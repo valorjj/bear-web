@@ -20,8 +20,8 @@ body,
 }
 
 body {
-  background-color: var(--bear-bg);
-  color: var(--bear-text);
-  font-family: var(--bear-font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
