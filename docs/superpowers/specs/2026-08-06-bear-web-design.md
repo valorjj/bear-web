@@ -27,18 +27,18 @@ open-source or original, and themes carry original names.
 
 ## Stack
 
-| Concern | Choice | Reason |
-| --- | --- | --- |
-| Framework | React 19 + TypeScript | Largest ecosystem for the editor layer |
-| Build | Vite | Instant HMR; static output deploys anywhere |
-| Styling | Tailwind CSS + CSS custom properties | Themes become token maps, not stylesheets |
-| Editor | Tiptap (ProseMirror) | Real document model, Markdown input rules, tables |
-| Persistence | Dexie (IndexedDB) + `dexie-react-hooks` | Live queries make the database the store |
-| UI state | Zustand | Ephemeral state only |
-| i18n | Korean and English from day one | Retrofitting means touching every component |
-| Unit tests | Vitest | |
-| Component tests | React Testing Library | |
-| E2E tests | Playwright | |
+| Concern         | Choice                                  | Reason                                            |
+| --------------- | --------------------------------------- | ------------------------------------------------- |
+| Framework       | React 19 + TypeScript                   | Largest ecosystem for the editor layer            |
+| Build           | Vite                                    | Instant HMR; static output deploys anywhere       |
+| Styling         | Tailwind CSS + CSS custom properties    | Themes become token maps, not stylesheets         |
+| Editor          | Tiptap (ProseMirror)                    | Real document model, Markdown input rules, tables |
+| Persistence     | Dexie (IndexedDB) + `dexie-react-hooks` | Live queries make the database the store          |
+| UI state        | Zustand                                 | Ephemeral state only                              |
+| i18n            | Korean and English from day one         | Retrofitting means touching every component       |
+| Unit tests      | Vitest                                  |                                                   |
+| Component tests | React Testing Library                   |                                                   |
+| E2E tests       | Playwright                              |                                                   |
 
 No SSR. Server rendering buys nothing when every byte of data is in IndexedDB.
 
@@ -137,13 +137,13 @@ operation can be undone.
 
 Pure predicates over a note, collected in one module:
 
-| Sidebar row | Predicate |
-| --- | --- |
-| 태그 없음 / Untagged | note has no parsed tags |
-| 해야 할 일 / Todo | body contains an unchecked `- [ ]` |
-| 오늘 / Today | `updatedAt` falls on the current local date |
-| 고정됨 / Pinned | `pinned === true` |
-| 휴지통 / Trash | `trashedAt !== null` |
+| Sidebar row          | Predicate                                   |
+| -------------------- | ------------------------------------------- |
+| 태그 없음 / Untagged | note has no parsed tags                     |
+| 해야 할 일 / Todo    | body contains an unchecked `- [ ]`          |
+| 오늘 / Today         | `updatedAt` falls on the current local date |
+| 고정됨 / Pinned      | `pinned === true`                           |
+| 휴지통 / Trash       | `trashedAt !== null`                        |
 
 All rows except Trash exclude trashed notes.
 
@@ -239,11 +239,11 @@ handle poorly.
 
 ## Testing
 
-| Layer | Tool | Coverage |
-| --- | --- | --- |
-| Logic | Vitest | Tag parser, smart-list predicates, Markdown round-trip, title derivation, tag rename and delete |
-| Components | React Testing Library | Sidebar tree, note list, toolbars, settings panels |
-| End-to-end | Playwright | Four critical flows |
+| Layer      | Tool                  | Coverage                                                                                        |
+| ---------- | --------------------- | ----------------------------------------------------------------------------------------------- |
+| Logic      | Vitest                | Tag parser, smart-list predicates, Markdown round-trip, title derivation, tag rename and delete |
+| Components | React Testing Library | Sidebar tree, note list, toolbars, settings panels                                              |
+| End-to-end | Playwright            | Four critical flows                                                                             |
 
 Test-driven development is mandatory for the tag parser and the Markdown
 serializer, and optional elsewhere.
@@ -257,18 +257,18 @@ The four Playwright flows, which must never break:
 
 ## Milestones
 
-| ID | Milestone | Definition of done |
-| --- | --- | --- |
-| M0 | Scaffold | Vite, TypeScript, Tailwind, ESLint, Prettier, Vitest, Playwright, GitHub Actions CI, and a live GitHub Pages deploy |
-| M1 | Data layer | Dexie schema, repositories, migrations, JSON export and import, unit tests. No UI. |
-| M2 | Shell | Resizable three-pane layout, i18n wiring, base light theme, empty states |
-| M3 | Notes | Create, delete, trash, restore, title derivation, sorting, using a plain `textarea` editor |
-| M4 | Editor | `textarea` replaced by Tiptap, round-trip suite green, both toolbars |
-| M5 | Tags | Parser, tag pills, sidebar tree, nested tags, rename and delete |
-| M6 | Smart lists | Every row in the smart-list table, the Locked row in its permanent empty state, and trash management |
-| M7 | Search | Search provider, results UI, command palette |
-| M8 | Preferences | Theme registry, theme picker, typography panel |
-| M9 | Polish | Keyboard shortcuts, empty-state illustrations, export to Markdown, HTML, and print |
+| ID  | Milestone   | Definition of done                                                                                                  |
+| --- | ----------- | ------------------------------------------------------------------------------------------------------------------- |
+| M0  | Scaffold    | Vite, TypeScript, Tailwind, ESLint, Prettier, Vitest, Playwright, GitHub Actions CI, and a live GitHub Pages deploy |
+| M1  | Data layer  | Dexie schema, repositories, migrations, JSON export and import, unit tests. No UI.                                  |
+| M2  | Shell       | Resizable three-pane layout, i18n wiring, base light theme, empty states                                            |
+| M3  | Notes       | Create, delete, trash, restore, title derivation, sorting, using a plain `textarea` editor                          |
+| M4  | Editor      | `textarea` replaced by Tiptap, round-trip suite green, both toolbars                                                |
+| M5  | Tags        | Parser, tag pills, sidebar tree, nested tags, rename and delete                                                     |
+| M6  | Smart lists | Every row in the smart-list table, the Locked row in its permanent empty state, and trash management                |
+| M7  | Search      | Search provider, results UI, command palette                                                                        |
+| M8  | Preferences | Theme registry, theme picker, typography panel                                                                      |
+| M9  | Polish      | Keyboard shortcuts, empty-state illustrations, export to Markdown, HTML, and print                                  |
 
 M3 deliberately ships a plain `textarea`. It proves the full persistence loop —
 create, type, save, reload, restore — before editor complexity can obscure a
