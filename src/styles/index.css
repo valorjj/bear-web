@@ -1,1 +1,27 @@
-/* Tailwind and design tokens are added in Task 2. */
+@import 'tailwindcss';
+@import './tokens.css';
+
+@theme inline {
+  --color-bg: var(--bear-bg);
+  --color-surface: var(--bear-surface);
+  --color-sidebar: var(--bear-sidebar);
+  --color-text: var(--bear-text);
+  --color-muted: var(--bear-muted);
+  --color-accent: var(--bear-accent);
+  --color-border: var(--bear-border);
+  --font-sans: var(--bear-font-sans);
+  --font-mono: var(--bear-font-mono);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--bear-bg);
+  color: var(--bear-text);
+  font-family: var(--bear-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
