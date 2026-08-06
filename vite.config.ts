@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // GitHub Pages serves the site from /<repo-name>/. Local dev serves from /.
@@ -18,6 +18,13 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     css: true,
-    exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
+    exclude: [
+      ...configDefaults.exclude,
+      '**/dist/**',
+      'e2e/**',
+      'playwright-report/**',
+      'test-results/**',
+      'coverage/**',
+    ],
   },
 });

@@ -3,6 +3,7 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "target": "es2023",
     "lib": ["ES2023"],
+    "strict": true,
     "types": ["node"],
     "skipLibCheck": true,
 
@@ -19,5 +20,6 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts"]
+  "include": ["*.ts", "scripts"],
+  "exclude": ["vitest.setup.ts", "playwright.config.ts"]
 }
