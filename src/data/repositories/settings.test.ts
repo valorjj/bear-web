@@ -39,6 +39,12 @@ describe('settingsRepository', () => {
     expect(await settings.get('sidebarOpen', true)).toBe(false);
   });
 
+  it('distinguishes an explicitly stored null from an absent key', async () => {
+    await settings.set('lastOpenedNoteId', null);
+
+    expect(await settings.get('lastOpenedNoteId', 'fallback')).toBeNull();
+  });
+
   it('round-trips a structured value', async () => {
     await settings.set('panes', { sidebar: 240, list: 320 });
 
