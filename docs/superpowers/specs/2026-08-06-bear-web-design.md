@@ -65,8 +65,10 @@ what a feature does from that file without opening its internals.
 
 IndexedDB is the single source of truth for durable data. Components subscribe
 to live Dexie queries; there is no second copy of note data in application
-state. Zustand holds only ephemeral UI state: focused pane, open modals,
-current sidebar selection, pane widths.
+state. Zustand holds only genuinely ephemeral UI state: focused pane, open
+modals, current sidebar selection. Pane widths are a deliberate exception —
+they live in the settings table, not Zustand, because a pane width should
+survive a reload like any other durable preference.
 
 ## Data model
 
