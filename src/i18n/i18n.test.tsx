@@ -84,6 +84,21 @@ describe('I18nProvider', () => {
   it('throws when useT is used outside a provider', () => {
     expect(() => render(<Probe />)).toThrow(/I18nProvider/);
   });
+
+  it('keeps document.documentElement.lang in sync with the active locale', async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider locale="ko">
+        <Probe />
+      </I18nProvider>,
+    );
+
+    expect(document.documentElement.lang).toBe('ko');
+
+    await user.click(screen.getByRole('button', { name: 'toggle' }));
+
+    expect(document.documentElement.lang).toBe('en');
+  });
 });
 
 describe('detectLocale', () => {
@@ -100,5 +115,18 @@ describe('detectLocale', () => {
 
   it('honours the first supported tag in order', () => {
     expect(detectLocale(['fr', 'ko-KR', 'en'])).toBe('ko');
+  });
+
+  it('matches the primary subtag exactly, not merely a prefix', () => {
+    // 'kok' (Kokni) starts with "ko" but is not Korean; 'english' is not a
+    // real BCP-47 tag but starts with "en" and must not match either.
+    expect(detectLocale(['kok'])).toBe('en');
+    expect(detectLocale(['english'])).toBe('en');
+  });
+
+  it('still recognises Korean regardless of region or case', () => {
+    expect(detectLocale(['ko'])).toBe('ko');
+    expect(detectLocale(['ko-KR'])).toBe('ko');
+    expect(detectLocale(['KO-kr'])).toBe('ko');
   });
 });

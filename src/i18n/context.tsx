@@ -3,6 +3,7 @@ import {
   type ReactElement,
   type ReactNode,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -14,11 +15,18 @@ export type Locale = 'ko' | 'en';
 
 const bundles: Record<Locale, Record<TranslationKey, string>> = { en, ko };
 
-/** First supported tag wins; anything unrecognised falls back to English. */
+/**
+ * First supported tag wins; anything unrecognised falls back to English.
+ *
+ * Compares only the primary subtag (the part before the first `-`) so a tag
+ * like `kok` (Kokni) is never mistaken for Korean just because it starts with
+ * "ko" — a plain `startsWith` check would misread it.
+ */
 export function detectLocale(languages: readonly string[]): Locale {
   for (const tag of languages) {
-    if (tag.toLowerCase().startsWith('ko')) return 'ko';
-    if (tag.toLowerCase().startsWith('en')) return 'en';
+    const primary = tag.split('-')[0]?.toLowerCase();
+    if (primary === 'ko') return 'ko';
+    if (primary === 'en') return 'en';
   }
   return 'en';
 }
@@ -41,6 +49,15 @@ export function I18nProvider({
   const [locale, setLocale] = useState<Locale>(
     initial ?? detectLocale(typeof navigator === 'undefined' ? [] : navigator.languages),
   );
+
+  // Keep the document's declared language in sync with what is actually
+  // rendered. `index.html` ships a reasonable static default, but only this
+  // provider knows the active locale, so it is the one that must own
+  // `documentElement.lang` from here on (Finding 2).
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const value = useMemo<I18nValue>(
     () => ({ locale, setLocale, t: (key) => bundles[locale][key] }),
