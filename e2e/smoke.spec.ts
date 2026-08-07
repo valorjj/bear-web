@@ -89,3 +89,43 @@ test('warns the user when the browser refuses to store data', async ({ page }) =
   await expect(page.getByRole('region')).toHaveCount(3);
   await expect(page.getByRole('alert')).toBeVisible();
 });
+
+test('the shell never grows the page past the viewport, ready or degraded', async ({ page }) => {
+  // Ready state: no banner, but the shell must still fill exactly the viewport
+  // rather than exceeding it (h-full inside the flex column, not h-dvh, which
+  // pins to the viewport regardless of the banner above it).
+  await page.goto('/');
+  await expect(page.getByRole('region')).toHaveCount(3);
+
+  const readyHeights = await page.evaluate(() => ({
+    scrollHeight: document.documentElement.scrollHeight,
+    innerHeight: window.innerHeight,
+  }));
+  expect(readyHeights.scrollHeight).toBe(readyHeights.innerHeight);
+
+  // Degraded state: the banner adds height above the shell. If the shell keeps
+  // demanding the full viewport height (h-dvh) rather than filling its parent,
+  // the page overflows by exactly the banner's height and the undismissable
+  // warning can be scrolled out of view — defeating its purpose.
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'indexedDB', {
+      configurable: true,
+      get() {
+        throw new Error('IndexedDB is disabled');
+      },
+    });
+  });
+
+  await page.goto('/');
+  await expect(page.getByRole('region')).toHaveCount(3);
+  await expect(page.getByRole('alert')).toBeVisible();
+
+  const degradedHeights = await page.evaluate(() => ({
+    scrollHeight: document.documentElement.scrollHeight,
+    innerHeight: window.innerHeight,
+  }));
+  expect(degradedHeights.scrollHeight).toBe(degradedHeights.innerHeight);
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect(page.getByRole('alert')).toBeVisible();
+});

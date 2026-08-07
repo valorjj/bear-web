@@ -40,7 +40,7 @@ export function AppShell(): ReactElement {
   const noteListWidth = clampPaneWidth(drag.noteList ?? storedNoteList);
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-bg text-text">
+    <div className="flex h-full w-full overflow-hidden bg-bg text-text">
       <Pane label={t('pane.sidebar')} width={sidebarWidth} className="bg-sidebar">
         <EmptyState title={t('sidebar.empty.title')} body={t('sidebar.empty.body')} />
       </Pane>
