@@ -169,4 +169,62 @@ describe('notesRepository', () => {
     expect(await notes.tagsOf(active.id)).toEqual(['live']);
     expect(await notes.tagsOf(trashed.id)).toEqual([]);
   });
+
+  it('recreates tag rows on restore, even after a rebuild dropped them', async () => {
+    const note = await notes.create('#work item');
+    expect(await notes.tagsOf(note.id)).toEqual(['work']);
+
+    await notes.trash(note.id);
+    await notes.rebuildTagIndex();
+
+    await notes.restore(note.id);
+    expect(await notes.tagsOf(note.id)).toEqual(['work']);
+  });
+
+  it('keeps the incrementally-maintained tag index identical to a full rebuild across the whole lifecycle', async () => {
+    async function assertIndexMatchesRebuild(): Promise<void> {
+      const before = await db.noteTags.toArray();
+      await notes.rebuildTagIndex();
+      const after = await db.noteTags.toArray();
+
+      const normalize = (rows: { noteId: string; tag: string }[]) =>
+        rows
+          .map((r) => `${r.noteId}:${r.tag}`)
+          .sort()
+          .join(',');
+
+      expect(normalize(before)).toBe(normalize(after));
+    }
+
+    const note = await notes.create('#alpha item');
+    await assertIndexMatchesRebuild();
+
+    await notes.save(note.id, '#alpha #beta item');
+    await assertIndexMatchesRebuild();
+
+    await notes.trash(note.id);
+    await assertIndexMatchesRebuild();
+
+    await notes.restore(note.id);
+    await assertIndexMatchesRebuild();
+
+    await notes.trash(note.id);
+    await assertIndexMatchesRebuild();
+  });
+
+  it('treats a note trashed at epoch 0 as trashed', async () => {
+    clock = 0;
+    const note = await notes.create('gone at zero');
+    await notes.trash(note.id);
+
+    expect((await notes.listTrashed()).map((n) => n.id)).toEqual([note.id]);
+    expect((await notes.listActive()).map((n) => n.id)).toEqual([]);
+
+    expect(await notes.emptyTrash()).toBe(1);
+    expect(await notes.get(note.id)).toBeUndefined();
+  });
+
+  it('resolves silently when purging a note that does not exist', async () => {
+    await expect(notes.purge('does-not-exist')).resolves.toBeUndefined();
+  });
 });

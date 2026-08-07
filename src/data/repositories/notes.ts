@@ -93,20 +93,39 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     },
 
     async setPinned(id, pinned) {
-      await requireNote(id);
-      await db.notes.update(id, { pinned });
+      await db.transaction('rw', db.notes, async () => {
+        await requireNote(id);
+        await db.notes.update(id, { pinned });
+      });
     },
 
     async trash(id) {
-      await requireNote(id);
-      await db.notes.update(id, { trashedAt: now() });
+      // The tag index reflects active notes only (see rebuildTagIndex), so a
+      // trashed note's rows are removed here to keep both paths agreeing.
+      await db.transaction('rw', db.notes, db.noteTags, async () => {
+        await requireNote(id);
+        await db.notes.update(id, { trashedAt: now() });
+        await db.noteTags.where('noteId').equals(id).delete();
+      });
     },
 
     async restore(id) {
-      await requireNote(id);
-      await db.notes.update(id, { trashedAt: null });
+      // Reindex from the note's text, exactly as `save` does: a rebuild that
+      // ran while this note was trashed would have dropped its tag rows, and
+      // restoring must not leave them permanently gone.
+      await db.transaction('rw', db.notes, db.noteTags, async () => {
+        const note = await requireNote(id);
+        await db.notes.update(id, { trashedAt: null });
+        await reindex(id, note.text);
+      });
     },
 
+    /**
+     * Purging an absent id is intentionally a no-op, unlike its siblings
+     * (`save`, `setPinned`, `trash`, `restore`), which reject via `requireNote`.
+     * Delete idempotency is defensible: callers retrying a purge, or racing
+     * with another tab's purge of the same note, should not see an error.
+     */
     async purge(id) {
       await db.transaction('rw', db.notes, db.noteTags, db.files, async () => {
         await db.noteTags.where('noteId').equals(id).delete();
@@ -117,8 +136,10 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
 
     async emptyTrash() {
       return db.transaction('rw', db.notes, db.noteTags, db.files, async () => {
-        // The trashedAt index holds only trashed notes, since IndexedDB omits nulls.
-        const trashed = await db.notes.where('trashedAt').above(0).toArray();
+        // The trashedAt index holds only trashed notes, since IndexedDB omits
+        // nulls. Use aboveOrEqual(0), not above(0), so a note trashed at epoch
+        // 0 is still purged.
+        const trashed = await db.notes.where('trashedAt').aboveOrEqual(0).toArray();
         const ids = trashed.map((n) => n.id);
 
         await db.noteTags.where('noteId').anyOf(ids).delete();
@@ -136,7 +157,10 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     },
 
     async listTrashed() {
-      const trashed = await db.notes.where('trashedAt').above(0).toArray();
+      // aboveOrEqual(0), not above(0): a note trashed at epoch 0 must still
+      // appear here. IndexedDB omits null-valued records from the index, so
+      // this still matches only trashed notes.
+      const trashed = await db.notes.where('trashedAt').aboveOrEqual(0).toArray();
       return trashed.sort((a, b) => (b.trashedAt ?? 0) - (a.trashedAt ?? 0));
     },
 

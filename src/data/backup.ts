@@ -1,4 +1,5 @@
 import type { BearDatabase } from './db';
+import { deriveTitle } from './derive';
 import type { BackupBundle, SerializedFile } from './types';
 
 export const BACKUP_FORMAT = 'bear-web-backup';
@@ -100,6 +101,17 @@ export async function importDatabase(db: BearDatabase, payload: unknown): Promis
     blob: base64ToBlob(f.data, f.mime),
   }));
 
+  // Recompute `title` rather than trust the bundle: a hand-edited or stale
+  // backup can carry a title that disagrees with its text.
+  const notes = bundle.notes.map((n) => ({ ...n, title: deriveTitle(n.text) }));
+
+  // Drop noteTags rows that point at a note absent from this same bundle, so
+  // an orphaned row never survives an import. This does not rebuild the tag
+  // index from note text — backup.ts has no tag parser and must not acquire
+  // one; it only removes rows that are already unambiguously invalid.
+  const noteIds = new Set(bundle.notes.map((n) => n.id));
+  const noteTags = bundle.noteTags.filter((nt) => noteIds.has(nt.noteId));
+
   await db.transaction('rw', db.notes, db.noteTags, db.tags, db.files, db.settings, async () => {
     await Promise.all([
       db.notes.clear(),
@@ -110,8 +122,8 @@ export async function importDatabase(db: BearDatabase, payload: unknown): Promis
     ]);
 
     await Promise.all([
-      db.notes.bulkAdd(bundle.notes),
-      db.noteTags.bulkAdd(bundle.noteTags),
+      db.notes.bulkAdd(notes),
+      db.noteTags.bulkAdd(noteTags),
       db.tags.bulkAdd(bundle.tags),
       db.files.bulkAdd(files),
       db.settings.bulkAdd(bundle.settings),
@@ -119,8 +131,8 @@ export async function importDatabase(db: BearDatabase, payload: unknown): Promis
   });
 
   return {
-    notes: bundle.notes.length,
-    noteTags: bundle.noteTags.length,
+    notes: notes.length,
+    noteTags: noteTags.length,
     tags: bundle.tags.length,
     files: files.length,
     settings: bundle.settings.length,

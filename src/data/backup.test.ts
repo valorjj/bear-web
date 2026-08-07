@@ -137,6 +137,27 @@ describe('importDatabase', () => {
     await expect(importDatabase(target, null)).rejects.toThrow();
   });
 
+  it('recomputes a note title from its text rather than trusting the bundle', async () => {
+    const bundle = await exportDatabase(source);
+    bundle.notes[0].title = 'Stale Wrong Title';
+
+    await importDatabase(target, JSON.parse(JSON.stringify(bundle)));
+
+    const note = await target.notes.get('n1');
+    expect(note?.title).toBe('Groceries');
+  });
+
+  it('drops an orphaned noteTags row whose note is absent from the bundle', async () => {
+    const bundle = await exportDatabase(source);
+    bundle.noteTags.push({ noteId: 'does-not-exist', tag: 'orphan' });
+
+    const result = await importDatabase(target, JSON.parse(JSON.stringify(bundle)));
+
+    expect(result.noteTags).toBe(1);
+    expect(await target.noteTags.where('noteId').equals('does-not-exist').count()).toBe(0);
+    expect(await target.noteTags.where('noteId').equals('n1').count()).toBe(1);
+  });
+
   it('leaves the target untouched when validation fails', async () => {
     await target.notes.add({
       id: 'keep',
