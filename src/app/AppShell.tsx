@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 
 import { settings } from '@/data';
 import { useT } from '@/i18n';
@@ -34,13 +34,34 @@ export function AppShell(): ReactElement {
     DEFAULT_NOTE_LIST_WIDTH,
   );
 
+  // `drag` holds an optimistic width during and immediately after a pointer
+  // drag or keypress ends. It must NOT be cleared the instant onCommit fires:
+  // the committed width only becomes visible through `storedSidebar` /
+  // `storedNoteList` once the async settings write completes and the live
+  // query re-runs. Clearing eagerly would flash the pane back to the
+  // still-stale stored width for a frame (see Finding 3). Instead we track
+  // what we last committed in `pendingCommit` and only drop the override once
+  // the live query reports that exact value.
   const [drag, setDrag] = useState<{ sidebar?: number; noteList?: number }>({});
+  const [pendingCommit, setPendingCommit] = useState<{ sidebar?: number; noteList?: number }>({});
 
-  const sidebarWidth = clampPaneWidth(drag.sidebar ?? storedSidebar);
-  const noteListWidth = clampPaneWidth(drag.noteList ?? storedNoteList);
+  useEffect(() => {
+    if (pendingCommit.sidebar === undefined || storedSidebar !== pendingCommit.sidebar) return;
+    setDrag((prev) => ({ ...prev, sidebar: undefined }));
+    setPendingCommit((prev) => ({ ...prev, sidebar: undefined }));
+  }, [storedSidebar, pendingCommit.sidebar]);
+
+  useEffect(() => {
+    if (pendingCommit.noteList === undefined || storedNoteList !== pendingCommit.noteList) return;
+    setDrag((prev) => ({ ...prev, noteList: undefined }));
+    setPendingCommit((prev) => ({ ...prev, noteList: undefined }));
+  }, [storedNoteList, pendingCommit.noteList]);
+
+  const sidebarWidth = clampPaneWidth(drag.sidebar ?? storedSidebar, DEFAULT_SIDEBAR_WIDTH);
+  const noteListWidth = clampPaneWidth(drag.noteList ?? storedNoteList, DEFAULT_NOTE_LIST_WIDTH);
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-bg text-text">
+    <main className="flex h-full w-full overflow-hidden bg-bg text-text">
       <Pane label={t('pane.sidebar')} width={sidebarWidth} className="bg-sidebar">
         <EmptyState title={t('sidebar.empty.title')} body={t('sidebar.empty.body')} />
       </Pane>
@@ -52,7 +73,8 @@ export function AppShell(): ReactElement {
         max={MAX_PANE_WIDTH}
         onResize={(width) => setDrag((prev) => ({ ...prev, sidebar: width }))}
         onCommit={(width) => {
-          setDrag((prev) => ({ ...prev, sidebar: undefined }));
+          setDrag((prev) => ({ ...prev, sidebar: width }));
+          setPendingCommit((prev) => ({ ...prev, sidebar: width }));
           void settings.set(SIDEBAR_WIDTH_KEY, width);
         }}
       />
@@ -68,7 +90,8 @@ export function AppShell(): ReactElement {
         max={MAX_PANE_WIDTH}
         onResize={(width) => setDrag((prev) => ({ ...prev, noteList: width }))}
         onCommit={(width) => {
-          setDrag((prev) => ({ ...prev, noteList: undefined }));
+          setDrag((prev) => ({ ...prev, noteList: width }));
+          setPendingCommit((prev) => ({ ...prev, noteList: width }));
           void settings.set(NOTE_LIST_WIDTH_KEY, width);
         }}
       />
@@ -76,6 +99,6 @@ export function AppShell(): ReactElement {
       <Pane label={t('pane.editor')}>
         <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
       </Pane>
-    </div>
+    </main>
   );
 }

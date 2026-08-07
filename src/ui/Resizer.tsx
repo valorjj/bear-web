@@ -59,9 +59,27 @@ export function Resizer({
         if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
         event.preventDefault();
         const delta = event.key === 'ArrowRight' ? KEYBOARD_STEP : -KEYBOARD_STEP;
-        onCommit(clamp(width + delta));
+        const next = clamp(width + delta);
+        // Move the pane immediately rather than waiting on the commit's async
+        // write + live query round trip (Finding 6) — the same optimistic
+        // value AppShell then holds onto until the write is confirmed
+        // (Finding 3).
+        onResize(next);
+        onCommit(next);
       }}
-      className="w-px shrink-0 cursor-col-resize bg-border transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-    />
+      // The visible divider stays a hairline (the centred inner span below),
+      // but the interactive box is widened to roughly 8px using a negative
+      // margin that cancels back out in flex layout, so neighbouring panes
+      // never shift (Finding 4). `relative z-10` keeps this element painted
+      // above the flow-adjacent panes so the overlap is actually hit-testable
+      // on both sides, not just whichever pane happens to come first in the
+      // DOM.
+      className="group relative z-10 -mx-1 w-2 shrink-0 cursor-col-resize focus-visible:outline-none"
+    >
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-accent group-focus-visible:bg-accent"
+      />
+    </div>
   );
 }

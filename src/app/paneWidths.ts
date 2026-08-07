@@ -8,7 +8,7 @@ export const MIN_PANE_WIDTH = 160;
 export const MAX_PANE_WIDTH = 560;
 
 /** Keeps a pane usable regardless of what a drag, a stale setting, or a bad import supplies. */
-export function clampPaneWidth(width: number): number {
-  if (!Number.isFinite(width)) return DEFAULT_SIDEBAR_WIDTH;
+export function clampPaneWidth(width: number, fallback: number = DEFAULT_SIDEBAR_WIDTH): number {
+  if (!Number.isFinite(width)) return fallback;
   return Math.min(MAX_PANE_WIDTH, Math.max(MIN_PANE_WIDTH, Math.round(width)));
 }
