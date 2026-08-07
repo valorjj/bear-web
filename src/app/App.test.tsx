@@ -1,17 +1,22 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
+import { en } from '@/i18n/en';
+
 import App from './App';
 
 describe('App', () => {
-  it('renders the shell inside an i18n provider', () => {
-    render(<App />);
+  it('renders the three-pane shell when the database is ready', () => {
+    render(<App status="ready" />);
 
-    // Three labelled regions, in whichever locale was detected.
     expect(screen.getAllByRole('region')).toHaveLength(3);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('does not throw for a missing provider', () => {
-    expect(() => render(<App />)).not.toThrow();
+  it('renders the warning above the shell when running in memory', () => {
+    render(<App status="memory" />);
+
+    expect(screen.getAllByRole('region')).toHaveLength(3);
+    expect(screen.getByRole('alert')).toHaveTextContent(en['database.memory.title']);
   });
 });

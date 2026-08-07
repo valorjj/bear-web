@@ -72,3 +72,20 @@ test('the page loads with no console errors', async ({ page }) => {
 
   expect(errors).toEqual([]);
 });
+
+test('warns the user when the browser refuses to store data', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'indexedDB', {
+      configurable: true,
+      get() {
+        throw new Error('IndexedDB is disabled');
+      },
+    });
+  });
+
+  await page.goto('/');
+
+  // The app must still render, degraded rather than broken.
+  await expect(page.getByRole('region')).toHaveCount(3);
+  await expect(page.getByRole('alert')).toBeVisible();
+});

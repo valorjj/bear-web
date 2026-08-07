@@ -5,12 +5,10 @@ import App from '@/app/App';
 import { openDatabase } from '@/data';
 import '@/styles/index.css';
 
-// Resolve storage before the first render so components never discover a failed
-// database from inside a live query. Task 5 threads the result into the tree.
-void openDatabase().then(() => {
+void openDatabase().then((status) => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <App />
+      <App status={status} />
     </StrictMode>,
   );
 });
