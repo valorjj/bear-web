@@ -27,3 +27,20 @@
   --bear-accent: #ff6b6b;
   --bear-border: #3a3a3c;
 }
+
+/*
+ * The system preference is the default, applied with no JavaScript so there is
+ * no flash of the wrong theme on first paint. An explicit `data-theme` on the
+ * root overrides it — that is the seam the M8 theme picker will drive.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bear-bg: #1c1c1e;
+    --bear-surface: #242426;
+    --bear-sidebar: #202022;
+    --bear-text: #f2f2f7;
+    --bear-muted: #8a8a8e;
+    --bear-accent: #ff6b6b;
+    --bear-border: #3a3a3c;
+  }
+}

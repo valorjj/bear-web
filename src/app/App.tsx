@@ -1,24 +1,13 @@
-import { useState } from 'react';
+import type { ReactElement } from 'react';
 
-export default function App() {
-  const [dark, setDark] = useState(false);
+import { I18nProvider } from '@/i18n';
 
-  const toggle = () => {
-    const next = !dark;
-    setDark(next);
-    document.documentElement.dataset.theme = next ? 'dark' : 'light';
-  };
+import { AppShell } from './AppShell';
 
+export default function App(): ReactElement {
   return (
-    <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-bg text-text">
-      <h1 className="text-2xl font-semibold">bear-web</h1>
-      <button
-        type="button"
-        onClick={toggle}
-        className="rounded border border-border px-3 py-1 text-muted"
-      >
-        {dark ? 'Light' : 'Dark'}
-      </button>
-    </div>
+    <I18nProvider>
+      <AppShell />
+    </I18nProvider>
   );
 }

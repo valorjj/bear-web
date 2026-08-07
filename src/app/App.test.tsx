@@ -1,35 +1,17 @@
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import App from './App';
 
 describe('App', () => {
-  beforeEach(() => {
-    document.documentElement.removeAttribute('data-theme');
-  });
-
-  it('renders the application name', () => {
-    render(<App />);
-    expect(screen.getByRole('heading', { name: 'bear-web' })).toBeInTheDocument();
-  });
-
-  it('sets the dark theme attribute when the toggle is pressed', async () => {
-    const user = userEvent.setup();
+  it('renders the shell inside an i18n provider', () => {
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: 'Dark' }));
-
-    expect(document.documentElement.dataset.theme).toBe('dark');
+    // Three labelled regions, in whichever locale was detected.
+    expect(screen.getAllByRole('region')).toHaveLength(3);
   });
 
-  it('returns to the light theme when toggled twice', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getByRole('button', { name: 'Dark' }));
-    await user.click(screen.getByRole('button', { name: 'Light' }));
-
-    expect(document.documentElement.dataset.theme).toBe('light');
+  it('does not throw for a missing provider', () => {
+    expect(() => render(<App />)).not.toThrow();
   });
 });

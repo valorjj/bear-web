@@ -1,28 +1,64 @@
 import { expect, test } from '@playwright/test';
 
-test('the shell renders and the theme toggle works', async ({ page }) => {
+test('the three-pane shell renders with empty states', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: 'bear-web' })).toBeVisible();
+  await expect(page.getByRole('region')).toHaveCount(3);
+  await expect(page.getByRole('separator')).toHaveCount(2);
+});
 
-  const getBodyColors = () =>
-    page.evaluate(() => {
-      const style = getComputedStyle(document.body);
-      return { backgroundColor: style.backgroundColor, color: style.color };
-    });
+test('the shell uses the token layer for its colours', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
 
-  expect(await getBodyColors()).toEqual({
+  await expect(page.getByRole('region')).toHaveCount(3);
+
+  const bodyColors = await page.evaluate(() => {
+    const style = getComputedStyle(document.body);
+    return { backgroundColor: style.backgroundColor, color: style.color };
+  });
+
+  expect(bodyColors).toEqual({
     backgroundColor: 'rgb(255, 255, 255)',
     color: 'rgb(28, 28, 30)',
   });
+});
 
-  await page.getByRole('button', { name: 'Dark' }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+test('the system dark preference applies with no JavaScript toggle', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/');
 
-  expect(await getBodyColors()).toEqual({
-    backgroundColor: 'rgb(28, 28, 30)',
-    color: 'rgb(242, 242, 247)',
-  });
+  await expect(page.getByRole('region')).toHaveCount(3);
+
+  const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+  expect(background).toBe('rgb(28, 28, 30)');
+});
+
+test('a resized pane keeps its width across a reload', async ({ page }) => {
+  await page.goto('/');
+
+  const separator = page.getByRole('separator').first();
+  await separator.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+
+  const widthAfterResize = await page
+    .getByRole('region')
+    .first()
+    .evaluate((element) => element.getBoundingClientRect().width);
+
+  await page.reload();
+  await expect(page.getByRole('region')).toHaveCount(3);
+
+  await expect
+    .poll(() =>
+      page
+        .getByRole('region')
+        .first()
+        .evaluate((element) => element.getBoundingClientRect().width),
+    )
+    .toBe(widthAfterResize);
 });
 
 test('the page loads with no console errors', async ({ page }) => {
@@ -32,7 +68,7 @@ test('the page loads with no console errors', async ({ page }) => {
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'bear-web' })).toBeVisible();
+  await expect(page.getByRole('region')).toHaveCount(3);
 
   expect(errors).toEqual([]);
 });
