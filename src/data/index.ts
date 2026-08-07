@@ -3,6 +3,8 @@ export type { ImportResult } from './backup';
 export { BearDatabase, DATABASE_NAME, db } from './db';
 export { deriveTitle } from './derive';
 export { newId } from './ids';
+export { openDatabase, resolveDatabase } from './open';
+export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
 export { files, notes, settings, tags } from './repositories';
 export type {
   FilesRepository,
