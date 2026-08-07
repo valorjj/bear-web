@@ -38,3 +38,23 @@ export interface SettingRecord {
   key: string;
   value: unknown;
 }
+
+/** A file with its blob encoded as base64, so the bundle is JSON-safe. */
+export interface SerializedFile {
+  id: string;
+  noteId: string;
+  mime: string;
+  /** base64, without a data-URL prefix. */
+  data: string;
+}
+
+export interface BackupBundle {
+  format: 'bear-web-backup';
+  schemaVersion: number;
+  exportedAt: number;
+  notes: Note[];
+  noteTags: NoteTag[];
+  tags: TagMeta[];
+  files: SerializedFile[];
+  settings: SettingRecord[];
+}
