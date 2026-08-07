@@ -34,9 +34,25 @@ describe('deriveTitle', () => {
     expect(deriveTitle('**bold** title')).toBe('**bold** title');
   });
 
-  it('is idempotent when applied to its own output', () => {
-    const once = deriveTitle('# Heading\nbody');
-    expect(deriveTitle(once)).toBe(once);
+  it('strips exactly one level of heading syntax', () => {
+    expect(deriveTitle('# # nested')).toBe('# nested');
+  });
+
+  it('is deterministic for the same text', () => {
+    const text = '# Heading\nbody';
+    expect(deriveTitle(text)).toBe(deriveTitle(text));
+  });
+
+  it('leaves a bare hash alone', () => {
+    expect(deriveTitle('#')).toBe('#');
+  });
+
+  it('does not treat more than six hashes as a heading', () => {
+    expect(deriveTitle('####### seven hashes')).toBe('####### seven hashes');
+  });
+
+  it('accepts a tab after the hashes', () => {
+    expect(deriveTitle('#\ttab after hash')).toBe('tab after hash');
   });
 });
 
