@@ -117,6 +117,37 @@ These bit us once already. They are not mistakes.
   mutate `savedRef` or `failed`. Comparing text instead is NOT sound — after a
   rollback, `savedRef.current` can coincidentally equal an older save's own
   pending text, so a value guard passes for a superseded write.
+- **`useLiveQuery` returns the _previous_ deps' value for one tick after the
+  deps change — never `undefined`.** `dexie-react-hooks`' `useObservable` keeps
+  one `monitor` ref across dependency-array changes and only takes a
+  synchronous seed value when `!monitor.current.hasResult`; once any query on
+  that hook instance has ever resolved, `hasResult` stays `true` forever, so a
+  deps change does not reset it to "loading." The hook keeps exposing the old
+  deps' cached result until the new `Dexie.liveQuery` subscription resolves in
+  a `useEffect` (a passive effect, scheduled after commit — can lag well
+  behind the deps change under CPU contention). Confirmed with an isolated
+  repro of `useObservable` alone: reading its result in the same tick as a
+  deps change deterministically returns the prior deps' value, every time.
+  **Any `useLiveQuery` whose deps can change must tag its result with the
+  dependency value it was computed for, and only trust the result once that
+  tag matches the current dependency** — a mismatch means "still loading,"
+  not "loaded." `useNotes` does this for both of its calls: `items` is
+  `{ scope, list }` keyed against the live `scope`, and `probe` is
+  `{ id: selectedNoteId, note }` keyed against the live `selectedNoteId`;
+  either one resolving with a stale tag now falls back to `undefined`/`null`
+  instead of being trusted. **`usePaneWidths` is not affected** — its
+  `useLiveQuery` deps are the constant `[]`, so there is no "previous deps"
+  to leak. `useNotes` is currently the only call site with changing deps; do
+  not add the tag-and-verify pattern to call sites whose deps never change,
+  it would be dead complexity. Skipping this on a call site that _does_ have
+  changing deps means a scope or selection switch can briefly render the
+  previous scope's (already-stale) data — surfaced as a roughly 1-in-8
+  full-suite flake in `AppShell.test.tsx > "moves a note to the trash and
+restores it"`, and, via the identical mechanism on the `probe` query, an
+  even more frequent flake in `"shows each note's own text after switching,
+not the previous note's"`. A real user under load would see the same
+  thing: a wrong, empty, or stale note list or editor for a frame after
+  switching scopes or notes.
 
 ## Working style
 
