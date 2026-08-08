@@ -1,6 +1,50 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 const DEFAULT_SIDEBAR_WIDTH = 240;
+const DATABASE_NAME = 'bear-web';
+const SIDEBAR_WIDTH_KEY = 'pane.sidebarWidth';
+
+/**
+ * Reads the persisted sidebar width straight out of IndexedDB, bypassing the
+ * rendered DOM entirely. The DOM cannot be used to detect whether a resize
+ * commit has actually reached storage: the optimistic override in
+ * `usePaneWidths` (kept, deliberately, to satisfy Finding 3 — no flash back
+ * to the stale width on release) makes the rendered width read as
+ * "committed" the instant a drag ends, well before the async
+ * `settings.set` write it is fire-and-forget from has landed.
+ */
+function readSidebarWidthFromIndexedDb(page: Page): Promise<number | undefined> {
+  return page.evaluate(
+    ({ dbName, key }) =>
+      new Promise<number | undefined>((resolve) => {
+        const request = indexedDB.open(dbName);
+        request.onerror = () => resolve(undefined);
+        request.onsuccess = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains('settings')) {
+            db.close();
+            resolve(undefined);
+            return;
+          }
+          const getRequest = db
+            .transaction('settings', 'readonly')
+            .objectStore('settings')
+            .get(key);
+          getRequest.onsuccess = () => {
+            const row = getRequest.result as { value?: unknown } | undefined;
+            db.close();
+            resolve(typeof row?.value === 'number' ? row.value : undefined);
+          };
+          getRequest.onerror = () => {
+            db.close();
+            resolve(undefined);
+          };
+        };
+      }),
+    { dbName: DATABASE_NAME, key: SIDEBAR_WIDTH_KEY },
+  );
+}
 
 test('the three-pane shell renders with empty states', async ({ page }) => {
   await page.goto('/');
@@ -195,10 +239,16 @@ test('dragging a separator with the mouse resizes the pane without snapping back
   );
   expect(widthImmediatelyAfterRelease).toBeGreaterThan(DEFAULT_SIDEBAR_WIDTH);
 
-  // The width also settles asynchronously (the write + live query round
-  // trip), so assert persistence by polling rather than a single reload check.
+  // The commit write is fire-and-forget (`onCommit` never awaits
+  // `settings.set`), and the round trip through IndexedDB + the live query is
+  // genuinely async, so assert persistence by polling rather than a single
+  // reload check. This has to poll IndexedDB directly rather than the
+  // rendered width: the optimistic override above (Finding 3) makes the DOM
+  // read as "committed" immediately, so it can never distinguish "written"
+  // from "not yet written" and reloading on its say-so races the real write
+  // against page teardown, which can silently lose it.
   await expect
-    .poll(() => region.evaluate((element) => element.getBoundingClientRect().width))
+    .poll(() => readSidebarWidthFromIndexedDb(page))
     .toBeGreaterThan(DEFAULT_SIDEBAR_WIDTH);
 
   await page.reload();
