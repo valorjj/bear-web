@@ -9,5 +9,7 @@ import { I18nProvider, type Locale } from './context';
  * depend on the machine's language settings.
  */
 export function renderWithI18n(ui: ReactNode, locale: Locale = 'en'): RenderResult {
-  return render(<I18nProvider locale={locale}>{ui}</I18nProvider>);
+  return render(ui, {
+    wrapper: ({ children }) => <I18nProvider locale={locale}>{children}</I18nProvider>,
+  });
 }

@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
+import { Button } from './Button';
 import { EmptyState } from './EmptyState';
 import { Pane } from './Pane';
 import { Resizer } from './Resizer';
@@ -97,5 +98,35 @@ describe('Resizer', () => {
     render(<Resizer {...props} width={240} onResize={vi.fn()} onCommit={vi.fn()} />);
 
     expect(screen.getByRole('separator')).toHaveAttribute('tabindex', '0');
+  });
+});
+
+describe('Button', () => {
+  it('renders its children and calls onClick', async () => {
+    const onClick = vi.fn();
+    const user = userEvent.setup();
+
+    render(<Button onClick={onClick}>New note</Button>);
+
+    await user.click(screen.getByRole('button', { name: 'New note' }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('never submits a form', () => {
+    // There are no forms in bear-web. A button that defaults to type="submit"
+    // would navigate the page if one ever appeared around it.
+    render(<Button onClick={vi.fn()}>New note</Button>);
+
+    expect(screen.getByRole('button')).toHaveAttribute('type', 'button');
+  });
+
+  it('takes an explicit accessible name when its children are not text', () => {
+    render(
+      <Button onClick={vi.fn()} label="Delete">
+        <span aria-hidden="true">×</span>
+      </Button>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
 });
