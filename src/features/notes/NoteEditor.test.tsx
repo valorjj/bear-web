@@ -93,12 +93,17 @@ describe('NoteEditor', () => {
     });
   });
 
-  it('shows an inline message when a save fails, and keeps the text on screen', async () => {
+  it('shows an inline message when a save fails, keeps the text on screen, and recovers once saves succeed again', async () => {
     const note = await notes.create('');
     const user = userEvent.setup();
     const save = vi.spyOn(notes, 'save').mockRejectedValue(new Error('QuotaExceededError'));
 
-    renderWithI18n(<NoteEditor note={note} />);
+    renderWithI18n(
+      <>
+        <NoteEditor note={note} />
+        <button type="button">elsewhere</button>
+      </>,
+    );
     const textarea = screen.getByRole('textbox', { name: 'Note text' });
     await user.type(textarea, 'precious');
 
@@ -106,11 +111,22 @@ describe('NoteEditor', () => {
       expect(screen.getByRole('status')).toBeInTheDocument();
     });
     expect(textarea).toHaveValue('precious');
-    // The failed write must never overwrite the last known-good text in
-    // IndexedDB — the stored value stays at its pre-failure state.
-    expect((await notes.get(note.id))?.text).toBe('');
+    // The attempted write carried the user's text, not a stale or empty
+    // buffer.
+    expect(save).toHaveBeenCalledWith(note.id, 'precious');
 
+    // Restore the real repository and force another flush of the *same*
+    // text (no further typing). This is the case that actually exercises
+    // the failure-rollback: if the failed save had been mismarked as saved,
+    // the next flush would see the pending text as already matching the
+    // "saved" marker and skip the retry entirely, leaving the database
+    // empty forever.
     save.mockRestore();
+    await user.click(screen.getByRole('button', { name: 'elsewhere' }));
+
+    await waitFor(async () => {
+      expect((await notes.get(note.id))?.text).toBe('precious');
+    });
   });
 
   it('uses role="status", never role="alert"', async () => {
