@@ -9,9 +9,11 @@ export interface NoteListItemProps {
   note: Note;
   selected: boolean;
   onSelect: () => void;
+  /** The current time, for deciding whether a note's date renders as a time or a date. Defaults to the wall clock; tests pin it. */
+  now?: number;
 }
 
-export function NoteListItem({ note, selected, onSelect }: NoteListItemProps): ReactElement {
+export function NoteListItem({ note, selected, onSelect, now }: NoteListItemProps): ReactElement {
   const t = useT();
   const { locale } = useLocale();
 
@@ -31,7 +33,7 @@ export function NoteListItem({ note, selected, onSelect }: NoteListItemProps): R
           {note.title === '' ? t('note.untitled') : note.title}
         </span>
         <span className="text-xs text-muted">
-          {formatNoteDate(note.updatedAt, locale, Date.now())}
+          {formatNoteDate(note.updatedAt, locale, now ?? Date.now())}
         </span>
         <span className="truncate text-xs text-muted">
           {snippet === '' ? t('note.noText') : snippet}
