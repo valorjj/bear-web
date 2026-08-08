@@ -215,6 +215,58 @@ describe('useAutosave', () => {
     expect(save).toHaveBeenCalledTimes(2);
   });
 
+  it('does not let a stale, later-resolving success clear a failure reported by a newer save', async () => {
+    let resolveSave1: () => void = () => {};
+    let rejectSave2: (error: Error) => void = () => {};
+
+    const save = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSave1 = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectSave2 = reject;
+          }),
+      )
+      .mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useAutosave({ initial: '', save }));
+
+    // Save1 starts for 'a'.
+    act(() => result.current.setText('a'));
+    act(() => result.current.flush());
+
+    // The user keeps typing; Save2 starts for 'ab' while Save1 is still in flight.
+    act(() => result.current.setText('ab'));
+    act(() => result.current.flush());
+
+    // Save2 (the newer save) rejects first: 'ab' was never persisted.
+    rejectSave2(new Error('newer save failed'));
+    await settle();
+
+    expect(result.current.failed).toBe(true);
+
+    // Save1 (the older, superseded save) then resolves. Its success must not
+    // clear the failure that correctly describes the current buffer — doing
+    // so would hide a real failure behind a stale, unrelated success.
+    resolveSave1();
+    await settle();
+
+    expect(result.current.failed).toBe(true);
+
+    // The newest text must still be retried on the next trigger.
+    act(() => result.current.flush());
+    await settle();
+
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(save).toHaveBeenLastCalledWith('ab');
+  });
+
   it('falls through to a normal flush on unmount when no discard is supplied, even with an empty buffer', async () => {
     const save = vi.fn().mockResolvedValue(undefined);
     const { result, unmount } = renderHook(() => useAutosave({ initial: 'had content', save }));

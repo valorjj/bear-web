@@ -42,6 +42,14 @@ export function useAutosave({
   const savedRef = useRef(initial);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // A currency token for in-flight saves. Comparing *text* cannot tell "I am
+  // the latest save" from "my pending text happens to match the current
+  // marker" — a rolled-back marker can coincidentally equal an older save's
+  // text. A monotonically increasing counter has no such collision: each
+  // `flush` claims the next value, and a handler only acts if its claim is
+  // still the most recent one when its promise settles.
+  const saveSeqRef = useRef(0);
+
   // The unmount cleanup runs once and must not call a callback captured at
   // mount, so the latest ones are kept in refs.
   const saveRef = useRef(save);
@@ -69,18 +77,25 @@ export function useAutosave({
     const previous = savedRef.current;
     savedRef.current = pending;
 
+    const token = ++saveSeqRef.current;
+
     void saveRef.current(pending).then(
-      () => setFailed(false),
       () => {
-        // Guard against a stale rejection: if a newer flush has since
-        // overwritten the marker (and possibly already persisted
-        // successfully), this call's failure no longer describes the
-        // current buffer. Rolling back or reporting `failed` here would
-        // stomp a correct, already-saved marker and raise a false alarm.
-        if (savedRef.current === pending) {
-          savedRef.current = previous;
-          setFailed(true);
-        }
+        // Superseded: a newer flush has started since this one, so this
+        // settlement — success or failure — no longer describes the current
+        // buffer. Clearing `failed` here could hide a real failure reported
+        // by that newer save behind an unrelated, stale success.
+        if (saveSeqRef.current !== token) return;
+        setFailed(false);
+      },
+      () => {
+        // Superseded, symmetric to the success branch: rolling back the
+        // marker or reporting `failed` here would stomp a correct,
+        // already-saved marker and raise a false alarm for a write that has
+        // since been superseded and succeeded.
+        if (saveSeqRef.current !== token) return;
+        savedRef.current = previous;
+        setFailed(true);
       },
     );
   }, [cancelTimer]);
