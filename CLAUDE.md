@@ -20,7 +20,7 @@ IndexedDB.
 | M4 editor                      | next                                      |
 | M5–M9                          | tags, smart lists, search, themes, polish |
 
-176 unit tests, 13 end-to-end tests. `main` is always green and auto-deploys.
+178 unit tests, 14 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
