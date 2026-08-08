@@ -141,11 +141,12 @@ These bit us once already. They are not mistakes.
   not add the tag-and-verify pattern to call sites whose deps never change,
   it would be dead complexity. Skipping this on a call site that _does_ have
   changing deps means a scope or selection switch can briefly render the
-  previous scope's (already-stale) data — surfaced as a roughly 1-in-8
-  full-suite flake in `AppShell.test.tsx > "moves a note to the trash and
-restores it"`, and, via the identical mechanism on the `probe` query, an
-  even more frequent flake in `"shows each note's own text after switching,
-not the previous note's"`. A real user under load would see the same
+  previous scope's (already-stale) data — surfaced intermittently as a
+  full-suite flake in `AppShell.test.tsx`'s "moves a note to the trash and
+  restores it" test, and, via the identical mechanism on the `probe` query,
+  an even more frequent flake in its "shows each note's own text after
+  switching, not the previous note's" test. A real user under load would see
+  the same
   thing: a wrong, empty, or stale note list or editor for a frame after
   switching scopes or notes.
 

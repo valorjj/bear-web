@@ -158,6 +158,14 @@ The accepted consequence: typing a single space and navigating away leaves an
 Blank notes are purged, not trashed. Filling the trash with empty notes defeats
 the purpose of discarding them.
 
+The discard is the unmount cleanup, not a standing invariant: a blank note that
+is still open when the page reloads is never purged, because `beforeunload`
+only flushes and does not unmount. This is spec-compliant — the rule is
+"discarded when selection moves off it," and a reload is not a selection
+change — but it is a second, known way a blank row can become permanent. A
+startup sweep of empty notes would close it and is deferred to a future
+milestone, not folded into M3.
+
 ### Durability limit
 
 `beforeunload` can only *start* an asynchronous IndexedDB write; it cannot wait
