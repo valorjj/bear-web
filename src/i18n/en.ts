@@ -14,6 +14,23 @@ export const en = {
   'editor.empty.title': 'No note selected',
   'editor.empty.body': 'Choose a note from the list, or create one.',
 
+  'scope.label': 'Note scopes',
+  'scope.notes': 'Notes',
+  'scope.trash': 'Trash',
+
+  'note.untitled': 'Untitled',
+  'note.noText': 'No additional text',
+
+  'noteList.create': 'New note',
+  'noteList.trash': 'Delete',
+  'noteList.restore': 'Restore',
+
+  'trash.empty.title': 'Trash is empty',
+  'trash.empty.body': 'Notes you delete appear here until you remove them for good.',
+
+  'editor.textarea': 'Note text',
+  'editor.saveFailed': 'This note could not be saved. Keep typing — bear-web will keep trying.',
+
   'resizer.sidebar': 'Resize the sidebar',
   'resizer.noteList': 'Resize the note list',
 
