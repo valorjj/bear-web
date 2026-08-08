@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -85,6 +85,15 @@ describe('AppShell notes', () => {
     await user.click(await screen.findByRole('button', { name: /Groceries/ }));
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
+    // `NoteList` only renders `Delete` when a note is selected in the active
+    // scope, so its disappearance is proof the selection was actually
+    // cleared by `useNotes` reconciliation — not just that the row left the
+    // list, which the next assertion alone cannot distinguish. Reconciliation
+    // clears the selection via an async probe, hence `waitFor`.
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    });
+
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /Groceries/ })).not.toBeInTheDocument();
     });
@@ -129,38 +138,33 @@ describe('AppShell notes', () => {
   });
 
   // Regression test for the keyed remount described in AppShell: without
-  // `key={note.id}` on `NoteEditor`, switching notes keeps the old editor
-  // instance mounted, so its flush-on-switch (an unmount effect) never runs
-  // and its save callbacks — closed over the *old* note's id — end up
-  // writing whatever is still in the buffer into the *new* note.
-  it('never writes one note text into the other when switching between them', async () => {
+  // `key={note.id}` on `NoteEditor`, switching notes reuses the same editor
+  // fiber. `useAutosave`'s `useState(initial)` only reads `initial` at
+  // mount, so a reused fiber keeps displaying the *previous* note's text
+  // after the switch — 100% reproducible with an ordinary click, no timing
+  // games required. (An earlier version of this test tried to catch a
+  // pending-debounce cross-write via `fireEvent.click`, on the theory that
+  // skipping the realistic blur would expose a stale `saveRef`. That path
+  // turned out to be unreachable through the real UI: `NoteListItem` is a
+  // plain `<button>`, so any real focus transfer onto it — mouse or
+  // keyboard — blurs the textarea and flushes correctly before `onSelect`
+  // runs, regardless of the key. That test was deleted in favor of this one,
+  // which asserts the actual, always-reachable symptom.)
+  it("shows each note's own text after switching, not the previous note's", async () => {
     const user = userEvent.setup();
-    const first = await notes.create('First note original text');
-    const second = await notes.create('Second note original text');
+    await notes.create('First note text');
+    await notes.create('Second note text');
 
     renderShell();
 
     await user.click(await screen.findByRole('button', { name: /First note/ }));
+    expect(await screen.findByRole('textbox', { name: 'Note text' })).toHaveValue(
+      'First note text',
+    );
 
-    const textarea = await screen.findByRole('textbox', { name: 'Note text' });
-    await user.clear(textarea);
-    await user.type(textarea, 'First note EDITED');
-
-    // Switch before the debounce fires and without blurring the textarea
-    // first: `fireEvent.click` dispatches only the click event, unlike
-    // `userEvent.click`, which would also blur the textarea and flush
-    // through `onBlur` while `note.id` still points at the first note —
-    // masking exactly the race this test exists to catch. The scenario
-    // under test is the pending *debounce* timer firing after the switch,
-    // which is what a missing `key` mis-targets.
-    fireEvent.click(screen.getByRole('button', { name: /Second note/ }));
-
-    await waitFor(async () => {
-      const savedFirst = await notes.get(first.id);
-      expect(savedFirst?.text).toBe('First note EDITED');
-    });
-
-    const savedSecond = await notes.get(second.id);
-    expect(savedSecond?.text).toBe('Second note original text');
+    await user.click(await screen.findByRole('button', { name: /Second note/ }));
+    expect(await screen.findByRole('textbox', { name: 'Note text' })).toHaveValue(
+      'Second note text',
+    );
   });
 });
