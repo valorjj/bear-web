@@ -94,4 +94,27 @@ describe('useNotes', () => {
 
     await waitFor(() => expect(result.current.selectedNote?.id).toBe(note.id));
   });
+
+  it('reports selectedNote as undefined while the probe is unresolved, distinct from null', async () => {
+    // The three states are not interchangeable: `undefined` means "the probe
+    // for this selection has not resolved yet" (render nothing); `null` means
+    // "resolved, and there is no note" (render the empty state). Collapsing
+    // the former into the latter is exactly the bug this test guards —
+    // `AppShell` would paint one frame of "No note selected" on every switch.
+    const first = await notes.create('first');
+    const second = await notes.create('second');
+    const { result } = renderHook(() => useNotes('active'));
+
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+    act(() => result.current.select(first.id));
+    await waitFor(() => expect(result.current.selectedNote?.id).toBe(first.id));
+
+    // Switching the selection re-tags the probe against the new id, and the
+    // live query has not had a tick to resolve against it yet: this must be
+    // `undefined`, never `null`, in that window.
+    act(() => result.current.select(second.id));
+    expect(result.current.selectedNote).toBeUndefined();
+
+    await waitFor(() => expect(result.current.selectedNote?.id).toBe(second.id));
+  });
 });

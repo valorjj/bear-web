@@ -10,7 +10,13 @@ export interface NotesState {
   /** `undefined` while the live query has not yet resolved. */
   items: Note[] | undefined;
   selectedNoteId: string | null;
-  selectedNote: Note | null;
+  /**
+   * `undefined` while the probe for `selectedNoteId` has not yet resolved
+   * (nothing is known yet — render nothing); `null` once resolved and there
+   * is no selection, or the selected note is confirmed gone (render the
+   * empty state); the `Note` once the probe has resolved to one.
+   */
+  selectedNote: Note | null | undefined;
   select: (id: string | null) => void;
 }
 
@@ -87,7 +93,7 @@ export function useNotes(scope: NoteScope): NotesState {
   return {
     items,
     selectedNoteId,
-    selectedNote: probe?.note ?? null,
+    selectedNote: probe === undefined ? undefined : (probe?.note ?? null),
     select: setSelectedNoteId,
   };
 }

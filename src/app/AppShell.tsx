@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useState } from 'react';
+import { type ReactElement, useCallback, useRef, useState } from 'react';
 
 import { notes } from '@/data';
 import { NoteEditor, NoteList, type NoteScope, ScopeSidebar, useNotes } from '@/features/notes';
@@ -17,11 +17,23 @@ export function AppShell(): ReactElement {
   const [scope, setScope] = useState<NoteScope>('active');
   const { items, selectedNoteId, selectedNote, select } = useNotes(scope);
 
+  // Guards against a double-click (or any other double-fire) on "New note":
+  // `create` is async, and without this a second click before the first
+  // `await` resolves creates a second note that never gets an editor mounted
+  // to flush-and-purge it on unmount — a permanent blank `Untitled` row.
+  const creatingRef = useRef(false);
+
   const handleCreate = useCallback(async () => {
-    // Creating always lands in the notes scope: a new note is not trash.
-    setScope('active');
-    const created = await notes.create();
-    select(created.id);
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    try {
+      // Creating always lands in the notes scope: a new note is not trash.
+      setScope('active');
+      const created = await notes.create();
+      select(created.id);
+    } finally {
+      creatingRef.current = false;
+    }
   }, [select]);
 
   const handleTrash = useCallback(async (id: string) => {
@@ -69,7 +81,7 @@ export function AppShell(): ReactElement {
       />
 
       <Pane label={t('pane.editor')}>
-        {selectedNote === null ? (
+        {selectedNote === undefined ? null : selectedNote === null ? (
           <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
         ) : (
           // `key` is load-bearing, not an optimisation: it remounts the editor
