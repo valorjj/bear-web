@@ -3,5 +3,7 @@ export type { NoteEditorProps } from './NoteEditor';
 export { NoteList } from './NoteList';
 export type { NoteListProps } from './NoteList';
 export type { NoteScope } from './scope';
+export { ScopeSidebar } from './ScopeSidebar';
+export type { ScopeSidebarProps } from './ScopeSidebar';
 export { useNotes } from './useNotes';
 export type { NotesState } from './useNotes';
