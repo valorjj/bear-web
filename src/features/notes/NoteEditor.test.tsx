@@ -58,9 +58,15 @@ describe('NoteEditor', () => {
     await user.type(screen.getByRole('textbox', { name: 'Note text' }), 'x');
     await user.click(screen.getByRole('button', { name: 'elsewhere' }));
 
-    await waitFor(async () => {
-      expect((await notes.get(note.id))?.text).toBe('x');
-    });
+    // Real timers, but a timeout well under AUTOSAVE_DELAY_MS (300ms): the
+    // ordinary debounce cannot have fired yet, so a pass can only mean the
+    // blur handler triggered the write.
+    await waitFor(
+      async () => {
+        expect((await notes.get(note.id))?.text).toBe('x');
+      },
+      { timeout: 150 },
+    );
   });
 
   it('purges a note left empty when it unmounts', async () => {
@@ -100,6 +106,9 @@ describe('NoteEditor', () => {
       expect(screen.getByRole('status')).toBeInTheDocument();
     });
     expect(textarea).toHaveValue('precious');
+    // The failed write must never overwrite the last known-good text in
+    // IndexedDB — the stored value stays at its pre-failure state.
+    expect((await notes.get(note.id))?.text).toBe('');
 
     save.mockRestore();
   });
