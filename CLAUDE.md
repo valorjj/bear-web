@@ -11,15 +11,16 @@ IndexedDB.
 
 ## Status
 
-| Milestone                      | State                                             |
-| ------------------------------ | ------------------------------------------------- |
-| M0 scaffold, CI, Pages deploy  | complete                                          |
-| M1 data layer (Dexie)          | complete                                          |
-| M2 application shell           | complete                                          |
-| M3 notes CRUD, textarea editor | next                                              |
-| M4–M9                          | editor, tags, smart lists, search, themes, polish |
+| Milestone                      | State                                     |
+| ------------------------------ | ----------------------------------------- |
+| M0 scaffold, CI, Pages deploy  | complete                                  |
+| M1 data layer (Dexie)          | complete                                  |
+| M2 application shell           | complete                                  |
+| M3 notes CRUD, textarea editor | complete                                  |
+| M4 editor                      | next                                      |
+| M5–M9                          | tags, smart lists, search, themes, polish |
 
-113 unit tests, 10 end-to-end tests. `main` is always green and auto-deploys.
+176 unit tests, 13 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -72,6 +73,9 @@ These bit us once already. They are not mistakes.
   `src/styles/tokens.css` is a defect.
 - IndexedDB is the single source of truth for durable data; components subscribe
   via `useLiveQuery`. There is no second copy of note data in application state.
+- `src/features/notes/ScopeSidebar.tsx` is two hardcoded rows and **M6 deletes
+  the file**. It exists so M3 can ship `trash` and `restore` with a path back.
+  Do not grow it into a registry.
 
 ## Rules that must not be silently reversed
 
@@ -100,6 +104,19 @@ These bit us once already. They are not mistakes.
   `:root:not([data-theme='light'])` selector.
 - Pane widths are **durable** (settings table), not Zustand state. Zustand is
   reserved for genuinely ephemeral state and has not been added yet.
+- **`NoteEditor` must be rendered with `key={note.id}`.** The remount is what
+  makes an editor instance know exactly one note for its lifetime, so its
+  unmount cleanup is a correct flush-on-switch. Removing the key reintroduces
+  the entire class of "wrote note A's text over note B" bugs.
+- **`useNotes` reconciles against the database, not the note list.** The list
+  lags a creation by one tick, so reconciling against it deselects every note
+  the instant it is created. The `{ note }` wrapper on the probe query exists
+  to distinguish "still loading" from "loaded, and it is gone".
+- **`useAutosave` claims a sequence token per flush.** Overlapping saves are
+  real: type, pause past the debounce, keep typing. Only the latest claim may
+  mutate `savedRef` or `failed`. Comparing text instead is NOT sound — after a
+  rollback, `savedRef.current` can coincidentally equal an older save's own
+  pending text, so a value guard passes for a superseded write.
 
 ## Working style
 
@@ -124,15 +141,3 @@ found only that way.
   Global git config is the work identity and must stay untouched.
 - The first 33 commits carry the work address. Left deliberately; not worth a
   force-push on a public repo.
-
-## Open decision for M3
-
-Selection state — which note is open — has no home. The only pattern in the
-codebase is "durable, via `settings` + `useLiveQuery`", and copying it would
-persist a note id that may be deleted and round-trip every click through
-IndexedDB. Choose `useState` lifted into `AppShell`, or introduce Zustand, which
-the spec reserves for exactly this. Decide before implementation, not during.
-
-Also for M3: `AppShell` already does two jobs (layout and width persistence).
-Adding selection and a note list without extracting a `usePaneWidths` hook will
-make it the file everyone edits.
