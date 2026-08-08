@@ -167,4 +167,63 @@ describe('useAutosave', () => {
     expect(save).toHaveBeenLastCalledWith('important');
     expect(result.current.failed).toBe(false);
   });
+
+  it('does not let a stale rejection stomp a newer, already-succeeded save', async () => {
+    let rejectSave1: (error: Error) => void = () => {};
+    let resolveSave2: () => void = () => {};
+
+    const save = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectSave1 = reject;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSave2 = resolve;
+          }),
+      );
+
+    const { result } = renderHook(() => useAutosave({ initial: '', save }));
+
+    // Save1 starts for 'a'.
+    act(() => result.current.setText('a'));
+    act(() => result.current.flush());
+
+    // The user keeps typing; Save2 starts for 'ab' while Save1 is still in flight.
+    act(() => result.current.setText('ab'));
+    act(() => result.current.flush());
+
+    // Save2 resolves first: 'ab' is genuinely persisted.
+    resolveSave2();
+    await settle();
+
+    // Save1 then rejects — stale, and must not stomp the marker Save2 set,
+    // nor report a failure that no longer reflects the current buffer.
+    rejectSave1(new Error('stale failure'));
+    await settle();
+
+    expect(result.current.failed).toBe(false);
+
+    // Confirm the saved marker still reflects 'ab': flushing unchanged text
+    // must not trigger a redundant write.
+    act(() => result.current.flush());
+    await settle();
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls through to a normal flush on unmount when no discard is supplied, even with an empty buffer', async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { result, unmount } = renderHook(() => useAutosave({ initial: 'had content', save }));
+
+    act(() => result.current.setText(''));
+    unmount();
+    await settle();
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith('');
+  });
 });

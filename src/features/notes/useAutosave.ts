@@ -72,8 +72,15 @@ export function useAutosave({
     void saveRef.current(pending).then(
       () => setFailed(false),
       () => {
-        savedRef.current = previous;
-        setFailed(true);
+        // Guard against a stale rejection: if a newer flush has since
+        // overwritten the marker (and possibly already persisted
+        // successfully), this call's failure no longer describes the
+        // current buffer. Rolling back or reporting `failed` here would
+        // stomp a correct, already-saved marker and raise a false alarm.
+        if (savedRef.current === pending) {
+          savedRef.current = previous;
+          setFailed(true);
+        }
       },
     );
   }, [cancelTimer]);
