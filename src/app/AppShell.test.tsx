@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -123,6 +123,26 @@ describe('AppShell notes', () => {
       expect(await notes.listActive()).toHaveLength(1);
     });
     expect((await notes.listActive())[0]?.id).toBe(keeper.id);
+  });
+
+  it('does not create a second note when "New note" is double-clicked', async () => {
+    renderShell();
+
+    const createButton = screen.getByRole('button', { name: 'New note' });
+
+    // `fireEvent`, not `userEvent`, deliberately: both clicks must land
+    // synchronously, before the first `notes.create()` await resolves — the
+    // double-click race the guard in `handleCreate` exists for. Awaiting
+    // between the two clicks would let the guard's `finally` clear before the
+    // second click, and the test would pass whether or not the fix exists.
+    fireEvent.click(createButton);
+    fireEvent.click(createButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Note text' })).toBeInTheDocument();
+    });
+
+    expect(await notes.listActive()).toHaveLength(1);
   });
 
   it('creating from the trash scope returns to the notes scope', async () => {
