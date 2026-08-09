@@ -303,10 +303,13 @@ describe('useAutosave', () => {
 });
 
 describe('rollback targets confirmed-persisted text', () => {
-  it('re-attempts a write after a failure, even when the buffer returns to an earlier value', async () => {
-    // The defect this replaces: `previous` was an optimistic marker that could
-    // name text never actually written. If the buffer later coincidentally
-    // equalled it, the next flush skipped a write that had never landed.
+  it('retries the failed text itself, when the buffer returns to exactly what failed', async () => {
+    // The defect this replaces: the old optimistic marker, after 'two' fails,
+    // would still point at 'two' (the just-attempted, never-persisted text).
+    // If the buffer later returned to 'two', the marker matched and the flush
+    // was skipped — even though the store still only holds 'one'. The fix
+    // rolls the marker back to the confirmed-persisted value ('one') instead,
+    // so a buffer of 'two' never matches it and the write is retried.
     let current = 'start';
     const save = vi
       .fn<(text: string) => Promise<void>>()
@@ -326,13 +329,44 @@ describe('rollback targets confirmed-persisted text', () => {
     act(() => result.current.flush());
     await act(async () => undefined);
 
-    // Back to the last *confirmed* text. A flush must still be attempted,
-    // because the failed write means the store does not hold 'two'.
+    // Buffer is unchanged, still 'two' — the exact text that failed to save.
+    // The store only holds 'one', so this must be retried, not skipped.
+    act(() => result.current.flush());
+    await act(async () => undefined);
+
+    expect(save.mock.calls.map(([text]) => text)).toEqual(['one', 'two', 'two']);
+  });
+
+  it('skips a redundant write when the buffer returns to the confirmed-persisted text', async () => {
+    // The complementary case: after 'two' fails, the store still genuinely
+    // holds 'one'. If the buffer returns to 'one', that text is already on
+    // disk — writing it again would be a redundant, pointless save.
+    let current = 'start';
+    const save = vi
+      .fn<(text: string) => Promise<void>>()
+      .mockResolvedValueOnce(undefined) // 'one' persists
+      .mockRejectedValueOnce(new Error('quota')) // 'two' fails
+      .mockResolvedValue(undefined);
+
+    const { result } = renderHook(() =>
+      useAutosave({ initial: 'start', read: () => current, save }),
+    );
+
     current = 'one';
     act(() => result.current.flush());
     await act(async () => undefined);
 
-    expect(save.mock.calls.map(([text]) => text)).toEqual(['one', 'two', 'one']);
+    current = 'two';
+    act(() => result.current.flush());
+    await act(async () => undefined);
+
+    // Back to 'one' — the last text that actually persisted. No write needed.
+    current = 'one';
+    act(() => result.current.flush());
+    await act(async () => undefined);
+
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls.map(([text]) => text)).toEqual(['one', 'two']);
   });
 
   it('clears the failure flag once a later write succeeds', async () => {

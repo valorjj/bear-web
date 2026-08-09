@@ -47,25 +47,10 @@ export function useAutosave({
   isEmpty,
   delayMs = AUTOSAVE_DELAY_MS,
 }: AutosaveOptions): Autosave {
-  const [failed, setFailedState] = useState(false);
-
-  // Mirrors `failed` synchronously. `flush` runs inside a promise callback,
-  // where the last-committed React state (not necessarily the latest
-  // `setFailed` call) is what a plain closure would see; a ref sidesteps that.
-  const failedRef = useRef(false);
-  const setFailed = useCallback((value: boolean) => {
-    failedRef.current = value;
-    setFailedState(value);
-  }, []);
+  const [failed, setFailed] = useState(false);
 
   // The text of the most recent write we have STARTED. Deduplicates triggers
-  // that arrive while a write is in flight. This check is suppressed while
-  // `failedRef` is set: after a failure, `attemptedRef` is rolled back to the
-  // confirmed-persisted marker (see below), and the buffer can coincidentally
-  // return to exactly that value even though the failed write itself never
-  // landed. Trusting the dedupe check there would silently skip a write the
-  // user is owed — the hook writes through unconditionally on the next flush
-  // until a save actually succeeds again.
+  // that arrive while a write is in flight.
   const attemptedRef = useRef(initial);
 
   // The text of the most recent write that RESOLVED SUCCESSFULLY. This is the
@@ -106,7 +91,7 @@ export function useAutosave({
     cancelTimer();
 
     const pending = readRef.current();
-    if (!failedRef.current && pending === attemptedRef.current) return;
+    if (pending === attemptedRef.current) return;
 
     attemptedRef.current = pending;
     const token = ++saveSeqRef.current;
@@ -138,7 +123,7 @@ export function useAutosave({
         setFailed(true);
       },
     );
-  }, [cancelTimer, setFailed]);
+  }, [cancelTimer]);
 
   const schedule = useCallback(() => {
     cancelTimer();
