@@ -275,6 +275,62 @@ describe('opening a note', () => {
   });
 });
 
+/**
+ * The property the whole editor rests on, asserted through the REAL component
+ * rather than against `MarkdownManager` standalone.
+ *
+ * Every serializer test drives the manager on its own. Nothing asserted that
+ * the manager and the MOUNTED ProseMirror schema agree — and `NoteEditor`'s
+ * correctness is exactly that agreement. When they disagreed, opening a note
+ * and closing it again could rewrite it, or (for `'1. '`, `'# '`) DELETE it:
+ * the manager emitted a schema-invalid node, ProseMirror silently dropped it,
+ * and the shorter document was written back.
+ *
+ * Each input below is stored verbatim and then merely opened and closed. No
+ * write and no purge may occur, for any of them.
+ */
+describe('manager/schema agreement', () => {
+  const DEGENERATE: ReadonlyArray<{ name: string; markdown: string }> = [
+    // The reproduction from the final review, byte for byte: typing '1. ' in a
+    // new note stored '1. \n\n', and reopening it purged the note outright.
+    { name: 'empty ordered list item', markdown: '1. ' },
+    { name: 'empty ordered list item, as stored', markdown: '1. \n\n' },
+    { name: 'empty heading', markdown: '# ' },
+    { name: 'empty bullet', markdown: '- ' },
+    { name: 'empty blockquote', markdown: '> ' },
+    { name: 'ordered list with a trailing empty item', markdown: '1. Milk\n2. ' },
+    { name: 'empty heading above a body', markdown: '# \n\nReal body text here' },
+    // Non-idempotent normalization is the other way opening a note can write:
+    // '<br>' at the end of a block serializes to '  \n', which parses back as
+    // plain text, so the seed and the editor's reading differed forever.
+    { name: 'trailing hard break', markdown: 'a<br>' },
+    { name: 'trailing two-space break', markdown: 'a  \n' },
+    // Whitespace-only notes survived M3's textarea and must keep surviving.
+    { name: 'whitespace only', markdown: '   ' },
+  ];
+
+  describe.each(DEGENERATE)('$name', ({ markdown }) => {
+    it('is neither written nor purged by opening and closing it', async () => {
+      const note = await createNote(markdown);
+      const save = vi.spyOn(notes, 'save');
+      const purge = vi.spyOn(notes, 'purge');
+
+      const { unmount } = renderWithI18n(<NoteEditor key={note.id} note={note} />);
+      await screen.findByLabelText('Note text');
+
+      await triggerVisibilityFlush();
+      act(() => {
+        unmount();
+      });
+      await act(async () => undefined);
+
+      expect(save).not.toHaveBeenCalled();
+      expect(purge).not.toHaveBeenCalled();
+      expect((await notes.get(note.id))?.text).toBe(markdown);
+    });
+  });
+});
+
 describe('the keyed remount', () => {
   // `NoteEditor` must be rendered with `key={note.id}` so React remounts it
   // on every switch — the doc comment on the component says so, but nothing

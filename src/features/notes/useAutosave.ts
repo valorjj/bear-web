@@ -21,6 +21,12 @@ export interface Autosave {
   /** Debounces a flush. Call on every change. */
   schedule: () => void;
   flush: () => void;
+  /**
+   * Re-declares what is already persisted, for callers whose text source only
+   * becomes readable AFTER this hook's own mount — a child editor, say.
+   * Ignored once any write has been started, so it can never rewrite history.
+   */
+  seed: (text: string) => void;
   failed: boolean;
 }
 
@@ -133,6 +139,14 @@ export function useAutosave({
     }, delayMs);
   }, [cancelTimer, delayMs, flush]);
 
+  // Both markers move together, exactly as they are initialised: the caller is
+  // asserting "this text is what is already stored", not reporting a write.
+  const seed = useCallback((text: string) => {
+    if (saveSeqRef.current !== 0) return;
+    attemptedRef.current = text;
+    persistedRef.current = text;
+  }, []);
+
   useFlushTriggers(flush);
 
   useEffect(() => {
@@ -154,5 +168,5 @@ export function useAutosave({
     };
   }, [cancelTimer, flush]);
 
-  return { schedule, flush, failed };
+  return { schedule, flush, seed, failed };
 }
