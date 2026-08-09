@@ -40,8 +40,12 @@ export const EMPTY_DOCUMENT_MARKDOWN = '';
 const schema = getSchema(editorExtensions);
 
 /**
- * Repairs a parsed document so that it is (a) valid against the editor schema
- * and (b) serializable, without throwing and without losing content.
+ * Repairs a parsed document to close the invalid-node class: nodes that the
+ * schema forbids. Does not eliminate all manager/schema divergence; a
+ * serializer asymmetry between empty and absent `content` still causes empty
+ * headings to diverge (`'# '` from the manager, `''` when read back). Guards
+ * (b) and (c) in the note-purge defense absorb that case, so all three are
+ * load-bearing.
  *
  * Two repairs, both discovered from real inputs a user can type:
  *

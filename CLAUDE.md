@@ -239,10 +239,11 @@ These bit us once already. They are not mistakes.
   truncation, and a total truncation reached `notes.purge`. Typing `1. `,
   switching away, then merely reopening the note DELETED IT. Three independent
   guards now stand between that mechanism and a user's data — `sanitize` in
-  `markdown.ts` (schema-derived, applied on parse and on serialize), the
-  editor-sourced seed above, and `discard` refusing to purge a note that held
-  text at mount and was never edited. Keep all three; this is the one place in
-  the app where a single point of failure is unacceptable. The
+  `markdown.ts` (closes the invalid-node class, but a serializer asymmetry
+  leaves empty headings divergent), the editor-sourced seed above, and `discard`
+  refusing to purge a note that held text at mount and was never edited. Keep
+  all three; this is the one place in the app where a single point of failure is
+  unacceptable. The
   `manager/schema agreement` suite in `NoteEditor.test.tsx` drives the real
   component and is where a new degenerate input belongs.
 - **`useAutosave` rolls back to confirmed-persisted text.** `persistedRef`
