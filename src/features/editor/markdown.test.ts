@@ -1,6 +1,27 @@
+import type { JSONContent } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
 import { normalizeMarkdown, parseMarkdown } from './markdown';
+
+/**
+ * Recursively finds the first text node in a parsed document that carries a
+ * mark of the given type. Walks `content` arrays depth-first.
+ *
+ * Used to assert on the parsed document's structure directly, independent of
+ * the serializer. A round-trip string match cannot prove a mark exists: if
+ * the tokenizer that produces it is dead, the delimited source text falls
+ * through as plain text and still serializes back byte-identically.
+ */
+function findMarkedTextNode(node: JSONContent, markType: string): JSONContent | undefined {
+  if (node.type === 'text' && node.marks?.some((mark) => mark.type === markType)) {
+    return node;
+  }
+  for (const child of node.content ?? []) {
+    const found = findMarkedTextNode(child, markType);
+    if (found) return found;
+  }
+  return undefined;
+}
 
 /**
  * Fidelity: canonical Markdown, written in the serializer's own output style,
@@ -53,5 +74,34 @@ describe('attribute preservation', () => {
     const checked = normalizeMarkdown('- [x] done');
     const unchecked = normalizeMarkdown('- [ ] done');
     expect(checked).not.toBe(unchecked);
+  });
+});
+
+/**
+ * Structural assertions on the parsed document, independent of the
+ * serializer. The fidelity round-trip above cannot distinguish "the
+ * highlight mark works" from "the tokenizer is dead and `==` degraded to
+ * literal text" — a dead tokenizer emits no token at all, so the source
+ * characters simply survive serialization unmarked. These tests inspect
+ * `parseMarkdown`'s output directly so a dead tokenizer, a disabled `start`
+ * hook, or a renamed tokenizer field is caught even though it round-trips.
+ */
+describe('highlight mark structure', () => {
+  it('produces a text node carrying a highlight mark', () => {
+    const doc = parseMarkdown('Some ==highlighted== text.');
+    const marked = findMarkedTextNode(doc, 'highlight');
+    expect(marked).toBeDefined();
+  });
+
+  it('marks only the delimited text, not the surrounding sentence', () => {
+    const doc = parseMarkdown('Some ==highlighted== text.');
+    const marked = findMarkedTextNode(doc, 'highlight');
+    expect(marked?.text).toBe('highlighted');
+  });
+
+  it('adds no highlight mark when the source has no ==', () => {
+    const doc = parseMarkdown('Some plain text.');
+    const marked = findMarkedTextNode(doc, 'highlight');
+    expect(marked).toBeUndefined();
   });
 });
