@@ -53,6 +53,8 @@ export const en = {
   'editor.toolbar.link': 'Link',
   'editor.toolbar.code': 'Code block',
   'editor.toolbar.quote': 'Quote',
+  'editor.toolbar.top': 'Top controls',
+  'editor.toolbar.bottom': 'Formatting toolbar',
   'editor.info.show': 'Note information',
   'editor.info.words': 'Words',
   'editor.info.characters': 'Characters',

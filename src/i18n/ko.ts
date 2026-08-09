@@ -55,6 +55,8 @@ export const ko: Record<TranslationKey, string> = {
   'editor.toolbar.link': '링크',
   'editor.toolbar.code': '코드 블록',
   'editor.toolbar.quote': '인용',
+  'editor.toolbar.top': '상단 컨트롤',
+  'editor.toolbar.bottom': '서식 도구 모음',
   'editor.info.show': '노트 정보',
   'editor.info.words': '단어',
   'editor.info.characters': '글자',
