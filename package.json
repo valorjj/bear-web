@@ -21,6 +21,10 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@tiptap/core": "^3.29.2",
+    "@tiptap/markdown": "^3.29.2",
+    "@tiptap/react": "^3.29.2",
+    "@tiptap/starter-kit": "^3.29.2",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
     "fake-indexeddb": "^6.2.5",
