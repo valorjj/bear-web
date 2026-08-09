@@ -3,6 +3,8 @@ import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
 
+import { pinAllSelectionStep } from './toolbarSelection';
+
 export interface TopControlsProps {
   editor: Editor | null;
   infoOpen: boolean;
@@ -34,7 +36,7 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
         aria-label={t('editor.toolbar.bold')}
         aria-pressed={editor?.isActive('bold') ?? false}
         disabled={editor === null}
-        onClick={() => editor?.chain().focus().toggleBold().run()}
+        onClick={() => editor?.chain().command(pinAllSelectionStep).focus().toggleBold().run()}
         className="rounded px-2 py-1 text-xs font-bold text-muted hover:bg-hover aria-pressed:text-text"
       >
         B
@@ -44,7 +46,7 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
         aria-label={t('editor.toolbar.italic')}
         aria-pressed={editor?.isActive('italic') ?? false}
         disabled={editor === null}
-        onClick={() => editor?.chain().focus().toggleItalic().run()}
+        onClick={() => editor?.chain().command(pinAllSelectionStep).focus().toggleItalic().run()}
         className="rounded px-2 py-1 text-xs italic text-muted hover:bg-hover aria-pressed:text-text"
       >
         I

@@ -4,6 +4,8 @@ import type { ReactElement } from 'react';
 import { useT } from '@/i18n';
 import type { TranslationKey } from '@/i18n';
 
+import { pinAllSelectionStep } from './toolbarSelection';
+
 export interface BottomToolbarProps {
   editor: Editor | null;
 }
@@ -32,56 +34,57 @@ const ACTIONS: readonly Action[] = [
     key: 'heading',
     label: 'editor.toolbar.heading',
     glyph: 'H',
-    run: (editor) => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+    run: (editor) =>
+      editor.chain().command(pinAllSelectionStep).focus().toggleHeading({ level: 1 }).run(),
     active: (editor) => editor.isActive('heading', { level: 1 }),
   },
   {
     key: 'checklist',
     label: 'editor.toolbar.checklist',
     glyph: '☑',
-    run: (editor) => editor.chain().focus().toggleTaskList().run(),
+    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleTaskList().run(),
     active: (editor) => editor.isActive('taskList'),
   },
   {
     key: 'bulletList',
     label: 'editor.toolbar.bulletList',
     glyph: '•',
-    run: (editor) => editor.chain().focus().toggleBulletList().run(),
+    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleBulletList().run(),
     active: (editor) => editor.isActive('bulletList'),
   },
   {
     key: 'orderedList',
     label: 'editor.toolbar.orderedList',
     glyph: '1.',
-    run: (editor) => editor.chain().focus().toggleOrderedList().run(),
+    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleOrderedList().run(),
     active: (editor) => editor.isActive('orderedList'),
   },
   {
     key: 'bold',
     label: 'editor.toolbar.bold',
     glyph: 'B',
-    run: (editor) => editor.chain().focus().toggleBold().run(),
+    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleBold().run(),
     active: (editor) => editor.isActive('bold'),
   },
   {
     key: 'italic',
     label: 'editor.toolbar.italic',
     glyph: 'I',
-    run: (editor) => editor.chain().focus().toggleItalic().run(),
+    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleItalic().run(),
     active: (editor) => editor.isActive('italic'),
   },
   {
     key: 'strike',
     label: 'editor.toolbar.strike',
     glyph: 'S',
-    run: (editor) => editor.chain().focus().toggleStrike().run(),
+    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleStrike().run(),
     active: (editor) => editor.isActive('strike'),
   },
   {
     key: 'highlight',
     label: 'editor.toolbar.highlight',
     glyph: '▮',
-    run: (editor) => editor.chain().focus().toggleHighlight().run(),
+    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleHighlight().run(),
     active: (editor) => editor.isActive('highlight'),
   },
   {
@@ -91,10 +94,16 @@ const ACTIONS: readonly Action[] = [
     run: (editor) => {
       const href = window.prompt('');
       if (href === null || href === '') {
-        editor.chain().focus().unsetLink().run();
+        editor.chain().command(pinAllSelectionStep).focus().unsetLink().run();
         return;
       }
-      editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
+      editor
+        .chain()
+        .command(pinAllSelectionStep)
+        .focus()
+        .extendMarkRange('link')
+        .setLink({ href })
+        .run();
     },
     active: (editor) => editor.isActive('link'),
   },
@@ -102,14 +111,14 @@ const ACTIONS: readonly Action[] = [
     key: 'code',
     label: 'editor.toolbar.code',
     glyph: '</>',
-    run: (editor) => editor.chain().focus().toggleCodeBlock().run(),
+    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleCodeBlock().run(),
     active: (editor) => editor.isActive('codeBlock'),
   },
   {
     key: 'quote',
     label: 'editor.toolbar.quote',
     glyph: '❝',
-    run: (editor) => editor.chain().focus().toggleBlockquote().run(),
+    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleBlockquote().run(),
     active: (editor) => editor.isActive('blockquote'),
   },
 ];
