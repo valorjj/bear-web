@@ -20,12 +20,16 @@ async function settle(): Promise<void> {
 
 describe('useAutosave', () => {
   it('coalesces a burst of edits into a single write', async () => {
+    let current = '';
     const save = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useAutosave({ initial: '', save }));
+    const { result } = renderHook(() => useAutosave({ initial: '', read: () => current, save }));
 
-    act(() => result.current.setText('a'));
-    act(() => result.current.setText('ab'));
-    act(() => result.current.setText('abc'));
+    current = 'a';
+    act(() => result.current.schedule());
+    current = 'ab';
+    act(() => result.current.schedule());
+    current = 'abc';
+    act(() => result.current.schedule());
 
     expect(save).not.toHaveBeenCalled();
 
@@ -36,20 +40,13 @@ describe('useAutosave', () => {
     expect(save).toHaveBeenCalledWith('abc');
   });
 
-  it('exposes the buffer synchronously, before any write', () => {
-    const save = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useAutosave({ initial: 'seed', save }));
-
-    expect(result.current.text).toBe('seed');
-    act(() => result.current.setText('typed'));
-    expect(result.current.text).toBe('typed');
-  });
-
   it('writes immediately on an explicit flush', async () => {
+    let current = '';
     const save = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useAutosave({ initial: '', save }));
+    const { result } = renderHook(() => useAutosave({ initial: '', read: () => current, save }));
 
-    act(() => result.current.setText('abc'));
+    current = 'abc';
+    act(() => result.current.schedule());
     act(() => result.current.flush());
     await settle();
 
@@ -63,24 +60,31 @@ describe('useAutosave', () => {
   });
 
   it('does not write when the buffer matches what was already saved', async () => {
+    const current = 'seed';
     const save = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useAutosave({ initial: 'seed', save }));
+    const { result } = renderHook(() =>
+      useAutosave({ initial: 'seed', read: () => current, save }),
+    );
 
     act(() => result.current.flush());
     await settle();
     expect(save).not.toHaveBeenCalled();
 
-    act(() => result.current.setText('seed'));
+    act(() => result.current.schedule());
     act(() => void vi.advanceTimersByTime(AUTOSAVE_DELAY_MS));
     await settle();
     expect(save).not.toHaveBeenCalled();
   });
 
   it('flushes pending text on unmount', async () => {
+    let current = '';
     const save = vi.fn().mockResolvedValue(undefined);
-    const { result, unmount } = renderHook(() => useAutosave({ initial: '', save }));
+    const { result, unmount } = renderHook(() =>
+      useAutosave({ initial: '', read: () => current, save }),
+    );
 
-    act(() => result.current.setText('unsaved'));
+    current = 'unsaved';
+    act(() => result.current.schedule());
     unmount();
     await settle();
 
@@ -91,7 +95,9 @@ describe('useAutosave', () => {
   it('discards instead of saving when the buffer is empty at unmount', async () => {
     const save = vi.fn().mockResolvedValue(undefined);
     const discard = vi.fn().mockResolvedValue(undefined);
-    const { unmount } = renderHook(() => useAutosave({ initial: '', save, discard }));
+    const { unmount } = renderHook(() =>
+      useAutosave({ initial: '', read: () => '', save, discard }),
+    );
 
     unmount();
     await settle();
@@ -101,13 +107,15 @@ describe('useAutosave', () => {
   });
 
   it('discards a note the user emptied out, rather than saving the empty text first', async () => {
+    let current = 'had content';
     const save = vi.fn().mockResolvedValue(undefined);
     const discard = vi.fn().mockResolvedValue(undefined);
     const { result, unmount } = renderHook(() =>
-      useAutosave({ initial: 'had content', save, discard }),
+      useAutosave({ initial: 'had content', read: () => current, save, discard }),
     );
 
-    act(() => result.current.setText(''));
+    current = '';
+    act(() => result.current.schedule());
     unmount();
     await settle();
 
@@ -116,10 +124,12 @@ describe('useAutosave', () => {
   });
 
   it('flushes on visibilitychange when the page becomes hidden', async () => {
+    let current = '';
     const save = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() => useAutosave({ initial: '', save }));
+    const { result } = renderHook(() => useAutosave({ initial: '', read: () => current, save }));
 
-    act(() => result.current.setText('typed'));
+    current = 'typed';
+    act(() => result.current.schedule());
 
     // jsdom defines `visibilityState` as a prototype getter, which `vi.spyOn`
     // cannot reliably intercept on the instance. Redefine it directly.
@@ -144,14 +154,16 @@ describe('useAutosave', () => {
   });
 
   it('reports a failed save and retries the same text on the next trigger', async () => {
+    let current = '';
     const save = vi
       .fn()
       .mockRejectedValueOnce(new Error('QuotaExceededError'))
       .mockResolvedValue(undefined);
 
-    const { result } = renderHook(() => useAutosave({ initial: '', save }));
+    const { result } = renderHook(() => useAutosave({ initial: '', read: () => current, save }));
 
-    act(() => result.current.setText('important'));
+    current = 'important';
+    act(() => result.current.schedule());
     act(() => void vi.advanceTimersByTime(AUTOSAVE_DELAY_MS));
     await settle();
 
@@ -169,6 +181,7 @@ describe('useAutosave', () => {
   });
 
   it('does not let a stale rejection stomp a newer, already-succeeded save', async () => {
+    let current = '';
     let rejectSave1: (error: Error) => void = () => {};
     let resolveSave2: () => void = () => {};
 
@@ -187,14 +200,16 @@ describe('useAutosave', () => {
           }),
       );
 
-    const { result } = renderHook(() => useAutosave({ initial: '', save }));
+    const { result } = renderHook(() => useAutosave({ initial: '', read: () => current, save }));
 
     // Save1 starts for 'a'.
-    act(() => result.current.setText('a'));
+    current = 'a';
+    act(() => result.current.schedule());
     act(() => result.current.flush());
 
     // The user keeps typing; Save2 starts for 'ab' while Save1 is still in flight.
-    act(() => result.current.setText('ab'));
+    current = 'ab';
+    act(() => result.current.schedule());
     act(() => result.current.flush());
 
     // Save2 resolves first: 'ab' is genuinely persisted.
@@ -216,6 +231,7 @@ describe('useAutosave', () => {
   });
 
   it('does not let a stale, later-resolving success clear a failure reported by a newer save', async () => {
+    let current = '';
     let resolveSave1: () => void = () => {};
     let rejectSave2: (error: Error) => void = () => {};
 
@@ -235,14 +251,16 @@ describe('useAutosave', () => {
       )
       .mockResolvedValue(undefined);
 
-    const { result } = renderHook(() => useAutosave({ initial: '', save }));
+    const { result } = renderHook(() => useAutosave({ initial: '', read: () => current, save }));
 
     // Save1 starts for 'a'.
-    act(() => result.current.setText('a'));
+    current = 'a';
+    act(() => result.current.schedule());
     act(() => result.current.flush());
 
     // The user keeps typing; Save2 starts for 'ab' while Save1 is still in flight.
-    act(() => result.current.setText('ab'));
+    current = 'ab';
+    act(() => result.current.schedule());
     act(() => result.current.flush());
 
     // Save2 (the newer save) rejects first: 'ab' was never persisted.
@@ -268,14 +286,115 @@ describe('useAutosave', () => {
   });
 
   it('falls through to a normal flush on unmount when no discard is supplied, even with an empty buffer', async () => {
+    let current = 'had content';
     const save = vi.fn().mockResolvedValue(undefined);
-    const { result, unmount } = renderHook(() => useAutosave({ initial: 'had content', save }));
+    const { result, unmount } = renderHook(() =>
+      useAutosave({ initial: 'had content', read: () => current, save }),
+    );
 
-    act(() => result.current.setText(''));
+    current = '';
+    act(() => result.current.schedule());
     unmount();
     await settle();
 
     expect(save).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith('');
+  });
+});
+
+describe('rollback targets confirmed-persisted text', () => {
+  it('re-attempts a write after a failure, even when the buffer returns to an earlier value', async () => {
+    // The defect this replaces: `previous` was an optimistic marker that could
+    // name text never actually written. If the buffer later coincidentally
+    // equalled it, the next flush skipped a write that had never landed.
+    let current = 'start';
+    const save = vi
+      .fn<(text: string) => Promise<void>>()
+      .mockResolvedValueOnce(undefined) // 'one' persists
+      .mockRejectedValueOnce(new Error('quota')) // 'two' fails
+      .mockResolvedValue(undefined);
+
+    const { result } = renderHook(() =>
+      useAutosave({ initial: 'start', read: () => current, save }),
+    );
+
+    current = 'one';
+    act(() => result.current.flush());
+    await act(async () => undefined);
+
+    current = 'two';
+    act(() => result.current.flush());
+    await act(async () => undefined);
+
+    // Back to the last *confirmed* text. A flush must still be attempted,
+    // because the failed write means the store does not hold 'two'.
+    current = 'one';
+    act(() => result.current.flush());
+    await act(async () => undefined);
+
+    expect(save.mock.calls.map(([text]) => text)).toEqual(['one', 'two', 'one']);
+  });
+
+  it('clears the failure flag once a later write succeeds', async () => {
+    let current = 'start';
+    const save = vi
+      .fn<(text: string) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('quota'))
+      .mockResolvedValue(undefined);
+
+    const { result } = renderHook(() =>
+      useAutosave({ initial: 'start', read: () => current, save }),
+    );
+
+    current = 'a';
+    act(() => result.current.flush());
+    await act(async () => undefined);
+    expect(result.current.failed).toBe(true);
+
+    current = 'b';
+    act(() => result.current.flush());
+    await act(async () => undefined);
+    expect(result.current.failed).toBe(false);
+  });
+
+  it('does not write when the text has not changed since the last confirmed save', async () => {
+    let current = 'start';
+    const save = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+
+    const { result } = renderHook(() =>
+      useAutosave({ initial: 'start', read: () => current, save }),
+    );
+
+    current = 'edited';
+    act(() => result.current.flush());
+    await act(async () => undefined);
+
+    act(() => result.current.flush());
+    await act(async () => undefined);
+
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the empty predicate', () => {
+  it('discards using isEmpty rather than a bare === comparison', async () => {
+    const save = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+    const discard = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+
+    const { unmount } = renderHook(() =>
+      useAutosave({
+        initial: 'start',
+        read: () => 'EMPTY',
+        save,
+        discard,
+        isEmpty: (text) => text === 'EMPTY',
+      }),
+    );
+
+    unmount();
+    await act(async () => undefined);
+
+    expect(discard).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
   });
 });

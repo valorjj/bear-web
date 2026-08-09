@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback } from 'react';
+import { type ReactElement, useCallback, useRef } from 'react';
 
 import { notes } from '@/data';
 import type { Note } from '@/data';
@@ -25,14 +25,26 @@ export function NoteEditor({ note }: NoteEditorProps): ReactElement {
   const save = useCallback((next: string) => notes.save(note.id, next), [note.id]);
   const discard = useCallback(() => notes.purge(note.id), [note.id]);
 
-  const { text, setText, flush, failed } = useAutosave({ initial: note.text, save, discard });
+  // Temporary scaffolding: a rich editor (Task 10) will own its document and
+  // call `schedule` directly. Until then, a plain ref stands in for that
+  // ownership so the tree compiles against the new `useAutosave` interface.
+  const textRef = useRef(note.text);
+  const { schedule, flush, failed } = useAutosave({
+    initial: note.text,
+    read: () => textRef.current,
+    save,
+    discard,
+  });
 
   return (
     <div className="flex h-full flex-col">
       <textarea
         aria-label={t('editor.textarea')}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
+        defaultValue={note.text}
+        onChange={(event) => {
+          textRef.current = event.target.value;
+          schedule();
+        }}
         onBlur={flush}
         spellCheck={false}
         className="min-h-0 flex-1 resize-none bg-bg px-6 py-4 font-mono text-sm text-text outline-none"
