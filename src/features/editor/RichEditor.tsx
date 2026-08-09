@@ -1,11 +1,15 @@
-import { EditorContent, useEditor } from '@tiptap/react';
-import { type ReactElement, type RefObject, useEffect } from 'react';
+import { EditorContent, type Editor, useEditor } from '@tiptap/react';
+import { type ReactElement, type RefObject, useEffect, useState } from 'react';
 
+import { BottomToolbar } from './BottomToolbar';
 import { editorExtensions } from './extensions';
+import { InfoPanel } from './InfoPanel';
 import { parseMarkdown, serializeMarkdown } from './markdown';
+import { TopControls } from './TopControls';
 
 export interface RichEditorHandle {
   getMarkdown: () => string;
+  editor: Editor | null;
 }
 
 export interface RichEditorProps {
@@ -15,7 +19,7 @@ export interface RichEditorProps {
   onBlur: () => void;
   ariaLabel: string;
   handleRef: RefObject<RichEditorHandle | null>;
-  /** Displayed by the info panel, which Task 11 adds. Unused until then. */
+  /** Displayed by the info panel. */
   createdAt: number;
   updatedAt: number;
 }
@@ -33,7 +37,10 @@ export function RichEditor({
   onBlur,
   ariaLabel,
   handleRef,
+  createdAt,
+  updatedAt,
 }: RichEditorProps): ReactElement {
+  const [infoOpen, setInfoOpen] = useState(false);
   const editor = useEditor({
     extensions: editorExtensions,
     content: parseMarkdown(initialMarkdown),
@@ -51,6 +58,7 @@ export function RichEditor({
   useEffect(() => {
     handleRef.current = {
       getMarkdown: () => (editor === null ? initialMarkdown : serializeMarkdown(editor.getJSON())),
+      editor,
     };
 
     return () => {
@@ -58,5 +66,18 @@ export function RichEditor({
     };
   }, [editor, handleRef, initialMarkdown]);
 
-  return <EditorContent editor={editor} className="flex min-h-0 flex-1 flex-col" />;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <TopControls
+        editor={editor}
+        infoOpen={infoOpen}
+        onToggleInfo={() => setInfoOpen((v) => !v)}
+      />
+      {infoOpen && (
+        <InfoPanel text={editor?.getText() ?? ''} createdAt={createdAt} updatedAt={updatedAt} />
+      )}
+      <EditorContent editor={editor} className="flex min-h-0 flex-1 flex-col overflow-auto" />
+      <BottomToolbar editor={editor} />
+    </div>
+  );
 }

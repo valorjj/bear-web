@@ -1,13 +1,15 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+
+import { renderWithI18n } from '@/i18n/testing';
 
 import { RichEditor, type RichEditorHandle } from './RichEditor';
 
 describe('RichEditor', () => {
   it('renders the initial markdown as rich content', async () => {
     const handleRef = createRef<RichEditorHandle>();
-    render(
+    renderWithI18n(
       <RichEditor
         initialMarkdown="# Hello"
         onChange={vi.fn()}
@@ -24,7 +26,7 @@ describe('RichEditor', () => {
 
   it('exposes the current markdown through its handle', async () => {
     const handleRef = createRef<RichEditorHandle>();
-    render(
+    renderWithI18n(
       <RichEditor
         initialMarkdown="# Hello"
         onChange={vi.fn()}
@@ -43,7 +45,7 @@ describe('RichEditor', () => {
   it('preserves an unsupported construct through the handle', async () => {
     const source = '| a |\n| --- |\n| b |';
     const handleRef = createRef<RichEditorHandle>();
-    render(
+    renderWithI18n(
       <RichEditor
         initialMarkdown={source}
         onChange={vi.fn()}

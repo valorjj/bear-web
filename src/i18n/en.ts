@@ -41,6 +41,24 @@ export const en = {
     'This browser will not let bear-web store data, so anything you write is kept only until you close this tab. Private browsing is the usual cause.',
 
   'locale.switch': 'Language',
+
+  'editor.toolbar.heading': 'Heading',
+  'editor.toolbar.checklist': 'Checklist',
+  'editor.toolbar.bulletList': 'Bullet list',
+  'editor.toolbar.orderedList': 'Numbered list',
+  'editor.toolbar.bold': 'Bold',
+  'editor.toolbar.italic': 'Italic',
+  'editor.toolbar.strike': 'Strikethrough',
+  'editor.toolbar.highlight': 'Highlight',
+  'editor.toolbar.link': 'Link',
+  'editor.toolbar.code': 'Code block',
+  'editor.toolbar.quote': 'Quote',
+  'editor.info.show': 'Note information',
+  'editor.info.words': 'Words',
+  'editor.info.characters': 'Characters',
+  'editor.info.created': 'Created',
+  'editor.info.modified': 'Modified',
+  'editor.link.prompt': 'Link address',
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -43,4 +43,22 @@ export const ko: Record<TranslationKey, string> = {
     '이 브라우저에서 bear-web이 데이터를 저장할 수 없어, 작성한 내용은 탭을 닫을 때까지만 유지됩니다. 대개 사생활 보호 모드가 원인입니다.',
 
   'locale.switch': '언어',
+
+  'editor.toolbar.heading': '제목',
+  'editor.toolbar.checklist': '체크리스트',
+  'editor.toolbar.bulletList': '글머리 기호 목록',
+  'editor.toolbar.orderedList': '번호 매기기 목록',
+  'editor.toolbar.bold': '굵게',
+  'editor.toolbar.italic': '기울임꼴',
+  'editor.toolbar.strike': '취소선',
+  'editor.toolbar.highlight': '형광펜',
+  'editor.toolbar.link': '링크',
+  'editor.toolbar.code': '코드 블록',
+  'editor.toolbar.quote': '인용',
+  'editor.info.show': '노트 정보',
+  'editor.info.words': '단어',
+  'editor.info.characters': '글자',
+  'editor.info.created': '만든 날짜',
+  'editor.info.modified': '수정한 날짜',
+  'editor.link.prompt': '링크 주소',
 };
