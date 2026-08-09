@@ -27,6 +27,30 @@ const UNSUPPORTED: ReadonlyArray<{ name: string; markdown: string }> = [
     name: 'raw html block',
     markdown: '<div>raw html</div>',
   },
+  {
+    name: 'inline span with no schema mapping',
+    markdown: '<span>x</span>',
+  },
+  {
+    name: 'inline superscript',
+    markdown: 'H<sup>2</sup>O',
+  },
+  {
+    name: 'inline subscript',
+    markdown: '<sub>x</sub>',
+  },
+  {
+    name: 'inline kbd',
+    markdown: '<kbd>Ctrl</kbd>',
+  },
+  {
+    name: 'inline HTML comment',
+    markdown: 'a<!-- comment -->b',
+  },
+  {
+    name: 'unknown custom element',
+    markdown: '<my-custom-el>x</my-custom-el>',
+  },
 ];
 
 describe.each(UNSUPPORTED)('preservation: $name', ({ markdown }) => {
@@ -110,13 +134,108 @@ describe('structural check: the raw node actually does the work', () => {
     expect(node?.type).toBe('rawHtmlBlock');
     expect(node?.attrs?.source).toBe(markdown);
   });
+
+  it('parses an unmapped inline HTML tag into a rawInlineHtml node carrying the source', () => {
+    const markdown = '<span>x</span>';
+    const doc = parseMarkdown(markdown);
+
+    const [paragraph] = doc.content ?? [];
+    expect(paragraph?.type).toBe('paragraph');
+    const [node] = paragraph?.content ?? [];
+    expect(node?.type).toBe('rawInlineHtml');
+    expect(node?.attrs?.source).toBe(markdown);
+  });
+
+  it('parses an unmapped inline HTML tag nested in text into place, not dropped', () => {
+    const markdown = 'H<sup>2</sup>O';
+    const doc = parseMarkdown(markdown);
+
+    const [paragraph] = doc.content ?? [];
+    expect(paragraph?.content?.map((child) => child.type)).toEqual([
+      'text',
+      'rawInlineHtml',
+      'text',
+    ]);
+    expect(paragraph?.content?.[1]?.attrs?.source).toBe('<sup>2</sup>');
+  });
+});
+
+describe('inline HTML: the tag this editor cannot represent is rescued, not dropped', () => {
+  // Without a mechanism like this, `@tiptap/markdown`'s built-in inline HTML
+  // handling silently unwraps any *standard* HTML tag name (its own
+  // definition of "recognized", independent of whether this schema actually
+  // maps it) and keeps only the inner text — `<sup>2</sup>` becomes a bare
+  // `2`. These lock in that the wrapper itself, not just its text content,
+  // survives.
+  const UNMAPPED_INLINE_HTML: ReadonlyArray<{ name: string; markdown: string }> = [
+    { name: 'span with no schema mapping', markdown: '<span>x</span>' },
+    { name: 'superscript', markdown: 'H<sup>2</sup>O' },
+    { name: 'subscript', markdown: '<sub>x</sub>' },
+    { name: 'kbd', markdown: '<kbd>Ctrl</kbd>' },
+    { name: 'HTML comment', markdown: 'a<!-- comment -->b' },
+    { name: 'unknown custom element', markdown: '<my-custom-el>x</my-custom-el>' },
+  ];
+
+  describe.each(UNMAPPED_INLINE_HTML)('$name', ({ markdown }) => {
+    it('round-trips byte-for-byte', () => {
+      expect(normalizeMarkdown(markdown)).toBe(markdown);
+    });
+  });
+});
+
+describe('inline HTML: constructs this editor upgrades must keep upgrading', () => {
+  // The fix must be narrow. These four are the exact upgrades named in the
+  // fix-round brief; regressing any of them to inert raw HTML is the failure
+  // mode a greedy tokenizer would produce.
+  it('still upgrades <em> to emphasis, not raw HTML', () => {
+    const doc = parseMarkdown('<em>hi</em>');
+    const [paragraph] = doc.content ?? [];
+    const [node] = paragraph?.content ?? [];
+    expect(node?.type).toBe('text');
+    expect(node?.marks).toEqual([{ type: 'italic' }]);
+    expect(normalizeMarkdown('<em>hi</em>')).toBe('*hi*');
+  });
+
+  it('still upgrades <mark> to the highlight mark, not raw HTML', () => {
+    const doc = parseMarkdown('<mark>x</mark>');
+    const [paragraph] = doc.content ?? [];
+    const [node] = paragraph?.content ?? [];
+    expect(node?.type).toBe('text');
+    expect(node?.marks).toEqual([{ type: 'highlight' }]);
+    expect(normalizeMarkdown('<mark>x</mark>')).toBe('==x==');
+  });
+
+  it('still upgrades <br> to a hard break, not raw HTML', () => {
+    const doc = parseMarkdown('line<br>break');
+    const [paragraph] = doc.content ?? [];
+    expect(paragraph?.content?.map((child) => child.type)).toEqual(['text', 'hardBreak', 'text']);
+    expect(normalizeMarkdown('line<br>break')).toBe('line  \nbreak');
+  });
+
+  it('still upgrades an autolink to a link mark, not raw HTML', () => {
+    const doc = parseMarkdown('<https://example.com>');
+    const [paragraph] = doc.content ?? [];
+    const [node] = paragraph?.content ?? [];
+    expect(node?.type).toBe('text');
+    expect(node?.marks?.[0]?.type).toBe('link');
+    expect(node?.marks?.[0]?.attrs?.href).toBe('https://example.com');
+    expect(normalizeMarkdown('<https://example.com>')).toBe(
+      '[https://example.com](https://example.com)',
+    );
+  });
 });
 
 describe('token set derivation', () => {
   it('registers a raw node for every editorExtensions name we rely on for fallback', () => {
     const names = editorExtensions.map((extension) => extension.name);
     expect(names).toEqual(
-      expect.arrayContaining(['rawTable', 'rawDefinition', 'rawHtmlBlock', 'rawImage']),
+      expect.arrayContaining([
+        'rawTable',
+        'rawDefinition',
+        'rawHtmlBlock',
+        'rawImage',
+        'rawInlineHtml',
+      ]),
     );
   });
 });
