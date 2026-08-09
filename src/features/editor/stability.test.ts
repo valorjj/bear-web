@@ -52,6 +52,27 @@ const NON_CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
     markdown:
       '# Notes\n\nSome **bold** and a [link](https://test.dev).\n\n> A quote here.\n\n- [ ] todo item',
   },
+
+  // Fix round 2: round 1 closed the gap for the constructs a reviewer named,
+  // but the underlying principle is "every construct the schema recognizes,
+  // supported or raw-fallback, needs at least one entry here" — not "every
+  // construct someone happened to name." Derived by walking CANONICAL
+  // (markdown.test.ts), UNSUPPORTED and the registered Raw* nodes
+  // (rawBlock.test.ts / extensions.ts) end to end; see the report's coverage
+  // table for the full enumeration. These five had zero stability coverage
+  // before this round. Content is deliberately different from every pinned
+  // fidelity/preservation string for the same construct.
+  { name: 'inline code', markdown: 'Use `printf` for output.' },
+  { name: 'image', markdown: '![diagram](https://example.com/diagram.svg)' },
+  { name: 'reference definition', markdown: '[docs]: https://another-example.org/docs' },
+  { name: 'raw html block', markdown: '<section>content here</section>' },
+  // Not named in either CANONICAL or UNSUPPORTED, but a real construct
+  // StarterKit registers and this codebase pins only through an HTML-upgrade
+  // fidelity check ('<br>' -> 'line  \nbreak' in rawBlock.test.ts) rather than
+  // through a native-markdown CANONICAL entry — so it had no stability
+  // coverage under its own native syntax either. Found while deriving the
+  // table below, not because a reviewer named it.
+  { name: 'hard break', markdown: 'First line  \nSecond line' },
 ];
 
 describe.each(NON_CANONICAL)('stability: $name', ({ markdown }) => {
