@@ -150,6 +150,37 @@ These bit us once already. They are not mistakes.
   thing: a wrong, empty, or stale note list or editor for a frame after
   switching scopes or notes.
 
+## Carried into M4
+
+Real, deliberately deferred at the end of M3 with a ruling. Full reasoning is in
+`.superpowers/sdd/2026-08-08-m3-notes/progress.md`. Fold these into M4's plan
+rather than rediscovering them.
+
+- **`useAutosave`'s rollback target is optimistic, not confirmed-persisted.**
+  `const previous = savedRef.current` may name text that was never actually
+  written. With three saves in flight where a superseded one also fails, the
+  rollback can target that text; if the user's buffer later coincidentally
+  re-equals it, the next flush skips it as unchanged. Reaching it needs a
+  three-way overlap inside a 300ms debounce plus an exact string match, which is
+  why it was deferred. The honest fix tracks confirmed-persisted text separately
+  from the in-flight marker — a redesign, and M4 rewrites this component's caller
+  anyway.
+- **`usePaneWidths` writes `void settings.set(...)` with no flush**, so dragging
+  a separator and reloading immediately can lose the width. Deferred because it
+  costs a pane width rather than note content, and because `useAutosave` now has
+  the general `beforeunload`/`visibilitychange` flush pair that should be
+  extracted and shared rather than duplicated one-off.
+- **`format.test.ts` has no midnight case**, so the documented reason for
+  choosing `hourCycle: 'h23'` over `hour12: false` — that the latter renders
+  midnight as 24:00 under some ICU builds — is asserted in a comment and verified
+  by nothing. One extra test case.
+- **Deleting a blank note purges it rather than trashing it**, silently. The
+  Delete button is irreversible there and identical everywhere else. Defensible
+  under the blank-note rule, but M6 owns trash management and should decide.
+- **A blank note open across a reload is never discarded**, because
+  `beforeunload` only flushes and does not unmount. Spec-compliant as written; a
+  startup sweep of empty notes would close it and belongs to a future milestone.
+
 ## Working style
 
 Each milestone runs: brainstorm → spec → written plan → subagent-driven execution
