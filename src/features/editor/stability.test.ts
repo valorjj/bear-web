@@ -29,6 +29,29 @@ const NON_CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   { name: 'ordered list starting at three', markdown: '3. third\n4. fourth' },
   { name: 'tilde fenced code', markdown: '~~~\ncode\n~~~' },
   { name: 'indented code block', markdown: '    indented code' },
+
+  // Fix round 1: fidelity pins exactly one string per construct and does not
+  // generalise to other content of the same construct. Stability previously
+  // covered only the 15 cases above, leaving every construct absent from this
+  // list ungoverned for any input other than the single string fidelity
+  // happens to check — a gap a reviewer demonstrated with a serializer defect
+  // that was a no-op on the fidelity string but drifted, without bound, on
+  // any other blockquote. Each entry below uses content distinct from
+  // markdown.test.ts's fidelity strings and rawBlock.test.ts's preservation
+  // strings, so this coverage is independent rather than redundant.
+  { name: 'blockquote', markdown: '> A different quote.' },
+  { name: 'link', markdown: 'Check [this site](https://another-example.org) out.' },
+  { name: 'task list', markdown: '- [ ] walk the dog\n- [x] feed the cat' },
+  { name: 'raw table', markdown: '| name | age |\n| --- | --- |\n| Alice | 30 |' },
+  { name: 'inline raw html', markdown: '<span>hello</span> world' },
+  { name: 'highlight', markdown: 'This ==really matters== a lot.' },
+  { name: 'strikethrough', markdown: 'This is ~~outdated~~ information.' },
+  { name: 'fenced code block with language', markdown: '```py\nprint("hi")\n```' },
+  {
+    name: 'multi-paragraph mixed constructs',
+    markdown:
+      '# Notes\n\nSome **bold** and a [link](https://test.dev).\n\n> A quote here.\n\n- [ ] todo item',
+  },
 ];
 
 describe.each(NON_CANONICAL)('stability: $name', ({ markdown }) => {
