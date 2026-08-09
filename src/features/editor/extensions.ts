@@ -20,7 +20,18 @@ import {
  * schema from exactly this set, before any Raw* node is added to it.
  */
 const supportedExtensions: Extensions = [
-  StarterKit,
+  // `underline: false` is load-bearing, not tidying. StarterKit registers
+  // `@tiptap/extension-underline`, which binds Mod-U and serializes to
+  // `++text++` — a syntax this project never chose, and one the spec explicitly
+  // rejected (no Markdown representation; `_underline_` collides with
+  // CommonMark italic). Leaving it on also put `u` into `recognizedHtmlTags`,
+  // so `<u>x</u>` in an existing note was REWRITTEN to `++x++` instead of being
+  // preserved verbatim by the raw-inline fallback.
+  //
+  // The absence of an underline BUTTON was tested and passed while all of the
+  // above shipped. The rule needs a schema-level assertion; see
+  // `extensions.test.ts`.
+  StarterKit.configure({ underline: false }),
   TaskList,
   TaskItem.configure({ nested: true }),
   Highlight,

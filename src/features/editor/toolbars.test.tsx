@@ -182,8 +182,22 @@ describe('the bottom toolbar', () => {
 
       expect(handleRef.current?.getMarkdown()).toBe('[word](https://example.com)');
     });
+
+    it('asks for the address with a translated label, never an empty prompt', async () => {
+      promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('https://example.com');
+      renderEditor('word');
+      await screen.findByLabelText('Note text');
+
+      await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Link' }));
+
+      expect(promptSpy).toHaveBeenCalledWith('Link address');
+    });
   });
 
+  // A missing BUTTON is the weakest possible form of this rule, and on its own
+  // it passed while underline was live in the schema, bound to Mod-U and
+  // serializing to `++text++`. The rule that actually matters is asserted at
+  // the schema, in `extensions.test.ts`; this stays as the UI half of it.
   it('does not offer underline, which has no markdown representation', async () => {
     renderEditor('word');
     await screen.findByLabelText('Note text');
