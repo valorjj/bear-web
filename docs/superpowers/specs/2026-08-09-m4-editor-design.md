@@ -143,9 +143,14 @@ src/features/notes/
   NoteEditor.tsx      Unchanged role: owns useAutosave; renders RichEditor
                       in place of the textarea
 
-src/app/
+src/lib/
   useFlushTriggers.ts Extracted from useAutosave; used by useAutosave AND usePaneWidths
 ```
+
+<!-- Corrected after the M4 final review: this file originally placed
+     useFlushTriggers.ts under src/app/. It shipped in src/lib/, which is the
+     right home — src/app/ holds application wiring, and a hook that knows
+     nothing about this product belongs beside src/ui/, not inside it. -->
 
 `markdown.ts` being the sole importer of `@tiptap/markdown` is deliberate. The
 round-trip suite tests that module rather than the editor component, so it runs

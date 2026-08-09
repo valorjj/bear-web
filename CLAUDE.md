@@ -56,14 +56,21 @@ These bit us once already. They are not mistakes.
   browser. **Duck-type in tests; never `instanceof`.**
 - **jsdom has no `setPointerCapture`.** Pointer-drag paths cannot be unit tested;
   they belong in Playwright.
-- **jsdom can drive the editor's commands but not its surface.** Mounting,
-  `getJSON()`, `commands.*`, and clicking toolbar buttons outside the editor all
-  work under Vitest. Clicking _inside_ the editor or typing into it throws
-  uncaught `elementFromPoint`/`getClientRects` errors and makes `vitest run`
-  exit 1 **even when every assertion passes** — so check exit codes, not pass
-  counts, when reviewing editor tests. Real editor interaction (typing, real
-  keyboard shortcuts, clicking inside the contenteditable surface) belongs in
-  Playwright.
+- **jsdom drives the editor's surface too, given three stubs.** Mounting,
+  `getJSON()`, `commands.*`, and clicking toolbar buttons outside the editor
+  work unaided. Clicking _inside_ the contenteditable or typing into it needs
+  `Range.prototype.getBoundingClientRect`, `Range.prototype.getClientRects` and
+  `document.elementFromPoint` stubbed — jsdom has no layout engine, so
+  ProseMirror's `coordsAtPos`/`posAtCoords` throw on APIs it never implements.
+  With those three in place, `userEvent.type` into the contenteditable works and
+  `vitest run` exits 0; see the header of `src/features/notes/NoteEditor.test.tsx`
+  for the exact stubs and `src/features/editor/toolbars.test.tsx` for the
+  related `EditorView.scrollToSelection` stub a block toggle needs. This is what
+  lets a Vitest test assert the whole store → editor → store loop. Without a
+  stub the errors are **uncaught**, so `vitest run` exits 1 even when every
+  assertion passes — check exit codes, not pass counts, when reviewing editor
+  tests. Real keyboard shortcuts and anything depending on real layout still
+  belong in Playwright.
 - `erasableSyntaxOnly` forbids `enum`, parameter properties, and namespaces.
   `verbatimModuleSyntax` requires `import type` / `export type`.
 
@@ -74,6 +81,11 @@ These bit us once already. They are not mistakes.
   as props rather than importing the pane-width constants.
 - Components reach persistence **only** through `src/data/index.ts`, never a
   repository module directly.
+- `src/lib/` holds framework-level hooks with no product knowledge —
+  `useFlushTriggers` today. Like `src/ui/`, it must import **nothing** from
+  `src/app/`, `src/data/`, `src/features/` or `src/i18n/`; unlike `src/ui/`, it
+  is behaviour rather than presentation. (The M4 spec places this directory at
+  `src/app/`; the spec is wrong and has been corrected.)
 - **No user-facing string is hardcoded in a component.** Everything goes through
   `useT`. `src/i18n/en.ts` defines the key type; `ko.ts` is annotated
   `Record<TranslationKey, string>` so a missing translation is a compile error.
@@ -162,7 +174,10 @@ These bit us once already. They are not mistakes.
   suite drives `MarkdownManager` standalone, with no `Editor` and no DOM, which
   is what lets it be exhaustive and fast. Importing the package elsewhere
   couples serialization to a mounted editor and puts the suite behind jsdom's
-  contenteditable limitations.
+  contenteditable limitations. **This is convention enforced by nothing** — there
+  is no lint rule, and oxlint has no import-restriction equivalent configured.
+  A second importer would simply work. `characterization.test.ts` is a deliberate
+  exception: it describes the dependency itself.
 - **The round-trip suite asserts three properties, not one.** Fidelity pins what
   each construct must produce; stability proves normalization settles;
   preservation proves unsupported constructs survive. Idempotence alone —
@@ -180,6 +195,15 @@ These bit us once already. They are not mistakes.
   fidelity string, and no amount of stability coverage catches it. Closing that
   needs semantic-equivalence checks or property-based fuzzing, not more cases.
   Do not attempt to fix it with more test cases.
+- **Known stable-but-lossy transformations. These are instances of the limit
+  above, not new bugs — do not "fix" them.** Each one round-trips to a fixed
+  point, so the suite is green, and each one is a legitimate reading of the
+  source by CommonMark's rules; only a semantic-equivalence check could tell
+  them apart from correct output. Found by the M4 final review:
+  `&copy;` → `&amp;copy;`, `a < b` → `a &lt; b`, `my_var_name` →
+  `my\_var\_name`, autolinks and reference links rewritten to inline form,
+  YAML front matter mangled, and whitespace-only notes normalizing to empty
+  (they are no longer purged for it — see the `discard` guard above).
 - **A dead custom tokenizer is invisible to round-trip tests.** Inert
   `==text==` serializes byte-identically to a working highlight. Constructs
   whose tokenizer is ours need **structural** assertions on the parsed
@@ -190,19 +214,58 @@ These bit us once already. They are not mistakes.
   destroys it with no error and no recovery. Do not remove it when M4b adds real
   table and image nodes — it still covers every other construct `marked` can
   tokenize.
-- **`NoteEditor` seeds autosave from the SERIALIZED document, never from
-  `note.text`.** Seeded from the raw text, every non-canonical note differs from
-  its own serialization the instant it opens, so merely looking at a note
+- **`NoteEditor` seeds autosave from the MOUNTED EDITOR's own reading, never
+  from `note.text`.** Seeded from the raw text, every non-canonical note differs
+  from its own serialization the instant it opens, so merely looking at a note
   rewrites it — churning `updatedAt`, reordering the note list, and re-running
   the tag reindex. Opening a note must produce no write.
+  **"Opening produces no write" silently depended on two preconditions, and
+  both were violated in M4.** (1) `normalizeMarkdown` must be idempotent — a
+  trailing hard break broke it, because `<br>` at the end of a block serializes
+  to `'a  \n'` and parses back as the plain text `'a  '`. (2) `MarkdownManager`
+  and the mounted ProseMirror schema must agree — they did not, and the
+  disagreement could DELETE a note (see the next bullet). Seeding from the
+  editor's own reading, in an effect after mount, makes the rule hold **by
+  construction**: whatever the editor produces at rest is the baseline, so the
+  two components no longer have to match for the rule to hold. React runs a
+  child's effects before its parent's, which is what makes reading `handleRef`
+  in `NoteEditor`'s mount effect safe.
+- **The manager and the mounted schema must be asserted to AGREE, through the
+  real component.** Every serializer test drives `MarkdownManager` standalone,
+  and `NoteEditor`'s correctness depends on exactly the agreement none of them
+  checks. `manager.parse('1. ')` emitted a `listItem` with no children, which
+  the schema forbids: serializing it threw, and ProseMirror silently dropped it
+  on mount, so `read()` returned a shorter document, the first flush wrote the
+  truncation, and a total truncation reached `notes.purge`. Typing `1. `,
+  switching away, then merely reopening the note DELETED IT. Three independent
+  guards now stand between that mechanism and a user's data — `sanitize` in
+  `markdown.ts` (schema-derived, applied on parse and on serialize), the
+  editor-sourced seed above, and `discard` refusing to purge a note that held
+  text at mount and was never edited. Keep all three; this is the one place in
+  the app where a single point of failure is unacceptable. The
+  `manager/schema agreement` suite in `NoteEditor.test.tsx` drives the real
+  component and is where a new degenerate input belongs.
 - **`useAutosave` rolls back to confirmed-persisted text.** `persistedRef`
   advances only when a save RESOLVES; the failure branch restores the dedupe
   baseline to it. Rolling back to the optimistic marker instead reintroduces the
   M3 defect where a buffer that coincidentally re-equals a never-written value
   skips a needed save. The sequence token is separate and still required.
-- **Underline does not exist and must not be added.** It has no Markdown
-  representation. Bear's `_underline_` collides with CommonMark italic and would
-  round-trip ambiguously. Highlight is `==text==`.
+- **Underline is switched off at the schema, in
+  `StarterKit.configure({ underline: false })`, and must stay off.** It has no
+  Markdown representation; `_underline_` collides with CommonMark italic, and
+  serializing to raw `<u>` was considered and rejected. Highlight is `==text==`.
+  **This rule needs a SCHEMA-level assertion, and that is why it escaped.**
+  StarterKit registers `@tiptap/extension-underline` by default, so for the
+  whole of M4 the mark was live: `Mod-U` worked and persisted `++text++`, and
+  because `u` then appeared in the schema-derived `recognizedHtmlTags`, an
+  existing note's `<u>x</u>` was rewritten to `++x++` instead of being preserved
+  verbatim by the raw-inline fallback. The spec, this file, and a passing test
+  all asserted the rule while all of that shipped — the test checked that no
+  underline BUTTON was rendered, which says nothing about the schema, the keymap
+  or the serializer. `src/features/editor/extensions.test.ts` now asserts the
+  mark, the command, the `Mod-U` binding and `<u>` preservation. Any future
+  "not supported" ruling about a StarterKit-bundled extension needs the same
+  treatment: assert on `getSchema(editorExtensions)`, never on the UI.
 - **`AllSelection` must be pinned to a `TextSelection` before any block-level
   toolbar command.** ProseMirror's `AllSelection` (what
   `editor.commands.selectAll()` and the real `Ctrl/Cmd+A` keyboard shortcut both
