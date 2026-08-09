@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeMarkdown } from './markdown';
+import { normalizeMarkdown, parseMarkdown } from './markdown';
 
 /**
  * Fidelity: canonical Markdown, written in the serializer's own output style,
@@ -26,10 +26,29 @@ const CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   { name: 'nested bullet list', markdown: '- outer\n  - inner' },
   { name: 'two paragraphs', markdown: 'First paragraph.\n\nSecond paragraph.' },
   { name: 'heading then paragraph', markdown: '# Title\n\nBody text.' },
+  { name: 'fenced code block, no language', markdown: '```\nplain text\n```' },
+  { name: 'fenced code block with language', markdown: '```ts\nconst x = 1;\n```' },
+  { name: 'fenced code block, multi-line', markdown: '```js\nconst a = 1;\nconst b = 2;\n```' },
+  { name: 'task list, unchecked', markdown: '- [ ] buy bread' },
+  { name: 'task list, checked', markdown: '- [x] buy bread' },
+  { name: 'task list, mixed', markdown: '- [x] done\n- [ ] not done' },
 ];
 
 describe.each(CANONICAL)('fidelity: $name', ({ markdown }) => {
   it('round-trips byte-for-byte', () => {
     expect(normalizeMarkdown(markdown)).toBe(markdown);
+  });
+});
+
+describe('attribute preservation', () => {
+  it('keeps the code block language in the document, not just the output', () => {
+    const doc = parseMarkdown('```ts\nconst x = 1;\n```');
+    expect(JSON.stringify(doc)).toContain('ts');
+  });
+
+  it('distinguishes a checked task item from an unchecked one', () => {
+    const checked = normalizeMarkdown('- [x] done');
+    const unchecked = normalizeMarkdown('- [ ] done');
+    expect(checked).not.toBe(unchecked);
   });
 });

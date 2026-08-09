@@ -1,4 +1,6 @@
 import type { Extensions } from '@tiptap/core';
+import { TaskItem } from '@tiptap/extension-task-item';
+import { TaskList } from '@tiptap/extension-task-list';
 import StarterKit from '@tiptap/starter-kit';
 
 /**
@@ -6,4 +8,8 @@ import StarterKit from '@tiptap/starter-kit';
  * supports. A construct absent from this array is handled by RawBlock and
  * survives verbatim; it is never silently dropped.
  */
-export const editorExtensions: Extensions = [StarterKit];
+export const editorExtensions: Extensions = [
+  StarterKit,
+  TaskList,
+  TaskItem.configure({ nested: true }),
+];
