@@ -11,16 +11,17 @@ IndexedDB.
 
 ## Status
 
-| Milestone                      | State                                     |
-| ------------------------------ | ----------------------------------------- |
-| M0 scaffold, CI, Pages deploy  | complete                                  |
-| M1 data layer (Dexie)          | complete                                  |
-| M2 application shell           | complete                                  |
-| M3 notes CRUD, textarea editor | complete                                  |
-| M4 editor                      | next                                      |
-| M5–M9                          | tags, smart lists, search, themes, polish |
+| Milestone                      | State                                    |
+| ------------------------------ | ---------------------------------------- |
+| M0 scaffold, CI, Pages deploy  | complete                                 |
+| M1 data layer (Dexie)          | complete                                 |
+| M2 application shell           | complete                                 |
+| M3 notes CRUD, textarea editor | complete                                 |
+| M4 editor                      | complete                                 |
+| M5 tags, smart lists           | next                                     |
+| M6–M9                          | trash management, search, themes, polish |
 
-178 unit tests, 14 end-to-end tests. `main` is always green and auto-deploys.
+347 unit tests, 16 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -55,6 +56,14 @@ These bit us once already. They are not mistakes.
   browser. **Duck-type in tests; never `instanceof`.**
 - **jsdom has no `setPointerCapture`.** Pointer-drag paths cannot be unit tested;
   they belong in Playwright.
+- **jsdom can drive the editor's commands but not its surface.** Mounting,
+  `getJSON()`, `commands.*`, and clicking toolbar buttons outside the editor all
+  work under Vitest. Clicking _inside_ the editor or typing into it throws
+  uncaught `elementFromPoint`/`getClientRects` errors and makes `vitest run`
+  exit 1 **even when every assertion passes** — so check exit codes, not pass
+  counts, when reviewing editor tests. Real editor interaction (typing, real
+  keyboard shortcuts, clicking inside the contenteditable surface) belongs in
+  Playwright.
 - `erasableSyntaxOnly` forbids `enum`, parameter properties, and namespaces.
   `verbatimModuleSyntax` requires `import type` / `export type`.
 
@@ -149,37 +158,94 @@ These bit us once already. They are not mistakes.
   the same
   thing: a wrong, empty, or stale note list or editor for a frame after
   switching scopes or notes.
+- **`markdown.ts` is the only importer of `@tiptap/markdown`.** The round-trip
+  suite drives `MarkdownManager` standalone, with no `Editor` and no DOM, which
+  is what lets it be exhaustive and fast. Importing the package elsewhere
+  couples serialization to a mounted editor and puts the suite behind jsdom's
+  contenteditable limitations.
+- **The round-trip suite asserts three properties, not one.** Fidelity pins what
+  each construct must produce; stability proves normalization settles;
+  preservation proves unsupported constructs survive. Idempotence alone —
+  the parent spec's original wording — is satisfied by a serializer that
+  discards every note, so dropping the fidelity suite silently guts the others.
+  **These three properties are not interchangeable, and fidelity is the
+  load-bearing one.** Fidelity pins exactly one string per construct; stability
+  only covers its listed inputs. A defect that is a no-op on the pinned string
+  and corrupts every other instance of that construct passed the entire suite
+  until stability coverage was extended. Any new construct needs entries in
+  **both**.
+- **A known, irreducible limit of the round-trip suite:** any serializer defect
+  whose output is _itself valid Markdown for the same construct_ — so
+  reparsing reproduces it exactly — corrupts every input except the one pinned
+  fidelity string, and no amount of stability coverage catches it. Closing that
+  needs semantic-equivalence checks or property-based fuzzing, not more cases.
+  Do not attempt to fix it with more test cases.
+- **A dead custom tokenizer is invisible to round-trip tests.** Inert
+  `==text==` serializes byte-identically to a working highlight. Constructs
+  whose tokenizer is ours need **structural** assertions on the parsed
+  document, not just round-trip assertions.
+- **`RawBlock` is why deferring tables and images is safe.** A note containing a
+  table already exists in real databases, written in M3's textarea or restored
+  from a JSON import. Without the verbatim fallback, opening one and typing
+  destroys it with no error and no recovery. Do not remove it when M4b adds real
+  table and image nodes — it still covers every other construct `marked` can
+  tokenize.
+- **`NoteEditor` seeds autosave from the SERIALIZED document, never from
+  `note.text`.** Seeded from the raw text, every non-canonical note differs from
+  its own serialization the instant it opens, so merely looking at a note
+  rewrites it — churning `updatedAt`, reordering the note list, and re-running
+  the tag reindex. Opening a note must produce no write.
+- **`useAutosave` rolls back to confirmed-persisted text.** `persistedRef`
+  advances only when a save RESOLVES; the failure branch restores the dedupe
+  baseline to it. Rolling back to the optimistic marker instead reintroduces the
+  M3 defect where a buffer that coincidentally re-equals a never-written value
+  skips a needed save. The sequence token is separate and still required.
+- **Underline does not exist and must not be added.** It has no Markdown
+  representation. Bear's `_underline_` collides with CommonMark italic and would
+  round-trip ambiguously. Highlight is `==text==`.
+- **`AllSelection` must be pinned to a `TextSelection` before any block-level
+  toolbar command.** ProseMirror's `AllSelection` (what
+  `editor.commands.selectAll()` and the real `Ctrl/Cmd+A` keyboard shortcut both
+  produce) never collapses to a fixed range — its `.map()` re-derives to "the
+  whole document, whatever it is now." Every toolbar action restores this stale
+  selection via `.focus()`, so `TrailingNode`'s appended empty paragraph gets
+  wrapped by the next toggle, which appends its own trailing paragraph, forever
+  — a note that silently grows without bound on repeated clicks. See
+  `src/features/editor/toolbarSelection.ts` for the fix and the full diagnosis.
+  Verified in a real Chromium browser via Playwright for both the programmatic
+  `selectAll()` path and the real keyboard `Ctrl/Cmd+A` path — the two are
+  driven by the identical `AllSelection` mechanism and the identical fix closes
+  both.
 
-## Carried into M4
+## Carried into M5
 
-Real, deliberately deferred at the end of M3 with a ruling. Full reasoning is in
-`.superpowers/sdd/2026-08-08-m3-notes/progress.md`. Fold these into M4's plan
+Real, deliberately deferred with a ruling. Full M3 reasoning is in
+`.superpowers/sdd/2026-08-08-m3-notes/progress.md`; full M4 reasoning is in
+`.superpowers/sdd/2026-08-09-m4-editor/progress.md`. Fold these into M5's plan
 rather than rediscovering them.
 
-- **`useAutosave`'s rollback target is optimistic, not confirmed-persisted.**
-  `const previous = savedRef.current` may name text that was never actually
-  written. With three saves in flight where a superseded one also fails, the
-  rollback can target that text; if the user's buffer later coincidentally
-  re-equals it, the next flush skips it as unchanged. Reaching it needs a
-  three-way overlap inside a 300ms debounce plus an exact string match, which is
-  why it was deferred. The honest fix tracks confirmed-persisted text separately
-  from the in-flight marker — a redesign, and M4 rewrites this component's caller
-  anyway.
-- **`usePaneWidths` writes `void settings.set(...)` with no flush**, so dragging
-  a separator and reloading immediately can lose the width. Deferred because it
-  costs a pane width rather than note content, and because `useAutosave` now has
-  the general `beforeunload`/`visibilitychange` flush pair that should be
-  extracted and shared rather than duplicated one-off.
-- **`format.test.ts` has no midnight case**, so the documented reason for
-  choosing `hourCycle: 'h23'` over `hour12: false` — that the latter renders
-  midnight as 24:00 under some ICU builds — is asserted in a comment and verified
-  by nothing. One extra test case.
 - **Deleting a blank note purges it rather than trashing it**, silently. The
   Delete button is irreversible there and identical everywhere else. Defensible
   under the blank-note rule, but M6 owns trash management and should decide.
 - **A blank note open across a reload is never discarded**, because
   `beforeunload` only flushes and does not unmount. Spec-compliant as written; a
   startup sweep of empty notes would close it and belongs to a future milestone.
+- **`usePaneWidths` writes `void settings.set(...)` with no flush**, so dragging
+  a separator and reloading immediately can lose the width. Deferred because it
+  costs a pane width rather than note content, and because `useAutosave` now has
+  the general `beforeunload`/`visibilitychange` flush pair that should be
+  extracted and shared rather than duplicated one-off.
+- **The keyed-remount rule (`key={note.id}`) is currently unfalsifiable at the
+  app level.** Removing the key from `AppShell`'s render of `NoteEditor` left
+  all 14 pre-M4 e2e tests green: `useNotes` routes every selection change
+  through a transient `undefined`, which unmounts/remounts `NoteEditor`
+  independently of the key, masking its removal. Reproduced identically on the
+  pre-Tiptap textarea, so this is pre-existing, not a Tiptap regression. The key
+  is not wrong — it is defence in depth whose own app-level test cannot fail. A
+  future milestone touching `useNotes`' selection handling should either close
+  this gap or record why it remains open.
+- **Tag marks and syntax-visibility toggling are still deferred**, per the M4
+  spec. Not a defect; M5 owns tags.
 
 ## Working style
 

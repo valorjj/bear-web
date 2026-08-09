@@ -49,3 +49,17 @@ describe('formatNoteDate', () => {
     expect(formatNoteDate(lastYear, locale, now)).toBe('Aug 8, 2025');
   });
 });
+
+describe('midnight', () => {
+  it('renders midnight as 00:xx, never 24:xx', () => {
+    // The documented reason for choosing hourCycle: 'h23' over hour12: false.
+    // Under some ICU builds the latter renders midnight as 24:00.
+    const midnight = new Date(2026, 0, 15, 0, 30).getTime();
+    const sameDay = new Date(2026, 0, 15, 9, 0).getTime();
+
+    const rendered = formatNoteDate(midnight, 'en', sameDay);
+
+    expect(rendered).toContain('00:30');
+    expect(rendered).not.toContain('24:30');
+  });
+});

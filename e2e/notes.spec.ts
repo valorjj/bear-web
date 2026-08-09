@@ -139,3 +139,110 @@ test('switching between notes never flashes the empty state', async ({ page }) =
 
   expect(flashes).toEqual([]);
 });
+
+test('markdown typed into the editor survives a reload, in the document and on disk', async ({
+  page,
+}) => {
+  // The literal, never read back from the page. M2 shipped a persistence test
+  // that compared a stale default against itself and passed with persistence
+  // completely broken.
+  const HEADING = 'Roasting notes';
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByLabel('Note text');
+  await editor.click();
+  await editor.pressSequentially(`# ${HEADING}\n\nBeans rest for 24 hours.`);
+
+  // The heading must be a real heading, not literal '# ' text.
+  await expect(page.getByRole('heading', { name: HEADING })).toBeVisible();
+
+  // Wait for the debounced write to land in IndexedDB rather than racing it.
+  await expect
+    .poll(async () =>
+      page.evaluate(async () => {
+        const request = indexedDB.open('bear-web');
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        const store = db.transaction('notes', 'readonly').objectStore('notes');
+        const all = await new Promise<Array<{ text: string }>>((resolve, reject) => {
+          const req = store.getAll();
+          req.onsuccess = () => resolve(req.result as Array<{ text: string }>);
+          req.onerror = () => reject(req.error);
+        });
+        return all.map((note) => note.text).join('\n');
+      }),
+    )
+    .toContain(`# ${HEADING}`);
+
+  await page.reload();
+
+  // Selection is ephemeral by design (see 'a note survives a reload' above),
+  // so the note must be reopened by hand before its heading can render again.
+  await page.getByRole('button', { name: new RegExp(HEADING) }).click();
+  await expect(page.getByRole('heading', { name: HEADING })).toBeVisible();
+});
+
+test('keyboard select-all (Ctrl/Cmd+A) then repeated checklist toggles do not grow the note', async ({
+  page,
+}) => {
+  // Task 11 fixed a real content-corruption bug: with the whole document
+  // selected, clicking a block-format toolbar button repeatedly grew the note
+  // without bound instead of toggling off, because ProseMirror's AllSelection
+  // never collapses to a fixed range. The fix (pinAllSelectionStep) was only
+  // ever verified via editor.commands.selectAll() — a programmatic shortcut,
+  // not the real user path. This test drives the actual keyboard shortcut.
+  const WORD = 'Coffee';
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByLabel('Note text');
+  await editor.click();
+  await editor.pressSequentially(WORD);
+
+  // The real keyboard path — not a programmatic selectAll() command.
+  await page.keyboard.press('ControlOrMeta+a');
+
+  const checklist = page.getByRole('button', { name: 'Checklist' });
+
+  const readStoredText = () =>
+    page.evaluate(async () => {
+      const request = indexedDB.open('bear-web');
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const store = db.transaction('notes', 'readonly').objectStore('notes');
+      const all = await new Promise<Array<{ text: string }>>((resolve, reject) => {
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result as Array<{ text: string }>);
+        req.onerror = () => reject(req.error);
+      });
+      return all.map((note) => note.text).join('\n');
+    });
+
+  // Toggle on, then off. Wait for the debounced write to land before reading
+  // it back, so the baseline captured below is the settled, persisted value.
+  await checklist.click();
+  await checklist.click();
+  await expect.poll(readStoredText).toContain(WORD);
+  const afterTwo = await readStoredText();
+
+  // Toggle on and off again. Four toggles must be indistinguishable from two:
+  // that is the property the corrupting bug violated (it kept growing on
+  // every click instead of settling back to the same state).
+  await checklist.click();
+  await checklist.click();
+  await expect.poll(readStoredText).toBe(afterTwo);
+  const afterFour = await readStoredText();
+
+  expect(afterFour).toBe(afterTwo);
+
+  // No accumulating empty checklist items in the rendered document either —
+  // four toggles ends on an even (off) count, so no list markup should remain.
+  await expect(editor.locator('li')).toHaveCount(0);
+});
