@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -54,6 +54,36 @@ async function createNote(text: string): Promise<Note> {
   const stored = await notes.get(created.id);
   if (stored === undefined) throw new Error('note vanished');
   return stored;
+}
+
+/**
+ * Forces `useFlushTriggers`' `visibilitychange` listener to fire, the same
+ * path a real tab switch or mobile backgrounding takes. jsdom's
+ * `document.visibilityState` is a read-only getter, so it has to be
+ * redefined before the event is dispatched — restored afterward so it
+ * doesn't leak into later tests.
+ */
+async function triggerVisibilityFlush(): Promise<void> {
+  const original = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => 'hidden',
+  });
+  try {
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    // `flush`'s save is fire-and-forget (`void save(...).then(...)`); drain
+    // the microtask queue so a would-be call has actually happened by the
+    // time the assertion runs, rather than racing it.
+    await act(async () => undefined);
+  } finally {
+    if (original) {
+      Object.defineProperty(document, 'visibilityState', original);
+    } else {
+      delete (document as { visibilityState?: string }).visibilityState;
+    }
+  }
 }
 
 describe('NoteEditor', () => {
@@ -194,30 +224,99 @@ describe('NoteEditor', () => {
 });
 
 describe('opening a note', () => {
-  it('does not write when a note is merely opened', async () => {
-    // The ruling: savedRef is seeded from the SERIALIZED document, not from
-    // note.text. Seeded the obvious way, every non-canonical note in the
-    // database would differ from its own serialization the instant it opened,
-    // and autosave would write it back — churning updatedAt, reordering the
-    // note list, and re-running the tag reindex, for a note the user only
-    // looked at.
+  // The ruling: savedRef is seeded from the SERIALIZED document, not from
+  // note.text. Seeded the obvious way, every non-canonical note in the
+  // database would differ from its own serialization the instant it opened,
+  // and autosave would write it back — churning updatedAt, reordering the
+  // note list, and re-running the tag reindex, for a note the user only
+  // looked at.
+  //
+  // Both tests below assert on the `notes.save` SPY, not on disk content
+  // read back afterward: `flush`'s write is a fire-and-forget promise
+  // (`void save(...).then(...)`), so reading the note back immediately races
+  // it and can pass on timing luck alone. Spying is deterministic — no
+  // polling, no delay, no race.
+
+  it('a flush after opening still writes nothing', async () => {
     const note = await createNote('* asterisk bullet');
     const save = vi.spyOn(notes, 'save');
 
     renderWithI18n(<NoteEditor key={note.id} note={note} />);
     await screen.findByLabelText('Note text');
 
+    // Force a real flush — the note was opened, never edited. `flush`'s own
+    // dedupe (`pending === attemptedRef.current`) is exactly what this test
+    // is checking: it only holds if `attemptedRef` (seeded from `initial`)
+    // already equals the editor's serialized document.
+    await triggerVisibilityFlush();
+
     expect(save).not.toHaveBeenCalled();
   });
 
-  it('leaves non-canonical markdown untouched on disk until the user edits', async () => {
+  it('unmounting after opening still writes nothing', async () => {
     const note = await createNote('* asterisk bullet');
+    const save = vi.spyOn(notes, 'save');
 
     const { unmount } = renderWithI18n(<NoteEditor key={note.id} note={note} />);
     await screen.findByLabelText('Note text');
-    unmount();
 
+    act(() => {
+      unmount();
+    });
+    // The unmount cleanup's flush is also fire-and-forget; drain the
+    // microtask queue before asserting.
+    await act(async () => undefined);
+
+    expect(save).not.toHaveBeenCalled();
+    // Weaker, secondary check: the note is untouched on disk. Kept alongside
+    // the spy assertion above (which is what actually makes this test
+    // deterministic), not in place of it.
     expect((await notes.get(note.id))?.text).toBe('* asterisk bullet');
+  });
+});
+
+describe('the keyed remount', () => {
+  // `NoteEditor` must be rendered with `key={note.id}` so React remounts it
+  // on every switch — the doc comment on the component says so, but nothing
+  // in this file pinned the mechanism directly. `AppShell.test.tsx`'s
+  // equivalent test cannot: `useNotes` routes every selection change through
+  // a transient `undefined`, which unmounts `NoteEditor` regardless of `key`
+  // and masks its absence for that specific click sequence (see the Task 10
+  // report). This test drives `NoteEditor` directly, with no `useNotes` in
+  // between, so the `key` is the only thing that can produce isolation.
+  it('shows the new note after a keyed switch, never the previous note', async () => {
+    const noteA = await notes.create('First note text');
+    const noteB = await notes.create('Second note text');
+
+    const { rerender } = renderWithI18n(<NoteEditor key={noteA.id} note={noteA} />);
+    await screen.findByText('First note text');
+
+    rerender(<NoteEditor key={noteB.id} note={noteB} />);
+
+    const editor = await screen.findByLabelText('Note text');
+    expect(editor).toHaveTextContent('Second note text');
+    expect(editor).not.toHaveTextContent('First note text');
+  });
+
+  // The falsification: the SAME key across a `note` prop change is exactly
+  // the bug the real `key={note.id}` prevents. React reuses the fiber, the
+  // rich editor's `useState(() => normalizeMarkdown(note.text))` seed only
+  // ever runs once, and the surface keeps showing note A's text after
+  // "switching" to note B — the "wrote note A's text over note B" class of
+  // bug in visible form.
+  it('WITHOUT a change of key: keeps showing the previous note (falsification)', async () => {
+    const noteA = await notes.create('First note text');
+    const noteB = await notes.create('Second note text');
+
+    const { rerender } = renderWithI18n(<NoteEditor key="constant" note={noteA} />);
+    await screen.findByText('First note text');
+
+    rerender(<NoteEditor key="constant" note={noteB} />);
+
+    // No remount happens, so there is nothing to await; assert immediately.
+    const editor = screen.getByLabelText('Note text');
+    expect(editor).toHaveTextContent('First note text');
+    expect(editor).not.toHaveTextContent('Second note text');
   });
 });
 
