@@ -32,6 +32,9 @@ const CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   { name: 'task list, unchecked', markdown: '- [ ] buy bread' },
   { name: 'task list, checked', markdown: '- [x] buy bread' },
   { name: 'task list, mixed', markdown: '- [x] done\n- [ ] not done' },
+  { name: 'highlight', markdown: 'Some ==highlighted== text.' },
+  { name: 'highlight at line start', markdown: '==Highlighted== opening.' },
+  { name: 'highlight with bold inside', markdown: 'Some ==**bold** highlight== text.' },
 ];
 
 describe.each(CANONICAL)('fidelity: $name', ({ markdown }) => {
