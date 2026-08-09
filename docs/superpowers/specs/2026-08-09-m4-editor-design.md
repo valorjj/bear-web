@@ -259,9 +259,21 @@ empty notes would close it and remains deferred.
 | Components | Opening a note produces no write. Toolbar buttons toggle marks. The info panel counts correctly. Keyed remount still isolates one note per editor instance.                |
 | End-to-end | **The existing 14 tests must pass unmodified.** Plus one new flow: type Markdown, reload, and assert both the rendering and the stored bytes.                              |
 
-The existing e2e suite passing without edits is the regression net for the swap.
-A test that has to be rewritten to accommodate M4 is evidence of a behaviour
-change, and must be escalated rather than edited.
+The existing e2e suite is the regression net for the swap, and it is frozen with
+one enumerated exception.
+
+**`toHaveValue()` throws on a `contenteditable`.** A `<textarea>` has a `value`;
+a ProseMirror document does not. Four assertions in `e2e/notes.spec.ts` depend on
+it and cannot survive the swap unchanged. They become text assertions on the same
+locators. `getByRole('textbox', { name: 'Note text' })` and `.fill()` both work
+against a `contenteditable` and are not affected.
+
+Those four lines are the complete permitted change. Any other e2e edit that
+appears necessary is evidence of a behaviour change and must be escalated rather
+than made. The migrated assertions are re-falsified — by removing `NoteEditor`'s
+`key` prop and confirming they go red — because a weakened assertion that passes
+forever protects nothing, and two of these four exist to catch the "wrote note
+A's text over note B" class that the keyed remount removes.
 
 ### The open unknown
 
@@ -302,6 +314,7 @@ with a temporary regex.
 - Both toolbars and the info panel ship.
 - The three folded M3 items are closed.
 - New user-facing strings exist in both `en.ts` and `ko.ts`.
-- All 14 existing e2e tests pass unmodified.
+- All 14 existing e2e tests pass, changed only by the four enumerated
+  `toHaveValue` migrations, each re-falsified.
 - `npm test`, `npm run test:e2e`, `npm run lint`, `npm run typecheck`,
   `npm run format`, and `npm run build` all pass.
