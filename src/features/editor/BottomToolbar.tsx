@@ -6,6 +6,8 @@ import type { TranslationKey } from '@/i18n';
 
 import { pinAllSelectionStep } from './toolbarSelection';
 
+type Translate = (key: TranslationKey) => string;
+
 export interface BottomToolbarProps {
   editor: Editor | null;
 }
@@ -25,7 +27,12 @@ interface Action {
     | 'quote';
   label: TranslationKey;
   glyph: string;
-  run: (editor: Editor) => void;
+  /**
+   * `t` is threaded in rather than read from a hook because ACTIONS is a
+   * module-level constant. The link action needs a translated prompt, and no
+   * user-facing string may be hardcoded in a component.
+   */
+  run: (editor: Editor, t: Translate) => void;
   active: (editor: Editor) => boolean;
 }
 
@@ -91,8 +98,8 @@ const ACTIONS: readonly Action[] = [
     key: 'link',
     label: 'editor.toolbar.link',
     glyph: '🔗',
-    run: (editor) => {
-      const href = window.prompt('');
+    run: (editor, t) => {
+      const href = window.prompt(t('editor.link.prompt'));
       if (href === null || href === '') {
         editor.chain().command(pinAllSelectionStep).focus().unsetLink().run();
         return;
@@ -143,7 +150,7 @@ export function BottomToolbar({ editor }: BottomToolbarProps): ReactElement {
           aria-label={t(action.label)}
           aria-pressed={editor !== null && action.active(editor)}
           disabled={editor === null}
-          onClick={() => editor !== null && action.run(editor)}
+          onClick={() => editor !== null && action.run(editor, t)}
           className="rounded px-2 py-1 text-xs text-muted hover:bg-hover aria-pressed:text-text"
         >
           {action.glyph}
