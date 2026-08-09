@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useFlushTriggers } from '@/lib/useFlushTriggers';
+
 export const AUTOSAVE_DELAY_MS = 300;
 
 export interface AutosaveOptions {
@@ -114,19 +116,7 @@ export function useAutosave({
     [cancelTimer, delayMs, flush],
   );
 
-  useEffect(() => {
-    const onVisibilityChange = (): void => {
-      if (document.visibilityState === 'hidden') flush();
-    };
-
-    window.addEventListener('beforeunload', flush);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      window.removeEventListener('beforeunload', flush);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [flush]);
+  useFlushTriggers(flush);
 
   useEffect(() => {
     return () => {

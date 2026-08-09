@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { settings } from '@/data';
+import { useFlushTriggers } from '@/lib/useFlushTriggers';
 
 import {
   clampPaneWidth,
@@ -50,6 +51,12 @@ export function usePaneWidths(): PaneWidths {
   const [drag, setDrag] = useState<{ sidebar?: number; noteList?: number }>({});
   const [pendingCommit, setPendingCommit] = useState<{ sidebar?: number; noteList?: number }>({});
 
+  // The last width handed to `settings.set`. `set` is fire-and-forget, so a
+  // reload landing between the commit and the write losing the race would drop
+  // the width. Re-issuing on the flush triggers costs one redundant write and
+  // closes that window.
+  const lastCommitted = useRef<{ sidebar?: number; noteList?: number }>({});
+
   useEffect(() => {
     if (pendingCommit.sidebar === undefined || storedSidebar !== pendingCommit.sidebar) return;
     setDrag((prev) => ({ ...prev, sidebar: undefined }));
@@ -62,6 +69,15 @@ export function usePaneWidths(): PaneWidths {
     setPendingCommit((prev) => ({ ...prev, noteList: undefined }));
   }, [storedNoteList, pendingCommit.noteList]);
 
+  useFlushTriggers(() => {
+    if (lastCommitted.current.sidebar !== undefined) {
+      void settings.set(SIDEBAR_WIDTH_KEY, lastCommitted.current.sidebar);
+    }
+    if (lastCommitted.current.noteList !== undefined) {
+      void settings.set(NOTE_LIST_WIDTH_KEY, lastCommitted.current.noteList);
+    }
+  });
+
   return {
     sidebarWidth: clampPaneWidth(drag.sidebar ?? storedSidebar, DEFAULT_SIDEBAR_WIDTH),
     noteListWidth: clampPaneWidth(drag.noteList ?? storedNoteList, DEFAULT_NOTE_LIST_WIDTH),
@@ -70,6 +86,7 @@ export function usePaneWidths(): PaneWidths {
     onSidebarCommit: (width) => {
       setDrag((prev) => ({ ...prev, sidebar: width }));
       setPendingCommit((prev) => ({ ...prev, sidebar: width }));
+      lastCommitted.current.sidebar = width;
       void settings.set(SIDEBAR_WIDTH_KEY, width);
     },
 
@@ -77,6 +94,7 @@ export function usePaneWidths(): PaneWidths {
     onNoteListCommit: (width) => {
       setDrag((prev) => ({ ...prev, noteList: width }));
       setPendingCommit((prev) => ({ ...prev, noteList: width }));
+      lastCommitted.current.noteList = width;
       void settings.set(NOTE_LIST_WIDTH_KEY, width);
     },
   };
