@@ -178,12 +178,16 @@ describe('AppShell notes', () => {
     renderShell();
 
     await user.click(await screen.findByRole('button', { name: /First note/ }));
-    expect(await screen.findByRole('textbox', { name: 'Note text' })).toHaveValue(
+    // A ProseMirror `contenteditable` has no `value`; assert its text content
+    // instead. Same migration as the four `toHaveValue` assertions in
+    // `e2e/notes.spec.ts`, forced by the same textarea-to-contenteditable
+    // swap (Task 10).
+    expect(await screen.findByRole('textbox', { name: 'Note text' })).toHaveTextContent(
       'First note text',
     );
 
     await user.click(await screen.findByRole('button', { name: /Second note/ }));
-    expect(await screen.findByRole('textbox', { name: 'Note text' })).toHaveValue(
+    expect(await screen.findByRole('textbox', { name: 'Note text' })).toHaveTextContent(
       'Second note text',
     );
   });

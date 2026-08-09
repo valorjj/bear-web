@@ -25,7 +25,9 @@ test('a note survives a reload', async ({ page }) => {
   // Selection is ephemeral by design, so the note must be reopened by hand.
   await page.getByRole('button', { name: /Groceries/ }).click();
 
-  await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveValue(NOTE_TEXT);
+  const reopened = page.getByRole('textbox', { name: 'Note text' });
+  await expect(reopened).toContainText('Groceries');
+  await expect(reopened).toContainText('milk, bread, coffee');
 });
 
 test('a deleted note can be found in the trash and restored', async ({ page }) => {
@@ -94,7 +96,7 @@ test('switching between notes never flashes the empty state', async ({ page }) =
   // mounted textarea instead. Waiting for the value to go blank is the
   // equivalent of that human "there's nothing to click yet" gate.
   await page.getByRole('button', { name: 'New note' }).click();
-  await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveValue('');
+  await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveText('');
   await page.getByRole('textbox', { name: 'Note text' }).fill('Beta note');
   await page.getByRole('textbox', { name: 'Note text' }).blur();
   await expect(page.getByRole('button', { name: /Beta note/ })).toBeVisible();
@@ -103,7 +105,7 @@ test('switching between notes never flashes the empty state', async ({ page }) =
   const betaRow = page.getByRole('button', { name: /Beta note/ });
 
   await alphaRow.click();
-  await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveValue('Alpha note');
+  await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveText('Alpha note');
 
   // Record every mutation of the editor pane's text while switching
   // selection, rather than sampling per animation frame: a MutationObserver
@@ -127,7 +129,7 @@ test('switching between notes never flashes the empty state', async ({ page }) =
   });
 
   await betaRow.click();
-  await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveValue('Beta note');
+  await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveText('Beta note');
 
   const flashes = await page.evaluate(() => {
     const w = window as unknown as { __flashes: string[]; __editorObserver: MutationObserver };

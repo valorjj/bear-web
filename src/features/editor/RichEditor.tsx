@@ -41,6 +41,7 @@ export function RichEditor({
     onBlur,
     editorProps: {
       attributes: {
+        role: 'textbox',
         'aria-label': ariaLabel,
         class: 'min-h-0 flex-1 bg-bg px-6 py-4 text-sm text-text outline-none',
       },

@@ -1,7 +1,13 @@
-import { type ReactElement, useCallback, useRef } from 'react';
+import { type ReactElement, useCallback, useRef, useState } from 'react';
 
 import { notes } from '@/data';
 import type { Note } from '@/data';
+import {
+  EMPTY_DOCUMENT_MARKDOWN,
+  normalizeMarkdown,
+  RichEditor,
+  type RichEditorHandle,
+} from '@/features/editor';
 import { useT } from '@/i18n';
 
 import { useAutosave } from './useAutosave';
@@ -22,39 +28,82 @@ export interface NoteEditorProps {
 export function NoteEditor({ note }: NoteEditorProps): ReactElement {
   const t = useT();
 
-  const save = useCallback((next: string) => notes.save(note.id, next), [note.id]);
+  const handleRef = useRef<RichEditorHandle | null>(null);
+
+  // Seeded from the SERIALIZED document, not from `note.text`. Opening a note
+  // must never produce a write: a non-canonical note would otherwise differ
+  // from its own serialization immediately and be rewritten just for being
+  // looked at.
+  //
+  // Wrapped in try/catch for the same reason as `read`, below: serialization
+  // can fail, and a failure here must degrade to the raw stored text plus a
+  // visible message rather than crash the component outright.
+  const [{ initialMarkdown, initialSerializeFailed }] = useState(() => {
+    try {
+      return { initialMarkdown: normalizeMarkdown(note.text), initialSerializeFailed: false };
+    } catch {
+      return { initialMarkdown: note.text, initialSerializeFailed: true };
+    }
+  });
+  const [serializeFailed, setSerializeFailed] = useState(initialSerializeFailed);
+
+  const read = useCallback((): string => {
+    try {
+      return handleRef.current?.getMarkdown() ?? initialMarkdown;
+    } catch {
+      return initialMarkdown;
+    }
+  }, [initialMarkdown]);
+
+  const save = useCallback(
+    async (next: string) => {
+      // Serialization already happened in `read`. If it threw, `read` reported
+      // the last good value and there is nothing new to write.
+      await notes.save(note.id, next);
+    },
+    [note.id],
+  );
+
   const discard = useCallback(() => notes.purge(note.id), [note.id]);
 
-  // Temporary scaffolding: a rich editor (Task 10) will own its document and
-  // call `schedule` directly. Until then, a plain ref stands in for that
-  // ownership so the tree compiles against the new `useAutosave` interface.
-  const textRef = useRef(note.text);
   const { schedule, flush, failed } = useAutosave({
-    initial: note.text,
-    read: () => textRef.current,
+    initial: initialMarkdown,
+    read,
     save,
     discard,
+    isEmpty: (text) => text === EMPTY_DOCUMENT_MARKDOWN,
   });
+
+  const onChange = useCallback(() => {
+    try {
+      handleRef.current?.getMarkdown();
+      setSerializeFailed(false);
+      schedule();
+    } catch {
+      // A serialization failure happens BEFORE any write. `notes.save` is never
+      // called, so the stored Markdown is untouched by construction rather than
+      // by discipline. The document stays in memory and the next edit retries.
+      setSerializeFailed(true);
+    }
+  }, [schedule]);
 
   return (
     <div className="flex h-full flex-col">
-      <textarea
-        aria-label={t('editor.textarea')}
-        defaultValue={note.text}
-        onChange={(event) => {
-          textRef.current = event.target.value;
-          schedule();
-        }}
+      <RichEditor
+        initialMarkdown={initialMarkdown}
+        onChange={onChange}
         onBlur={flush}
-        spellCheck={false}
-        className="min-h-0 flex-1 resize-none bg-bg px-6 py-4 font-mono text-sm text-text outline-none"
+        ariaLabel={t('editor.textarea')}
+        handleRef={handleRef}
+        createdAt={note.createdAt}
+        updatedAt={note.updatedAt}
       />
 
-      {failed && (
+      {(failed || serializeFailed) && (
         // `status`, not `alert`: `alert` is the degraded-storage banner's role
         // and the e2e suite asserts there is exactly one of those.
         <p role="status" className="shrink-0 border-t border-border px-6 py-2 text-xs text-muted">
-          {t('editor.saveFailed')}
+          {serializeFailed ? t('editor.serializeFailed') : t('editor.saveFailed')}
         </p>
       )}
     </div>

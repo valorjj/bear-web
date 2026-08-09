@@ -32,6 +32,8 @@ export const ko: Record<TranslationKey, string> = {
 
   'editor.textarea': '메모 내용',
   'editor.saveFailed': '메모를 저장하지 못했습니다. 계속 입력하세요. 저장을 다시 시도합니다.',
+  'editor.serializeFailed':
+    '이 노트를 저장용으로 변환하지 못했습니다. 입력한 내용은 그대로 있으며 덮어쓰지 않았습니다.',
 
   'resizer.sidebar': '사이드바 크기 조절',
   'resizer.noteList': '메모 목록 크기 조절',

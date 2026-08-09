@@ -30,6 +30,8 @@ export const en = {
 
   'editor.textarea': 'Note text',
   'editor.saveFailed': 'This note could not be saved. Keep typing — bear-web will keep trying.',
+  'editor.serializeFailed':
+    'This note could not be converted for saving. Your text is still here — nothing has been overwritten.',
 
   'resizer.sidebar': 'Resize the sidebar',
   'resizer.noteList': 'Resize the note list',
