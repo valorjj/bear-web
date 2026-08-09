@@ -172,11 +172,26 @@ const VOID_HTML_ELEMENTS = new Set([
  * open-tag-to-matching-close-tag span (or a single self-closing/void tag, or
  * an HTML comment) as one atom.
  *
+ * The invariant this tokenizer must never violate: it must never claim a
+ * span it cannot re-emit exactly. Claiming up to merely the *first* same-name
+ * closing tag would be wrong — for nested markup like
+ * `<span><span>x</span></span>` that truncates at the inner `</span>`,
+ * leaving a dangling, unbalanced closer behind to be swallowed elsewhere and
+ * permanently losing bytes, which is strictly worse than the pre-fix
+ * behaviour (stripping the tags but keeping every character of text). So the
+ * search below is depth-aware: it counts nested opens/closes of the same tag
+ * name and only stops at the one that brings depth back to zero, which is
+ * also what keeps two sibling tags on one line (`<span>a</span> and
+ * <span>b</span>`) from being merged into a single over-claimed span — the
+ * first same-name closing tag *is* the correct, balanced one for a sibling,
+ * just not for a nested one.
+ *
  * If no matching closing tag is found before the end of the current inline
- * span, this tokenizer declines (returns `undefined`) rather than guessing
- * how far the unclosed tag reaches; that text falls through to the existing
- * (already-imperfect, out of scope here) built-in HTML handling, same as
- * today.
+ * span (e.g. a genuinely unclosed `<span>x`), this tokenizer declines
+ * (returns `undefined`) rather than guessing how far the unclosed tag
+ * reaches; that text falls through to the existing (already-imperfect, out
+ * of scope here) built-in HTML handling — a non-regression, since that is
+ * exactly what happened before this tokenizer existed.
  */
 function createRawInlineHtml(nodeName: string, recognizedTags: ReadonlySet<string>): Node {
   const OPEN_TAG = /^<([a-zA-Z][\w-]*)((?:\s+[^<>]*)?)\s*(\/)?>/;
@@ -239,11 +254,35 @@ function createRawInlineHtml(nodeName: string, recognizedTags: ReadonlySet<strin
           return { type: nodeName, raw: openMatch[0] };
         }
 
+        // Nesting-aware: scan for open/close tags of this same tag name and
+        // track depth, so `<span><span>x</span></span>` is claimed whole
+        // rather than truncated at the first `</span>` (which would leave a
+        // dangling closer behind and lose bytes — worse than the pre-fix
+        // behaviour of merely stripping the wrapper and keeping the text).
+        // Depth returning to zero at a sibling's close (not a descendant's)
+        // is exactly what keeps two sibling `<span>`s on one line from being
+        // merged into a single, over-claimed span.
         const rest = src.slice(openMatch[0].length);
-        const closeMatch = new RegExp(`</${tagName}\\s*>`, 'i').exec(rest);
-        if (!closeMatch) return undefined;
+        const sameTag = new RegExp(`<(/?)${tagName}(?:\\s[^>]*)?(/)?>`, 'gi');
+        let depth = 1;
+        let matchEnd = -1;
+        let sameTagMatch: RegExpExecArray | null;
+        while ((sameTagMatch = sameTag.exec(rest))) {
+          const isClosing = sameTagMatch[1] === '/';
+          const isSelfClosing = Boolean(sameTagMatch[2]) && !isClosing;
+          if (isClosing) {
+            depth -= 1;
+            if (depth === 0) {
+              matchEnd = sameTagMatch.index + sameTagMatch[0].length;
+              break;
+            }
+          } else if (!isSelfClosing) {
+            depth += 1;
+          }
+        }
+        if (matchEnd === -1) return undefined;
 
-        const raw = src.slice(0, openMatch[0].length + closeMatch.index + closeMatch[0].length);
+        const raw = src.slice(0, openMatch[0].length + matchEnd);
         return { type: nodeName, raw };
       },
     },

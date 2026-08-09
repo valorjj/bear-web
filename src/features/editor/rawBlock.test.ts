@@ -183,6 +183,74 @@ describe('inline HTML: the tag this editor cannot represent is rescued, not drop
   });
 });
 
+describe('inline HTML: the tokenizer must never claim a span it cannot re-emit exactly', () => {
+  // A naive "first matching close tag" scan is unsound for nested markup:
+  // `<span><span>x</span></span>` would be truncated at the *inner*
+  // `</span>`, leaving a dangling, unbalanced `</span>` behind to be
+  // swallowed elsewhere — permanently losing bytes, which is worse than the
+  // pre-fix behaviour (stripping the tags but keeping the text, i.e. `x`).
+  // The matcher must be depth-aware instead: track nested opens/closes of
+  // the same tag name and stop only when depth returns to zero.
+
+  it('claims nested same-name tags whole, byte-for-byte', () => {
+    const markdown = '<span><span>x</span></span>';
+    expect(normalizeMarkdown(markdown)).toBe(markdown);
+  });
+
+  it('parses nested same-name tags into a single rawInlineHtml node carrying the whole span', () => {
+    const markdown = '<span><span>x</span></span>';
+    const doc = parseMarkdown(markdown);
+    const [paragraph] = doc.content ?? [];
+    expect(paragraph?.content).toHaveLength(1);
+    const [node] = paragraph?.content ?? [];
+    expect(node?.type).toBe('rawInlineHtml');
+    expect(node?.attrs?.source).toBe(markdown);
+  });
+
+  it('claims nested different-name tags whole, byte-for-byte (guard: this already worked)', () => {
+    const markdown = '<span><sup>x</sup></span>';
+    expect(normalizeMarkdown(markdown)).toBe(markdown);
+  });
+
+  it('claims three levels of the same nested tag whole, byte-for-byte', () => {
+    const markdown = '<span><span><span>x</span></span></span>';
+    expect(normalizeMarkdown(markdown)).toBe(markdown);
+  });
+
+  it('declines an unclosed tag, no worse than the pre-fix fallback', () => {
+    // Before this tokenizer existed at all, `<span>x` round-tripped to `x`
+    // (the wrapper stripped, the text kept) via @tiptap/markdown's built-in
+    // HTML handling. There is no balanced close to find here, so this
+    // tokenizer must decline and let that same pre-existing path run —
+    // not guess where the tag "should" have closed.
+    expect(normalizeMarkdown('<span>x')).toBe('x');
+  });
+
+  it('declines a stray closing tag with no opener, no worse than the pre-fix fallback', () => {
+    expect(normalizeMarkdown('a</span>b')).toBe('ab');
+  });
+
+  it('does not over-claim across two sibling same-name tags on one line', () => {
+    // The risk a depth-aware fix introduces: a counter that doesn't reset
+    // per-span could treat the *second* span's open tag as raising the
+    // depth again and swallow everything up through the second span's
+    // close. It must not — each top-level tag call starts its own scan, and
+    // the first same-name close it meets closes its own span.
+    const markdown = '<span>a</span> and <span>b</span>';
+    expect(normalizeMarkdown(markdown)).toBe(markdown);
+
+    const doc = parseMarkdown(markdown);
+    const [paragraph] = doc.content ?? [];
+    expect(paragraph?.content?.map((child) => child.type)).toEqual([
+      'rawInlineHtml',
+      'text',
+      'rawInlineHtml',
+    ]);
+    expect(paragraph?.content?.[0]?.attrs?.source).toBe('<span>a</span>');
+    expect(paragraph?.content?.[2]?.attrs?.source).toBe('<span>b</span>');
+  });
+});
+
 describe('inline HTML: constructs this editor upgrades must keep upgrading', () => {
   // The fix must be narrow. These four are the exact upgrades named in the
   // fix-round brief; regressing any of them to inert raw HTML is the failure
