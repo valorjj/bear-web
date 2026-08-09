@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { EMPTY_DOCUMENT_MARKDOWN, normalizeMarkdown } from './markdown';
+import {
+  EMPTY_DOCUMENT_MARKDOWN,
+  normalizeMarkdown,
+  parseMarkdown,
+  serializeMarkdown,
+} from './markdown';
 
 /**
  * Stability: normalization must reach a fixed point immediately.
@@ -73,7 +78,27 @@ const NON_CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   // coverage under its own native syntax either. Found while deriving the
   // table below, not because a reviewer named it.
   { name: 'hard break', markdown: 'First line  \nSecond line' },
+
+  // Final review: the existing hard-break entries are both MID-paragraph, and
+  // the whole defect lives at the END of one. A trailing `<br>` serialized to
+  // 'a  \n', which parses back as the plain text 'a  ' — so normalization was
+  // not idempotent, and merely OPENING such a note wrote to it, churning
+  // updatedAt, the note order and the tag index. A trailing hard break has no
+  // Markdown spelling at all, so it is now dropped at parse time instead.
+  { name: 'trailing hard break, html', markdown: 'a<br>' },
+  { name: 'trailing hard break, two spaces', markdown: 'a  \n' },
 ];
+
+/**
+ * Totality, over the same corpus: `serializeMarkdown` must never throw on
+ * `parseMarkdown`'s output. See the header of the matching suite in
+ * markdown.test.ts for why this is a note-destroying failure and not a crash.
+ */
+describe.each(NON_CANONICAL)('totality: $name', ({ markdown }) => {
+  it('serializes its own parse without throwing', () => {
+    expect(() => serializeMarkdown(parseMarkdown(markdown))).not.toThrow();
+  });
+});
 
 describe.each(NON_CANONICAL)('stability: $name', ({ markdown }) => {
   it('reaches a fixed point after one pass', () => {

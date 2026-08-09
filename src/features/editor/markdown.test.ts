@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
-import { normalizeMarkdown, parseMarkdown } from './markdown';
+import { normalizeMarkdown, parseMarkdown, serializeMarkdown } from './markdown';
 
 /**
  * Recursively finds the first text node in a parsed document that carries a
@@ -103,5 +103,72 @@ describe('highlight mark structure', () => {
     const doc = parseMarkdown('Some plain text.');
     const marked = findMarkedTextNode(doc, 'highlight');
     expect(marked).toBeUndefined();
+  });
+});
+
+/**
+ * Totality: the serializer must never throw on the PARSER's output.
+ *
+ * `serializeMarkdown` emits `'1. '` for an empty ordered-list item, and
+ * `parseMarkdown('1. ')` used to hand back a `listItem` with no children, which
+ * `serializeMarkdown` then threw on — the round trip was not closed on the
+ * serializer's own output. `NoteEditor` caught the throw, but `RichEditor` fed
+ * the same document to ProseMirror, which dropped the invalid node silently,
+ * and the truncation was written back. For `'1. '` the truncation was total and
+ * the note was PURGED.
+ *
+ * Every string that must round-trip is also a string the serializer must be
+ * total on, so the fidelity corpus is reused. `stability.test.ts` runs the same
+ * assertion over its own corpus.
+ */
+const DEGENERATE_BLOCKS: readonly string[] = [
+  '1. ',
+  '# ',
+  '- ',
+  '> ',
+  '* ',
+  '1) ',
+  '1. Milk\n2. ',
+  '# \n\nbody',
+  '1. \n\n',
+  '- [ ] ',
+  '> \n\nbody',
+];
+
+describe.each(CANONICAL)('totality: $name', ({ markdown }) => {
+  it('serializes its own parse without throwing', () => {
+    expect(() => serializeMarkdown(parseMarkdown(markdown))).not.toThrow();
+  });
+});
+
+describe.each(DEGENERATE_BLOCKS)('totality: degenerate %j', (markdown) => {
+  it('serializes its own parse without throwing', () => {
+    expect(() => serializeMarkdown(parseMarkdown(markdown))).not.toThrow();
+  });
+
+  it('is a fixed point after one pass', () => {
+    const once = normalizeMarkdown(markdown);
+    expect(normalizeMarkdown(once)).toBe(once);
+  });
+});
+
+describe('an empty block keeps its own marker', () => {
+  // The reproduction from the final whole-branch review. Before the fix these
+  // two lost their content entirely — '1. ' threw, and the caller's fallback
+  // path ended in `notes.purge`.
+  it('keeps an empty ordered list item', () => {
+    expect(normalizeMarkdown('1. ')).toBe('1. ');
+  });
+
+  it('keeps an empty heading', () => {
+    expect(normalizeMarkdown('# ')).toBe('# ');
+  });
+
+  it('keeps the body under an empty heading', () => {
+    expect(normalizeMarkdown('# \n\nReal body text here')).toBe('# \n\nReal body text here');
+  });
+
+  it('keeps an earlier list item when a later one is empty', () => {
+    expect(normalizeMarkdown('1. Milk\n2. ')).toBe('1. Milk\n2. ');
   });
 });
