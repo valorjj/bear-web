@@ -20,6 +20,8 @@ describe('parseTags', () => {
       ['#work_item', ['work_item']],
       ['', []],
       ['no tags here', []],
+      ['#work\r\n#home', ['work', 'home']],
+      ['#b #a #b #c', ['b', 'a', 'c']],
     ];
 
     it.each(cases)('%j -> %j', (input, expected) => {
@@ -149,6 +151,36 @@ describe('parseTags', () => {
 
     it('does not close a backtick fence with a tilde fence', () => {
       expect(parseTags('```\n#work\n~~~\n#home\n```')).toEqual([]);
+    });
+
+    it('does not open a fence when a backtick span merely starts the line', () => {
+      expect(parseTags('```code``` is inline\n\n#work #home')).toEqual(['work', 'home']);
+    });
+
+    it('does not let an info string close a backtick fence', () => {
+      expect(parseTags('a\n```\n#incode\n```txt\n#work\n```\n#tail')).toEqual(['tail']);
+    });
+
+    it('does not let trailing text close a tilde fence', () => {
+      expect(parseTags('~~~\n#incode\n~~~x\n#work')).toEqual([]);
+    });
+
+    it('does not let trailing text close a backtick fence', () => {
+      expect(parseTags('```\n#work\n``` not-a-closer\n#home')).toEqual([]);
+    });
+
+    it('allows trailing whitespace on a closer', () => {
+      expect(parseTags('```\n#work\n```   \n#tail')).toEqual(['tail']);
+    });
+
+    it('allows a tilde opener to carry an info string', () => {
+      expect(parseTags('~~~ruby\n#work\n~~~')).toEqual([]);
+    });
+
+    it('discards a whole multi-word candidate that contains a masked span', () => {
+      // Asymmetric with the simple form on purpose: see the comment at
+      // normalizeTag's `raw.includes(MASK)` check.
+      expect(parseTags('#project `x` plan#')).toEqual([]);
     });
 
     it('leaves an unterminated inline run alone', () => {

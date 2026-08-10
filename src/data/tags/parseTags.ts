@@ -12,10 +12,23 @@
  * Stands in for a masked character. Deliberately not a space: a space before a
  * `#` would satisfy the start rule and turn `` `x`#work `` into a tag.
  * Terminates a tag, but never permits one to start.
+ *
+ * Must be typed as the four-character escape sequence shown below, never
+ * pasted as a literal NUL byte — a raw NUL byte looks identical in most
+ * editors but silently breaks plain-text tools like `grep` run against this
+ * file.
  */
 const MASK = '\u0000';
 
-const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+/**
+ * A backtick fence's info string may not itself contain a backtick (per
+ * CommonMark); a line that merely starts with an inline code span, like
+ * `` ```code``` is inline ``, is a paragraph, not a fence opener.
+ */
+const BACKTICK_OPENER = /^ {0,3}(`{3,})([^`]*)$/;
+
+/** A tilde fence's info string may contain anything, including backticks. */
+const TILDE_OPENER = /^ {0,3}(~{3,})(.*)$/;
 
 /**
  * Content starting with one of these is thrown away whole rather than trimmed,
@@ -44,9 +57,24 @@ function maskAll(line: string): string {
 }
 
 function openingFence(line: string): { char: string; length: number } | null {
-  const match = FENCE.exec(line);
-  if (match === null) return null;
-  return { char: match[1][0], length: match[1].length };
+  const backtick = BACKTICK_OPENER.exec(line);
+  if (backtick !== null) return { char: '`', length: backtick[1].length };
+
+  const tilde = TILDE_OPENER.exec(line);
+  if (tilde !== null) return { char: '~', length: tilde[1].length };
+
+  return null;
+}
+
+/**
+ * A closing fence: same character, at least the opener's length, and nothing
+ * after it but spaces and tabs. A closer may not carry an info string or
+ * trailing text, so a line like `` ```txt `` never closes a backtick fence.
+ */
+function closesFence(line: string, fence: { char: string; length: number }): boolean {
+  const escaped = fence.char === '`' ? '`' : '~';
+  const pattern = new RegExp(`^ {0,3}(${escaped}{${fence.length},})[ \\t]*$`);
+  return pattern.test(line);
 }
 
 /**
@@ -102,10 +130,10 @@ function maskCode(input: string): string {
     .split('\n')
     .map((line) => {
       if (fence !== null) {
-        const candidate = openingFence(line);
-        const closes =
-          candidate !== null && candidate.char === fence.char && candidate.length >= fence.length;
-        if (closes) fence = null;
+        // Only the closer rule applies to interior lines — the opener check
+        // does not re-run, so a stray `` ```txt `` inside a fence is just
+        // more masked content, not a nested (or accidentally re-opened) fence.
+        if (closesFence(line, fence)) fence = null;
         return maskAll(line);
       }
 
@@ -136,6 +164,14 @@ function trimTrailing(input: string): string {
 }
 
 function normalizeTag(raw: string): string | null {
+  // Deliberate asymmetry between the two tag forms: the simple-form scanner
+  // stops AT a mask, so `#work`x`` yields `work` — the mask is a boundary,
+  // never inspected. The multi-word form takes the far `#` as its closer
+  // first and only then checks the whole span for a mask, so
+  // `#project `x` plan#` discards the entire candidate, including the clean
+  // `project` prefix, rather than truncating to it. Do not "fix" this by
+  // falling back to a simple-form scan when a mask is found — that is an
+  // unapproved behaviour change, not a bug fix.
   if (raw.includes(MASK)) return null;
 
   const collapsed = raw.replace(/\s+/g, ' ').trim();
