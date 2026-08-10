@@ -1,5 +1,5 @@
 export { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, exportDatabase, importDatabase } from './backup';
-export type { ImportResult } from './backup';
+export type { ImportDeps, ImportResult } from './backup';
 export { BearDatabase, DATABASE_NAME, db } from './db';
 export { deriveTitle } from './derive';
 export { newId } from './ids';

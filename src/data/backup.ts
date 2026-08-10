@@ -13,6 +13,14 @@ export interface ImportResult {
   settings: number;
 }
 
+export interface ImportDeps {
+  /**
+   * Rebuilds the derived tag index from note text. Injected because
+   * `backup.ts` has no tag parser and must not acquire one.
+   */
+  rebuildTagIndex: () => Promise<number>;
+}
+
 async function blobToBase64(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let binary = '';
@@ -90,7 +98,11 @@ function assertBundle(candidate: unknown): asserts candidate is BackupBundle {
  * Replaces the entire database with the bundle's contents. Validation happens
  * before anything is cleared, so a rejected import leaves existing data intact.
  */
-export async function importDatabase(db: BearDatabase, payload: unknown): Promise<ImportResult> {
+export async function importDatabase(
+  db: BearDatabase,
+  payload: unknown,
+  deps: ImportDeps,
+): Promise<ImportResult> {
   assertBundle(payload);
   const bundle = payload;
 
@@ -105,12 +117,7 @@ export async function importDatabase(db: BearDatabase, payload: unknown): Promis
   // backup can carry a title that disagrees with its text.
   const notes = bundle.notes.map((n) => ({ ...n, title: deriveTitle(n.text) }));
 
-  // Drop noteTags rows that point at a note absent from this same bundle, so
-  // an orphaned row never survives an import. This does not rebuild the tag
-  // index from note text — backup.ts has no tag parser and must not acquire
-  // one; it only removes rows that are already unambiguously invalid.
-  const noteIds = new Set(bundle.notes.map((n) => n.id));
-  const noteTags = bundle.noteTags.filter((nt) => noteIds.has(nt.noteId));
+  let rebuiltRows = 0;
 
   await db.transaction('rw', db.notes, db.noteTags, db.tags, db.files, db.settings, async () => {
     await Promise.all([
@@ -123,16 +130,20 @@ export async function importDatabase(db: BearDatabase, payload: unknown): Promis
 
     await Promise.all([
       db.notes.bulkAdd(notes),
-      db.noteTags.bulkAdd(noteTags),
       db.tags.bulkAdd(bundle.tags),
       db.files.bulkAdd(files),
       db.settings.bulkAdd(bundle.settings),
     ]);
+
+    // `noteTags` is derived data. Trusting a file's copy of it contradicts the
+    // rule that the index comes from `notes.text` and is never authoritative,
+    // and it is what made a pre-M5 backup restore an empty index.
+    rebuiltRows = await deps.rebuildTagIndex();
   });
 
   return {
     notes: notes.length,
-    noteTags: noteTags.length,
+    noteTags: rebuiltRows,
     tags: bundle.tags.length,
     files: files.length,
     settings: bundle.settings.length,

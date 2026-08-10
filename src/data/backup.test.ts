@@ -1,8 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, exportDatabase, importDatabase } from './backup';
 import type { BearDatabase } from './db';
+import { createNotesRepository } from './repositories/notes';
+import { parseTags } from './tags';
 import { createTestDatabase } from './testing';
+
+const noRebuild = { rebuildTagIndex: vi.fn(async () => 0) };
 
 async function seed(db: BearDatabase): Promise<void> {
   await db.notes.add({
@@ -78,9 +82,11 @@ describe('importDatabase', () => {
   it('restores every record through a full JSON round trip', async () => {
     const json = JSON.stringify(await exportDatabase(source));
 
-    const result = await importDatabase(target, JSON.parse(json));
+    const result = await importDatabase(target, JSON.parse(json), noRebuild);
 
-    expect(result).toEqual({ notes: 1, noteTags: 1, tags: 1, files: 1, settings: 1 });
+    // noteTags now reports the rebuilt row count, not the bundle's; noRebuild
+    // is a no-op fake, so it is 0 here regardless of the seeded bundle.
+    expect(result).toEqual({ notes: 1, noteTags: 0, tags: 1, files: 1, settings: 1 });
 
     const note = await target.notes.get('n1');
     expect(note?.text).toBe('# Groceries\n\n- [ ] milk #food');
@@ -91,7 +97,7 @@ describe('importDatabase', () => {
 
   it('restores file blobs byte for byte', async () => {
     const json = JSON.stringify(await exportDatabase(source));
-    await importDatabase(target, JSON.parse(json));
+    await importDatabase(target, JSON.parse(json), noRebuild);
 
     const file = await target.files.get('f1');
     const bytes = new Uint8Array(await file!.blob.arrayBuffer());
@@ -112,14 +118,18 @@ describe('importDatabase', () => {
       archivedAt: null,
     });
 
-    await importDatabase(target, JSON.parse(JSON.stringify(await exportDatabase(source))));
+    await importDatabase(
+      target,
+      JSON.parse(JSON.stringify(await exportDatabase(source))),
+      noRebuild,
+    );
 
     expect(await target.notes.get('pre-existing')).toBeUndefined();
     expect(await target.notes.count()).toBe(1);
   });
 
   it('rejects a bundle with the wrong format marker', async () => {
-    await expect(importDatabase(target, { format: 'something-else' })).rejects.toThrow(
+    await expect(importDatabase(target, { format: 'something-else' }, noRebuild)).rejects.toThrow(
       /not a bear-web backup/i,
     );
   });
@@ -128,34 +138,23 @@ describe('importDatabase', () => {
     const bundle = await exportDatabase(source);
 
     await expect(
-      importDatabase(target, { ...bundle, schemaVersion: BACKUP_SCHEMA_VERSION + 1 }),
+      importDatabase(target, { ...bundle, schemaVersion: BACKUP_SCHEMA_VERSION + 1 }, noRebuild),
     ).rejects.toThrow(/newer version/i);
   });
 
   it('rejects a non-object payload', async () => {
-    await expect(importDatabase(target, 'not a bundle')).rejects.toThrow();
-    await expect(importDatabase(target, null)).rejects.toThrow();
+    await expect(importDatabase(target, 'not a bundle', noRebuild)).rejects.toThrow();
+    await expect(importDatabase(target, null, noRebuild)).rejects.toThrow();
   });
 
   it('recomputes a note title from its text rather than trusting the bundle', async () => {
     const bundle = await exportDatabase(source);
     bundle.notes[0].title = 'Stale Wrong Title';
 
-    await importDatabase(target, JSON.parse(JSON.stringify(bundle)));
+    await importDatabase(target, JSON.parse(JSON.stringify(bundle)), noRebuild);
 
     const note = await target.notes.get('n1');
     expect(note?.title).toBe('Groceries');
-  });
-
-  it('drops an orphaned noteTags row whose note is absent from the bundle', async () => {
-    const bundle = await exportDatabase(source);
-    bundle.noteTags.push({ noteId: 'does-not-exist', tag: 'orphan' });
-
-    const result = await importDatabase(target, JSON.parse(JSON.stringify(bundle)));
-
-    expect(result.noteTags).toBe(1);
-    expect(await target.noteTags.where('noteId').equals('does-not-exist').count()).toBe(0);
-    expect(await target.noteTags.where('noteId').equals('n1').count()).toBe(1);
   });
 
   it('leaves the target untouched when validation fails', async () => {
@@ -170,8 +169,118 @@ describe('importDatabase', () => {
       archivedAt: null,
     });
 
-    await expect(importDatabase(target, { format: 'wrong' })).rejects.toThrow();
+    await expect(importDatabase(target, { format: 'wrong' }, noRebuild)).rejects.toThrow();
 
     expect(await target.notes.get('keep')).toBeDefined();
+  });
+});
+
+describe('import rebuilds the derived tag index', () => {
+  let target: BearDatabase;
+
+  beforeEach(async () => {
+    target = createTestDatabase();
+    await target.open();
+  });
+
+  it('ignores the bundle noteTags rows and reports the rebuilt count', async () => {
+    const bundle = {
+      format: BACKUP_FORMAT,
+      schemaVersion: BACKUP_SCHEMA_VERSION,
+      exportedAt: 0,
+      notes: [
+        {
+          id: 'n1',
+          title: '',
+          text: '#work',
+          createdAt: 1,
+          updatedAt: 1,
+          pinned: false,
+          trashedAt: null,
+          archivedAt: null,
+        },
+      ],
+      // Deliberately wrong: a pre-M5 backup carries an empty index, and a
+      // hand-edited one can carry a lie.
+      noteTags: [{ noteId: 'n1', tag: 'nonsense' }],
+      tags: [],
+      files: [],
+      settings: [],
+    };
+
+    const rebuildTagIndex = vi.fn(async () => {
+      await target.noteTags.bulkPut([{ noteId: 'n1', tag: 'work' }]);
+      return 1;
+    });
+
+    const result = await importDatabase(target, bundle, { rebuildTagIndex });
+
+    expect(rebuildTagIndex).toHaveBeenCalledTimes(1);
+    expect(result.noteTags).toBe(1);
+    expect(await target.noteTags.toArray()).toEqual([{ noteId: 'n1', tag: 'work' }]);
+  });
+
+  it('still rejects a bundle missing its noteTags table, before clearing anything', async () => {
+    await target.notes.add({
+      id: 'existing',
+      title: 'keep me',
+      text: 'keep me',
+      createdAt: 1,
+      updatedAt: 1,
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    });
+
+    const bundle = {
+      format: BACKUP_FORMAT,
+      schemaVersion: BACKUP_SCHEMA_VERSION,
+      exportedAt: 0,
+      notes: [],
+      tags: [],
+      files: [],
+      settings: [],
+    };
+
+    const rebuildTagIndex = vi.fn(async () => 0);
+
+    await expect(importDatabase(target, bundle, { rebuildTagIndex })).rejects.toThrow(/noteTags/);
+    expect(rebuildTagIndex).not.toHaveBeenCalled();
+    expect(await target.notes.count()).toBe(1);
+  });
+
+  it('rebuilds from the real repository, proving the notes are inserted before the rebuild runs', async () => {
+    const targetNotes = createNotesRepository({ db: target, parseTags });
+
+    const bundle = {
+      format: BACKUP_FORMAT,
+      schemaVersion: BACKUP_SCHEMA_VERSION,
+      exportedAt: 0,
+      notes: [
+        {
+          id: 'n1',
+          title: '',
+          text: '#work',
+          createdAt: 1,
+          updatedAt: 1,
+          pinned: false,
+          trashedAt: null,
+          archivedAt: null,
+        },
+      ],
+      // Deliberately wrong, same as above: proves the bundle's copy is never
+      // trusted, this time against the real rebuild rather than a fake.
+      noteTags: [{ noteId: 'n1', tag: 'nonsense' }],
+      tags: [],
+      files: [],
+      settings: [],
+    };
+
+    const result = await importDatabase(target, bundle, {
+      rebuildTagIndex: () => targetNotes.rebuildTagIndex(),
+    });
+
+    expect(result.noteTags).toBe(1);
+    expect(await target.noteTags.toArray()).toEqual([{ noteId: 'n1', tag: 'work' }]);
   });
 });
