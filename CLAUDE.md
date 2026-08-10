@@ -11,15 +11,15 @@ IndexedDB.
 
 ## Status
 
-| Milestone                      | State                                    |
-| ------------------------------ | ---------------------------------------- |
-| M0 scaffold, CI, Pages deploy  | complete                                 |
-| M1 data layer (Dexie)          | complete                                 |
-| M2 application shell           | complete                                 |
-| M3 notes CRUD, textarea editor | complete                                 |
-| M4 editor                      | complete                                 |
-| M5 tags, smart lists           | next                                     |
-| M6–M9                          | trash management, search, themes, polish |
+| Milestone                      | State                                         |
+| ------------------------------ | --------------------------------------------- |
+| M0 scaffold, CI, Pages deploy  | complete                                      |
+| M1 data layer (Dexie)          | complete                                      |
+| M2 application shell           | complete                                      |
+| M3 notes CRUD, textarea editor | complete                                      |
+| M4 editor                      | complete                                      |
+| M5 tags                        | next                                          |
+| M6–M9                          | smart lists and trash, search, themes, polish |
 
 347 unit tests, 16 end-to-end tests. `main` is always green and auto-deploys.
 
