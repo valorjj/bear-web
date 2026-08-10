@@ -118,9 +118,11 @@ These bit us once already. They are not mistakes.
   HTML-attribute detection: `https://x/#a`, `[x](#a)` and `<div id="#x">` are
   all excluded by the preceding character alone. Removing it means adding all
   three.
-- **Content beginning with `.,;:!?` or `/` is rejected whole, not trimmed** —
+- **Content beginning with `.,;:!?` is rejected whole, not trimmed** —
   otherwise a shebang in an unmasked indented code block becomes a tag named
-  `bin/sh`. The set is deliberately narrow: `#-lead` is a legitimate tag.
+  `bin/sh`. A leading slash is rejected by the empty-segment rule instead:
+  `#/bin/sh` splits on `/` and produces an empty first segment. The set is
+  deliberately narrow: `#-lead` is a legitimate tag.
 - **The mask character is `\u0000`, deliberately not a space.** Masked code
   must terminate a tag without permitting one to start — with a space,
   `` `x`#work `` becomes a tag. `src/data/tags/parseTags.test.ts` pins this.
@@ -128,9 +130,9 @@ These bit us once already. They are not mistakes.
   pasted or typed as a literal NUL byte — a raw NUL byte looks identical to
   the escape sequence in most editors, but `grep` and `diff` both silently
   mangle it. This milestone hit that twice.
-- **A tag's closing `#` needs a non-whitespace character on both sides, not
-  just after it.** The multi-word form originally required only that the
-  character after the closer be a boundary; a lone `#` later on the same
+- **A tag's closing `#` must be followed by a boundary and preceded by a
+  non-whitespace character.** The multi-word form originally required only that
+  the character after the closer be a boundary; a lone `#` later on the same
   line — unrelated prose, not a second tag — would then act as the first
   tag's closer and swallow every word between the two hashes.
   `Fix #bug then see item # 5` produced the tag `bug then see item` instead
