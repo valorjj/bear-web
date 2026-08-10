@@ -192,3 +192,67 @@ describe('AppShell notes', () => {
     );
   });
 });
+
+describe('tag scopes', () => {
+  it('filters the note list to the clicked tag', async () => {
+    await notes.create('alpha #work');
+    await notes.create('beta #home');
+
+    renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
+
+    // `deriveTitle` does not strip hashtags, so the rendered title is the
+    // whole first line ("alpha #work"), not the bare word — hence the regex
+    // matchers rather than exact strings.
+    await waitFor(() => {
+      expect(screen.getByText(/^alpha\b/)).toBeInTheDocument();
+      expect(screen.queryByText(/^beta\b/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('seeds a note created inside a tag scope so it appears in that scope', async () => {
+    await notes.create('alpha #work');
+
+    renderShell();
+    await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
+    await screen.findByText(/^alpha\b/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+
+    await waitFor(() => {
+      const stored = screen.getByRole('textbox');
+      expect(stored).toHaveTextContent('#work');
+    });
+
+    // The list still shows the tag scope and now holds two notes.
+    await waitFor(() => expect(screen.getAllByRole('listitem').length).toBeGreaterThan(1));
+  });
+
+  it('falls back to all notes when the selected tag stops existing', async () => {
+    const note = await notes.create('alpha #work');
+
+    renderShell();
+    await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
+    await screen.findByText(/^alpha\b/);
+
+    await notes.save(note.id, 'alpha');
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Notes' })).toHaveAttribute('aria-current', 'page'),
+    );
+  });
+
+  it('does not fall back while the tag tree is still loading', async () => {
+    await notes.create('alpha #work');
+
+    renderShell();
+    await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
+
+    // Immediately after selection the tree query may still be resolving. The
+    // Notes row must not become current at any point.
+    expect(screen.getByRole('button', { name: 'Notes' })).not.toHaveAttribute('aria-current');
+    await screen.findByText(/^alpha\b/);
+    expect(screen.getByRole('button', { name: 'Notes' })).not.toHaveAttribute('aria-current');
+  });
+});

@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 
 import { notes } from '@/data';
 import {
@@ -9,6 +9,7 @@ import {
   ScopeSidebar,
   useNotes,
 } from '@/features/notes';
+import { TagSidebar, type TagNode, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
 import { EmptyState } from '@/ui/EmptyState';
 import { Pane } from '@/ui/Pane';
@@ -23,6 +24,11 @@ export function AppShell(): ReactElement {
 
   const [scope, setScope] = useState<NoteScope>(ACTIVE_SCOPE);
   const { items, selectedNoteId, selectedNote, select } = useNotes(scope);
+  const tree = useTagTree();
+
+  // The text the just-created note was seeded with, so `NoteEditor` can treat
+  // it as disposable. Cleared as soon as the selection moves elsewhere.
+  const [seed, setSeed] = useState<{ id: string; text: string } | null>(null);
 
   // Guards against a double-click (or any other double-fire) on "New note":
   // `create` is async, and without this a second click before the first
@@ -34,14 +40,34 @@ export function AppShell(): ReactElement {
     if (creatingRef.current) return;
     creatingRef.current = true;
     try {
-      // Creating always lands in the notes scope: a new note is not trash.
-      setScope(ACTIVE_SCOPE);
-      const created = await notes.create();
+      // A note created inside a tag scope carries that tag, so it belongs to
+      // the list the user is looking at. The leading newline puts the caret on
+      // the title line with the tag below it.
+      const seedText = scope.kind === 'tag' ? `\n#${scope.tag}` : '';
+      if (scope.kind === 'trashed') setScope(ACTIVE_SCOPE);
+
+      const created = await notes.create(seedText);
+      setSeed(seedText === '' ? null : { id: created.id, text: seedText });
       select(created.id);
     } finally {
       creatingRef.current = false;
     }
-  }, [select]);
+  }, [scope, select]);
+
+  // Falls back to all notes when the selected tag stops existing — otherwise a
+  // row that is no longer rendered stays selected.
+  //
+  // Guarded on `tree.nodes !== undefined`: the tag tree is a live query, and
+  // reverting on a loading value would eject the user from their own filter on
+  // every unrelated edit.
+  useEffect(() => {
+    if (scope.kind !== 'tag' || tree.nodes === undefined) return;
+
+    const exists = (nodes: TagNode[]): boolean =>
+      nodes.some((node) => node.tag === scope.tag || exists(node.children));
+
+    if (!exists(tree.nodes)) setScope(ACTIVE_SCOPE);
+  }, [scope, tree.nodes]);
 
   const handleTrash = useCallback(async (id: string) => {
     await notes.trash(id);
@@ -54,7 +80,16 @@ export function AppShell(): ReactElement {
   return (
     <main className="flex h-full w-full overflow-hidden bg-bg text-text">
       <Pane label={t('pane.sidebar')} width={widths.sidebarWidth} className="bg-sidebar">
-        <ScopeSidebar scope={scope} onScopeChange={setScope} />
+        <div className="flex h-full flex-col overflow-y-auto">
+          <ScopeSidebar scope={scope} onScopeChange={setScope} />
+          <TagSidebar
+            nodes={tree.nodes}
+            scope={scope}
+            onScopeChange={setScope}
+            isCollapsed={tree.isCollapsed}
+            onToggle={tree.toggle}
+          />
+        </div>
       </Pane>
 
       <Resizer
@@ -94,7 +129,11 @@ export function AppShell(): ReactElement {
           // `key` is load-bearing, not an optimisation: it remounts the editor
           // on every switch, so an instance only ever writes to one note and
           // its unmount cleanup is the flush-on-switch.
-          <NoteEditor key={selectedNote.id} note={selectedNote} />
+          <NoteEditor
+            key={selectedNote.id}
+            note={selectedNote}
+            seedText={seed?.id === selectedNote.id ? seed.text : undefined}
+          />
         )}
       </Pane>
     </main>
