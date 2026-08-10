@@ -35,10 +35,10 @@ export function NoteList({
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
         <Button onClick={onCreate}>{t('noteList.create')}</Button>
 
-        {selectedNoteId !== null && scope === 'active' && (
+        {selectedNoteId !== null && scope.kind === 'active' && (
           <Button onClick={() => onTrash(selectedNoteId)}>{t('noteList.trash')}</Button>
         )}
-        {selectedNoteId !== null && scope === 'trashed' && (
+        {selectedNoteId !== null && scope.kind === 'trashed' && (
           <Button onClick={() => onRestore(selectedNoteId)}>{t('noteList.restore')}</Button>
         )}
       </div>
@@ -47,8 +47,8 @@ export function NoteList({
           during the first frame would flash "No notes" on every reload. */}
       {items === undefined ? null : items.length === 0 ? (
         <EmptyState
-          title={scope === 'active' ? t('noteList.empty.title') : t('trash.empty.title')}
-          body={scope === 'active' ? t('noteList.empty.body') : t('trash.empty.body')}
+          title={scope.kind === 'trashed' ? t('trash.empty.title') : t('noteList.empty.title')}
+          body={scope.kind === 'trashed' ? t('trash.empty.body') : t('noteList.empty.body')}
         />
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto">

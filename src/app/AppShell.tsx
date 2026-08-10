@@ -1,7 +1,14 @@
 import { type ReactElement, useCallback, useRef, useState } from 'react';
 
 import { notes } from '@/data';
-import { NoteEditor, NoteList, type NoteScope, ScopeSidebar, useNotes } from '@/features/notes';
+import {
+  ACTIVE_SCOPE,
+  NoteEditor,
+  NoteList,
+  type NoteScope,
+  ScopeSidebar,
+  useNotes,
+} from '@/features/notes';
 import { useT } from '@/i18n';
 import { EmptyState } from '@/ui/EmptyState';
 import { Pane } from '@/ui/Pane';
@@ -14,7 +21,7 @@ export function AppShell(): ReactElement {
   const t = useT();
   const widths = usePaneWidths();
 
-  const [scope, setScope] = useState<NoteScope>('active');
+  const [scope, setScope] = useState<NoteScope>(ACTIVE_SCOPE);
   const { items, selectedNoteId, selectedNote, select } = useNotes(scope);
 
   // Guards against a double-click (or any other double-fire) on "New note":
@@ -28,7 +35,7 @@ export function AppShell(): ReactElement {
     creatingRef.current = true;
     try {
       // Creating always lands in the notes scope: a new note is not trash.
-      setScope('active');
+      setScope(ACTIVE_SCOPE);
       const created = await notes.create();
       select(created.id);
     } finally {

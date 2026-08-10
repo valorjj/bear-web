@@ -4,11 +4,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithI18n } from '@/i18n/testing';
 
+import { ACTIVE_SCOPE, TRASHED_SCOPE } from './scope';
 import { ScopeSidebar } from './ScopeSidebar';
 
 describe('ScopeSidebar', () => {
   it('offers exactly the two scopes M3 has', () => {
-    renderWithI18n(<ScopeSidebar scope="active" onScopeChange={vi.fn()} />);
+    renderWithI18n(<ScopeSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} />);
 
     const items = screen.getAllByRole('listitem');
     expect(items).toHaveLength(2);
@@ -17,12 +18,14 @@ describe('ScopeSidebar', () => {
   });
 
   it('marks the active scope as the current page', () => {
-    const { rerender } = renderWithI18n(<ScopeSidebar scope="active" onScopeChange={vi.fn()} />);
+    const { rerender } = renderWithI18n(
+      <ScopeSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} />,
+    );
 
     expect(screen.getByRole('button', { name: 'Notes' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: 'Trash' })).not.toHaveAttribute('aria-current');
 
-    rerender(<ScopeSidebar scope="trashed" onScopeChange={vi.fn()} />);
+    rerender(<ScopeSidebar scope={TRASHED_SCOPE} onScopeChange={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Trash' })).toHaveAttribute('aria-current', 'page');
   });
 
@@ -30,9 +33,9 @@ describe('ScopeSidebar', () => {
     const onScopeChange = vi.fn();
     const user = userEvent.setup();
 
-    renderWithI18n(<ScopeSidebar scope="active" onScopeChange={onScopeChange} />);
+    renderWithI18n(<ScopeSidebar scope={ACTIVE_SCOPE} onScopeChange={onScopeChange} />);
     await user.click(screen.getByRole('button', { name: 'Trash' }));
 
-    expect(onScopeChange).toHaveBeenCalledWith('trashed');
+    expect(onScopeChange).toHaveBeenCalledWith(TRASHED_SCOPE);
   });
 });

@@ -6,6 +6,7 @@ import type { Note } from '@/data';
 import { renderWithI18n } from '@/i18n/testing';
 
 import { NoteList, type NoteListProps } from './NoteList';
+import { ACTIVE_SCOPE, TRASHED_SCOPE } from './scope';
 
 function makeNote(id: string, title: string): Note {
   return {
@@ -22,7 +23,7 @@ function makeNote(id: string, title: string): Note {
 
 function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
   return {
-    scope: 'active',
+    scope: ACTIVE_SCOPE,
     items: [makeNote('a', 'Alpha'), makeNote('b', 'Beta')],
     selectedNoteId: null,
     onSelect: vi.fn(),
@@ -66,7 +67,7 @@ describe('NoteList', () => {
   });
 
   it('shows the trash empty state when the trashed scope has no notes', () => {
-    renderWithI18n(<NoteList {...props({ scope: 'trashed', items: [] })} />);
+    renderWithI18n(<NoteList {...props({ scope: TRASHED_SCOPE, items: [] })} />);
 
     expect(screen.getByText('Trash is empty')).toBeInTheDocument();
   });
@@ -75,7 +76,7 @@ describe('NoteList', () => {
     const onCreate = vi.fn();
     const user = userEvent.setup();
 
-    renderWithI18n(<NoteList {...props({ scope: 'trashed', onCreate })} />);
+    renderWithI18n(<NoteList {...props({ scope: TRASHED_SCOPE, onCreate })} />);
     await user.click(screen.getByRole('button', { name: 'New note' }));
 
     expect(onCreate).toHaveBeenCalledTimes(1);
@@ -98,7 +99,9 @@ describe('NoteList', () => {
     const onRestore = vi.fn();
     const user = userEvent.setup();
 
-    renderWithI18n(<NoteList {...props({ scope: 'trashed', selectedNoteId: 'a', onRestore })} />);
+    renderWithI18n(
+      <NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: 'a', onRestore })} />,
+    );
 
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Restore' }));

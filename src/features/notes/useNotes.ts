@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { notes } from '@/data';
 import type { Note } from '@/data';
 
-import { listForScope, type NoteScope } from './scope';
+import { listForScope, type NoteScope, scopeKey } from './scope';
 
 export interface NotesState {
   /** `undefined` while the live query has not yet resolved. */
@@ -42,11 +42,10 @@ export function useNotes(scope: NoteScope): NotesState {
   // right after switching scopes. Tagging the result and falling back to
   // `undefined` on a stale tag turns that wrong-but-present value back into
   // "still loading," which is the correct state to show.
-  const itemsResult = useLiveQuery(
-    async () => ({ scope, list: await listForScope(scope) }),
-    [scope],
-  );
-  const items = itemsResult?.scope === scope ? itemsResult.list : undefined;
+  const key = scopeKey(scope);
+
+  const itemsResult = useLiveQuery(async () => ({ key, list: await listForScope(scope) }), [key]);
+  const items = itemsResult?.key === key ? itemsResult.list : undefined;
 
   // Reconciliation probes the database for the selected note, NOT `items`.
   //
@@ -86,9 +85,9 @@ export function useNotes(scope: NoteScope): NotesState {
       return;
     }
 
-    const inScope = scope === 'active' ? note.trashedAt === null : note.trashedAt !== null;
+    const inScope = scope.kind === 'trashed' ? note.trashedAt !== null : note.trashedAt === null;
     if (!inScope) setSelectedNoteId(null);
-  }, [probe, scope]);
+  }, [probe, key]);
 
   return {
     items,

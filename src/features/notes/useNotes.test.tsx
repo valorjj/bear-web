@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { db, notes } from '@/data';
 
+import { ACTIVE_SCOPE, TRASHED_SCOPE } from './scope';
 import { useNotes } from './useNotes';
 
 beforeEach(async () => {
@@ -15,7 +16,7 @@ describe('useNotes', () => {
     const older = await notes.create('older');
     const newer = await notes.create('newer');
 
-    const { result } = renderHook(() => useNotes('active'));
+    const { result } = renderHook(() => useNotes(ACTIVE_SCOPE));
 
     await waitFor(() => expect(result.current.items).toHaveLength(2));
     expect(result.current.items?.map((n) => n.id)).toEqual([newer.id, older.id]);
@@ -26,7 +27,7 @@ describe('useNotes', () => {
     const gone = await notes.create('gone');
     await notes.trash(gone.id);
 
-    const { result } = renderHook(() => useNotes('trashed'));
+    const { result } = renderHook(() => useNotes(TRASHED_SCOPE));
 
     await waitFor(() => expect(result.current.items).toHaveLength(1));
     expect(result.current.items?.[0]?.id).toBe(gone.id);
@@ -35,7 +36,7 @@ describe('useNotes', () => {
 
   it('resolves the selected id to the note itself', async () => {
     const note = await notes.create('hello');
-    const { result } = renderHook(() => useNotes('active'));
+    const { result } = renderHook(() => useNotes(ACTIVE_SCOPE));
 
     await waitFor(() => expect(result.current.items).toHaveLength(1));
     act(() => result.current.select(note.id));
@@ -48,7 +49,7 @@ describe('useNotes', () => {
     // for a tick after `create` resolves. Reconciling against that stale list
     // would clear the selection the instant a new note is made — the note is
     // absent from the list but present in the database.
-    const { result } = renderHook(() => useNotes('active'));
+    const { result } = renderHook(() => useNotes(ACTIVE_SCOPE));
     await waitFor(() => expect(result.current.items).toEqual([]));
 
     const created = await notes.create('');
@@ -60,7 +61,7 @@ describe('useNotes', () => {
 
   it('clears the selection when the selected note is purged', async () => {
     const note = await notes.create('doomed');
-    const { result } = renderHook(() => useNotes('active'));
+    const { result } = renderHook(() => useNotes(ACTIVE_SCOPE));
 
     await waitFor(() => expect(result.current.items).toHaveLength(1));
     act(() => result.current.select(note.id));
@@ -74,7 +75,7 @@ describe('useNotes', () => {
 
   it('clears the selection when the selected note leaves the scope', async () => {
     const note = await notes.create('doomed');
-    const { result } = renderHook(() => useNotes('active'));
+    const { result } = renderHook(() => useNotes(ACTIVE_SCOPE));
 
     await waitFor(() => expect(result.current.items).toHaveLength(1));
     act(() => result.current.select(note.id));
@@ -87,7 +88,7 @@ describe('useNotes', () => {
 
   it('does not clear a selection while the query is still loading', async () => {
     const note = await notes.create('hello');
-    const { result } = renderHook(() => useNotes('active'));
+    const { result } = renderHook(() => useNotes(ACTIVE_SCOPE));
 
     act(() => result.current.select(note.id));
     expect(result.current.selectedNoteId).toBe(note.id);
@@ -103,7 +104,7 @@ describe('useNotes', () => {
     // `AppShell` would paint one frame of "No note selected" on every switch.
     const first = await notes.create('first');
     const second = await notes.create('second');
-    const { result } = renderHook(() => useNotes('active'));
+    const { result } = renderHook(() => useNotes(ACTIVE_SCOPE));
 
     await waitFor(() => expect(result.current.items).toHaveLength(2));
     act(() => result.current.select(first.id));

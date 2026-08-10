@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
 
-import type { NoteScope } from './scope';
+import { ACTIVE_SCOPE, type NoteScope, scopeKey, TRASHED_SCOPE } from './scope';
 
 export interface ScopeSidebarProps {
   scope: NoteScope;
@@ -20,9 +20,9 @@ export interface ScopeSidebarProps {
 export function ScopeSidebar({ scope, onScopeChange }: ScopeSidebarProps): ReactElement {
   const t = useT();
 
-  const rows: ReadonlyArray<{ id: NoteScope; label: string }> = [
-    { id: 'active', label: t('scope.notes') },
-    { id: 'trashed', label: t('scope.trash') },
+  const rows: ReadonlyArray<{ id: string; scope: NoteScope; label: string }> = [
+    { id: 'active', scope: ACTIVE_SCOPE, label: t('scope.notes') },
+    { id: 'trashed', scope: TRASHED_SCOPE, label: t('scope.trash') },
   ];
 
   return (
@@ -32,10 +32,10 @@ export function ScopeSidebar({ scope, onScopeChange }: ScopeSidebarProps): React
           <li key={row.id}>
             <button
               type="button"
-              onClick={() => onScopeChange(row.id)}
-              aria-current={scope === row.id ? 'page' : undefined}
+              onClick={() => onScopeChange(row.scope)}
+              aria-current={scopeKey(scope) === scopeKey(row.scope) ? 'page' : undefined}
               className={`w-full rounded px-2 py-1 text-left text-sm text-text ${
-                scope === row.id ? 'bg-bg' : 'hover:bg-bg'
+                scopeKey(scope) === scopeKey(row.scope) ? 'bg-bg' : 'hover:bg-bg'
               }`}
             >
               {row.label}
