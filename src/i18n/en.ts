@@ -18,6 +18,9 @@ export const en = {
   'scope.notes': 'Notes',
   'scope.trash': 'Trash',
 
+  'tags.label': 'Tags',
+  'tags.toggle': 'Expand or collapse',
+
   'note.untitled': 'Untitled',
   'note.noText': 'No additional text',
 

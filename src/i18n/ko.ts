@@ -20,6 +20,9 @@ export const ko: Record<TranslationKey, string> = {
   'scope.notes': '메모',
   'scope.trash': '휴지통',
 
+  'tags.label': '태그',
+  'tags.toggle': '펼치기 또는 접기',
+
   'note.untitled': '제목 없음',
   'note.noText': '추가 내용 없음',
 
