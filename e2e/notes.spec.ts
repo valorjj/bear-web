@@ -246,3 +246,57 @@ test('keyboard select-all (Ctrl/Cmd+A) then repeated checklist toggles do not gr
   // four toggles ends on an even (off) count, so no list markup should remain.
   await expect(editor.locator('li')).toHaveCount(0);
 });
+
+test('a tag typed into a note appears in the sidebar and filters the list', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Sprint planning\n#work/urgent');
+  await editor.blur();
+
+  const tags = page.getByRole('navigation', { name: 'Tags' });
+  await expect(tags.getByRole('button', { name: /^work\b/ })).toBeVisible();
+  await expect(tags.getByRole('button', { name: /^urgent\b/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  await page.getByRole('textbox', { name: 'Note text' }).click();
+  await page.keyboard.type('Groceries\n#home');
+  await page.getByRole('textbox', { name: 'Note text' }).blur();
+
+  // Selecting the parent covers the descendant and excludes the other tag.
+  // Scoped to the note-list region: a tag filter never deselects the note
+  // still open in the editor (see CLAUDE.md), so an unscoped query would see
+  // 'Groceries' lingering in the editor pane and fail for the wrong reason.
+  const noteList = page.getByRole('region', { name: 'Note list' });
+  await tags.getByRole('button', { name: /^work\b/ }).click();
+  await expect(noteList.getByText('Sprint planning')).toBeVisible();
+  await expect(noteList.getByText('Groceries')).toHaveCount(0);
+
+  // Creating inside a tag scope seeds the tag, so the note stays in view.
+  // The active scope here is 'work' (the parent tag clicked above), not the
+  // leaf 'work/urgent', so that is what a new note is seeded with.
+  await page.getByRole('button', { name: 'New note' }).click();
+  await expect(page.getByRole('textbox', { name: 'Note text' })).toContainText('#work');
+});
+
+test('collapsing a tag hides its children and survives a reload', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Sprint planning\n#work/urgent');
+  await editor.blur();
+
+  const tags = page.getByRole('navigation', { name: 'Tags' });
+  const workRow = tags.getByRole('button', { name: /^work\b/ }).locator('xpath=ancestor::li[1]');
+
+  await workRow.getByRole('button', { name: 'Expand or collapse' }).click();
+  await expect(tags.getByRole('button', { name: /^urgent\b/ })).toHaveCount(0);
+
+  await page.reload();
+  await expect(tags.getByRole('button', { name: /^work\b/ })).toBeVisible();
+  await expect(tags.getByRole('button', { name: /^urgent\b/ })).toHaveCount(0);
+});

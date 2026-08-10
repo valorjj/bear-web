@@ -11,17 +11,18 @@ IndexedDB.
 
 ## Status
 
-| Milestone                      | State                                         |
-| ------------------------------ | --------------------------------------------- |
-| M0 scaffold, CI, Pages deploy  | complete                                      |
-| M1 data layer (Dexie)          | complete                                      |
-| M2 application shell           | complete                                      |
-| M3 notes CRUD, textarea editor | complete                                      |
-| M4 editor                      | complete                                      |
-| M5 tags                        | next                                          |
-| M6–M9                          | smart lists and trash, search, themes, polish |
+| Milestone                        | State                  |
+| -------------------------------- | ---------------------- |
+| M0 scaffold, CI, Pages deploy    | complete               |
+| M1 data layer (Dexie)            | complete               |
+| M2 application shell             | complete               |
+| M3 notes CRUD, textarea editor   | complete               |
+| M4 editor                        | complete               |
+| M5 tags                          | complete               |
+| M6 smart lists, trash management | next                   |
+| M7–M9                            | search, themes, polish |
 
-347 unit tests, 16 end-to-end tests. `main` is always green and auto-deploys.
+579 unit tests, 18 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -97,16 +98,81 @@ These bit us once already. They are not mistakes.
 - `src/features/notes/ScopeSidebar.tsx` is two hardcoded rows and **M6 deletes
   the file**. It exists so M3 can ship `trash` and `restore` with a path back.
   Do not grow it into a registry.
+- `parseTags` lives in `src/data/tags/`, not `src/features/tags/`. It is
+  injected at `src/data/repositories/index.ts`, and `src/data/` must not import
+  from `src/features/`. It also genuinely is data-layer logic: it derives a
+  database index. Feature code reaches the index only through
+  `notes.listByTag` and `notes.allTagRows` — never Dexie directly. (The parent
+  spec sketches the parser under `features/tags/`; the spec is wrong.)
 
 ## Rules that must not be silently reversed
 
-- **No real tag parser exists until M5.** `src/data/repositories/index.ts` wires a
-  `noTags` stub returning `[]`. `parseTags` is one of two functions where a wrong
-  implementation silently corrupts user data, so the spec makes TDD mandatory for
-  it. Do not write a "simple regex one for now".
-- **Swapping in that parser is not a one-line change.** Every note written during
-  M2–M4 accumulates an empty tag index, so M5 also needs a rebuild-on-upgrade step.
-  This is the largest outstanding debt and it grows.
+- **Tags are keyed lowercase, and that is what makes `rebuildTagIndex`
+  deterministic.** `#Work` and `#work` are one tag. Bear preserves first-seen
+  casing instead; that was rejected because "first" is undefined during a
+  rebuild — note iteration order would decide display casing, so dropping and
+  rebuilding the index could change it. The parent spec's rule that a rebuild
+  is always safe depends on this.
+- **A tag may only start at a `#` preceded by start-of-line or whitespace.**
+  This single precondition is why `parseTags` needs no URL, link-destination or
+  HTML-attribute detection: `https://x/#a`, `[x](#a)` and `<div id="#x">` are
+  all excluded by the preceding character alone. Removing it means adding all
+  three.
+- **Content beginning with `.,;:!?` or `/` is rejected whole, not trimmed** —
+  otherwise a shebang in an unmasked indented code block becomes a tag named
+  `bin/sh`. The set is deliberately narrow: `#-lead` is a legitimate tag.
+- **The mask character is `\u0000`, deliberately not a space.** Masked code
+  must terminate a tag without permitting one to start — with a space,
+  `` `x`#work `` becomes a tag. `src/data/tags/parseTags.test.ts` pins this.
+- **Indented code blocks and raw HTML blocks are deliberately unmasked.**
+  `#define FOO` inside indented C yields one junk tag. That is the accepted
+  price of not hand-rolling CommonMark's list-aware indentation rules; the
+  obvious cases (`# comment`, `#!/bin/sh`) reject on the grammar alone. Do not
+  "fix" this with more masking.
+- **Fenced-code recognition needs tail assertions on the fence regex.**
+  Without them, `'```code``` is inline'` opens a fence that never closes,
+  silently deleting every tag in the rest of the note; and a closer carrying an
+  info string inverts fence state, inventing tags from inside code blocks.
+- **The tag-index rebuild is a settings marker, never a Dexie `upgrade()`
+  hook.** A throw inside a versioning transaction means the database never
+  opens — the app is bricked with the user's notes on disk and unreachable.
+  With the marker a throw costs an empty index and the version is deliberately
+  not recorded, so the next launch retries. `runMigrations` must never reject —
+  that includes a caller-supplied `onError` that itself throws, which is
+  guarded separately — and `TAG_INDEX_VERSION` is bumped whenever the parser's
+  output changes.
+- **`importDatabase` ignores the bundle's `noteTags` rows and rebuilds**, via an
+  injected callback. The index is derived; trusting a file's copy contradicts
+  that, and it is what made a pre-M5 backup restore an empty index. `backup.ts`
+  still has no tag parser and must not acquire one.
+- **`NoteScope` is an object union, so every `useLiveQuery` keyed on it uses
+  `scopeKey`, never the object.** An object literal has a fresh identity every
+  render; passing it as a dependency is an unbounded refetch loop. `ACTIVE_SCOPE`
+  and `TRASHED_SCOPE` are module constants for the same reason. The only call
+  site that can falsify this is `useNotes.test.tsx`'s refetch test, which needs
+  an explicit effect flush to observe anything.
+- **A tag filter never deselects the open note.** `useNotes` reconciles on
+  trash state alone. Deselecting on tag membership would pull the editor out
+  from under someone deleting a hashtag — or merely typing `#wo` on the way to
+  `#work`.
+- **The vanished-tag fallback must not fire while the tag tree is loading.**
+  `useTagTree` returns `undefined` before its live query resolves, and
+  `AppShell`'s effect returns early on it. Treating `undefined` as "no tags"
+  ejects the user from their own filter on every unrelated edit. **This loading
+  guard is currently unreachable in the shipped app** — `scope` starts at
+  `ACTIVE_SCOPE` and is not persisted, so nothing selects a tag before the tree
+  has resolved once. It is kept as defence in depth against a future persisted
+  scope, not because it is load-bearing today; it has no falsifying app-level
+  test.
+- **`NoteEditor`'s `seedText` is scoped to the just-created note, and `AppShell`
+  must clear it when the selection leaves that note.** A note created inside a
+  tag scope is seeded with that tag, so it is not empty and the blank-note
+  purge would never reclaim it by the ordinary path — but without clearing
+  `seed` on selection change, reopening that note re-arms `seedText`, and a
+  note the user has edited down to just its tag is silently purged: exactly the
+  tag-only deletion the spec rejected. Widening `isEmpty` to "contains only
+  tags" was also rejected — it would delete a note the user deliberately filled
+  with nothing but tags.
 - **`deriveTitle` is deliberately not idempotent.** `'# # nested'` yields
   `'# nested'`, which is that heading's true Markdown content. Stripping twice would
   delete a character the user typed.
@@ -281,19 +347,27 @@ These bit us once already. They are not mistakes.
   driven by the identical `AllSelection` mechanism and the identical fix closes
   both.
 
-## Carried into M5
+## Carried into M5b and M6
 
 Real, deliberately deferred with a ruling. Full M3 reasoning is in
 `.superpowers/sdd/2026-08-08-m3-notes/progress.md`; full M4 reasoning is in
-`.superpowers/sdd/2026-08-09-m4-editor/progress.md`. Fold these into M5's plan
-rather than rediscovering them.
+`.superpowers/sdd/2026-08-09-m4-editor/progress.md`; full M5 reasoning is in
+`.superpowers/sdd/2026-08-10-m5-tags/progress.md`. Fold these into the next
+plan rather than rediscovering them.
 
+- **The tag pill mark and rename/delete are M5b.** M5 shipped the parser, the
+  index, the tree, the sidebar, and seeded creation; it never made `#tag` its
+  own inline mark, never let a tag be renamed or deleted in bulk, and never
+  added syntax-visibility toggling. Not a defect — the M4/M5 specs scope this
+  out deliberately.
 - **Deleting a blank note purges it rather than trashing it**, silently. The
   Delete button is irreversible there and identical everywhere else. Defensible
   under the blank-note rule, but M6 owns trash management and should decide.
+  (M5's seeded-note purge, above, is the same mechanism applied to a note that
+  is empty except for its seeded tag.)
 - **A blank note open across a reload is never discarded**, because
   `beforeunload` only flushes and does not unmount. Spec-compliant as written; a
-  startup sweep of empty notes would close it and belongs to a future milestone.
+  startup sweep of empty notes would close it and belongs to M6.
 - **`usePaneWidths` writes `void settings.set(...)` with no flush**, so dragging
   a separator and reloading immediately can lose the width. Deferred because it
   costs a pane width rather than note content, and because `useAutosave` now has
@@ -308,8 +382,23 @@ rather than rediscovering them.
   is not wrong — it is defence in depth whose own app-level test cannot fail. A
   future milestone touching `useNotes`' selection handling should either close
   this gap or record why it remains open.
-- **Tag marks and syntax-visibility toggling are still deferred**, per the M4
-  spec. Not a defect; M5 owns tags.
+- **A tag tree row's own count and its children resolve as two independent live
+  queries.** A previously-collapsed row can flash open for a frame before the
+  collapsed-state query lands, and a rapid double-toggle click collapses to one
+  logical toggle rather than two (it converges, so no test currently fails on
+  it). Cheap to fix by joining the queries; not done because M5 had no user
+  complaint to point at.
+- **A tag key of `''`, or one with a leading slash, would vanish from the tree
+  entirely** — not merely mis-parented, its note disappears from every list.
+  Unreachable today because the TDD-pinned `parseTags` grammar never emits such
+  a key, but a one-line defensive skip in `buildTagTree` would be cheap
+  insurance against a future parser change reopening a data-loss-shaped bug.
+- **`NoteEditor`'s seed-vs-editor-reading comparison would be sturdier if it
+  captured the mounted editor's own text at mount** when `note.text === seedText`,
+  the way the general autosave-seed rule already does, rather than trusting
+  `seedText` and the editor to agree. Not reshaped at M5's end because the
+  current failure mode is fail-safe (a stray note lingers, nothing is deleted),
+  unlike the manager/schema divergence that motivated the general rule.
 
 ## Working style
 
