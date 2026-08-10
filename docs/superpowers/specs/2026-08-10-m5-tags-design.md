@@ -223,6 +223,47 @@ The reconciliation effect in `useNotes` therefore narrows to trash state alone:
 
 Tag membership never deselects.
 
+### Creating a note inside a tag scope
+
+Creating a note while `#work` is selected seeds its text with that tag, so the
+new note belongs to the list the user is looking at. The seed is `'\n#work'` —
+an empty first line, the tag on the second — so the caret lands where the title
+goes. `deriveTitle` will report `work` until the user types a real title, which
+is self-correcting and acceptable.
+
+**This collides with the blank-note rule**, and the collision is the whole
+reason the seed needs care. `NoteEditor` purges a note that is empty at unmount,
+where "empty" means `text === ''`. A seeded note is not empty, so an untouched
+one would persist forever and tag scopes would silently fill with junk.
+
+Widening `isEmpty` globally to "contains only tags" was rejected: it would
+delete a note in which the user deliberately wrote nothing but tags. Instead
+`NoteEditor` takes an optional `seedText` prop, set only for the note the app
+just created:
+
+- `isEmpty(text)` becomes `text === '' || text === seedText`
+- the truncation guard's `hadTextAtMount` becomes
+  `note.text !== '' && note.text !== seedText`
+
+An untouched seeded note is therefore purged on unmount exactly like an
+untouched blank one, and every existing note is unaffected because `seedText`
+is undefined for all of them. The guard that protects against upstream
+truncation bugs keeps its full strength for real notes.
+
+### When the selected tag stops existing
+
+Deleting the last `#work` from the last note carrying it makes the tag vanish
+from the sidebar. The scope falls back to `{ kind: 'active' }` rather than
+leaving a selection pointing at a row that is no longer rendered. The open note
+stays open, per the rule above.
+
+**The fallback must not fire on a loading tag list.** `useTagTree`'s live query
+is subject to the same stale-previous-value behaviour documented in
+`CLAUDE.md`, so the effect only reverts once the tag list has resolved for the
+current query — an `undefined` or stale-tagged result means "still loading" and
+must leave the scope alone. Reverting on a loading value would eject the user
+from their filter on every unrelated edit.
+
 ## Sidebar
 
 `ScopeSidebar` survives M5 unchanged, still two hardcoded rows, still slated for
@@ -256,6 +297,12 @@ Beyond that:
   selected, trashed notes excluded.
 - **`useNotes`.** No refetch loop on a stable scope; stale-tag fallback on
   switch; a note edited out of tag scope stays open.
+- **Seeded creation.** A note created in a tag scope appears in that scope; an
+  untouched seeded note is purged on unmount; an existing note whose text
+  happens to equal some other note's seed is never purged.
+- **Tag disappearance.** The scope reverts to active when the tag is gone, and
+  does **not** revert while the tag list is loading or stale — the falsification
+  is to return a stale tag list and assert the scope survives.
 - **e2e.** Type `#work/urgent` into a note, see both nodes appear in the
   sidebar, click the parent, and watch the list filter to it.
 
