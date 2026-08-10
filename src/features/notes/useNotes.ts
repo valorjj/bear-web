@@ -59,9 +59,9 @@ export function useNotes(scope: NoteScope): NotesState {
   // undefined }`). A bare `Note | undefined` conflates the two, and clearing
   // on the loading value deselects on every scope change.
   //
-  // Also tagged with `id`, for the same reason `items` is tagged with
-  // `scope` above: switching the selected note must not display, or
-  // reconcile against, the *previous* note's cached probe result.
+  // Also tagged with `id`, for the same reason `items` is tagged with `key`
+  // above: switching the selected note must not display, or reconcile
+  // against, the *previous* note's cached probe result.
   const probeResult = useLiveQuery(
     async () =>
       selectedNoteId === null
@@ -76,6 +76,8 @@ export function useNotes(scope: NoteScope): NotesState {
         ? probeResult
         : undefined;
 
+  const scopeIsTrash = scope.kind === 'trashed';
+
   useEffect(() => {
     if (probe === undefined || probe === null) return;
 
@@ -85,9 +87,13 @@ export function useNotes(scope: NoteScope): NotesState {
       return;
     }
 
-    const inScope = scope.kind === 'trashed' ? note.trashedAt !== null : note.trashedAt === null;
+    // Trash state only. Tag membership deliberately does NOT deselect: a user
+    // who deletes `#work` from the note they are typing in must not have the
+    // editor pulled out from under them, and neither must someone typing `#wo`
+    // on the way to `#work`. The note leaves the list and stays open.
+    const inScope = scopeIsTrash ? note.trashedAt !== null : note.trashedAt === null;
     if (!inScope) setSelectedNoteId(null);
-  }, [probe, key]);
+  }, [probe, scopeIsTrash]);
 
   return {
     items,

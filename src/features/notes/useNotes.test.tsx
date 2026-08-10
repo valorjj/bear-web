@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { db, notes } from '@/data';
 
-import { ACTIVE_SCOPE, TRASHED_SCOPE } from './scope';
+import { ACTIVE_SCOPE, tagScope, TRASHED_SCOPE } from './scope';
 import { useNotes } from './useNotes';
 
 beforeEach(async () => {
@@ -117,5 +117,68 @@ describe('useNotes', () => {
     expect(result.current.selectedNote).toBeUndefined();
 
     await waitFor(() => expect(result.current.selectedNote?.id).toBe(second.id));
+  });
+});
+
+describe('tag scope reconciliation', () => {
+  it('keeps a note selected after its tag is edited away', async () => {
+    const created = await notes.create('#work draft');
+
+    const { result } = renderHook(({ scope }) => useNotes(scope), {
+      initialProps: { scope: tagScope('work') },
+    });
+
+    act(() => result.current.select(created.id));
+    await waitFor(() => expect(result.current.selectedNote?.id).toBe(created.id));
+
+    // The user deletes the hashtag. The note leaves the tag index.
+    await notes.save(created.id, 'draft');
+
+    await waitFor(() => expect(result.current.items).toEqual([]));
+    expect(result.current.selectedNoteId).toBe(created.id);
+    expect(result.current.selectedNote?.id).toBe(created.id);
+  });
+
+  it('still deselects a note that is trashed while a tag scope is open', async () => {
+    const created = await notes.create('#work draft');
+
+    const { result } = renderHook(() => useNotes(tagScope('work')));
+
+    act(() => result.current.select(created.id));
+    await waitFor(() => expect(result.current.selectedNote?.id).toBe(created.id));
+
+    await notes.trash(created.id);
+
+    await waitFor(() => expect(result.current.selectedNoteId).toBeNull());
+  });
+
+  it('still deselects a note that is purged while a tag scope is open', async () => {
+    const created = await notes.create('#work draft');
+
+    const { result } = renderHook(() => useNotes(tagScope('work')));
+
+    act(() => result.current.select(created.id));
+    await waitFor(() => expect(result.current.selectedNote?.id).toBe(created.id));
+
+    await notes.purge(created.id);
+
+    await waitFor(() => expect(result.current.selectedNoteId).toBeNull());
+  });
+
+  it('does not refetch on a re-render with an equal tag scope', async () => {
+    await notes.create('#work draft');
+
+    const { result, rerender } = renderHook(({ tag }) => useNotes(tagScope(tag)), {
+      initialProps: { tag: 'work' },
+    });
+
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+    const first = result.current.items;
+
+    rerender({ tag: 'work' });
+    rerender({ tag: 'work' });
+
+    // Identity is preserved because the live query never resubscribed.
+    expect(result.current.items).toBe(first);
   });
 });
