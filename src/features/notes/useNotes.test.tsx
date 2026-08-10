@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db, notes } from '@/data';
 
@@ -168,17 +168,36 @@ describe('tag scope reconciliation', () => {
   it('does not refetch on a re-render with an equal tag scope', async () => {
     await notes.create('#work draft');
 
+    const listByTag = vi.spyOn(notes, 'listByTag');
+
     const { result, rerender } = renderHook(({ tag }) => useNotes(tagScope(tag)), {
       initialProps: { tag: 'work' },
     });
 
     await waitFor(() => expect(result.current.items).toHaveLength(1));
+    const callsAfterFirstLoad = listByTag.mock.calls.length;
     const first = result.current.items;
 
     rerender({ tag: 'work' });
     rerender({ tag: 'work' });
 
-    // Identity is preserved because the live query never resubscribed.
+    // `tagScope` builds a fresh object every render, so without `scopeKey`
+    // these re-renders each look like a dependency change and resubscribe.
+    // The flush is required: dexie-react-hooks resubscribes in a passive
+    // effect, and the resubscription's query resolves through several more
+    // microtask/macrotask hops (fake-indexeddb's request events, then the
+    // liveQuery emission), so a single microtask tick is not always enough
+    // to observe it — drain several rounds of both queues, deterministically,
+    // with no wall-clock wait.
+    await act(async () => {
+      for (let i = 0; i < 10; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    });
+
+    expect(listByTag.mock.calls.length).toBe(callsAfterFirstLoad);
     expect(result.current.items).toBe(first);
+
+    listByTag.mockRestore();
   });
 });
