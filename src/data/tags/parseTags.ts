@@ -35,8 +35,15 @@ const TILDE_OPENER = /^ {0,3}(~{3,})(.*)$/;
  * so a shebang in an unmasked indented code block yields nothing instead of a
  * tag named `bin/sh`. Deliberately narrow — `#-lead` is a legitimate tag, so
  * this must not widen to "any non-word character".
+ *
+ * `/` is deliberately absent: a leading slash always produces an empty first
+ * `/`-separated segment (`#/bin` splits to `['', 'bin']`), which the
+ * empty-segment rule in `normalizeTag` already rejects. Content starting with
+ * `#!/bin/sh` still rejects too, via the leading `!`. Keeping `/` here as well
+ * was a rule enforced by nothing — see the parser test suite, which is green
+ * with or without it.
  */
-const LEADING_REJECT = /^[.,;:!?/]/;
+const LEADING_REJECT = /^[.,;:!?]/;
 
 function isWhitespace(ch: string | undefined): boolean {
   return ch !== undefined && /\s/.test(ch);
@@ -187,9 +194,22 @@ function normalizeTag(raw: string): string | null {
   return trimmed;
 }
 
-function lineEndFrom(text: string, from: number): number {
-  const newline = text.indexOf('\n', from);
-  return newline === -1 ? text.length : newline;
+/**
+ * Whether a candidate closing `#` at `close` sits on the same line as `from`.
+ * Bounded to `[from, close)` rather than scanning to end-of-line: on a long
+ * single line with a nearby closer, an unbounded scan to end-of-line on every
+ * candidate `#` is what made parsing quadratic (a 900 KB line of `'#a '`
+ * measured 2.1s before this fix). `close` is always found first by the
+ * caller, so this never scans past it.
+ */
+function closesOnSameLine(text: string, from: number, close: number): boolean {
+  // `text.indexOf('\n', from)` is the wrong tool here: when no newline exists
+  // between `from` and the end of the (possibly huge) string, `indexOf` scans
+  // all the way to the end to find that out, on every call. Slicing to just
+  // `[from, close)` first bounds that scan to the gap between two consecutive
+  // `#` characters — summed over a whole parse, that gap total is O(n), not
+  // O(n) per candidate.
+  return !text.slice(from, close).includes('\n');
 }
 
 export function parseTags(markdown: string): string[] {
@@ -209,15 +229,22 @@ export function parseTags(markdown: string): string[] {
       continue;
     }
 
-    const lineEnd = lineEndFrom(text, open + 1);
     const close = text.indexOf('#', open + 1);
 
     let content: string | null;
     let end: number;
 
-    if (close !== -1 && close < lineEnd && isBoundary(text[close + 1])) {
+    if (
+      close !== -1 &&
+      closesOnSameLine(text, open + 1, close) &&
+      isBoundary(text[close + 1]) &&
+      !isWhitespace(text[close - 1])
+    ) {
       // Multi-word form. The closing hash must be followed by a boundary, which
-      // is what stops `#a #b` from reading as one tag named `a `.
+      // is what stops `#a #b` from reading as one tag named `a `, and must NOT
+      // be preceded by whitespace, symmetric with the boundary-after rule —
+      // otherwise `Fix #bug then see item # 5` reads the far, unrelated `#` as
+      // this tag's closer and swallows the prose between them.
       content = text.slice(open + 1, close);
       end = close + 1;
     } else {

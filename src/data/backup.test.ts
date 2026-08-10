@@ -8,6 +8,16 @@ import { createTestDatabase } from './testing';
 
 const noRebuild = { rebuildTagIndex: vi.fn(async () => 0) };
 
+// `noRebuild` is declared once at module scope and shared across every test in
+// this file. Call-count assertions against it are inert today (nothing here
+// asserts a count against it directly), but a future test that does would
+// silently inherit calls from every earlier test in the run order. Clear it
+// before each test so it is always live, not a trap waiting for the next
+// assertion added against it.
+beforeEach(() => {
+  noRebuild.rebuildTagIndex.mockClear();
+});
+
 async function seed(db: BearDatabase): Promise<void> {
   await db.notes.add({
     id: 'n1',

@@ -124,6 +124,19 @@ These bit us once already. They are not mistakes.
 - **The mask character is `\u0000`, deliberately not a space.** Masked code
   must terminate a tag without permitting one to start — with a space,
   `` `x`#work `` becomes a tag. `src/data/tags/parseTags.test.ts` pins this.
+  It must always be written as that four-character escape sequence, never
+  pasted or typed as a literal NUL byte — a raw NUL byte looks identical to
+  the escape sequence in most editors, but `grep` and `diff` both silently
+  mangle it. This milestone hit that twice.
+- **A tag's closing `#` needs a non-whitespace character on both sides, not
+  just after it.** The multi-word form originally required only that the
+  character after the closer be a boundary; a lone `#` later on the same
+  line — unrelated prose, not a second tag — would then act as the first
+  tag's closer and swallow every word between the two hashes.
+  `Fix #bug then see item # 5` produced the tag `bug then see item` instead
+  of `bug`, silently destroying the user's actual tag. Fixed by also
+  requiring the character before the closing `#` to be non-whitespace,
+  symmetric with the existing rule.
 - **Indented code blocks and raw HTML blocks are deliberately unmasked.**
   `#define FOO` inside indented C yields one junk tag. That is the accepted
   price of not hand-rolling CommonMark's list-aware indentation rules; the
@@ -151,6 +164,14 @@ These bit us once already. They are not mistakes.
   and `TRASHED_SCOPE` are module constants for the same reason. The only call
   site that can falsify this is `useNotes.test.tsx`'s refetch test, which needs
   an explicit effect flush to observe anything.
+- **Widening a two-armed union to three is not a safe default when logic is
+  gated with `===`.** `NoteScope` grew a `tag` arm; `NoteList`'s Trash button
+  stayed gated on `scope.kind === 'active'`, which was total over the old two
+  scopes and silently became partial — a tag scope rendered neither Trash nor
+  Restore, so a note filtered to `#work` had no delete affordance at all, and
+  no test covered the missing third arm. Gate the total case (`!== 'trashed'`)
+  rather than enumerating the arms that should pass, and add a test for the
+  new arm whenever a union grows.
 - **A tag filter never deselects the open note.** `useNotes` reconciles on
   trash state alone. Deselecting on tag membership would pull the editor out
   from under someone deleting a hashtag — or merely typing `#wo` on the way to

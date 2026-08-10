@@ -35,7 +35,7 @@ export function NoteList({
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
         <Button onClick={onCreate}>{t('noteList.create')}</Button>
 
-        {selectedNoteId !== null && scope.kind === 'active' && (
+        {selectedNoteId !== null && scope.kind !== 'trashed' && (
           <Button onClick={() => onTrash(selectedNoteId)}>{t('noteList.trash')}</Button>
         )}
         {selectedNoteId !== null && scope.kind === 'trashed' && (

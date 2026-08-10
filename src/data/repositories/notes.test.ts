@@ -253,6 +253,23 @@ describe('notesRepository', () => {
       expect(found.map((n) => n.id)).toEqual([kept.id]);
     });
 
+    it('listByTag excludes a trashed note even when its noteTags row was never removed', async () => {
+      // trash() already removes the row, so this cannot happen through the
+      // repository. It simulates a desync directly — a stale row surviving a
+      // rebuild that ran while the note was trashed, or a bug in a future
+      // change to trash()/restore() — to prove listByTag's own filter is a
+      // real, load-bearing second guard, not just a mirror of trash()'s.
+      const repo = createNotesRepository({ db, parseTags });
+
+      const kept = await repo.create('#work');
+      const trashedNote = await repo.create('#work');
+      await repo.trash(trashedNote.id);
+      await db.noteTags.put({ noteId: trashedNote.id, tag: 'work' });
+
+      const found = await repo.listByTag('work');
+      expect(found.map((n) => n.id)).toEqual([kept.id]);
+    });
+
     it('listByTag returns most recently updated first', async () => {
       let clock = 1000;
       const repo = createNotesRepository({ db, parseTags, now: () => (clock += 10) });

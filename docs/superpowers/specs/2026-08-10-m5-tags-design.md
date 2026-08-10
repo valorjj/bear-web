@@ -110,19 +110,28 @@ precedence rule:
 
 1. If the next character is whitespace or end-of-line, reject and continue.
 2. **Multi-word form.** Scan forward on the same line to the next `#`. If one
-   exists and is immediately followed by whitespace or end-of-line, the span
-   between the two hashes is the tag content. If the next `#` is followed by
-   anything else, there is no valid closing hash and the multi-word form does
-   not apply.
+   exists, is immediately preceded by a non-whitespace character, and is
+   immediately followed by whitespace or end-of-line, the span between the two
+   hashes is the tag content. If the next `#` is preceded by whitespace, or
+   followed by anything other than whitespace or end-of-line, there is no
+   valid closing hash and the multi-word form does not apply. The
+   preceded-by-non-whitespace half of this rule is symmetric with the
+   followed-by-boundary half: without it, a lone `#` later in the same line —
+   unrelated prose, not a second tag — closes the first tag and swallows every
+   word in between. `Fix #bug then see item # 5` would otherwise produce the
+   tag `bug then see item` instead of `bug`.
 3. **Simple form.** Otherwise the content runs to the next whitespace or
    end-of-line. Content containing a `#` is rejected.
 4. Collapse internal whitespace runs to a single space, then trim.
-5. Reject outright if the content **begins** with `.,;:!?` or `/`. This is
-   rejection rather than trimming, and the difference matters: `#!/bin/sh` in
-   an indented code block — which is deliberately not masked — would otherwise
+5. Reject outright if the content **begins** with `.,;:!?`. This is rejection
+   rather than trimming, and the difference matters: `#!/bin/sh` in an
+   indented code block — which is deliberately not masked — would otherwise
    become a tag named either `!/bin/sh` or, if the leading characters were
    trimmed, `bin/sh`. Both are junk. The set is deliberately narrow; `#-lead`
-   is a legitimate tag and must stay one.
+   is a legitimate tag and must stay one. A leading slash is not in this set:
+   `#/bin/sh` already rejects via rule 8, because splitting on `/` produces an
+   empty first segment. Naming `/` here as well would be a rule stated twice
+   and enforced by only one of the two sites.
 6. Trim trailing `.,;:!?` and `/` repeatedly, so `#done..` yields `done`,
    `#work/` yields `work` rather than a tag with a phantom empty child, and
    `#done./` settles on `done`.
@@ -141,6 +150,7 @@ Rule 2 is what makes the multi-word form safe. Worked cases:
 | `#a #b`           | `a`, `b`        | next `#` is followed by `b`, not whitespace |
 | `#project plan#`  | `project plan`  | closing `#` at end of line                 |
 | `#a b #c d#`      | `a`, `c d`      | first candidate has no valid close         |
+| `Fix #bug then see item # 5` | `bug` | the later `#` is preceded by whitespace, so it cannot close the first tag; the first candidate falls back to the simple form instead of swallowing the prose in between |
 | `# Heading`       | —               | whitespace after `#`                       |
 | `## Heading`      | —               | valid close, empty content                 |
 | `### Heading`     | —               | no valid close; simple content holds `#`   |

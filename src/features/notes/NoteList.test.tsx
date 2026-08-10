@@ -6,7 +6,7 @@ import type { Note } from '@/data';
 import { renderWithI18n } from '@/i18n/testing';
 
 import { NoteList, type NoteListProps } from './NoteList';
-import { ACTIVE_SCOPE, TRASHED_SCOPE } from './scope';
+import { ACTIVE_SCOPE, tagScope, TRASHED_SCOPE } from './scope';
 
 function makeNote(id: string, title: string): Note {
   return {
@@ -91,6 +91,20 @@ describe('NoteList', () => {
 
     rerender(<NoteList {...props({ selectedNoteId: 'a', onTrash })} />);
     await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onTrash).toHaveBeenCalledWith('a');
+  });
+
+  it('offers delete for a selected note in a tag scope too', async () => {
+    const onTrash = vi.fn();
+    const user = userEvent.setup();
+
+    renderWithI18n(
+      <NoteList {...props({ scope: tagScope('work'), selectedNoteId: 'a', onTrash })} />,
+    );
+
+    const trashButton = screen.getByRole('button', { name: 'Delete' });
+    await user.click(trashButton);
 
     expect(onTrash).toHaveBeenCalledWith('a');
   });

@@ -64,6 +64,22 @@ describe('parseTags', () => {
     it('does not pair a closing hash across a line break', () => {
       expect(parseTags('#project plan\nmore #')).toEqual(['project']);
     });
+
+    describe('a closing hash preceded by whitespace cannot close', () => {
+      // Symmetric with the followed-by-boundary half of the rule: the closer
+      // must also be preceded by a non-whitespace character. Without this, a
+      // later, unrelated `#` reads as the closer and the tag swallows every
+      // word in between, silently destroying it.
+      const cases: ReadonlyArray<[string, string[]]> = [
+        ['Fix #bug then see item # 5', ['bug']],
+        ['Issue #12 and # of items', []],
+        ['see #tag and # here.', ['tag']],
+      ];
+
+      it.each(cases)('%j -> %j', (input, expected) => {
+        expect(parseTags(input)).toEqual(expected);
+      });
+    });
   });
 
   describe('headings never become tags', () => {

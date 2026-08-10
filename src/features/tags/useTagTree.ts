@@ -19,7 +19,13 @@ export function useTagTree(): TagTreeState {
   const rows = useLiveQuery(() => notes.allTagRows(), []);
   const meta = useLiveQuery(() => tags.allMeta(), []);
 
-  const nodes = rows === undefined ? undefined : buildTagTree(rows);
+  // Memoized on `rows`' identity: `dexie-react-hooks`' `useLiveQuery` gives a
+  // fresh array only when the underlying query result actually changes, so
+  // without this `buildTagTree` re-ran, and gave `tree.nodes` a fresh
+  // identity, on every `AppShell` render — including ones with no tag
+  // change — which in turn made `AppShell`'s vanished-tag effect re-walk the
+  // whole tree on every render too.
+  const nodes = useMemo(() => (rows === undefined ? undefined : buildTagTree(rows)), [rows]);
 
   const collapsed = useMemo(
     () => new Set((meta ?? []).filter((m) => m.collapsed).map((m) => m.tag)),

@@ -49,6 +49,11 @@ describe('TagSidebar', () => {
     );
 
     expect(screen.queryByRole('button', { name: /work/ })).not.toBeInTheDocument();
+    // Guards against `nodes === undefined` being conflated with `nodes === []`:
+    // a component that renders the empty state instead of `null` on a loading
+    // tree would flash "No tags yet" on every reload, and would still pass the
+    // assertion above.
+    expect(screen.queryByText('No tags yet')).not.toBeInTheDocument();
   });
 
   it('shows an empty state when there are no tags', () => {
