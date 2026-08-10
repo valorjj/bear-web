@@ -1,0 +1,1 @@
+export { parseTags } from './parseTags';
