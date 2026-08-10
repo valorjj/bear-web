@@ -156,6 +156,18 @@ These bit us once already. They are not mistakes.
   that includes a caller-supplied `onError` that itself throws, which is
   guarded separately — and `TAG_INDEX_VERSION` is bumped whenever the parser's
   output changes.
+- **`persistStorage` checks `persisted()` before it ever calls `persist()`, and
+  only asks once the database already holds a note.** The order is the whole
+  design. `persisted()` only reads state; `persist()` raises a permission
+  doorhanger in Firefox, and asking a first-time visitor to grant persistent
+  storage before they have written anything is the moment they are most likely
+  to refuse — a refusal that sticks. So notes from a user's very first session
+  stay evictable until their next launch, which is safe because eviction does
+  not happen mid-session. Chrome and Safari never prompt and decide from
+  engagement heuristics, which the same gating happens to favour. Do not "fix"
+  this by requesting at boot unconditionally. Like `runMigrations`, it never
+  rejects, is feature-detected rather than assumed (`navigator.storage` is
+  absent in older Safari and some webviews), and guards its own `onError`.
 - **`importDatabase` ignores the bundle's `noteTags` rows and rebuilds**, via an
   injected callback. The index is derived; trusting a file's copy contradicts
   that, and it is what made a pre-M5 backup restore an empty index. `backup.ts`

@@ -11,6 +11,8 @@ export {
 } from './migrations';
 export type { MigrationDeps } from './migrations';
 export { openDatabase, resolveDatabase } from './open';
+export { persistStorage, requestPersistentStorage } from './persist';
+export type { PersistDeps, PersistOutcome } from './persist';
 export { parseTags } from './tags';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
 export { files, notes, settings, tags } from './repositories';
