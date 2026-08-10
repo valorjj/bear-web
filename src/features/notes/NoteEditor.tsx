@@ -14,6 +14,18 @@ import { useAutosave } from './useAutosave';
 
 export interface NoteEditorProps {
   note: Note;
+  /**
+   * The text this note was created with, set ONLY for a note the app just
+   * created. A note created inside a tag scope is seeded with that tag, which
+   * makes it non-empty and therefore immune to the blank-note purge — so tag
+   * scopes would silently fill with notes nobody ever wrote in.
+   *
+   * Widening `isEmpty` globally to "contains only tags" was rejected: it would
+   * delete a note in which the user deliberately wrote nothing but tags.
+   * Scoping the rule to the just-created note leaves every existing note
+   * untouched, and the truncation guard below keeps its full strength.
+   */
+  seedText?: string;
 }
 
 /**
@@ -25,7 +37,7 @@ export interface NoteEditorProps {
  * query updates for the open note are deliberately ignored, so nothing moves
  * the caret except the user.
  */
-export function NoteEditor({ note }: NoteEditorProps): ReactElement {
+export function NoteEditor({ note, seedText }: NoteEditorProps): ReactElement {
   const t = useT();
 
   const handleRef = useRef<RichEditorHandle | null>(null);
@@ -38,11 +50,26 @@ export function NoteEditor({ note }: NoteEditorProps): ReactElement {
   // Wrapped in try/catch for the same reason as `read`, below: serialization
   // can fail, and a failure here must degrade to the raw stored text plus a
   // visible message rather than crash the component outright.
-  const [{ initialMarkdown, initialSerializeFailed }] = useState(() => {
+  //
+  // `seedText` is normalized the same way, once, here. `isEmpty` below
+  // compares against the MOUNTED EDITOR's serialized reading (`read()`),
+  // never against raw stored text — `normalizeMarkdown` can itself change the
+  // text (for instance, stripping a leading newline), so comparing a
+  // normalized reading against a raw `seedText` would silently never match
+  // and the seeded-empty check would never fire.
+  const [{ initialMarkdown, initialSerializeFailed, normalizedSeedText }] = useState(() => {
     try {
-      return { initialMarkdown: normalizeMarkdown(note.text), initialSerializeFailed: false };
+      return {
+        initialMarkdown: normalizeMarkdown(note.text),
+        initialSerializeFailed: false,
+        normalizedSeedText: seedText === undefined ? undefined : normalizeMarkdown(seedText),
+      };
     } catch {
-      return { initialMarkdown: note.text, initialSerializeFailed: true };
+      return {
+        initialMarkdown: note.text,
+        initialSerializeFailed: true,
+        normalizedSeedText: seedText,
+      };
     }
   });
   const [serializeFailed, setSerializeFailed] = useState(initialSerializeFailed);
@@ -73,7 +100,7 @@ export function NoteEditor({ note }: NoteEditorProps): ReactElement {
   // comparing text, because a text comparison is exactly what a truncation bug
   // corrupts.
   const editedRef = useRef(false);
-  const hadTextAtMountRef = useRef(note.text !== '');
+  const hadTextAtMountRef = useRef(note.text !== '' && note.text !== seedText);
 
   const discard = useCallback(async () => {
     if (hadTextAtMountRef.current && !editedRef.current) return;
@@ -85,7 +112,9 @@ export function NoteEditor({ note }: NoteEditorProps): ReactElement {
     read,
     save,
     discard,
-    isEmpty: (text) => text === EMPTY_DOCUMENT_MARKDOWN,
+    isEmpty: (text) =>
+      text === EMPTY_DOCUMENT_MARKDOWN ||
+      (normalizedSeedText !== undefined && text === normalizedSeedText),
   });
 
   // Guard (b). `initialMarkdown` above is what the MANAGER produces from the

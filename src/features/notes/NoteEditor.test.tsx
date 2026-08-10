@@ -376,6 +376,62 @@ describe('the keyed remount', () => {
   });
 });
 
+describe('seeded notes', () => {
+  it('purges a seeded note left untouched', async () => {
+    const purge = vi.spyOn(notes, 'purge').mockResolvedValue(undefined);
+    const note = await notes.create('\n#work');
+
+    const { unmount } = renderWithI18n(<NoteEditor note={note} seedText={'\n#work'} />);
+    await screen.findByRole('textbox');
+
+    unmount();
+
+    await waitFor(() => expect(purge).toHaveBeenCalledWith(note.id));
+  });
+
+  it('keeps a seeded note the user typed into', async () => {
+    const purge = vi.spyOn(notes, 'purge').mockResolvedValue(undefined);
+    const save = vi.spyOn(notes, 'save');
+    const note = await notes.create('\n#work');
+
+    const { unmount } = renderWithI18n(<NoteEditor note={note} seedText={'\n#work'} />);
+    const editorEl = await screen.findByRole('textbox');
+
+    await userEvent.click(editorEl);
+    await userEvent.type(editorEl, 'a plan');
+
+    unmount();
+
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(purge).not.toHaveBeenCalled();
+  });
+
+  it('never purges a note whose text merely equals some other note seed', async () => {
+    const purge = vi.spyOn(notes, 'purge').mockResolvedValue(undefined);
+    const note = await notes.create('\n#work');
+
+    // No seedText: this is an existing note that happens to hold that text.
+    const { unmount } = renderWithI18n(<NoteEditor note={note} />);
+    await screen.findByRole('textbox');
+
+    unmount();
+
+    await waitFor(() => expect(purge).not.toHaveBeenCalled());
+  });
+
+  it('still purges a genuinely blank new note', async () => {
+    const purge = vi.spyOn(notes, 'purge').mockResolvedValue(undefined);
+    const note = await notes.create('');
+
+    const { unmount } = renderWithI18n(<NoteEditor note={note} />);
+    await screen.findByRole('textbox');
+
+    unmount();
+
+    await waitFor(() => expect(purge).toHaveBeenCalledWith(note.id));
+  });
+});
+
 describe('serialization failure', () => {
   it('never calls save when serialization throws', async () => {
     const note = await createNote('# Hello');
