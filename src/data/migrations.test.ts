@@ -34,6 +34,7 @@ describe('runMigrations', () => {
 
     await expect(runMigrations(d)).resolves.toBe(false);
     expect(d.rebuildTagIndex).not.toHaveBeenCalled();
+    expect(d.setVersion).not.toHaveBeenCalled();
   });
 
   it('re-runs once the version constant moves ahead of the marker', async () => {
@@ -65,5 +66,19 @@ describe('runMigrations', () => {
 
     await expect(runMigrations(d)).resolves.toBe(false);
     expect(d.rebuildTagIndex).not.toHaveBeenCalled();
+  });
+
+  it('never rejects when onError itself throws', async () => {
+    const d = deps({
+      rebuildTagIndex: vi.fn(async () => {
+        throw new Error('parser exploded');
+      }),
+      onError: vi.fn(() => {
+        throw new Error('logger exploded');
+      }),
+    });
+
+    await expect(runMigrations(d)).resolves.toBe(false);
+    expect(d.setVersion).not.toHaveBeenCalled();
   });
 });

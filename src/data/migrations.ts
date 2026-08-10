@@ -22,7 +22,8 @@ export interface MigrationDeps {
  * empty tag index and nothing else, and the version is deliberately not
  * recorded so the next launch retries.
  *
- * Resolves `true` when a rebuild ran. Never rejects.
+ * Resolves `true` only when a rebuild ran AND the new version was recorded.
+ * Never rejects.
  */
 export async function runMigrations(deps: MigrationDeps): Promise<boolean> {
   try {
@@ -33,7 +34,14 @@ export async function runMigrations(deps: MigrationDeps): Promise<boolean> {
     await deps.setVersion(TAG_INDEX_VERSION);
     return true;
   } catch (error) {
-    deps.onError?.(error);
+    // A caller-supplied callback must never be able to turn a failed rebuild
+    // into an unhandled rejection — the never-rejects contract is the entire
+    // reason this is a settings marker and not a Dexie upgrade hook.
+    try {
+      deps.onError?.(error);
+    } catch {
+      // Nothing useful left to do: the reporter is the thing that broke.
+    }
     return false;
   }
 }
