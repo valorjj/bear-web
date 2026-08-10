@@ -1,12 +1,43 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db, notes } from '@/data';
 import { I18nProvider } from '@/i18n';
 import { en } from '@/i18n/en';
 
 import { AppShell } from './AppShell';
+
+// jsdom has no layout engine, so ProseMirror's caret/scroll math
+// (`coordsAtPos`, `posAtCoords`) throws on APIs jsdom never implements. These
+// stubs return harmless empty geometry so `userEvent.type` can drive the
+// contenteditable surface without crashing. Copied from the identical header
+// in `src/features/notes/NoteEditor.test.tsx`, which is the canonical model
+// per CLAUDE.md's toolchain notes; only the tag-seed-reopen test below needs
+// to type into the editor.
+const emptyRect: DOMRect = {
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  toJSON: () => ({}),
+};
+Range.prototype.getBoundingClientRect = () => emptyRect;
+Range.prototype.getClientRects = () =>
+  ({
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: function* () {},
+  }) as unknown as DOMRectList;
+document.elementFromPoint = () => null;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function renderShell() {
   return render(
@@ -204,10 +235,13 @@ describe('tag scopes', () => {
 
     // `deriveTitle` does not strip hashtags, so the rendered title is the
     // whole first line ("alpha #work"), not the bare word — hence the regex
-    // matchers rather than exact strings.
+    // matchers rather than exact strings. Anchored on the list-item button's
+    // accessible name (as the pre-existing tests in this file do), not on
+    // `getByText`: a bare prefix match on text would silently grab the wrong
+    // row once a fixture adds a second note starting with the same word.
     await waitFor(() => {
-      expect(screen.getByText(/^alpha\b/)).toBeInTheDocument();
-      expect(screen.queryByText(/^beta\b/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^alpha\b/ })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^beta\b/ })).not.toBeInTheDocument();
     });
   });
 
@@ -216,7 +250,7 @@ describe('tag scopes', () => {
 
     renderShell();
     await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
-    await screen.findByText(/^alpha\b/);
+    await screen.findByRole('button', { name: /^alpha\b/ });
 
     await userEvent.click(screen.getByRole('button', { name: 'New note' }));
 
@@ -234,7 +268,7 @@ describe('tag scopes', () => {
 
     renderShell();
     await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
-    await screen.findByText(/^alpha\b/);
+    await screen.findByRole('button', { name: /^alpha\b/ });
 
     await notes.save(note.id, 'alpha');
 
@@ -243,16 +277,84 @@ describe('tag scopes', () => {
     );
   });
 
-  it('does not fall back while the tag tree is still loading', async () => {
+  it('selecting a tag does not bounce back to Notes', async () => {
     await notes.create('alpha #work');
 
     renderShell();
     await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
 
-    // Immediately after selection the tree query may still be resolving. The
-    // Notes row must not become current at any point.
+    // This does NOT exercise the fallback effect's `tree.nodes === undefined`
+    // branch: `TagSidebar` returns `null` until the tree has resolved, so the
+    // "work" button above cannot even be clicked while the tree is loading.
+    // That branch is unreachable from the app today (see the comment on the
+    // effect in AppShell.tsx) and this fixture cannot make it reachable. What
+    // this test actually checks is the ordinary, always-reachable path: after
+    // a tag is selected, the "Notes" row must not spuriously regain
+    // `aria-current`.
     expect(screen.getByRole('button', { name: 'Notes' })).not.toHaveAttribute('aria-current');
-    await screen.findByText(/^alpha\b/);
+    await screen.findByRole('button', { name: /^alpha\b/ });
     expect(screen.getByRole('button', { name: 'Notes' })).not.toHaveAttribute('aria-current');
+  });
+
+  // The seed is keyed by id, so re-selecting the same just-created note keeps
+  // handing `NoteEditor` the same `seedText` unless something clears it. That
+  // makes the note vulnerable to the guard `NoteEditorProps` says was
+  // rejected: editing real content into it, switching away, switching back,
+  // then editing it back down to exactly its tag would have `isEmpty`
+  // mistake it for the disposable creation seed and purge it — even though
+  // the user deliberately kept content in it the whole time it was open the
+  // second time. Full path: create inside a tag scope, type real content,
+  // select another note, reselect the created one, edit it back to just the
+  // tag, then unmount.
+  it('does not re-arm the seed purge when a created note is reopened', async () => {
+    const purge = vi.spyOn(notes, 'purge').mockResolvedValue(undefined);
+    await notes.create('keeper #work');
+
+    renderShell();
+    await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
+    // Captured once and reused for every later click on this row: after the
+    // seeded note is typed into, its title changes, so re-querying by name
+    // would either miss it or (worse) risk matching a future fixture's note
+    // that happens to share a word. The row's identity, not its label, is
+    // what this test needs.
+    const keeperRow = await screen.findByRole('button', { name: /^keeper\b/ });
+
+    await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+    const created = await screen.findByRole('textbox');
+    // The just-created note's row is the only one with `aria-current="true"`
+    // (`ScopeSidebar`/`TagSidebar` rows use `aria-current="page"`), which
+    // identifies it without depending on its title text.
+    const createdRow = screen.getByRole('button', { current: true });
+
+    // Type real content into the freshly created note. The caret lands at
+    // the end of the seeded "#work" text, hence the leading space rather
+    // than typing before it — typing flush against the tag would merge into
+    // it and stop it parsing as a tag at all, which is not what this test is
+    // about.
+    await userEvent.click(created);
+    await userEvent.type(created, ' urgent');
+
+    // Switch away — this note now holds real content, so it is saved, not
+    // discarded, and its editor unmounts.
+    await userEvent.click(keeperRow);
+
+    // Switch back to the created note via the captured row. If `seed` was
+    // never cleared, AppShell still passes the ORIGINAL creation `seedText`
+    // for this id.
+    await userEvent.click(createdRow);
+    const reopened = await screen.findByRole('textbox');
+
+    // Edit the reopened note back down to exactly its tag line — content the
+    // user is deliberately choosing to keep, since they just typed it.
+    await userEvent.click(reopened);
+    await userEvent.keyboard('{Control>}a{/Control}');
+    await userEvent.keyboard('{Backspace}');
+    await userEvent.type(reopened, '#work');
+
+    // Switch away again to unmount the reopened editor and run the discard
+    // check.
+    await userEvent.click(keeperRow);
+
+    await waitFor(() => expect(purge).not.toHaveBeenCalled());
   });
 });

@@ -30,6 +30,18 @@ export function AppShell(): ReactElement {
   // it as disposable. Cleared as soon as the selection moves elsewhere.
   const [seed, setSeed] = useState<{ id: string; text: string } | null>(null);
 
+  // Actually clears the seed once selection moves elsewhere — the state above
+  // only sets it. Without this, a seed set for note A survives every later
+  // selection change for the rest of the session: reopening A after editing
+  // it down to exactly its tag would pass `seedText` again, `isEmpty` would
+  // treat it as disposable, and the truncation guard (which only fires when
+  // `editedRef` is false) would not stop the purge. `setSeed` in `handleCreate`
+  // and `select(created.id)` run in the same continuation and batch together,
+  // so a freshly created seed is never cleared by its own creation.
+  useEffect(() => {
+    if (seed !== null && selectedNoteId !== seed.id) setSeed(null);
+  }, [seed, selectedNoteId]);
+
   // Guards against a double-click (or any other double-fire) on "New note":
   // `create` is async, and without this a second click before the first
   // `await` resolves creates a second note that never gets an editor mounted
@@ -57,9 +69,15 @@ export function AppShell(): ReactElement {
   // Falls back to all notes when the selected tag stops existing — otherwise a
   // row that is no longer rendered stays selected.
   //
-  // Guarded on `tree.nodes !== undefined`: the tag tree is a live query, and
-  // reverting on a loading value would eject the user from their own filter on
-  // every unrelated edit.
+  // `tree.nodes === undefined` is unreachable today: `scope` starts at
+  // `ACTIVE_SCOPE` and is not persisted, and the only way to select a tag
+  // scope is a `TagSidebar` row, which does not render until the tree has
+  // already resolved. Kept as defence in depth — persisting the selected
+  // scope across reloads would make a mount-time tag scope coincide with a
+  // still-loading tree, and treating that as "no tags" would eject the user
+  // from their own filter. Not falsifiable by an app-level test today; see
+  // the "selecting a tag does not bounce back to Notes" test in
+  // `AppShell.test.tsx`, which documents why.
   useEffect(() => {
     if (scope.kind !== 'tag' || tree.nodes === undefined) return;
 
