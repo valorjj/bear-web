@@ -419,6 +419,56 @@ describe('seeded notes', () => {
     await waitFor(() => expect(purge).not.toHaveBeenCalled());
   });
 
+  // The test above is guarded twice over and neither guard is exercised by
+  // it: `isEmpty` is false because `normalizedSeedText` is `undefined` (no
+  // `seedText` prop here), AND `hadTextAtMountRef` is `true` with `editedRef`
+  // `false`, so `discard` early-returns regardless of what `isEmpty` says.
+  // It would stay green even under the rejected design — `isEmpty: (text) =>
+  // text === '' || containsOnlyTags(text)` — because that test never edits,
+  // so `editedRef` never flips and `discard`'s early return fires first. This
+  // test closes that gap: it types and deletes, so `editedRef` is `true` and
+  // `discard` actually falls through to comparing `isEmpty`'s verdict. Only
+  // this path exercises the real risk the rejected design carried: a user
+  // opens an existing tags-only note, edits it, deletes back to tags-only,
+  // and closes it — under the rejected design that purges a note the user
+  // deliberately kept.
+  it('never purges an unseeded tags-only note the user edited', async () => {
+    const purge = vi.spyOn(notes, 'purge').mockResolvedValue(undefined);
+    const note = await notes.create('#work');
+
+    // No seedText: an existing note the user deliberately filled with only tags.
+    const { unmount } = renderWithI18n(<NoteEditor note={note} />);
+    const el = await screen.findByRole('textbox');
+
+    await userEvent.click(el);
+    await userEvent.type(el, 'x{Backspace}');
+
+    unmount();
+
+    await waitFor(() => expect(purge).not.toHaveBeenCalled());
+  });
+
+  // The intended, correct counterpart: a SEEDED note the user typed into and
+  // then deleted back down to exactly the seed IS purged at unmount.
+  // Everything user-authored is gone and only the app-generated tag line
+  // remains, so there is nothing left worth keeping. This is the behaviour
+  // most likely to surprise a future reader; pinning it here makes it read as
+  // intended rather than as an accident.
+  it('purges a seeded note the user typed into and then deleted back to the seed', async () => {
+    const purge = vi.spyOn(notes, 'purge').mockResolvedValue(undefined);
+    const note = await notes.create('\n#work');
+
+    const { unmount } = renderWithI18n(<NoteEditor note={note} seedText={'\n#work'} />);
+    const el = await screen.findByRole('textbox');
+
+    await userEvent.click(el);
+    await userEvent.type(el, 'x{Backspace}');
+
+    unmount();
+
+    await waitFor(() => expect(purge).toHaveBeenCalledWith(note.id));
+  });
+
   it('still purges a genuinely blank new note', async () => {
     const purge = vi.spyOn(notes, 'purge').mockResolvedValue(undefined);
     const note = await notes.create('');

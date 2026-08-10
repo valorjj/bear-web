@@ -51,25 +51,30 @@ export function NoteEditor({ note, seedText }: NoteEditorProps): ReactElement {
   // can fail, and a failure here must degrade to the raw stored text plus a
   // visible message rather than crash the component outright.
   //
-  // `seedText` is normalized the same way, once, here. `isEmpty` below
-  // compares against the MOUNTED EDITOR's serialized reading (`read()`),
-  // never against raw stored text — `normalizeMarkdown` can itself change the
-  // text (for instance, stripping a leading newline), so comparing a
-  // normalized reading against a raw `seedText` would silently never match
-  // and the seeded-empty check would never fire.
-  const [{ initialMarkdown, initialSerializeFailed, normalizedSeedText }] = useState(() => {
+  // `seedText` is normalized the same way, once, here — but in its OWN
+  // try/catch, separate from `initialMarkdown`'s. `isEmpty` below compares
+  // against the MOUNTED EDITOR's serialized reading (`read()`), never against
+  // raw stored text — `normalizeMarkdown` can itself change the text (for
+  // instance, stripping a leading newline), so comparing a normalized reading
+  // against a raw `seedText` would silently never match and the seeded-empty
+  // check would never fire. A throw from normalizing the SEED is not evidence
+  // the note's own text fails to serialize; sharing one try/catch would show
+  // the user the serialization-failure banner, and fall back to mounting on
+  // raw `note.text`, for a note that serializes perfectly well. A bad seed
+  // should only cost the seed check, never the editor's confidence in itself.
+  const [{ initialMarkdown, initialSerializeFailed }] = useState(() => {
     try {
-      return {
-        initialMarkdown: normalizeMarkdown(note.text),
-        initialSerializeFailed: false,
-        normalizedSeedText: seedText === undefined ? undefined : normalizeMarkdown(seedText),
-      };
+      return { initialMarkdown: normalizeMarkdown(note.text), initialSerializeFailed: false };
     } catch {
-      return {
-        initialMarkdown: note.text,
-        initialSerializeFailed: true,
-        normalizedSeedText: seedText,
-      };
+      return { initialMarkdown: note.text, initialSerializeFailed: true };
+    }
+  });
+  const [normalizedSeedText] = useState(() => {
+    if (seedText === undefined) return undefined;
+    try {
+      return normalizeMarkdown(seedText);
+    } catch {
+      return seedText;
     }
   });
   const [serializeFailed, setSerializeFailed] = useState(initialSerializeFailed);
