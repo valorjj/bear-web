@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { BearDatabase } from '../db';
 import { createTestDatabase } from '../testing';
+import { parseTags } from '../tags';
 import { createNotesRepository, type NotesRepository } from './notes';
 
 /** A fake parser: every word starting with `#` is a tag. Not the real M5 parser. */
@@ -226,5 +227,90 @@ describe('notesRepository', () => {
 
   it('resolves silently when purging a note that does not exist', async () => {
     await expect(notes.purge('does-not-exist')).resolves.toBeUndefined();
+  });
+
+  describe('tag queries', () => {
+    it('listByTag includes descendants but not sibling prefixes', async () => {
+      const repo = createNotesRepository({ db, parseTags });
+
+      const parent = await repo.create('#work');
+      const child = await repo.create('#work/urgent');
+      await repo.create('#workflow');
+      await repo.create('no tags');
+
+      const found = await repo.listByTag('work');
+      expect(found.map((n) => n.id).sort()).toEqual([parent.id, child.id].sort());
+    });
+
+    it('listByTag excludes trashed notes', async () => {
+      const repo = createNotesRepository({ db, parseTags });
+
+      const kept = await repo.create('#work');
+      const gone = await repo.create('#work');
+      await repo.trash(gone.id);
+
+      const found = await repo.listByTag('work');
+      expect(found.map((n) => n.id)).toEqual([kept.id]);
+    });
+
+    it('listByTag returns most recently updated first', async () => {
+      let clock = 1000;
+      const repo = createNotesRepository({ db, parseTags, now: () => (clock += 10) });
+
+      const first = await repo.create('#work');
+      const second = await repo.create('#work');
+
+      const found = await repo.listByTag('work');
+      expect(found.map((n) => n.id)).toEqual([second.id, first.id]);
+    });
+
+    it('allTagRows returns one row per note per tag', async () => {
+      const repo = createNotesRepository({ db, parseTags });
+
+      const note = await repo.create('#work #home');
+      const rows = await repo.allTagRows();
+
+      expect(rows.map((r) => `${r.noteId}:${r.tag}`).sort()).toEqual(
+        [`${note.id}:work`, `${note.id}:home`].sort(),
+      );
+    });
+  });
+
+  describe('rebuild determinism', () => {
+    it('produces an identical row set when run twice', async () => {
+      const repo = createNotesRepository({ db, parseTags });
+      await repo.create('#Work/Urgent and #home');
+      await repo.create('#work/urgent');
+
+      await repo.rebuildTagIndex();
+      const first = (await repo.allTagRows()).map((r) => `${r.noteId}:${r.tag}`).sort();
+
+      await repo.rebuildTagIndex();
+      const second = (await repo.allTagRows()).map((r) => `${r.noteId}:${r.tag}`).sort();
+
+      expect(second).toEqual(first);
+    });
+
+    it('produces an identical row set regardless of note insertion order', async () => {
+      const texts = ['#Work', '#work/urgent', '#WORK', 'untagged'];
+
+      const build = async (order: number[]): Promise<string[]> => {
+        await db.notes.clear();
+        await db.noteTags.clear();
+        const repo = createNotesRepository({
+          db,
+          parseTags,
+          generateId: (() => {
+            let n = 0;
+            return () => `note-${order[n++]}`;
+          })(),
+        });
+        for (const index of order) await repo.create(texts[index]);
+        await repo.rebuildTagIndex();
+        return (await repo.allTagRows()).map((r) => `${r.noteId}:${r.tag}`).sort();
+      };
+
+      expect(await build([3, 1, 0, 2])).toEqual(await build([0, 1, 2, 3]));
+    });
   });
 });

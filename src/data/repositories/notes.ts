@@ -1,7 +1,7 @@
 import type { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
 import { newId } from '../ids';
-import type { Note } from '../types';
+import type { Note, NoteTag } from '../types';
 
 export type TagParser = (markdown: string) => string[];
 
@@ -25,6 +25,10 @@ export interface NotesRepository {
   listTrashed(): Promise<Note[]>;
   tagsOf(id: string): Promise<string[]>;
   rebuildTagIndex(): Promise<number>;
+  /** Active notes carrying `tag` or any descendant of it, newest first. */
+  listByTag(tag: string): Promise<Note[]>;
+  /** Every row of the derived tag index. The sidebar's only door to it. */
+  allTagRows(): Promise<NoteTag[]>;
 }
 
 export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepository {
@@ -181,6 +185,27 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
         await db.noteTags.bulkPut(rows);
         return rows.length;
       });
+    },
+
+    async listByTag(tag) {
+      // Two queries, not one: selecting a parent covers its descendants, and
+      // including the `/` in the prefix is what stops `work` matching
+      // `workflow`.
+      const [exact, descendants] = await Promise.all([
+        db.noteTags.where('tag').equals(tag).toArray(),
+        db.noteTags.where('tag').startsWith(`${tag}/`).toArray(),
+      ]);
+
+      const ids = [...new Set([...exact, ...descendants].map((row) => row.noteId))];
+      const found = await db.notes.bulkGet(ids);
+
+      return found
+        .filter((note): note is Note => note !== undefined && note.trashedAt === null)
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+    },
+
+    async allTagRows() {
+      return db.noteTags.toArray();
     },
   };
 }
