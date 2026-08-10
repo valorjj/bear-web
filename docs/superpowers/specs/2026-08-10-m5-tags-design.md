@@ -93,7 +93,7 @@ part of the specification, and the payoff is thin — the obvious cases reject o
 their own grammar:
 
 - `# install deps` — space after `#`, empty tag, rejected
-- `#!/bin/sh` — `!` trimmed as trailing punctuation, empty tag, rejected
+- `#!/bin/sh` — content begins with `!`, rejected (see rule 5 below)
 
 The genuine miss is `#define FOO` inside indented C, which produces one junk
 tag named `define`. The cost is a spurious sidebar row that the user can edit
@@ -117,12 +117,18 @@ precedence rule:
 3. **Simple form.** Otherwise the content runs to the next whitespace or
    end-of-line. Content containing a `#` is rejected.
 4. Collapse internal whitespace runs to a single space, then trim.
-5. Trim trailing `.,;:!?` repeatedly, so `#done..` yields `done`, then trim
-   trailing `/`, so `#work/` yields `work` rather than a tag with a phantom
-   empty child.
-6. Lowercase with `toLowerCase()`, not `toLocaleLowerCase()` — a Turkish
+5. Reject outright if the content **begins** with `.,;:!?` or `/`. This is
+   rejection rather than trimming, and the difference matters: `#!/bin/sh` in
+   an indented code block — which is deliberately not masked — would otherwise
+   become a tag named either `!/bin/sh` or, if the leading characters were
+   trimmed, `bin/sh`. Both are junk. The set is deliberately narrow; `#-lead`
+   is a legitimate tag and must stay one.
+6. Trim trailing `.,;:!?` and `/` repeatedly, so `#done..` yields `done`,
+   `#work/` yields `work` rather than a tag with a phantom empty child, and
+   `#done./` settles on `done`.
+7. Lowercase with `toLowerCase()`, not `toLocaleLowerCase()` — a Turkish
    locale must not turn `I` into `ı` and split a tag.
-7. Reject if the content is empty, if any `/`-separated segment is empty
+8. Reject if the content is empty, if any `/`-separated segment is empty
    (`#a//b`), or if **every** segment is numeric.
 
 Splitting on `/` is a display concern. The stored key is the whole string:
@@ -142,6 +148,8 @@ Rule 2 is what makes the multi-word form safe. Worked cases:
 | `#404`            | —               | every segment numeric                      |
 | `#work/1`         | `work/1`        | not every segment numeric                  |
 | `#done.`          | `done`          | trailing punctuation trimmed               |
+| `#!/bin/sh`       | —               | leading punctuation rejects, never trims   |
+| `#-lead`          | `-lead`         | `-` is not in the leading-reject set       |
 | `#한국어`         | `한국어`        | no character-class restriction             |
 | `` `#code` ``     | —               | inline code span, masked                   |
 
