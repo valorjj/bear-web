@@ -170,34 +170,45 @@ describe('tag scope reconciliation', () => {
 
     const listByTag = vi.spyOn(notes, 'listByTag');
 
-    const { result, rerender } = renderHook(({ tag }) => useNotes(tagScope(tag)), {
-      initialProps: { tag: 'work' },
-    });
+    try {
+      const { result, rerender } = renderHook(({ tag }) => useNotes(tagScope(tag)), {
+        initialProps: { tag: 'work' },
+      });
 
-    await waitFor(() => expect(result.current.items).toHaveLength(1));
-    const callsAfterFirstLoad = listByTag.mock.calls.length;
-    const first = result.current.items;
+      await waitFor(() => expect(result.current.items).toHaveLength(1));
+      const callsAfterFirstLoad = listByTag.mock.calls.length;
+      const first = result.current.items;
 
-    rerender({ tag: 'work' });
-    rerender({ tag: 'work' });
+      rerender({ tag: 'work' });
+      rerender({ tag: 'work' });
 
-    // `tagScope` builds a fresh object every render, so without `scopeKey`
-    // these re-renders each look like a dependency change and resubscribe.
-    // The flush is required: dexie-react-hooks resubscribes in a passive
-    // effect, and the resubscription's query resolves through several more
-    // microtask/macrotask hops (fake-indexeddb's request events, then the
-    // liveQuery emission), so a single microtask tick is not always enough
-    // to observe it — drain several rounds of both queues, deterministically,
-    // with no wall-clock wait.
-    await act(async () => {
-      for (let i = 0; i < 10; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-    });
+      // `tagScope` builds a fresh object every render, so without `scopeKey`
+      // these re-renders each look like a dependency change and resubscribe.
+      // The flush is required: dexie-react-hooks resubscribes in a passive
+      // effect, and the resubscription's query resolves through several more
+      // microtask/macrotask hops (fake-indexeddb's request events, then the
+      // liveQuery emission), so a single microtask tick is not always enough
+      // to observe it — drain several rounds of both queues, deterministically,
+      // with no wall-clock wait.
+      //
+      // Ten rounds, not one: the resubscription chain is React effect ->
+      // Dexie liveQuery resubscribe -> fake-indexeddb request event ->
+      // emission, and a single microtask flush was empirically flaky (it
+      // passed and failed on alternating runs against the same broken code).
+      // The count is a bound on event-loop turns, not a wall-clock wait. If
+      // this test ever flakes again, raise the count — and verify it still
+      // discriminates by reverting the `items` query's deps from `[key]` to
+      // `[scope]` in useNotes.ts and confirming it goes red.
+      await act(async () => {
+        for (let i = 0; i < 10; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      });
 
-    expect(listByTag.mock.calls.length).toBe(callsAfterFirstLoad);
-    expect(result.current.items).toBe(first);
-
-    listByTag.mockRestore();
+      expect(listByTag.mock.calls.length).toBe(callsAfterFirstLoad);
+      expect(result.current.items).toBe(first);
+    } finally {
+      listByTag.mockRestore();
+    }
   });
 });
