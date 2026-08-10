@@ -22,8 +22,15 @@ M6 delivers:
 - deletion of `src/features/notes/ScopeSidebar.tsx`
 
 **Not in M6:** search (M7), the theme picker (M8), tag rename and delete and the
-tag pill mark (M5b), and real encryption behind the Locked row (Phase 2). Visual
-design language is orthogonal to this milestone and is tracked separately.
+tag pill mark (M5b), and real encryption behind the Locked row (Phase 2).
+
+**Depends on M5.5** (`docs/superpowers/specs/2026-08-11-m5-5-design-language.md`),
+which lands first. M6 consumes three things from it: `Button`'s `danger` variant
+for Delete Forever, its `disabled` state for Empty Trash on an empty bin, and the
+`SidebarRow` primitive that the smart-list rows share with the M5 tag tree. The
+`--shadow-dialog` and motion tokens `ConfirmDialog` needs come from there too.
+Building M6 first would mean writing the smart-list row, then extracting it into
+`SidebarRow` immediately afterwards.
 
 ## Module layout
 
@@ -261,8 +268,9 @@ copy arrives as props, already translated by the caller — the same reason
 
 It provides: a focus trap, initial focus on the cancel action, Escape to cancel,
 a labelled backdrop that cancels on click, and `role="alertdialog"` with
-`aria-modal`. The destructive action is visually distinguished using the accent
-token; no literal colour.
+`aria-modal`. The destructive action uses `Button`'s `danger` variant, which
+resolves to `--bear-danger`; no literal colour, and no `accent` reference either
+— a theme must be able to keep a green accent and a red delete.
 
 **Known limit:** the focus trap is a keydown-cycling implementation, not
 `inert`. jsdom supports enough of this to test tab order and Escape; anything
