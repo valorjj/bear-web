@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db, notes } from '@/data';
@@ -528,5 +529,36 @@ describe('trash management', () => {
 
     expect(screen.queryByRole('button', { name: 'Delete forever' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Empty trash' })).not.toBeInTheDocument();
+  });
+});
+
+describe('StrictMode', () => {
+  it('creates a note that survives the remount cycle', async () => {
+    // React mounts, cleans up and remounts every component under StrictMode in
+    // development. `NoteEditor`'s unmount cleanup purges a blank note, and
+    // `useNotes` already routes every selection change through a transient
+    // `undefined` that unmounts the editor — so under StrictMode a just-created
+    // note was purged milliseconds after `notes.create` returned it, and NO
+    // note could be created at all in `npm run dev`.
+    //
+    // Nothing in the suite could see it: every other test here renders without
+    // StrictMode, and `npm run test:e2e` runs the production build, where the
+    // extra cycle does not happen.
+    render(
+      <StrictMode>
+        <I18nProvider locale="en">
+          <AppShell />
+        </I18nProvider>
+      </StrictMode>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New note' }));
+
+    await waitFor(async () => expect(await db.notes.count()).toBe(1));
+
+    // Let any deferred discard fire before declaring victory.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(await db.notes.count()).toBe(1);
   });
 });

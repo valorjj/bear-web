@@ -37,6 +37,15 @@ export interface NoteEditorProps {
  * query updates for the open note are deliberately ignored, so nothing moves
  * the caret except the user.
  */
+/**
+ * Discards scheduled but not yet executed, keyed by note id.
+ *
+ * Lives at module scope because a remount is a new component instance: a ref
+ * would start empty and cancel nothing. See `discard` below for why a
+ * destructive cleanup must be cancellable at all.
+ */
+const pendingDiscards = new Map<string, ReturnType<typeof setTimeout>>();
+
 export function NoteEditor({ note, seedText }: NoteEditorProps): ReactElement {
   const t = useT();
 
@@ -107,19 +116,55 @@ export function NoteEditor({ note, seedText }: NoteEditorProps): ReactElement {
   const editedRef = useRef(false);
   const hadTextAtMountRef = useRef(note.text !== '' && note.text !== seedText);
 
+  // Cancels a discard this note scheduled a moment ago. React ran a cleanup
+  // and then mounted us again, so the unmount was a remount, not the user
+  // leaving. Module-scope state, not a ref, because the remount is a NEW
+  // component instance whose refs start empty.
+  useEffect(() => {
+    const pending = pendingDiscards.get(note.id);
+    if (pending === undefined) return;
+
+    clearTimeout(pending);
+    pendingDiscards.delete(note.id);
+  }, [note.id]);
+
   const discard = useCallback(async () => {
     if (hadTextAtMountRef.current && !editedRef.current) return;
 
-    // A trashed note lives in the user's Trash and stays there. Without this,
-    // the Delete button purged a blank note outright while trashing every
-    // other note — one button, two irreversibilities, decided by state the
-    // user cannot see. M6 ruled that Delete always trashes; this is that
-    // ruling. The reclaim path for a blank note the user simply navigates
-    // away from is untouched.
-    const current = await notes.get(note.id);
-    if (current === undefined || current.trashedAt !== null) return;
+    const id = note.id;
 
-    await notes.purge(note.id);
+    // Deferred by a macrotask rather than run here, so a remount can cancel
+    // it. React's effect cleanup is NOT a reliable "this component is going
+    // away" signal — StrictMode runs mount/cleanup/mount on every mount in
+    // development, `useNotes` routes every selection change through a
+    // transient `undefined` that unmounts this editor, and Offscreen may do
+    // the same in production. Purging straight from the cleanup meant a
+    // just-created note was destroyed milliseconds after `notes.create`
+    // returned it: no note could be created at all under `npm run dev`.
+    //
+    // React runs the remount's effects before this macrotask fires, so the
+    // cancel above always wins the race when there is a remount at all. When
+    // there is not, the timer fires and the note is reclaimed as before.
+    clearTimeout(pendingDiscards.get(id));
+    pendingDiscards.set(
+      id,
+      setTimeout(() => {
+        pendingDiscards.delete(id);
+
+        void (async () => {
+          // A trashed note lives in the user's Trash and stays there. Without
+          // this, the Delete button purged a blank note outright while
+          // trashing every other note — one button, two irreversibilities,
+          // decided by state the user cannot see. M6 ruled that Delete always
+          // trashes; this is that ruling. The reclaim path for a blank note
+          // the user simply navigates away from is untouched.
+          const current = await notes.get(id);
+          if (current === undefined || current.trashedAt !== null) return;
+
+          await notes.purge(id);
+        })();
+      }, 0),
+    );
   }, [note.id]);
 
   const { schedule, flush, seed, failed } = useAutosave({
