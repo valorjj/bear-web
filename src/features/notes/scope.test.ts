@@ -2,7 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Note } from '@/data';
 
-import { ACTIVE_SCOPE, listForScope, scopeKey, tagScope, TRASHED_SCOPE } from './scope';
+import {
+  ACTIVE_SCOPE,
+  acceptsNewNote,
+  allowsTrash,
+  isTrash,
+  listForScope,
+  scopeKey,
+  seedTagFor,
+  tagScope,
+  TRASHED_SCOPE,
+} from './scope';
 
 const note = (id: string): Note => ({
   id,
@@ -55,5 +65,32 @@ describe('listForScope', () => {
     const repo = lister();
     await expect(listForScope(tagScope('work/urgent'), repo)).resolves.toEqual([note('tagged')]);
     expect(repo.listByTag).toHaveBeenCalledWith('work/urgent');
+  });
+});
+
+describe('capabilities', () => {
+  it('reports only the trash scope as trash', () => {
+    expect(isTrash(TRASHED_SCOPE)).toBe(true);
+    expect(isTrash(ACTIVE_SCOPE)).toBe(false);
+    expect(isTrash(tagScope('work'))).toBe(false);
+  });
+
+  it('offers Trash everywhere except the trash scope', () => {
+    expect(allowsTrash(ACTIVE_SCOPE)).toBe(true);
+    expect(allowsTrash(tagScope('work'))).toBe(true);
+    expect(allowsTrash(TRASHED_SCOPE)).toBe(false);
+  });
+
+  it('seeds a new note only inside a tag scope', () => {
+    expect(seedTagFor(tagScope('work'))).toBe('work');
+    expect(seedTagFor(ACTIVE_SCOPE)).toBeNull();
+    expect(seedTagFor(TRASHED_SCOPE)).toBeNull();
+  });
+
+  it('accepts a new note everywhere a new note would be visible', () => {
+    expect(acceptsNewNote(ACTIVE_SCOPE)).toBe(true);
+    expect(acceptsNewNote(tagScope('work'))).toBe(true);
+    // A note created here would be untrashed, so it would vanish immediately.
+    expect(acceptsNewNote(TRASHED_SCOPE)).toBe(false);
   });
 });

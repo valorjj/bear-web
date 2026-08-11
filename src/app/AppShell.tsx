@@ -3,10 +3,12 @@ import { type ReactElement, useCallback, useEffect, useRef, useState } from 'rea
 import { notes } from '@/data';
 import {
   ACTIVE_SCOPE,
+  acceptsNewNote,
   NoteEditor,
   NoteList,
   type NoteScope,
   ScopeSidebar,
+  seedTagFor,
   useNotes,
 } from '@/features/notes';
 import { TagSidebar, type TagNode, useTagTree } from '@/features/tags';
@@ -55,8 +57,9 @@ export function AppShell(): ReactElement {
       // A note created inside a tag scope carries that tag, so it belongs to
       // the list the user is looking at. The leading newline puts the caret on
       // the title line with the tag below it.
-      const seedText = scope.kind === 'tag' ? `\n#${scope.tag}` : '';
-      if (scope.kind === 'trashed') setScope(ACTIVE_SCOPE);
+      const tag = seedTagFor(scope);
+      const seedText = tag === null ? '' : `\n#${tag}`;
+      if (!acceptsNewNote(scope)) setScope(ACTIVE_SCOPE);
 
       const created = await notes.create(seedText);
       setSeed(seedText === '' ? null : { id: created.id, text: seedText });

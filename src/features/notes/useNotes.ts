@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { notes } from '@/data';
 import type { Note } from '@/data';
 
-import { listForScope, type NoteScope, scopeKey } from './scope';
+import { isTrash, listForScope, type NoteScope, scopeKey } from './scope';
 
 export interface NotesState {
   /** `undefined` while the live query has not yet resolved. */
@@ -76,7 +76,7 @@ export function useNotes(scope: NoteScope): NotesState {
         ? probeResult
         : undefined;
 
-  const scopeIsTrash = scope.kind === 'trashed';
+  const scopeIsTrash = isTrash(scope);
 
   useEffect(() => {
     if (probe === undefined || probe === null) return;
