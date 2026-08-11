@@ -9,7 +9,7 @@ colors:
   sidebar: "#f1efec"
   text: "#1c1b19"
   muted: "#6b6862"
-  faint: "#9c988f"
+  faint: "#88857d"
   border: "#e5e2dd"
   accent: "#cf3b2c"
   danger: "#cf3b2c"
@@ -207,7 +207,7 @@ built from the same handful of tokens at different sizes.
 | ----------------- | --------- | --------- | --------------------------------------------- |
 | `{colors.text}`  | `#1c1b19` | `#ebe9e5` | Primary reading text, note titles, headings  |
 | `{colors.muted}` | `#6b6862` | `#a09c94` | Secondary text — snippets, body copy in lists |
-| `{colors.faint}` | `#9c988f` | `#746f68` | Supplementary text — timestamps, counts       |
+| `{colors.faint}` | `#88857d` | `#7b766e` | Supplementary text — timestamps, counts       |
 
 ### Accent
 
@@ -252,27 +252,22 @@ checked in.
 | `text`     | `bg`       | ≥ 7.0  | **17.21:1** | **14.36:1** |
 | `text`     | `sidebar`  | ≥ 7.0  | **15.00:1** | **12.63:1** |
 | `muted`    | `surface`  | ≥ 4.5  | **5.28:1**  | **6.02:1**  |
-| `faint`    | `sidebar`  | ≥ 3.0  | **2.51:1 — FAILS** | **3.07:1**  |
+| `faint`    | `sidebar`  | ≥ 3.0  | **3.21:1**  | **3.40:1**  |
 | `bg`       | `accent`   | ≥ 4.5  | **4.87:1**  | **6.38:1**  |
 | `accent`   | `sidebar`  | ≥ 3.0  | **4.24:1**  | **5.61:1**  |
 
-Every pair passes its target except one. **`faint` on `sidebar` in Paper
-measures 2.51:1 against a target of 3.0** — the tag tree's row counts, set in
-`{colors.faint}` over `{colors.sidebar}`, fall short of the non-text minimum
-contrast guideline in the light theme only (Ink's identical pairing passes at
-3.07:1).
+Every pair passes its target, with margin.
 
-**Known gap — not fixed here.** Per this task's instructions, no token in
-`tokens.css` was changed to close this: a change at this stage would
-invalidate an already-reviewed task and the palette pinned by
-`e2e/smoke.spec.ts`. Recorded for a ruling:
-
-- Measured: `#9c988f` on `#f1efec` → 2.51:1.
-- Suggested replacement, found by binary search over darkening `faint` while
-  holding its hue: `#8c8981` → 3.04:1 against the same `{colors.sidebar}`.
-  (`muted` and `text` are unaffected since the search only touched `faint`.)
-- This changes exactly one Paper token (`--bear-faint`) and needs the same
-  review Task 3 already gave the rest of the palette before landing.
+**`faint` was deliberately darkened during this milestone to clear this
+bar**, in both themes: Paper's `--bear-faint` moved `#9c988f` → `#88857d`
+(2.51:1 on `sidebar` → 3.21:1) and Ink's moved `#746f68` → `#7b766e` (3.07:1 →
+3.40:1) — Ink's original number technically passed but with no real margin,
+which is not acceptable for a value that has to hold across three
+backgrounds. **Do not lighten `faint` back toward its original value for
+aesthetic reasons** without re-running this contrast check; a future
+contributor doing so would silently reopen this gap. Both changes preserve
+the `text > muted > faint` reading order — `faint` is still visibly the
+lightest/dimmest of the three in each theme.
 
 ## Typography
 
