@@ -231,7 +231,7 @@ describe('tag scopes', () => {
 
     renderShell();
 
-    await userEvent.click(await screen.findByRole('button', { name: /^work\d*$/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
 
     // `deriveTitle` does not strip hashtags, so the rendered title is the
     // whole first line ("alpha #work"), not the bare word — hence the regex
@@ -249,7 +249,7 @@ describe('tag scopes', () => {
     await notes.create('alpha #work');
 
     renderShell();
-    await userEvent.click(await screen.findByRole('button', { name: /^work\d*$/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
     await screen.findByRole('button', { name: /^alpha\b/ });
 
     await userEvent.click(screen.getByRole('button', { name: 'New note' }));
@@ -267,7 +267,7 @@ describe('tag scopes', () => {
     const note = await notes.create('alpha #work');
 
     renderShell();
-    await userEvent.click(await screen.findByRole('button', { name: /^work\d*$/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
     await screen.findByRole('button', { name: /^alpha\b/ });
 
     await notes.save(note.id, 'alpha');
@@ -281,7 +281,7 @@ describe('tag scopes', () => {
     await notes.create('alpha #work');
 
     renderShell();
-    await userEvent.click(await screen.findByRole('button', { name: /^work\d*$/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
 
     // This does NOT exercise the fallback effect's `tree.nodes === undefined`
     // branch: `TagSidebar` returns `null` until the tree has resolved, so the
@@ -311,7 +311,7 @@ describe('tag scopes', () => {
     await notes.create('keeper #work');
 
     renderShell();
-    await userEvent.click(await screen.findByRole('button', { name: /^work\d*$/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^work\b/ }));
     // Captured once and reused for every later click on this row: after the
     // seeded note is typed into, its title changes, so re-querying by name
     // would either miss it or (worse) risk matching a future fixture's note

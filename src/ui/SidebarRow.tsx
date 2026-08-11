@@ -94,9 +94,18 @@ export function SidebarRow({
           <span className="min-w-0 flex-1 truncate">{label}</span>
 
           {count !== undefined && (
-            <span data-count className="shrink-0 text-ui-xs text-faint tabular-nums">
-              {count}
-            </span>
+            <>
+              {/*
+                An explicit space text node, not a CSS gap. Accessible-name
+                computation concatenates text content and ignores `gap-2`, so
+                without this a row announces as "work3" rather than "work 3".
+                The pre-M5.5 TagSidebar had this space; losing it in the move
+                to SidebarRow was a silent screen-reader regression.
+              */}{' '}
+              <span data-count className="shrink-0 text-ui-xs text-faint tabular-nums">
+                {count}
+              </span>
+            </>
           )}
         </button>
       </div>

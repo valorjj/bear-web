@@ -65,16 +65,16 @@ describe('TagSidebar', () => {
     renderSidebar();
 
     const nav = screen.getByRole('navigation', { name: 'Tags' });
-    expect(within(nav).getByRole('button', { name: /^work\d*$/ })).toBeInTheDocument();
-    expect(within(nav).getByRole('button', { name: /^urgent\d*$/ })).toBeInTheDocument();
-    expect(within(nav).getByRole('button', { name: /^home\d*$/ })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: /^work\b/ })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: /^urgent\b/ })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: /^home\b/ })).toBeInTheDocument();
     expect(within(nav).getByText('3')).toBeInTheDocument();
   });
 
   it('selects the full tag key, not the label', async () => {
     const { onScopeChange } = renderSidebar();
 
-    await userEvent.click(screen.getByRole('button', { name: /^urgent\d*$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^urgent\b/ }));
 
     expect(onScopeChange).toHaveBeenCalledWith(tagScope('work/urgent'));
   });
@@ -82,18 +82,18 @@ describe('TagSidebar', () => {
   it('marks the selected tag as current', () => {
     renderSidebar({ scope: tagScope('work/urgent') });
 
-    expect(screen.getByRole('button', { name: /^urgent\d*$/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /^urgent\b/ })).toHaveAttribute(
       'aria-current',
       'page',
     );
-    expect(screen.getByRole('button', { name: /^work\d*$/ })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: /^work\b/ })).not.toHaveAttribute('aria-current');
   });
 
   it('hides children when a node is collapsed', () => {
     renderSidebar({ isCollapsed: (tag) => tag === 'work' });
 
-    expect(screen.queryByRole('button', { name: /^urgent\d*$/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^work\d*$/ })).toHaveAttribute(
+    expect(screen.queryByRole('button', { name: /^urgent\b/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^work\b/ })).toHaveAttribute(
       'aria-expanded',
       'false',
     );
@@ -102,8 +102,8 @@ describe('TagSidebar', () => {
   it('offers a toggle only on a node that has children', () => {
     renderSidebar();
 
-    const workRow = screen.getByRole('button', { name: /^work\d*$/ }).closest('li')!;
-    const homeRow = screen.getByRole('button', { name: /^home\d*$/ }).closest('li')!;
+    const workRow = screen.getByRole('button', { name: /^work\b/ }).closest('li')!;
+    const homeRow = screen.getByRole('button', { name: /^home\b/ }).closest('li')!;
 
     expect(within(workRow).getByRole('button', { name: 'Expand or collapse' })).toBeInTheDocument();
     expect(
@@ -114,7 +114,7 @@ describe('TagSidebar', () => {
   it('toggles the node it belongs to', async () => {
     const { onToggle, onScopeChange } = renderSidebar();
 
-    const workRow = screen.getByRole('button', { name: /^work\d*$/ }).closest('li')!;
+    const workRow = screen.getByRole('button', { name: /^work\b/ }).closest('li')!;
     await userEvent.click(within(workRow).getByRole('button', { name: 'Expand or collapse' }));
 
     expect(onToggle).toHaveBeenCalledWith('work');

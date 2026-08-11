@@ -230,6 +230,13 @@ describe('SidebarRow', () => {
     expect(screen.getByText('12')).toBeInTheDocument();
   });
 
+  it('separates label and count in the accessible name', () => {
+    // A CSS gap does not separate text for accessible-name computation. Without
+    // an explicit space this row announces as "work12", not "work 12".
+    renderRow({ label: 'work', count: 12 });
+    expect(screen.getByRole('button', { name: 'work 12' })).toBeInTheDocument();
+  });
+
   it('renders a zero count in the count element rather than hiding it', () => {
     // Not `getByText('0')`: with the `{count && …}` bug React renders a bare
     // `0` text node, which that query happily finds — so it passes for the
