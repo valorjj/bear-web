@@ -25,17 +25,21 @@ export function NoteListItem({ note, selected, onSelect, now }: NoteListItemProp
         type="button"
         onClick={onSelect}
         aria-current={selected ? 'true' : undefined}
-        className={`flex w-full flex-col gap-1 border-b border-border px-3 py-2 text-left ${
-          selected ? 'bg-bg' : 'hover:bg-bg'
+        className={`relative flex w-full flex-col gap-0.5 border-b border-border px-3 py-2.5 text-left transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
+          selected ? 'bg-selected' : 'hover:bg-hover'
         }`}
       >
-        <span className="truncate text-sm font-medium text-text">
+        {selected && (
+          <span aria-hidden="true" className="absolute inset-y-0 left-0 w-0.5 bg-accent" />
+        )}
+
+        <span className="truncate text-ui-md font-semibold text-text">
           {note.title === '' ? t('note.untitled') : note.title}
         </span>
-        <span className="text-xs text-muted">
+        <span className="text-ui-sm text-faint">
           {formatNoteDate(note.updatedAt, locale, now ?? Date.now())}
         </span>
-        <span className="truncate text-xs text-muted">
+        <span className="truncate text-ui-sm text-muted">
           {snippet === '' ? t('note.noText') : snippet}
         </span>
       </button>
