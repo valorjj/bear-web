@@ -300,3 +300,104 @@ test('collapsing a tag hides its children and survives a reload', async ({ page 
   await expect(tags.getByRole('button', { name: /^work\b/ })).toBeVisible();
   await expect(tags.getByRole('button', { name: /^urgent\b/ })).toHaveCount(0);
 });
+
+test('a note with an unchecked task appears in Todo, and leaves when checked', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  // Typed, not filled: `[ ] ` is a Tiptap input rule and `fill` bypasses
+  // input rules entirely, so the note would hold literal text and no task at
+  // all — the predicate would still match, and the test would pass without
+  // ever exercising a real checkbox. Typed with no leading `- `: TaskItem's
+  // own input rule (`^\s*(\[([( |x])?\])\s$`) fires on `[ ] ` alone; typing
+  // `- ` first hands the line to StarterKit's bulletList input rule instead,
+  // so the task item never forms and `[ ] milk` is left as literal bullet
+  // text. The editor still serializes the resulting task item to Markdown's
+  // `- [ ] milk`, which is what `UNCHECKED_TASK` matches.
+  await page.keyboard.type('[ ] milk');
+  await editor.blur();
+
+  const lists = page.getByRole('navigation', { name: 'Lists' });
+  const noteList = page.getByRole('region', { name: 'Note list' });
+
+  await lists.getByRole('button', { name: /^Todo\b/ }).click();
+  await expect(noteList.getByText('milk')).toBeVisible();
+
+  // Checking it off removes it from Todo. This is the half a predicate test
+  // cannot reach: it needs the real editor writing real Markdown.
+  await noteList.getByText('milk').click();
+  await page.getByRole('textbox', { name: 'Note text' }).getByRole('checkbox').check();
+  await page.getByRole('textbox', { name: 'Note text' }).blur();
+
+  await expect(noteList.getByText('milk')).toHaveCount(0);
+});
+
+test('pinning floats a note to the top of the list', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  await page.getByRole('textbox', { name: 'Note text' }).fill('First note');
+  await page.getByRole('textbox', { name: 'Note text' }).blur();
+
+  // 'New note' does not auto-focus the fresh textarea (see 'switching between
+  // notes never flashes the empty state' above), so a script can outrun it
+  // and fill the still-mounted first note's textbox instead of the new blank
+  // one. Waiting for it to go empty is the equivalent of a real user's "there
+  // is nothing to click yet" gate.
+  await page.getByRole('button', { name: 'New note' }).click();
+  await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveText('');
+  await page.getByRole('textbox', { name: 'Note text' }).fill('Second note');
+  await page.getByRole('textbox', { name: 'Note text' }).blur();
+
+  const noteList = page.getByRole('region', { name: 'Note list' });
+  const rows = noteList.getByRole('listitem');
+
+  // Newest first, so the second note leads.
+  await expect(rows.first()).toContainText('Second note');
+
+  await rows.filter({ hasText: 'First note' }).getByRole('button', { name: 'Pin note' }).click();
+
+  await expect(rows.first()).toContainText('First note');
+});
+
+test('deleting a note forever removes it permanently across a reload', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.fill('Doomed note');
+  await editor.blur();
+
+  await page.getByRole('button', { name: 'Delete' }).click();
+
+  const lists = page.getByRole('navigation', { name: 'Lists' });
+  const noteList = page.getByRole('region', { name: 'Note list' });
+
+  await lists.getByRole('button', { name: /^Trash\b/ }).click();
+  await noteList.getByRole('button', { name: /Doomed/ }).click();
+
+  // Only the toolbar button exists at this point, so the unscoped query is
+  // unambiguous; once the dialog opens there are two, hence the scoping below.
+  await page.getByRole('button', { name: 'Delete forever' }).click();
+
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Delete forever' }).click();
+
+  // Confirming dispatches the purge fire-and-forget; wait for the row to
+  // actually leave the DOM before reloading, or the reload can race the
+  // still-in-flight IndexedDB write and observe the note as if it were never
+  // deleted at all.
+  await expect(noteList.getByRole('button', { name: /Doomed/ })).toHaveCount(0);
+
+  // The reload is the whole point: it proves the purge reached IndexedDB
+  // rather than only the React tree. M2 shipped a persistence test that
+  // compared a value read out of the page against itself and passed with
+  // persistence completely broken.
+  await page.reload();
+  await expect(page.getByRole('region')).toHaveCount(3);
+  await lists.getByRole('button', { name: /^Trash\b/ }).click();
+  await expect(page.getByText('Trash is empty')).toBeVisible();
+});

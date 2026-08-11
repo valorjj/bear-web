@@ -20,10 +20,10 @@ IndexedDB.
 | M4 editor                        | complete               |
 | M5 tags                          | complete               |
 | M5.5 design language             | complete               |
-| M6 smart lists, trash management | next                   |
+| M6 smart lists, trash management | complete               |
 | M7–M9                            | search, themes, polish |
 
-626 unit tests, 18 end-to-end tests. `main` is always green and auto-deploys.
+717 unit tests, 21 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -111,9 +111,11 @@ These bit us once already. They are not mistakes.
   `src/styles/tokens.css` is a defect.
 - IndexedDB is the single source of truth for durable data; components subscribe
   via `useLiveQuery`. There is no second copy of note data in application state.
-- `src/features/notes/ScopeSidebar.tsx` is two hardcoded rows and **M6 deletes
-  the file**. It exists so M3 can ship `trash` and `restore` with a path back.
-  Do not grow it into a registry.
+- `src/features/notes/ScopeSidebar.tsx` no longer exists. It shipped in M3 as
+  two hardcoded rows (`Notes`, `Trash`) so M3 could ship `trash` and `restore`
+  with a path back, on the explicit understanding that M6 would delete it. M6
+  did: `SmartListSidebar` renders all seven builtin lists as data
+  (`SMART_LIST_IDS`), not a registry grown row by row.
 - `parseTags` lives in `src/data/tags/`, not `src/features/tags/`. It is
   injected at `src/data/repositories/index.ts`, and `src/data/` must not import
   from `src/features/`. It also genuinely is data-layer logic: it derives a
@@ -452,6 +454,67 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   test proving the `prefers-color-scheme` cascade reaches a rendered pixel, so
   a token change SHOULD require a conscious edit there. It went stale for four
   tasks during M5.5 because e2e was not run on every restyle task.
+- **`NoteScope` has two arms permanently, and every behavioural question is a
+  named capability function.** Adding a smart list is a row in
+  `SMART_LIST_IDS`, never a union arm and never a `scope.kind` comparison at a
+  call site. `scope.test.ts` asserts capabilities exhaustively over
+  `SmartListId`, so a new list without a ruling fails the suite. This is the
+  defence against the M5 defect where a widened union silently removed the
+  delete affordance from tag scopes.
+- **The Todo predicate's test fixture is derived from `MarkdownManager`, never
+  hand-written.** The parent spec writes it as "contains an unchecked `- [ ]`",
+  which is an assumption about our own output. Our serializer emits `- [ ]`
+  and normalizes `* [ ]` to it, but that is a fact about the serializer, not a
+  licence to hardcode it.
+- **`UNCHECKED_TASK` must not carry the `g` flag.** A global regex keeps
+  `lastIndex` between `.test()` calls, so a module-level constant reused per
+  note alternates true and false on identical input and drops roughly half the
+  matching notes.
+- **`UNCHECKED_TASK` matches `-`, `*` and `+` bullets** because `importDatabase`
+  accepts arbitrary Markdown and a note is only canonical once it has been
+  through the editor. A checkbox the user can see must not be invisible until
+  they open the note.
+- **A task inside a fenced code block counts as a todo.** Accepted: masking
+  code spans lives in `parseTags` in the data layer, and duplicating it for one
+  smart list is not worth a second copy.
+- **Only `untagged` reads the tag index in `listForScope`.** `allTagRows` is a
+  full table scan; paying for it on every scope switch would double the work
+  for six of the seven builtins.
+- **All seven sidebar counts come from one live query.** Seven independent
+  queries would let rows land in seven different frames — the mechanism behind
+  M5's collapsed-tag flash — and would let untagged plus tagged disagree with
+  all. Its deps are constant `[]`, so the tag-and-verify pattern deliberately
+  does not apply.
+- **`useSmartListCounts` returns `undefined` while loading, never a
+  zero-filled object.** Zeros render as "empty" rather than "not known yet".
+- **Pinned notes sort first in every list except Trash.** Trash is ordered by
+  deletion time; a pinned note deleted earlier is not more important than one
+  deleted later. `pinned` stays unindexed — IndexedDB rejects boolean keys.
+- **The pin button is a sibling of the row button, never nested.** A `<button>`
+  inside a `<button>` is invalid HTML and unclickable in some browsers.
+- **`ConfirmDialog` focuses Cancel on open.** These guard irreversible deletion
+  with no server copy, and an Enter keypress already in flight must not
+  destroy anything. `window.confirm` was rejected: it ignores the theme, and
+  some embedded contexts suppress it silently, turning a guarded delete into
+  an unguarded one.
+- **The startup sweep's three gates are all load-bearing, and
+  `createdAt === updatedAt` is the safety argument.** It runs before any editor
+  mounts, over notes it has never read — the M4 shape where a truncation
+  reached `notes.purge`. `save` always writes a fresh `updatedAt`, so that gate
+  makes a note the user has typed into unreachable even if the emptiness check
+  is wrong. Like `runMigrations` and `persistStorage`, it never rejects,
+  including when `onError` throws.
+- **The sweep runs after the tag-index rebuild resolves, not concurrently.**
+  Both write inside transactions over `notes`; sequencing removes the question
+  of what a rebuild sees mid-purge.
+- **Delete always trashes, blank or not.** The blank-note purge was emergent —
+  trash, unmount, discard — so one button meant two irreversibilities
+  depending on invisible state. `NoteEditor`'s `discard` now refuses to purge
+  an already-trashed note. The reclaim path for a blank note the user
+  navigates away from is unchanged.
+- **Today does not roll over at midnight.** A note edited at 23:59 stays in
+  Today until something else re-runs the query. A timer whose only job is to
+  move one row is not worth a live subscription.
 
 ## Carried into M5b and M6
 
@@ -468,14 +531,6 @@ rediscovering them.
   own inline mark, never let a tag be renamed or deleted in bulk, and never
   added syntax-visibility toggling. Not a defect — the M4/M5 specs scope this
   out deliberately.
-- **Deleting a blank note purges it rather than trashing it**, silently. The
-  Delete button is irreversible there and identical everywhere else. Defensible
-  under the blank-note rule, but M6 owns trash management and should decide.
-  (M5's seeded-note purge, above, is the same mechanism applied to a note that
-  is empty except for its seeded tag.)
-- **A blank note open across a reload is never discarded**, because
-  `beforeunload` only flushes and does not unmount. Spec-compliant as written; a
-  startup sweep of empty notes would close it and belongs to M6.
 - **`usePaneWidths` writes `void settings.set(...)` with no flush**, so dragging
   a separator and reloading immediately can lose the width. Deferred because it
   costs a pane width rather than note content, and because `useAutosave` now has
@@ -519,8 +574,9 @@ rediscovering them.
   before and after M5.5, so it is pre-existing, not introduced.** Unlike the
   `SidebarRow` case there is no separator to restore — title, date and snippet
   want a visually-hidden separator or an explicit `aria-label`, which is a real
-  accessibility design decision rather than a bug fix. M6 owns the note list;
-  fold it in there with its own ruling.
+  accessibility design decision rather than a bug fix. M6 owned the note list
+  and did not close this; it is carried forward from M6, not M5, and belongs
+  to whichever milestone next touches `NoteListItem`.
 - **An intermittent Playwright resize-test flake.** Seen once during M5.5, not
   reproducible afterwards across three consecutive full runs (18/18 each). Not
   actionable without a failing artifact, but worth naming because `jsdom` has
