@@ -404,7 +404,7 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   name must match too. `scripts/fonts.test.ts` compares the token's family
   against the families the shipped stylesheet declares; that is the only form
   of the assertion that can fail.
-- **Colour literals outside `tokens.css` fail the build**, via
+- **Colour literals outside `tokens.css` fail `npm test`** (not the build), via
   `scripts/sourceLint.test.ts`. The scan is a documented heuristic scoped to
   CSS files and `className`/`style` regions, because `#face` and `#dad` are
   valid hex and valid tags.

@@ -14,7 +14,7 @@ function walk(dir: string, extensions: readonly string[]): string[] {
   });
 }
 
-const COLOUR = /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/;
+const COLOUR = /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(|\boklch\(|\blab\(|\bcolor\(/;
 
 /**
  * Lines that could carry a colour into the rendered page. Restricted to CSS
@@ -32,6 +32,12 @@ function suspectLines(path: string): string[] {
     .filter(({ line }) => {
       if (!COLOUR.test(line)) return false;
       if (path.endsWith('.css')) return true;
+      // Two shapes, because components here write multi-line template literals
+      // for conditional classes: the colour often lands on a continuation line
+      // with no `className` token on it. A purely positional predicate scored
+      // that as safe — the exact place the comment above claims to cover.
+      if (/-\[[^\]]*(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(|oklch\(|lab\(|color\()/.test(line))
+        return true;
       return /className|style=|style:/.test(line);
     })
     .map(({ line, number }) => `${path}:${number}  ${line.trim()}`);
