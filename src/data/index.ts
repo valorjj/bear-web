@@ -13,6 +13,8 @@ export type { MigrationDeps } from './migrations';
 export { openDatabase, resolveDatabase } from './open';
 export { persistStorage, requestPersistentStorage } from './persist';
 export type { PersistDeps, PersistOutcome } from './persist';
+export { runStartupSweep, sweepBlankNotes } from './sweep';
+export type { SweepDeps } from './sweep';
 export { parseTags } from './tags';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
 export { files, notes, settings, tags } from './repositories';
