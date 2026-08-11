@@ -230,11 +230,14 @@ describe('SidebarRow', () => {
     expect(screen.getByText('12')).toBeInTheDocument();
   });
 
-  it('renders a zero count rather than hiding it', () => {
-    // `count && <span>` would swallow 0 and make an empty smart list look
-    // like a list with an unknown size.
-    renderRow({ count: 0 });
-    expect(screen.getByText('0')).toBeInTheDocument();
+  it('renders a zero count in the count element rather than hiding it', () => {
+    // Not `getByText('0')`: with the `{count && …}` bug React renders a bare
+    // `0` text node, which that query happily finds — so it passes for the
+    // bug and the fix alike. Asserting the count ELEMENT carries the text is
+    // what distinguishes them. An empty smart list must read "0", not blank,
+    // which is indistinguishable from "count unknown".
+    const { container } = renderRow({ count: 0 });
+    expect(container.querySelector('[data-count]')).toHaveTextContent('0');
   });
 
   it('renders no count element when count is omitted', () => {
