@@ -19,6 +19,9 @@ function deps(candidates: Note[], overrides: Partial<Parameters<typeof sweepBlan
   return {
     listCandidates: vi.fn(async () => candidates),
     purge: vi.fn(async () => {}),
+    // Comfortably above the fixtures' createdAt of 100, so tests that don't
+    // care about the boot boundary aren't accidentally gated by it.
+    createdBefore: 100_000,
     onError: vi.fn(),
     ...overrides,
   };
@@ -77,6 +80,43 @@ describe('sweepBlankNotes', () => {
       }),
     });
     await expect(sweepBlankNotes(d)).resolves.toBe(0);
+  });
+
+  it('reports a failed purge and keeps sweeping the rest', async () => {
+    // The count must reflect what actually happened: one purge throws, the
+    // other succeeds, so the total is 1 — not 0 (abort-on-first-error) and
+    // not 2 (silently counting the failure as a success).
+    const purge = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('locked'))
+      .mockResolvedValueOnce(undefined);
+    const d = deps([note({ id: 'a' }), note({ id: 'b' })], { purge });
+    await expect(sweepBlankNotes(d)).resolves.toBe(1);
+    expect(purge).toHaveBeenCalledWith('a');
+    expect(purge).toHaveBeenCalledWith('b');
+    expect(purge).toHaveBeenCalledTimes(2);
+    expect(d.onError).toHaveBeenCalled();
+  });
+
+  it('spares a note created after the sweep was decided on', async () => {
+    // The race: React mounts before the sweep runs, so a note created in that
+    // window passes all three content gates legitimately. Without this bound
+    // the sweep destroys work in progress and the pending save then rejects.
+    const d = deps([note({ id: 'fresh', createdAt: 5000, updatedAt: 5000 })], {
+      createdBefore: 1000,
+    });
+    await expect(sweepBlankNotes(d)).resolves.toBe(0);
+    expect(d.purge).not.toHaveBeenCalled();
+  });
+
+  it('excludes a note created at exactly the boundary instant', async () => {
+    // `>=`, not `>`: a note stamped at the same millisecond as boot cannot be
+    // proven to predate it, so it must be spared too.
+    const d = deps([note({ id: 'edge', createdAt: 1000, updatedAt: 1000 })], {
+      createdBefore: 1000,
+    });
+    await expect(sweepBlankNotes(d)).resolves.toBe(0);
+    expect(d.purge).not.toHaveBeenCalled();
   });
 
   it('never rejects when onError itself throws', async () => {

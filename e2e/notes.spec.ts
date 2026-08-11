@@ -75,9 +75,10 @@ test('a note the user never typed into is discarded', async ({ page }) => {
 
   await expect(page.getByRole('button', { name: /Untitled/ })).toBeHidden();
 
-  // Scoped to the note-list region: `ScopeSidebar` renders its two rows
-  // ('Notes', 'Trash') as `<li>` too, so an unscoped `listitem` query would
-  // count those alongside the note rows and never reach 1.
+  // Scoped to the note-list region: `SmartListSidebar` renders its rows
+  // ('Notes', 'Untagged', 'Todo', 'Today', 'Pinned', 'Locked', 'Trash') as
+  // `<li>` too, so an unscoped `listitem` query would count those alongside
+  // the note rows and never reach 1.
   const noteList = page.getByRole('region', { name: 'Note list' });
   await expect(noteList.getByRole('listitem')).toHaveCount(1);
 });

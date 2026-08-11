@@ -74,13 +74,29 @@ describe('SmartListSidebar', () => {
   });
 
   it('renders rows without counts while they are loading', () => {
-    renderWithI18n(
+    const { unmount } = renderWithI18n(
       <SmartListSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} counts={undefined} />,
     );
 
     // The rows themselves must still render — the sidebar structure is not
-    // waiting on a number — but no count element may appear.
+    // waiting on a number — and the accessible name must carry no trailing
+    // count at all. `getByRole` with an exact name already fails if any
+    // number is appended (it would only match 'Notes 3', not 'Notes').
     expect(screen.getByRole('button', { name: 'Notes' })).toBeInTheDocument();
-    expect(document.querySelectorAll('[data-count]')).toHaveLength(0);
+    unmount();
+
+    // And the loaded case's name must carry it, so this pair actually
+    // distinguishes "no count" from "a count that happens to be absent from
+    // this query". The `[data-count]` presence check pins the count down to
+    // a real, findable element too — the previous version of this test only
+    // ever checked for its *absence* in the loading case, which trivially
+    // holds even if the attribute reporting counts were silently renamed
+    // (nothing renders a count while loading regardless). Asserting its
+    // *presence* here means a rename reddens this file, not just `ui.test.tsx`.
+    const { container } = renderWithI18n(
+      <SmartListSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} counts={counts} />,
+    );
+    expect(screen.getByRole('button', { name: 'Notes 3' })).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-count]')).not.toHaveLength(0);
   });
 });

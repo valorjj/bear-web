@@ -385,7 +385,7 @@ describe('tag scopes', () => {
     await userEvent.click(screen.getByRole('button', { name: 'New note' }));
     const created = await screen.findByRole('textbox');
     // The just-created note's row is the only one with `aria-current="true"`
-    // (`ScopeSidebar`/`TagSidebar` rows use `aria-current="page"`), which
+    // (`SmartListSidebar`/`TagSidebar` rows use `aria-current="page"`), which
     // identifies it without depending on its title text.
     const createdRow = screen.getByRole('button', { current: true });
 
@@ -420,7 +420,9 @@ describe('tag scopes', () => {
 
     await waitFor(() => expect(purge).not.toHaveBeenCalled());
   });
+});
 
+describe('trash management', () => {
   it('purges a single note only after confirmation', async () => {
     await renderShell();
     await createNoteWithText('doomed');

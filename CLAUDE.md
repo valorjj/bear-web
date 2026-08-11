@@ -497,13 +497,21 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   destroy anything. `window.confirm` was rejected: it ignores the theme, and
   some embedded contexts suppress it silently, turning a guarded delete into
   an unguarded one.
-- **The startup sweep's three gates are all load-bearing, and
-  `createdAt === updatedAt` is the safety argument.** It runs before any editor
-  mounts, over notes it has never read — the M4 shape where a truncation
-  reached `notes.purge`. `save` always writes a fresh `updatedAt`, so that gate
-  makes a note the user has typed into unreachable even if the emptiness check
-  is wrong. Like `runMigrations` and `persistStorage`, it never rejects,
-  including when `onError` throws.
+- **The startup sweep's three content gates are load-bearing but not
+  sufficient — a fourth, `createdBefore`, closes a real race.**
+  `createdAt === updatedAt` makes a note the user has typed into unreachable
+  even if the emptiness check is wrong — the M4 shape where a truncation
+  reached `notes.purge`. But the sweep is unawaited and runs after React has
+  already mounted and made the app interactive, so a note created in that
+  window (widened to seconds by a tag-index rebuild) has empty text, no
+  `trashedAt`, and `createdAt === updatedAt` — it passes all three content
+  gates legitimately, and the sweep would purge work in progress out from
+  under a pending autosave. `SweepDeps.createdBefore` is captured at module
+  scope in `main.tsx` before anything else can run, and the sweep skips any
+  note whose `createdAt` is at or after it. Like `runMigrations` and
+  `persistStorage`, the sweep never rejects, including when `onError` throws;
+  a single note's purge throwing is now also caught per-note so it neither
+  aborts the rest of the sweep nor gets silently counted as succeeding.
 - **The sweep runs after the tag-index rebuild resolves, not concurrently.**
   Both write inside transactions over `notes`; sequencing removes the question
   of what a rebuild sees mid-purge.
@@ -515,6 +523,18 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
 - **Today does not roll over at midnight.** A note edited at 23:59 stays in
   Today until something else re-runs the query. A timer whose only job is to
   move one row is not worth a live subscription.
+- **Typing `- [ ] milk` does not create a task item, and this is an editor
+  input-rule defect, not a Todo defect.** StarterKit's bullet-list input rule
+  fires on `- ` first and converts the block to a `listItem`; `TaskItem`'s own
+  `wrappingInputRule` then cannot wrap a paragraph that is already inside a
+  `listItem`, so the user is left with a plain bullet and the literal text
+  `[ ] milk`, which never reaches Todo's predicate. M6's Todo predicate,
+  registry, and counts are all verified correct — this is purely the M4-era
+  editor never having its own promotion rule for this keystroke. Do not "fix"
+  this by loosening the Todo predicate to match literal `[ ] text` bullets;
+  the fix belongs in the editor, as an input rule that promotes a bullet item
+  to a task item, with its own round-trip coverage (see the `markdown.ts`
+  fidelity/stability/preservation rules above) — not in M6's counting logic.
 
 ## Carried into M5b and M6
 
@@ -526,6 +546,14 @@ the M5.5 progress ledger, gitignored and not carried forward — the items below
 are what survived out of it. Fold these into the next plan rather than
 rediscovering them.
 
+- **First item of M7: the task-item input-rule defect.** `- [ ] milk` produces
+  a plain bullet with literal `[ ] milk` text instead of a task item, because
+  StarterKit's bullet-list input rule wins the race against `TaskItem`'s
+  `wrappingInputRule` and a paragraph already wrapped in a `listItem` cannot be
+  re-wrapped. Todo's predicate, registry, and counts are all correct — see the
+  rule recorded above under "Rules that must not be silently reversed." Fix
+  needs an input rule that promotes a bullet item to a task item, plus its own
+  round-trip fidelity/stability coverage; not in scope for M6.
 - **The tag pill mark and rename/delete are M5b.** M5 shipped the parser, the
   index, the tree, the sidebar, and seeded creation; it never made `#tag` its
   own inline mark, never let a tag be renamed or deleted in bulk, and never
