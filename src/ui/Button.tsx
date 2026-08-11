@@ -20,7 +20,13 @@ export interface ButtonProps {
  * `bg` is near-black against a light coral. A literal white would fail in Ink.
  */
 const VARIANTS: Record<ButtonVariant, string> = {
-  default: 'text-text hover:bg-hover',
+  // A hairline and a surface, so a button reads as a control at rest rather
+  // than as a label. Until M6 this was `text-text hover:bg-hover` — no border,
+  // no fill — which made "New note", "Delete" and "Restore" indistinguishable
+  // from static text until the pointer happened to cross them. `ghost` is the
+  // variant for a control that should stay quiet until hovered; `default` is
+  // not, because it carries the primary action of the note list.
+  default: 'border border-border bg-bg text-text hover:bg-hover',
   primary: 'bg-accent text-bg hover:opacity-90',
   danger: 'bg-danger text-bg hover:opacity-90',
   ghost: 'text-muted hover:bg-hover hover:text-text',
