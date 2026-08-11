@@ -196,8 +196,11 @@ exist yet.
 
 **Motion** — `--bear-duration-fast: 100ms` (hover, selection fills),
 `--bear-duration: 160ms` (disclosure, dialog), and one easing token. Applied to
-hover and selected fills, the tag-tree disclosure arrow, and the dialog's
-fade-and-scale entrance.
+hover and selected fills and to `Resizer`'s hairline; reserved for M6's dialog
+entrance. The tag-tree disclosure glyph swaps instantly (`▸`/`▾`) — two
+different characters cannot be transitioned, so this was never deliverable as
+motion without a redesign to a rotating single glyph, which is out of scope
+here.
 
 The app currently has motion in exactly one place: `Resizer`'s hairline
 transitions to accent on hover. Everything else snaps.

@@ -29,7 +29,7 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
     <div
       role="toolbar"
       aria-label={t('editor.toolbar.top')}
-      className="flex shrink-0 items-center justify-end gap-1 border-b border-border px-4 py-2"
+      className="flex h-9 shrink-0 items-center justify-end gap-1 border-b border-border px-4"
     >
       <button
         type="button"
@@ -37,7 +37,7 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
         aria-pressed={editor?.isActive('bold') ?? false}
         disabled={editor === null}
         onClick={() => editor?.chain().command(pinAllSelectionStep).focus().toggleBold().run()}
-        className="rounded px-2 py-1 text-xs font-bold text-muted hover:bg-hover aria-pressed:text-text"
+        className="h-7 rounded-sm px-2 text-ui font-bold text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
       >
         B
       </button>
@@ -47,7 +47,7 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
         aria-pressed={editor?.isActive('italic') ?? false}
         disabled={editor === null}
         onClick={() => editor?.chain().command(pinAllSelectionStep).focus().toggleItalic().run()}
-        className="rounded px-2 py-1 text-xs italic text-muted hover:bg-hover aria-pressed:text-text"
+        className="h-7 rounded-sm px-2 text-ui italic text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
       >
         I
       </button>
@@ -56,7 +56,7 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
         aria-label={t('editor.info.show')}
         aria-expanded={infoOpen}
         onClick={onToggleInfo}
-        className="rounded px-2 py-1 text-xs text-muted hover:bg-hover"
+        className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover"
       >
         ⓘ
       </button>

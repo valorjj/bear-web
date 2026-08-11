@@ -32,7 +32,7 @@ export function NoteList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
+      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-2">
         <Button onClick={onCreate}>{t('noteList.create')}</Button>
 
         {selectedNoteId !== null && scope.kind !== 'trashed' && (

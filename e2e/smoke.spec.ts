@@ -64,9 +64,12 @@ test('the shell uses the token layer for its colours', async ({ page }) => {
     return { backgroundColor: style.backgroundColor, color: style.color };
   });
 
+  // These pin the shipped palette deliberately: a token change SHOULD require a
+  // conscious edit here, because this is the only test that proves the
+  // prefers-color-scheme cascade actually reaches a rendered pixel.
   expect(bodyColors).toEqual({
     backgroundColor: 'rgb(255, 255, 255)',
-    color: 'rgb(28, 28, 30)',
+    color: 'rgb(28, 27, 25)',
   });
 });
 
@@ -78,7 +81,10 @@ test('the system dark preference applies with no JavaScript toggle', async ({ pa
 
   const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
-  expect(background).toBe('rgb(28, 28, 30)');
+  // These pin the shipped palette deliberately: a token change SHOULD require a
+  // conscious edit here, because this is the only test that proves the
+  // prefers-color-scheme cascade actually reaches a rendered pixel.
+  expect(background).toBe('rgb(26, 26, 25)');
 });
 
 test('a resized pane keeps its width across a reload', async ({ page }) => {

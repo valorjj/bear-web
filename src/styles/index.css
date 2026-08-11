@@ -1,3 +1,5 @@
+@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+@import '@fontsource-variable/jetbrains-mono/index.css';
 @import 'tailwindcss';
 @import './tokens.css';
 
@@ -7,10 +9,36 @@
   --color-sidebar: var(--bear-sidebar);
   --color-text: var(--bear-text);
   --color-muted: var(--bear-muted);
+  --color-faint: var(--bear-faint);
   --color-accent: var(--bear-accent);
+  --color-danger: var(--bear-danger);
+  --color-focus: var(--bear-focus);
   --color-border: var(--bear-border);
+  --color-hover: var(--bear-hover);
+  --color-selected: var(--bear-selected);
+
   --font-sans: var(--bear-font-sans);
   --font-mono: var(--bear-font-mono);
+
+  --text-ui-xs: var(--bear-text-ui-xs);
+  --text-ui-xs--line-height: 1.4;
+  --text-ui-sm: var(--bear-text-ui-sm);
+  --text-ui-sm--line-height: var(--bear-leading-ui);
+  --text-ui: var(--bear-text-ui);
+  --text-ui--line-height: var(--bear-leading-ui);
+  --text-ui-md: var(--bear-text-ui-md);
+  --text-ui-md--line-height: 1.4;
+  --text-ui-lg: var(--bear-text-ui-lg);
+  --text-ui-lg--line-height: 1.35;
+
+  --radius-sm: var(--bear-radius-sm);
+  --radius-md: var(--bear-radius-md);
+  --radius-lg: var(--bear-radius-lg);
+
+  --shadow-popover: var(--bear-shadow-popover);
+  --shadow-dialog: var(--bear-shadow-dialog);
+
+  --ease-bear: var(--bear-ease);
 }
 
 html,
@@ -24,4 +52,16 @@ body {
   color: var(--color-text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * One global focus ring, replacing the per-component focus-visible utilities
+ * that existed on `Button` and nowhere else. No component may set
+ * `outline-none` without supplying a visible replacement — `Resizer` is the
+ * one exception, and it draws its own accent hairline on
+ * `group-focus-visible`.
+ */
+:focus-visible {
+  outline: 2px solid var(--bear-focus);
+  outline-offset: 2px;
 }

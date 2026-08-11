@@ -19,10 +19,11 @@ IndexedDB.
 | M3 notes CRUD, textarea editor   | complete               |
 | M4 editor                        | complete               |
 | M5 tags                          | complete               |
+| M5.5 design language             | complete               |
 | M6 smart lists, trash management | next                   |
 | M7–M9                            | search, themes, polish |
 
-579 unit tests, 18 end-to-end tests. `main` is always green and auto-deploys.
+626 unit tests, 18 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -74,12 +75,27 @@ These bit us once already. They are not mistakes.
   belong in Playwright.
 - `erasableSyntaxOnly` forbids `enum`, parameter properties, and namespaces.
   `verbatimModuleSyntax` requires `import type` / `export type`.
+- **`--color-hover` did not exist until M5.5.** `hover:bg-hover` was written in
+  `TopControls` and `BottomToolbar` from M4 onward, and Tailwind v4 silently
+  emits nothing for a utility whose theme key is absent — no build warning, no
+  runtime error — so those buttons had no hover state for two milestones. No
+  source-level grep can see this; only the compiled CSS shows a utility that
+  never made it in.
 
 ## Architecture boundaries
 
+- **These boundaries are enforced by `scripts/sourceLint.test.ts`, not merely
+  documented here.** It resolves both `@/`-aliased and relative specifiers to
+  `src/`-relative paths before checking them, because `src/ui`, `src/data`,
+  `src/lib`, `src/features`, `src/i18n` and `src/app` are flat siblings — a
+  relative `../data` from `src/ui/` reaches the data layer in one hop, and an
+  alias-only check would have been a one-character bypass.
 - `src/ui/` holds presentation primitives. It must import **nothing** from
   `src/app/`, `src/data/`, or `src/i18n/`. That is why `Resizer` takes `min`/`max`
   as props rather than importing the pane-width constants.
+- `src/ui/SidebarRow.tsx` is the shared row primitive for the tag tree, and is
+  meant to be reused by M6's smart lists and M7's search results rather than
+  each growing its own row markup.
 - Components reach persistence **only** through `src/data/index.ts`, never a
   repository module directly.
 - `src/lib/` holds framework-level hooks with no product knowledge —
@@ -381,14 +397,71 @@ These bit us once already. They are not mistakes.
   `selectAll()` path and the real keyboard `Ctrl/Cmd+A` path — the two are
   driven by the identical `AllSelection` mechanism and the identical fix closes
   both.
+- **The font families are `'Pretendard Variable'` and `'JetBrains Mono
+Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
+  `@font-face` anywhere, so the app silently ran on `system-ui` for five
+  milestones. Importing the package alone would not have fixed it — the family
+  name must match too. `scripts/fonts.test.ts` compares the token's family
+  against the families the shipped stylesheet declares; that is the only form
+  of the assertion that can fail.
+- **Colour literals outside `tokens.css` fail `npm test`** (not the build), via
+  `scripts/sourceLint.test.ts`. The scan is a documented heuristic scoped to
+  CSS files and `className`/`style` regions, because `#face` and `#dad` are
+  valid hex and valid tags.
+- **Both dark theme blocks must stay token-for-token identical**, asserted by
+  `scripts/sourceLint.test.ts`, which compares values and not just key sets. A
+  token present in `:root[data-theme='dark']` but missing from the
+  `prefers-color-scheme` block is correct for a user who picked dark and wrong
+  for a user whose OS is dark — invisible to every other test.
+- **Motion lives in two duration tokens, never per-component**, so one
+  `prefers-reduced-motion` block covers animations added later.
+- **`danger` and `focus` are separate tokens from `accent`** though all three
+  are identical in both shipped themes. An M8 theme with a green accent must
+  not get a green delete button.
+- **Tailwind v4 has no `--duration-*` theme namespace.** Durations are written
+  `duration-[var(--bear-duration-fast)]`. Adding a `--duration-fast` theme key
+  does not produce a `duration-fast` utility.
+- **Source-scanning tests live in `scripts/`, not `src/`.** `tsconfig.app.json`
+  deliberately omits Node types; `tsconfig.node.json` already includes
+  `scripts`.
+- **Never rely on a CSS `gap` to separate text for assistive tech.**
+  Accessible-name computation concatenates text content and ignores gaps. M5.5
+  shipped and reverted a regression where a tag row announced as `"work3"`
+  instead of `"work 3"` after `SidebarRow` dropped an explicit space text
+  node — the visual `gap-2` hid it completely, and the first fix attempt
+  edited the failing tests to match. `src/ui/SidebarRow.tsx` carries an
+  explicit `{' '}` and `ui.test.tsx` pins the resulting accessible name.
+- **A role-based test that fails during a restyle is reporting a behaviour
+  change, not a stale expectation.** Editing it to match the new output is the
+  same defect as asserting a class name. This is how the `SidebarRow` space
+  regression above nearly shipped.
+- **`--bear-faint` was darkened to clear WCAG 3.0 and must not be lightened for
+  aesthetics.** Paper `#88857d` measures 3.21:1 on `--bear-sidebar`; the
+  original `#9c988f` measured 2.51:1 and failed. Ink is `#7b766e` at 3.40:1.
+  `faint` carries counts and timestamps, so 3.0 is already the relaxed bar.
+  **No test can catch this** — contrast over alpha-composited overlays needs a
+  real cascade and jsdom has none, so the ratios are measured by hand and
+  recorded in `docs/design/DESIGN-bear-web.md`.
+- **Exactly two files may suppress the focus outline**, allowlisted in
+  `scripts/sourceLint.test.ts`, each mapped to a marker string proving it
+  supplies its own indicator: `Resizer.tsx` (`group-focus-visible:` accent
+  hairline) and `RichEditor.tsx` (the text caret). The test asserts the
+  suppressor set first, so a third file fails before the marker check runs.
+  `RichEditor`'s suppression was an undocumented accident until M5.5.
+- **`e2e/smoke.spec.ts` pins the shipped palette deliberately.** It is the only
+  test proving the `prefers-color-scheme` cascade reaches a rendered pixel, so
+  a token change SHOULD require a conscious edit there. It went stale for four
+  tasks during M5.5 because e2e was not run on every restyle task.
 
 ## Carried into M5b and M6
 
 Real, deliberately deferred with a ruling. Full M3 reasoning is in
 `.superpowers/sdd/2026-08-08-m3-notes/progress.md`; full M4 reasoning is in
 `.superpowers/sdd/2026-08-09-m4-editor/progress.md`; full M5 reasoning is in
-`.superpowers/sdd/2026-08-10-m5-tags/progress.md`. Fold these into the next
-plan rather than rediscovering them.
+`.superpowers/sdd/2026-08-10-m5-tags/progress.md`; full M5.5 reasoning is in
+the M5.5 progress ledger, gitignored and not carried forward — the items below
+are what survived out of it. Fold these into the next plan rather than
+rediscovering them.
 
 - **The tag pill mark and rename/delete are M5b.** M5 shipped the parser, the
   index, the tree, the sidebar, and seeded creation; it never made `#tag` its
@@ -434,6 +507,43 @@ plan rather than rediscovering them.
   `seedText` and the editor to agree. Not reshaped at M5's end because the
   current failure mode is fail-safe (a stray note lingers, nothing is deleted),
   unlike the manager/schema divergence that motivated the general rule.
+- **Editor typography is declared but not wired.** `--bear-font-size` and its
+  siblings sit in `tokens.css` unused while `RichEditor`'s contenteditable is
+  `text-sm`. M8 owns the typography sliders and must wire the tokens, not
+  merely add UI. M5.5's spec deferred editor typography deliberately.
+- **`NoteListItem`'s accessible name runs together.** Its three sibling spans —
+  title, date, snippet — concatenate with no separator, so a row announces as
+  `"work note10:24some body text"`. Same root cause as the `SidebarRow`
+  regression M5.5 caught and reverted: JSX strips inter-element whitespace and
+  accessible-name computation ignores CSS gaps. **Verified byte-identical
+  before and after M5.5, so it is pre-existing, not introduced.** Unlike the
+  `SidebarRow` case there is no separator to restore — title, date and snippet
+  want a visually-hidden separator or an explicit `aria-label`, which is a real
+  accessibility design decision rather than a bug fix. M6 owns the note list;
+  fold it in there with its own ruling.
+- **An intermittent Playwright resize-test flake.** Seen once during M5.5, not
+  reproducible afterwards across three consecutive full runs (18/18 each). Not
+  actionable without a failing artifact, but worth naming because `jsdom` has
+  no `setPointerCapture` — Playwright is the _only_ coverage for pointer-drag
+  paths, so a flake there is a hole in the one place that can test them. If it
+  recurs, run that spec with `--repeat-each`.
+- **Paper's `--bear-selected` at `rgb(207 59 44 / 0.11)` reads faint.** On the
+  bottom toolbar's pressed toggles it is a light wash over white, and on some
+  displays the pressed state reads mainly through the text-colour shift rather
+  than the background. Ink's `0.18` alpha is comfortable. Raising Paper's alpha
+  is a design call, and it ripples into `e2e/smoke.spec.ts`, which now pins the
+  shipped palette deliberately.
+- **`rounded-md`, `rounded-lg`, `shadow-popover` and `shadow-dialog` are
+  provisioned but unused.** M5.5's spec names them for M6's `ConfirmDialog`.
+  They are not dead code awaiting deletion; deleting them means M6 re-adds
+  them.
+- **`scripts/fonts.test.ts` ignores `font-weight` and `font-style`.** Its
+  `declaredFamilies` collects every `font-family:` an `@font-face` block
+  declares regardless of which face it belongs to, so a family declared _only_
+  at a weight or style the app never uses would satisfy the check. Latent, with
+  no live instance — Pretendard ships `font-weight: 45 920` normal and
+  JetBrains Mono `100 800` normal, so every declared family is one the app can
+  actually render.
 
 ## Working style
 

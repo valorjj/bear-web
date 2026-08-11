@@ -24,7 +24,7 @@ export function InfoPanel({ text, createdAt, updatedAt, now }: InfoPanelProps): 
   const resolvedNow = now ?? Date.now();
 
   return (
-    <dl className="flex shrink-0 gap-6 border-b border-border px-4 py-2 text-xs text-muted">
+    <dl className="flex h-9 shrink-0 items-center gap-6 border-b border-border px-4 text-ui-sm text-faint">
       <div className="flex gap-2">
         <dt>{t('editor.info.words')}</dt>
         <dd className="text-text">{countWords(text)}</dd>

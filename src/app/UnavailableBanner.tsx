@@ -11,7 +11,7 @@ export function UnavailableBanner(): ReactElement | null {
   if (status === 'ready') return null;
 
   return (
-    <div role="alert" className="border-b border-border bg-surface px-4 py-2 text-sm text-text">
+    <div role="alert" className="border-b border-border bg-surface px-4 py-2 text-ui text-text">
       <p className="font-semibold">{t('database.memory.title')}</p>
       <p className="text-muted">{t('database.memory.body')}</p>
     </div>
