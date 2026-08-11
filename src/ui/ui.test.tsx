@@ -129,4 +129,62 @@ describe('Button', () => {
 
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
+
+  it('does not fire when disabled', async () => {
+    const onClick = vi.fn();
+    render(
+      <Button onClick={onClick} disabled>
+        Empty trash
+      </Button>,
+    );
+
+    const button = screen.getByRole('button', { name: 'Empty trash' });
+    expect(button).toBeDisabled();
+
+    await userEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  // Pins that `danger` resolves to the danger token and NOT to the accent
+  // token. They are the same colour in both shipped themes, so nothing else
+  // would notice a call site reaching for `accent` — until an M8 theme with a
+  // green accent renders a green delete button.
+  it('renders the danger variant from the danger token', () => {
+    render(
+      <Button onClick={vi.fn()} variant="danger">
+        Delete forever
+      </Button>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Delete forever' }).className).toContain('bg-danger');
+  });
+
+  it('gives every variant a distinct appearance', () => {
+    const variants = ['default', 'primary', 'danger', 'ghost'] as const;
+    const classNames = variants.map((variant) => {
+      const { unmount } = render(
+        <Button onClick={vi.fn()} variant={variant}>
+          {variant}
+        </Button>,
+      );
+      const className = screen.getByRole('button', { name: variant }).className;
+      unmount();
+      return className;
+    });
+
+    expect(new Set(classNames).size).toBe(variants.length);
+  });
+
+  it('defaults to the default variant at md size', () => {
+    const { unmount } = render(<Button onClick={vi.fn()}>Bare</Button>);
+    const bare = screen.getByRole('button', { name: 'Bare' }).className;
+    unmount();
+
+    render(
+      <Button onClick={vi.fn()} variant="default" size="md">
+        Explicit
+      </Button>,
+    );
+    expect(screen.getByRole('button', { name: 'Explicit' }).className).toBe(bare);
+  });
 });
