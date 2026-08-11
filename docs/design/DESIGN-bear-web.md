@@ -1,0 +1,522 @@
+---
+version: alpha
+name: bear-web Design Language
+description: A quiet, warm-greyscale design system for a local-first Markdown notes app — one accent red, type-led hierarchy, no drop shadows beyond two floating surfaces, motion expressed as tokens rather than per-component durations.
+
+colors:
+  bg: "#ffffff"
+  surface: "#faf9f8"
+  sidebar: "#f1efec"
+  text: "#1c1b19"
+  muted: "#6b6862"
+  faint: "#9c988f"
+  border: "#e5e2dd"
+  accent: "#cf3b2c"
+  danger: "#cf3b2c"
+  focus: "#cf3b2c"
+  hover: "rgb(28 27 25 / 0.05)"
+  selected: "rgb(207 59 44 / 0.11)"
+  shadow: "rgb(28 27 25 / 0.14)"
+
+typography:
+  ui-xs:
+    fontFamily: Pretendard Variable
+    fontSize: 11px
+    lineHeight: 1.4
+    use: counts, badges
+  ui-sm:
+    fontFamily: Pretendard Variable
+    fontSize: 12px
+    lineHeight: 1.45
+    use: timestamps, snippets
+  ui:
+    fontFamily: Pretendard Variable
+    fontSize: 13px
+    lineHeight: 1.45
+    use: rows, buttons — the workhorse size
+  ui-md:
+    fontFamily: Pretendard Variable
+    fontSize: 14px
+    lineHeight: 1.4
+    use: note titles
+  ui-lg:
+    fontFamily: Pretendard Variable
+    fontSize: 16px
+    lineHeight: 1.35
+    use: pane headers, empty states
+  mono:
+    fontFamily: JetBrains Mono Variable
+    use: code spans and blocks inside notes
+
+rounded:
+  sm: 4px
+  md: 6px
+  lg: 10px
+
+spacing:
+  note: "There is no spacing token scale. Layout uses Tailwind's default 4px-grid utilities (p-2, gap-1, px-3, ...) directly. See Layout below for why."
+
+motion:
+  duration-fast: 100ms
+  duration: 160ms
+  ease: "cubic-bezier(0.2, 0, 0.2, 1)"
+
+shadows:
+  popover: "0 4px 12px {colors.shadow}"
+  dialog: "0 12px 32px {colors.shadow}"
+
+components:
+  sidebar-row:
+    height: 28px
+    typography: "{typography.ui}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.sm}"
+    selectedBackground: "{colors.selected}"
+    selectedIndicator: "{colors.accent}"
+    hoverBackground: "{colors.hover}"
+    countColor: "{colors.faint}"
+    countTypography: "{typography.ui-xs}"
+  note-list-row:
+    padding: "0.625rem 0.75rem"
+    borderColor: "{colors.border}"
+    titleColor: "{colors.text}"
+    titleTypography: "{typography.ui-md}"
+    dateColor: "{colors.faint}"
+    dateTypography: "{typography.ui-sm}"
+    snippetColor: "{colors.muted}"
+    snippetTypography: "{typography.ui-sm}"
+    selectedBackground: "{colors.selected}"
+    selectedIndicator: "{colors.accent}"
+    hoverBackground: "{colors.hover}"
+  toolbar:
+    height: 36px
+    borderColor: "{colors.border}"
+    background: "{colors.bg}"
+    role: toolbar
+  toolbar-button:
+    height: 28px
+    padding: "0 0.5rem"
+    rounded: "{rounded.sm}"
+    textColor: "{colors.muted}"
+    hoverBackground: "{colors.hover}"
+    activeBackground: "{colors.selected}"
+    activeTextColor: "{colors.text}"
+    disabledOpacity: 0.4
+  button-default:
+    height: 28px
+    padding: "0 0.5rem"
+    rounded: "{rounded.sm}"
+    textColor: "{colors.text}"
+    hoverBackground: "{colors.hover}"
+    typography: "{typography.ui}"
+  button-primary:
+    height: 28px
+    padding: "0 0.5rem"
+    rounded: "{rounded.sm}"
+    background: "{colors.accent}"
+    textColor: "{colors.bg}"
+    hoverOpacity: 0.9
+    typography: "{typography.ui}"
+  button-danger:
+    height: 28px
+    padding: "0 0.5rem"
+    rounded: "{rounded.sm}"
+    background: "{colors.danger}"
+    textColor: "{colors.bg}"
+    hoverOpacity: 0.9
+    typography: "{typography.ui}"
+  button-ghost:
+    height: 28px
+    padding: "0 0.5rem"
+    rounded: "{rounded.sm}"
+    textColor: "{colors.muted}"
+    hoverBackground: "{colors.hover}"
+    hoverTextColor: "{colors.text}"
+    typography: "{typography.ui}"
+  empty-state:
+    layout: centered column, full pane height
+    titleColor: "{colors.text}"
+    titleTypography: "{typography.ui-lg}"
+    bodyColor: "{colors.muted}"
+    bodyTypography: "{typography.ui}"
+    maxWidth: 20rem
+  dialog:
+    description: "Not yet built — M6 spec. A modal confirmation surface (e.g. Empty Trash, permanent delete) sitting above the app on a scrim."
+    background: "{colors.surface}"
+    borderColor: "{colors.border}"
+    rounded: "{rounded.lg}"
+    shadow: "{shadows.dialog}"
+    scrimBackground: "rgb(28 27 25 / 0.3) in Paper, rgb(0 0 0 / 0.5) in Ink — not yet a token; derive from {colors.shadow}'s tint at authoring time"
+    titleTypography: "{typography.ui-lg}"
+    bodyTypography: "{typography.ui}"
+    actionsAlignment: "trailing, button-default and button-danger/button-primary pair"
+    focusTrap: required
+    dismissal: "Escape key and scrim click, both must return focus to the element that opened the dialog"
+---
+
+## Overview
+
+bear-web is quiet on purpose. There is exactly one hue in the entire palette —
+a warm brick red — and it is spent carefully: selection, the accent edge on
+the active row, primary and danger actions, and the focus ring. Everything
+else is a warm greyscale, built from four surface steps (`{colors.bg}`,
+`{colors.surface}`, `{colors.sidebar}`, and translucent `{colors.hover}` /
+`{colors.selected}` overlays) and three text steps (`{colors.text}`,
+`{colors.muted}`, `{colors.faint}`). The app is modeled on Bear for macOS, and
+it reads like a macOS utility, not a marketing site: no gradients, no
+saturated chrome, no drop shadow except on the two surfaces that actually
+float above the page. Hierarchy is carried by type size and color weight, not
+by decoration — a sidebar row, a note-list row, and a toolbar button are all
+built from the same handful of tokens at different sizes.
+
+**Key characteristics:**
+
+- Warm, near-neutral greyscale (a slightly yellow-grey, not a cool blue-grey)
+  across four surface steps, in both a light theme (Paper) and a dark theme
+  (Ink).
+- One accent hue, `{colors.accent}` — a brick/coral red depending on theme —
+  that also backs `{colors.danger}` and `{colors.focus}`. The three tokens are
+  separate names resolving to one colour today so a future theme can diverge
+  them without a rename.
+- UI type is one notch below the web default: 13px is the workhorse row/button
+  size, echoing a macOS app's chrome being set smaller than its content.
+  Editor type is a separate, larger scale and is not covered by this document
+  — see Typography below.
+- Selection reads as *more present* than its surroundings: an accent-tinted
+  translucent fill plus a 2px accent edge marker, never a plain background
+  swap.
+- Two duration tokens, one easing curve, no per-component transition timing.
+- Two shadow tokens total, for the two floating surfaces the app has
+  (popovers and, from M6, dialogs). Everything else is flat, separated by
+  colour field and a 1px hairline border.
+
+## Colors
+
+### Surface
+
+| Token             | Paper     | Ink       | Use                                            |
+| ------------------ | --------- | --------- | ----------------------------------------------- |
+| `{colors.bg}`      | `#ffffff` | `#1a1a19` | Page canvas, editor background                  |
+| `{colors.surface}` | `#faf9f8` | `#201f1e` | Note list background, one step off the canvas   |
+| `{colors.sidebar}` | `#f1efec` | `#262523` | Tag sidebar background, the most-recessed panel |
+| `{colors.border}`  | `#e5e2dd` | `#35332f` | Hairline dividers between panes and list rows   |
+
+### Text
+
+| Token            | Paper     | Ink       | Use                                          |
+| ----------------- | --------- | --------- | --------------------------------------------- |
+| `{colors.text}`  | `#1c1b19` | `#ebe9e5` | Primary reading text, note titles, headings  |
+| `{colors.muted}` | `#6b6862` | `#a09c94` | Secondary text — snippets, body copy in lists |
+| `{colors.faint}` | `#9c988f` | `#746f68` | Supplementary text — timestamps, counts       |
+
+### Accent
+
+| Token              | Paper     | Ink       | Use                                            |
+| ------------------- | --------- | --------- | ------------------------------------------------ |
+| `{colors.accent}`  | `#cf3b2c` | `#ff6f5e` | Selection edge, primary buttons, active states |
+| `{colors.danger}`  | `#cf3b2c` | `#ff6f5e` | Destructive actions (trash, permanent delete)  |
+| `{colors.focus}`   | `#cf3b2c` | `#ff6f5e` | The one global `:focus-visible` ring             |
+
+`accent`, `danger`, and `focus` resolve to the same value in both shipped
+themes. They are not aliases of one token — they are three tokens that happen
+to agree today. An M8 theme with a green accent must not turn the Delete
+Forever button green; keeping the names separate is what makes that possible
+without touching every call site.
+
+### Overlay
+
+| Token               | Paper                     | Ink                        | Use                                    |
+| -------------------- | -------------------------- | --------------------------- | ---------------------------------------- |
+| `{colors.hover}`    | `rgb(28 27 25 / 0.05)`    | `rgb(255 255 255 / 0.06)` | Hover fill, any row or button           |
+| `{colors.selected}` | `rgb(207 59 44 / 0.11)`   | `rgb(255 111 94 / 0.18)` | Selected row/note fill — accent-tinted   |
+| `{colors.shadow}`   | `rgb(28 27 25 / 0.14)`    | `rgb(0 0 0 / 0.5)`        | Base for the two shadow tokens          |
+
+These three are translucent, not solid fills, because each sits over three
+different backgrounds (sidebar, note list, editor canvas) and no single solid
+colour could serve all three. `selected` is accent-tinted rather than a
+neutral grey — that tint is what makes a selected row read as *more* present
+than an unselected one. Before this milestone, selection was `{colors.bg}`
+under the row: literally less contrast than the surrounding list, a hole
+rather than a highlight.
+
+### Measured contrast ratios
+
+Computed by hand with a real WCAG 2.1 relative-luminance calculation
+(sRGB channel linearisation, `(L1 + 0.05) / (L2 + 0.05)`), because the
+alpha-composited overlays across three surfaces in two themes cannot be
+computed by jsdom in the test suite. Script: throwaway Node script, not
+checked in.
+
+| Foreground | Background | Target | Paper      | Ink        |
+| ----------- | ----------- | ------ | ---------- | ---------- |
+| `text`     | `bg`       | ≥ 7.0  | **17.21:1** | **14.36:1** |
+| `text`     | `sidebar`  | ≥ 7.0  | **15.00:1** | **12.63:1** |
+| `muted`    | `surface`  | ≥ 4.5  | **5.28:1**  | **6.02:1**  |
+| `faint`    | `sidebar`  | ≥ 3.0  | **2.51:1 — FAILS** | **3.07:1**  |
+| `bg`       | `accent`   | ≥ 4.5  | **4.87:1**  | **6.38:1**  |
+| `accent`   | `sidebar`  | ≥ 3.0  | **4.24:1**  | **5.61:1**  |
+
+Every pair passes its target except one. **`faint` on `sidebar` in Paper
+measures 2.51:1 against a target of 3.0** — the tag tree's row counts, set in
+`{colors.faint}` over `{colors.sidebar}`, fall short of the non-text minimum
+contrast guideline in the light theme only (Ink's identical pairing passes at
+3.07:1).
+
+**Known gap — not fixed here.** Per this task's instructions, no token in
+`tokens.css` was changed to close this: a change at this stage would
+invalidate an already-reviewed task and the palette pinned by
+`e2e/smoke.spec.ts`. Recorded for a ruling:
+
+- Measured: `#9c988f` on `#f1efec` → 2.51:1.
+- Suggested replacement, found by binary search over darkening `faint` while
+  holding its hue: `#8c8981` → 3.04:1 against the same `{colors.sidebar}`.
+  (`muted` and `text` are unaffected since the search only touched `faint`.)
+- This changes exactly one Paper token (`--bear-faint`) and needs the same
+  review Task 3 already gave the rest of the palette before landing.
+
+## Typography
+
+### Font families
+
+- **Pretendard Variable** — the UI sans, used for every pane, row, button, and
+  label in the app shell. Loaded as a variable font via
+  `pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css`.
+- **JetBrains Mono Variable** — the monospace face, used for code spans and
+  fenced code blocks inside note content.
+
+### UI scale
+
+UI type is deliberately one notch below the browser default — 13px is the
+workhorse size, where a web app would default to 14–16px. This echoes a
+macOS-native app setting its chrome smaller than its content; before this
+milestone the whole app ran at a flat 14px.
+
+| Token             | Size    | Line height | Use                          |
+| ------------------- | ------- | ------------ | ------------------------------ |
+| `{typography.ui-xs}` | 11px    | 1.4          | Counts, badges                |
+| `{typography.ui-sm}` | 12px    | 1.45         | Timestamps, snippets           |
+| `{typography.ui}`    | 13px    | 1.45         | Rows, buttons — the workhorse |
+| `{typography.ui-md}` | 14px    | 1.4          | Note titles                    |
+| `{typography.ui-lg}` | 16px    | 1.35         | Pane headers, empty states     |
+
+### Editor typography is separate, and owned by M8
+
+The editor's own type — `--bear-font-size` (16px), `--bear-line-height`
+(1.6), `--bear-line-width` (56em), `--bear-para-spacing`, `--bear-para-indent`
+— is a distinct scale bound to M8's preference sliders (font size, line
+height, and measure will all become user-adjustable). Do not reuse the UI
+scale for note content, and do not treat the editor tokens as part of this
+document's scope: they are read but not designed here.
+
+## Layout
+
+### Why there are no spacing tokens
+
+There is deliberately no `spacing` scale in this system. Tailwind's default
+spacing scale is already a 4px grid (`p-1` = 4px, `p-2` = 8px, `p-3` = 12px,
+...), and it is used directly throughout the app (`px-3 py-2.5`, `gap-1`,
+`h-7`, `h-9`). A second, bear-web-specific spacing scale on top of Tailwind's
+would create a standing question at every call site — "reach for the design
+token or the Tailwind utility?" — for no benefit, since they'd resolve to the
+same pixel grid anyway. Radii and durations get tokens because their values
+are opinionated and small in number; spacing does not need the same
+treatment.
+
+### Density rules
+
+| Element             | Height / measure | Notes                                              |
+| --------------------- | ------------------ | ----------------------------------------------------- |
+| Sidebar row          | 28px (`h-7`)      | Each nesting depth indents 0.75rem                    |
+| Note list row        | auto, `py-2.5`    | Title / date / snippet stacked, `gap-0.5`             |
+| Toolbar (top/bottom) | 36px (`h-9`)      | Bottom toolbar is a horizontally scrolling button row |
+| Button, `sm`         | 24px (`h-6`)      |                                                        |
+| Button, `md`         | 28px (`h-7`)      | The default size                                      |
+| Editor measure       | `56em` (`--bear-line-width`) | M8-adjustable, not part of this system     |
+
+### Panes
+
+Three panes — tag sidebar, note list, editor — each an `overflow-y-auto`
+`<section aria-label>` (`src/ui/Pane.tsx`). Sidebar and note-list widths are
+durable, persisted via the settings table, not component state; the editor
+pane fills the remainder. A `Resizer` (`src/ui/Resizer.tsx`) sits between
+panes: an 8px interactive hit-target collapsed visually to a 1px hairline
+that thickens and tints `{colors.accent}` on hover/focus.
+
+## Motion
+
+Two duration tokens and one easing curve, used everywhere:
+
+- `--bear-duration-fast` (100ms) — hover/press state changes on rows and
+  buttons.
+- `--bear-duration` (160ms) — reserved for slower transitions (panel
+  open/close, dialog entry from M6 onward).
+- `--bear-ease` — `cubic-bezier(0.2, 0, 0.2, 1)`, applied via the `ease-bear`
+  Tailwind utility.
+
+`prefers-reduced-motion: reduce` zeroes both duration tokens in one media
+query block. This is the entire reason no component may hardcode a duration:
+a per-component `transition-duration: 150ms` would keep animating under
+reduced motion, silently defeating the accessibility preference for exactly
+the component that skipped the token.
+
+## Shapes
+
+| Token            | Value | Use                                          |
+| ------------------ | ----- | ----------------------------------------------- |
+| `{rounded.sm}`   | 4px   | Rows, buttons, toolbar buttons — everyday chrome |
+| `{rounded.md}`   | 6px   | Reserved, not yet in use by a shipped component |
+| `{rounded.lg}`   | 10px  | Popovers, and (from M6) dialogs                 |
+
+Geometry is restrained: nothing rounds past 10px, there are no pill shapes,
+and no component is fully circular. This is the inverse of a marketing site's
+soft, toy-like geometry — bear-web reads as utilitarian chrome around type,
+not as a shape to look at.
+
+## Components
+
+### `sidebar-row`
+
+One row of the tag tree (`src/ui/SidebarRow.tsx`). 28px tall, `{typography.ui}`,
+optional disclosure triangle, optional leading icon, optional trailing count.
+Selected state: `{colors.selected}` fill plus a 2px accent bar on the leading
+edge (`bg-accent`), not a plain background swap. A leaf row without a
+disclosure control still reserves the disclosure's width with an
+`aria-hidden` spacer, so every row's label lines up regardless of depth.
+**The gap between label and count is bridged by an explicit space text node,
+not `gap-2`** — screen-reader accessible-name computation concatenates text
+content and ignores CSS gaps; without the literal space, a row with a count
+of 3 announces as "work3" instead of "work 3". This app shipped that
+regression once already.
+
+### `note-list-row`
+
+One row of the note list (`src/features/notes/NoteListItem.tsx`). Title
+(`{typography.ui-md}`, semibold, `{colors.text}`), date (`{typography.ui-sm}`,
+`{colors.faint}`), and a text snippet (`{typography.ui-sm}`, `{colors.muted}`)
+stacked with a hairline bottom border. Selected state mirrors `sidebar-row`:
+`{colors.selected}` fill and a 2px accent bar on the leading edge.
+
+### `toolbar`
+
+Two toolbars exist: `TopControls` (per-note controls: info panel toggle) and
+`BottomToolbar` (formatting actions: heading, lists, bold/italic/strike,
+highlight, link, code, quote). Both are `role="toolbar"` with a translated
+`aria-label`, 36px tall, a hairline border separating them from the editor
+canvas, background `{colors.bg}`.
+
+### `toolbar-button`
+
+A single action inside a toolbar. 28px, `{colors.muted}` text at rest,
+`{colors.hover}` background on hover, `{colors.selected}` background plus
+`{colors.text}` text when `aria-pressed="true"` (an active format — e.g. bold
+is on at the caret). Disabled (no editor mounted) drops to 40% opacity and
+disables pointer events; it does not change colour, only opacity, so the
+disabled state reads as *the same button, unavailable* rather than a
+different control.
+
+### `button-default`
+
+`{colors.text}` on transparent, `{colors.hover}` on hover. The unmarked,
+lowest-emphasis action.
+
+### `button-primary`
+
+`{colors.accent}` fill, `{colors.bg}` text, 90% opacity on hover. `text-bg` is
+the on-accent foreground in *both* themes, not a coincidence worth losing:
+Paper's `bg` is white against a mid red and Ink's `bg` is near-black against a
+light coral — a literal white would fail contrast in Ink.
+
+### `button-danger`
+
+Same shape as `button-primary`, filled with `{colors.danger}` instead. Reach
+for this — never `button-primary` tinted red by hand, and never `{colors.accent}`
+where the intent is destructive — even though the two tokens resolve to the
+same hex today.
+
+### `button-ghost`
+
+`{colors.muted}` text, `{colors.hover}` background on hover, brightening to
+`{colors.text}` on hover as well. The lowest-visual-weight variant, used
+where a control needs to be discoverable but not compete with content.
+
+### `empty-state`
+
+Centered column filling the full pane height: a `{typography.ui-lg}` title in
+`{colors.text}`, a `{typography.ui}` body in `{colors.muted}` capped at
+`20rem` (`max-w-xs`) so prose doesn't stretch edge-to-edge in a wide pane.
+Used for "no notes," "trash is empty," and (by extension) any future
+zero-state.
+
+### `dialog` — not yet built, this is the M6 spec
+
+No modal exists in the shipped app yet; M6 owns trash management (Empty
+Trash, permanent delete confirmation) and will need one. Specified here so
+M6 has a target rather than a blank page:
+
+- Surface: `{colors.surface}` fill, `{colors.border}` 1px edge,
+  `{rounded.lg}` corners, `{shadows.dialog}` — the second of the app's exactly
+  two floating-surface shadows (the first is `{shadows.popover}`).
+- Scrim: a translucent full-viewport overlay behind the dialog. No token
+  exists for it yet; derive it from `{colors.shadow}`'s tint rather than
+  inventing an unrelated black.
+- Title at `{typography.ui-lg}`, body at `{typography.ui}`, both on
+  `{colors.text}` / `{colors.muted}` respectively, following the same
+  hierarchy as `empty-state`.
+- Actions right-aligned, typically a `button-default` (Cancel) paired with a
+  `button-danger` (the destructive confirmation) or `button-primary`.
+- Must trap focus while open and restore focus to the triggering element on
+  both Escape and scrim-click dismissal — the same focus-return discipline
+  the rest of the app's `:focus-visible` ring depends on.
+- Entry/exit motion, if any, uses `{motion.duration}` and `{motion.ease}` —
+  never a bespoke duration.
+
+## Do's and Don'ts
+
+### Do
+
+- Reach for `{colors.accent}` for the one thing that should draw the eye on a
+  screen: a selected row's edge, a primary button, the focus ring.
+- Build every new row/button variant out of the existing `{colors.hover}` /
+  `{colors.selected}` / `{colors.border}` trio rather than inventing a new
+  overlay opacity.
+- Keep UI type at `{typography.ui}` (13px) for rows and buttons; reserve
+  `{typography.ui-md}` and `{typography.ui-lg}` for titles and headers only.
+- Use the `{motion.duration-fast}` / `{motion.duration}` tokens (via the
+  `ease-bear` utility) for every transition, so `prefers-reduced-motion`
+  keeps covering the whole app.
+- Add an explicit space text node (`{' '}`) wherever a `gap` utility visually
+  separates two pieces of text that together form one accessible name.
+
+### Don't
+
+- Don't write a colour literal (`#...`, `rgb(...)`, `hsl(...)`) inside a
+  component — `scripts/sourceLint.test.ts` scans every `.ts`/`.tsx` file and
+  fails the build on one. Colour lives in `src/styles/tokens.css` only.
+- Don't add a themed token to only one of the two dark blocks
+  (`:root[data-theme='dark']` and the `@media (prefers-color-scheme: dark)`
+  block). `scripts/sourceLint.test.ts` asserts the two blocks stay
+  token-for-token identical; a token added to just one silently diverges
+  system-preference dark mode from an explicit dark-mode choice.
+- Don't simplify `:root:not([data-theme='light'])` — it looks removable
+  today because no explicit picker exists yet, but it is the exact seam M8's
+  theme picker will use to override the system default.
+- Don't introduce a spacing token scale. Tailwind's default scale is already
+  a 4px grid; a second one creates a standing "which do I reach for" question
+  with no corresponding benefit.
+- Don't reach for `{colors.accent}` where the intent is destructive — use
+  `{colors.danger}`. They are the same hex in both shipped themes today, but
+  are separate tokens precisely so an M8 theme can diverge them; code that
+  conflates them breaks the moment one theme does.
+- Don't write a per-component transition duration. Use `{motion.duration-fast}`
+  / `{motion.duration}` so `prefers-reduced-motion` continues to cover every
+  animation, including ones added after this document.
+- Don't set `outline-none` without supplying a visible focus replacement.
+  Exactly two files are allowlisted for it
+  (`src/ui/Resizer.tsx` and `src/features/editor/RichEditor.tsx`, each with a
+  documented replacement indicator) and `scripts/sourceLint.test.ts` fails
+  the build on a third.
+- Don't rely on a CSS `gap` to separate two text nodes that together form an
+  accessible name. Accessible-name computation concatenates text content and
+  ignores layout gaps; this milestone shipped, and then reverted, a
+  regression where a sidebar row's label and count announced as "work3"
+  instead of "work 3." Use an explicit space text node.
