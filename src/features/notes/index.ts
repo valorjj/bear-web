@@ -20,3 +20,5 @@ export { ScopeSidebar } from './ScopeSidebar';
 export type { ScopeSidebarProps } from './ScopeSidebar';
 export { useNotes } from './useNotes';
 export type { NotesState } from './useNotes';
+export { useSmartListCounts } from './useSmartListCounts';
+export type { SmartListCounts } from './useSmartListCounts';
