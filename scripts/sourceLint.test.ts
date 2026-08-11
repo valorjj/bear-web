@@ -38,15 +38,18 @@ function suspectLines(path: string): string[] {
 }
 
 describe('design lint', () => {
-  const files = [
-    ...walk('src', ['.css']),
-    ...walk('src', ['.tsx', '.ts']).filter((path) => !/\.test\.tsx?$/.test(path)),
-  ].filter((path) => path !== TOKENS);
+  const cssFiles = walk('src', ['.css']).filter((path) => path !== TOKENS);
+  const codeFiles = walk('src', ['.tsx', '.ts']).filter((path) => !/\.test\.tsx?$/.test(path));
+  const files = [...cssFiles, ...codeFiles];
 
-  it('scans a non-trivial number of files', () => {
-    // Guards the guard: a walk() that silently returns [] would make every
-    // assertion below vacuously true.
-    expect(files.length).toBeGreaterThan(20);
+  it('scans both stylesheets and components', () => {
+    // Counted separately, deliberately. A single combined threshold is blind
+    // to one half of the scan returning nothing: with ~57 component files,
+    // zeroing the CSS walk still cleared a combined threshold of 20, so the
+    // colour-literal assertion below would have gone vacuously green for
+    // every stylesheet in the app while still reporting a pass.
+    expect(cssFiles.length, 'no stylesheets found').toBeGreaterThan(0);
+    expect(codeFiles.length, 'no components found').toBeGreaterThan(20);
   });
 
   it('finds no colour literal outside tokens.css', () => {
