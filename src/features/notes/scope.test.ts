@@ -8,6 +8,7 @@ import {
   allowsTrash,
   isTrash,
   listForScope,
+  type NoteScope,
   scopeKey,
   seedTagFor,
   smartScope,
@@ -33,6 +34,7 @@ function lister() {
     listActive: vi.fn(async () => [note('active')]),
     listTrashed: vi.fn(async () => [note('trashed')]),
     listByTag: vi.fn(async () => [note('tagged')]),
+    allTagRows: vi.fn(async () => []),
   };
 }
 
@@ -116,5 +118,92 @@ describe('capabilities', () => {
 
   it('does not let a tag collide with a builtin name', () => {
     expect(scopeKey(tagScope('all'))).not.toBe(scopeKey(ACTIVE_SCOPE));
+  });
+});
+
+describe('listForScope over smart lists', () => {
+  const base = {
+    id: '',
+    title: '',
+    text: '',
+    createdAt: 0,
+    updatedAt: 0,
+    pinned: false,
+    trashedAt: null,
+    archivedAt: null,
+  };
+  const NOW = new Date(2026, 7, 11, 12, 0, 0).getTime();
+  const YESTERDAY = new Date(2026, 7, 10, 12, 0, 0).getTime();
+
+  const active = [
+    { ...base, id: 'plain', updatedAt: YESTERDAY },
+    { ...base, id: 'tagged', updatedAt: YESTERDAY, text: 'see #work' },
+    { ...base, id: 'todo', updatedAt: YESTERDAY, text: '- [ ] milk' },
+    { ...base, id: 'done', updatedAt: YESTERDAY, text: '- [x] milk' },
+    { ...base, id: 'fresh', updatedAt: NOW },
+    { ...base, id: 'pin', updatedAt: YESTERDAY, pinned: true },
+  ];
+
+  const repo = {
+    listActive: async () => active,
+    listTrashed: async () => [{ ...base, id: 'gone', trashedAt: 1 }],
+    listByTag: async (tag: string) => (tag === 'work' ? [active[1]!] : []),
+    allTagRows: async () => [{ noteId: 'tagged', tag: 'work' }],
+  };
+
+  const ids = async (scope: NoteScope) =>
+    (await listForScope(scope, repo, () => NOW)).map((n) => n.id);
+
+  it('returns every active note for all', async () => {
+    expect(await ids(ACTIVE_SCOPE)).toEqual(active.map((n) => n.id));
+  });
+
+  it('returns only trashed notes for trash', async () => {
+    expect(await ids(TRASHED_SCOPE)).toEqual(['gone']);
+  });
+
+  it('excludes notes carrying a tag from untagged', async () => {
+    expect(await ids(smartScope('untagged'))).not.toContain('tagged');
+  });
+
+  it('keeps untagged notes in untagged', async () => {
+    expect(await ids(smartScope('untagged'))).toContain('plain');
+  });
+
+  it('returns only notes with an unchecked task for todo', async () => {
+    expect(await ids(smartScope('todo'))).toEqual(['todo']);
+  });
+
+  it('returns only notes updated today for today', async () => {
+    expect(await ids(smartScope('today'))).toEqual(['fresh']);
+  });
+
+  it('returns only pinned notes for pinned', async () => {
+    expect(await ids(smartScope('pinned'))).toEqual(['pin']);
+  });
+
+  it('returns nothing for locked', async () => {
+    expect(await ids(smartScope('locked'))).toEqual([]);
+  });
+
+  it('delegates a tag scope to the repository', async () => {
+    expect(await ids(tagScope('work'))).toEqual(['tagged']);
+  });
+
+  it('does not read the tag index for lists that do not need it', async () => {
+    // allTagRows is a full table scan. Only `untagged` needs it, and paying
+    // for it on every scope switch would be a needless second scan.
+    let calls = 0;
+    const counting = {
+      ...repo,
+      allTagRows: async () => {
+        calls += 1;
+        return repo.allTagRows();
+      },
+    };
+    await listForScope(smartScope('todo'), counting, () => NOW);
+    expect(calls).toBe(0);
+    await listForScope(smartScope('untagged'), counting, () => NOW);
+    expect(calls).toBe(1);
   });
 });

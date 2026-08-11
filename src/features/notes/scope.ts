@@ -1,6 +1,8 @@
 import { notes } from '@/data';
 import type { Note, NotesRepository } from '@/data';
 
+import { SMART_LIST_PREDICATES } from './smartLists';
+
 /**
  * The builtin lists. Adding one means adding an id here and a row to
  * `SMART_LIST_IDS` — never a new arm on `NoteScope`, and never a new
@@ -95,17 +97,37 @@ export function acceptsNewNote(scope: NoteScope): boolean {
 }
 
 /** Narrowed for injection in tests. */
-export type ScopeLister = Pick<NotesRepository, 'listActive' | 'listTrashed' | 'listByTag'>;
+export type ScopeLister = Pick<
+  NotesRepository,
+  'listActive' | 'listTrashed' | 'listByTag' | 'allTagRows'
+>;
+
+/** Lists whose predicate reads `ctx.tagged`, and so must pay for the index scan. */
+const NEEDS_TAG_INDEX: ReadonlySet<string> = new Set(['untagged']);
 
 /**
- * Ordering comes from the repository and is not re-sorted here.
- *
- * Task 4 replaces the smart-list arm with real predicate filtering. Until then
- * every non-trash builtin behaves as All Notes, which is exactly today's
- * behaviour for the only two builtins that exist.
+ * Ordering comes from the repository and is never re-sorted here: every lister
+ * returns its own order, and pinned-first ordering lives in the repository so
+ * it applies to the tag scope too.
  */
-export function listForScope(scope: NoteScope, repository: ScopeLister = notes): Promise<Note[]> {
+export async function listForScope(
+  scope: NoteScope,
+  repository: ScopeLister = notes,
+  now: () => number = Date.now,
+): Promise<Note[]> {
   if (scope.kind === 'tag') return repository.listByTag(scope.tag);
   if (scope.list === 'trash') return repository.listTrashed();
-  return repository.listActive();
+
+  const list = await repository.listActive();
+
+  // Only `untagged` reads the index, and `allTagRows` is a full table scan.
+  // Paying for it on every scope switch would double the work for six of the
+  // seven builtins.
+  const tagged = NEEDS_TAG_INDEX.has(scope.list)
+    ? new Set((await repository.allTagRows()).map((row) => row.noteId))
+    : new Set<string>();
+
+  const predicate = SMART_LIST_PREDICATES[scope.list];
+  const ctx = { tagged, now: now() };
+  return list.filter((note) => predicate(note, ctx));
 }
