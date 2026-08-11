@@ -1,12 +1,31 @@
 import type { ReactElement } from 'react';
 
 import type { Note } from '@/data';
+import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
 
 import { NoteListItem } from './NoteListItem';
-import type { NoteScope } from './scope';
+import { allowsTrash, isTrash, type NoteScope } from './scope';
+
+/**
+ * Locked gets its own copy deliberately. "No notes" would tell a user their
+ * locked notes are missing; the truth is the feature does not exist yet.
+ */
+function isLocked(scope: NoteScope): boolean {
+  return scope.kind === 'smart' && scope.list === 'locked';
+}
+
+function emptyTitle(scope: NoteScope): TranslationKey {
+  if (isLocked(scope)) return 'locked.empty.title';
+  return isTrash(scope) ? 'trash.empty.title' : 'noteList.empty.title';
+}
+
+function emptyBody(scope: NoteScope): TranslationKey {
+  if (isLocked(scope)) return 'locked.empty.body';
+  return isTrash(scope) ? 'trash.empty.body' : 'noteList.empty.body';
+}
 
 export interface NoteListProps {
   scope: NoteScope;
@@ -17,6 +36,9 @@ export interface NoteListProps {
   onCreate: () => void;
   onTrash: (id: string) => void;
   onRestore: (id: string) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
+  onPurge: (id: string) => void;
+  onEmptyTrash: () => void;
 }
 
 export function NoteList({
@@ -27,6 +49,9 @@ export function NoteList({
   onCreate,
   onTrash,
   onRestore,
+  onTogglePin,
+  onPurge,
+  onEmptyTrash,
 }: NoteListProps): ReactElement {
   const t = useT();
 
@@ -35,21 +60,32 @@ export function NoteList({
       <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-2">
         <Button onClick={onCreate}>{t('noteList.create')}</Button>
 
-        {selectedNoteId !== null && scope.kind !== 'trashed' && (
+        {selectedNoteId !== null && allowsTrash(scope) && (
           <Button onClick={() => onTrash(selectedNoteId)}>{t('noteList.trash')}</Button>
         )}
-        {selectedNoteId !== null && scope.kind === 'trashed' && (
+        {selectedNoteId !== null && isTrash(scope) && (
           <Button onClick={() => onRestore(selectedNoteId)}>{t('noteList.restore')}</Button>
+        )}
+        {selectedNoteId !== null && isTrash(scope) && (
+          <Button variant="danger" onClick={() => onPurge(selectedNoteId)}>
+            {t('noteList.deleteForever')}
+          </Button>
+        )}
+        {isTrash(scope) && (
+          <Button
+            variant="danger"
+            disabled={items === undefined || items.length === 0}
+            onClick={onEmptyTrash}
+          >
+            {t('noteList.emptyTrash')}
+          </Button>
         )}
       </div>
 
       {/* `undefined` is "not loaded yet", not "empty": showing the empty state
           during the first frame would flash "No notes" on every reload. */}
       {items === undefined ? null : items.length === 0 ? (
-        <EmptyState
-          title={scope.kind === 'trashed' ? t('trash.empty.title') : t('noteList.empty.title')}
-          body={scope.kind === 'trashed' ? t('trash.empty.body') : t('noteList.empty.body')}
-        />
+        <EmptyState title={t(emptyTitle(scope))} body={t(emptyBody(scope))} />
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto">
           {items.map((note) => (
@@ -58,6 +94,7 @@ export function NoteList({
               note={note}
               selected={note.id === selectedNoteId}
               onSelect={() => onSelect(note.id)}
+              onTogglePin={onTogglePin}
             />
           ))}
         </ul>

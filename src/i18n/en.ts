@@ -14,19 +14,40 @@ export const en = {
   'editor.empty.title': 'No note selected',
   'editor.empty.body': 'Choose a note from the list, or create one.',
 
-  'scope.label': 'Note scopes',
-  'scope.notes': 'Notes',
-  'scope.trash': 'Trash',
+  'smartList.label': 'Lists',
+  'smartList.all': 'Notes',
+  'smartList.untagged': 'Untagged',
+  'smartList.todo': 'Todo',
+  'smartList.today': 'Today',
+  'smartList.pinned': 'Pinned',
+  'smartList.locked': 'Locked',
+  'smartList.trash': 'Trash',
+
+  'locked.empty.title': 'Locked notes are not available yet',
+  'locked.empty.body':
+    'Encryption needs a passphrase and a way to recover it, so it is not built yet. Nothing of yours is hidden here.',
 
   'tags.label': 'Tags',
   'tags.toggle': 'Expand or collapse',
 
   'note.untitled': 'Untitled',
   'note.noText': 'No additional text',
+  'note.pin': 'Pin note',
+  'note.unpin': 'Unpin note',
 
   'noteList.create': 'New note',
   'noteList.trash': 'Delete',
   'noteList.restore': 'Restore',
+  'noteList.deleteForever': 'Delete forever',
+  'noteList.emptyTrash': 'Empty trash',
+
+  'confirm.cancel': 'Cancel',
+  'confirm.deleteForever.title': 'Delete this note forever?',
+  'confirm.deleteForever.body':
+    'This note will be removed permanently. bear-web keeps no copy anywhere else, so this cannot be undone.',
+  'confirm.emptyTrash.title': 'Empty the trash?',
+  'confirm.emptyTrash.body':
+    'Every note in the trash will be removed permanently. bear-web keeps no copy anywhere else, so this cannot be undone.',
 
   'trash.empty.title': 'Trash is empty',
   'trash.empty.body': 'Notes you delete appear here until you remove them for good.',

@@ -2,7 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Note } from '@/data';
 
-import { ACTIVE_SCOPE, listForScope, scopeKey, tagScope, TRASHED_SCOPE } from './scope';
+import {
+  ACTIVE_SCOPE,
+  acceptsNewNote,
+  allowsTrash,
+  isTrash,
+  listForScope,
+  type NoteScope,
+  scopeKey,
+  seedTagFor,
+  smartScope,
+  SMART_LIST_IDS,
+  type SmartListId,
+  tagScope,
+  TRASHED_SCOPE,
+} from './scope';
 
 const note = (id: string): Note => ({
   id,
@@ -20,13 +34,14 @@ function lister() {
     listActive: vi.fn(async () => [note('active')]),
     listTrashed: vi.fn(async () => [note('trashed')]),
     listByTag: vi.fn(async () => [note('tagged')]),
+    allTagRows: vi.fn(async () => []),
   };
 }
 
 describe('scopeKey', () => {
   it('is stable for each scope', () => {
-    expect(scopeKey(ACTIVE_SCOPE)).toBe('active');
-    expect(scopeKey(TRASHED_SCOPE)).toBe('trashed');
+    expect(scopeKey(ACTIVE_SCOPE)).toBe('smart:all');
+    expect(scopeKey(TRASHED_SCOPE)).toBe('smart:trash');
     expect(scopeKey(tagScope('work/urgent'))).toBe('tag:work/urgent');
   });
 
@@ -55,5 +70,140 @@ describe('listForScope', () => {
     const repo = lister();
     await expect(listForScope(tagScope('work/urgent'), repo)).resolves.toEqual([note('tagged')]);
     expect(repo.listByTag).toHaveBeenCalledWith('work/urgent');
+  });
+});
+
+describe('capabilities', () => {
+  // Exhaustive over SmartListId. A new smart list added without a ruling on
+  // its capabilities fails here rather than silently inheriting a default —
+  // this is the assertion that would have caught the M5 defect where a new
+  // union arm rendered no delete affordance at all.
+  const EXPECTED: Record<SmartListId, { trash: boolean; allowsTrash: boolean; accepts: boolean }> =
+    {
+      all: { trash: false, allowsTrash: true, accepts: true },
+      untagged: { trash: false, allowsTrash: true, accepts: true },
+      todo: { trash: false, allowsTrash: true, accepts: false },
+      today: { trash: false, allowsTrash: true, accepts: true },
+      pinned: { trash: false, allowsTrash: true, accepts: false },
+      locked: { trash: false, allowsTrash: false, accepts: false },
+      trash: { trash: true, allowsTrash: false, accepts: false },
+    };
+
+  it('covers every smart list', () => {
+    expect(Object.keys(EXPECTED).sort()).toEqual([...SMART_LIST_IDS].sort());
+  });
+
+  for (const list of SMART_LIST_IDS) {
+    it(`rules on ${list}`, () => {
+      const scope = smartScope(list);
+      expect(isTrash(scope)).toBe(EXPECTED[list].trash);
+      expect(allowsTrash(scope)).toBe(EXPECTED[list].allowsTrash);
+      expect(acceptsNewNote(scope)).toBe(EXPECTED[list].accepts);
+      expect(seedTagFor(scope)).toBeNull();
+    });
+  }
+
+  it('treats a tag scope as ordinary and seedable', () => {
+    const scope = tagScope('work');
+    expect(isTrash(scope)).toBe(false);
+    expect(allowsTrash(scope)).toBe(true);
+    expect(acceptsNewNote(scope)).toBe(true);
+    expect(seedTagFor(scope)).toBe('work');
+  });
+
+  it('keeps the builtin constants pointing at the right lists', () => {
+    expect(scopeKey(ACTIVE_SCOPE)).toBe('smart:all');
+    expect(scopeKey(TRASHED_SCOPE)).toBe('smart:trash');
+  });
+
+  it('does not let a tag collide with a builtin name', () => {
+    expect(scopeKey(tagScope('all'))).not.toBe(scopeKey(ACTIVE_SCOPE));
+  });
+});
+
+describe('listForScope over smart lists', () => {
+  const base = {
+    id: '',
+    title: '',
+    text: '',
+    createdAt: 0,
+    updatedAt: 0,
+    pinned: false,
+    trashedAt: null,
+    archivedAt: null,
+  };
+  const NOW = new Date(2026, 7, 11, 12, 0, 0).getTime();
+  const YESTERDAY = new Date(2026, 7, 10, 12, 0, 0).getTime();
+
+  const active = [
+    { ...base, id: 'plain', updatedAt: YESTERDAY },
+    { ...base, id: 'tagged', updatedAt: YESTERDAY, text: 'see #work' },
+    { ...base, id: 'todo', updatedAt: YESTERDAY, text: '- [ ] milk' },
+    { ...base, id: 'done', updatedAt: YESTERDAY, text: '- [x] milk' },
+    { ...base, id: 'fresh', updatedAt: NOW },
+    { ...base, id: 'pin', updatedAt: YESTERDAY, pinned: true },
+  ];
+
+  const repo = {
+    listActive: async () => active,
+    listTrashed: async () => [{ ...base, id: 'gone', trashedAt: 1 }],
+    listByTag: async (tag: string) => (tag === 'work' ? [active[1]!] : []),
+    allTagRows: async () => [{ noteId: 'tagged', tag: 'work' }],
+  };
+
+  const ids = async (scope: NoteScope) =>
+    (await listForScope(scope, repo, () => NOW)).map((n) => n.id);
+
+  it('returns every active note for all', async () => {
+    expect(await ids(ACTIVE_SCOPE)).toEqual(active.map((n) => n.id));
+  });
+
+  it('returns only trashed notes for trash', async () => {
+    expect(await ids(TRASHED_SCOPE)).toEqual(['gone']);
+  });
+
+  it('excludes notes carrying a tag from untagged', async () => {
+    expect(await ids(smartScope('untagged'))).not.toContain('tagged');
+  });
+
+  it('keeps untagged notes in untagged', async () => {
+    expect(await ids(smartScope('untagged'))).toContain('plain');
+  });
+
+  it('returns only notes with an unchecked task for todo', async () => {
+    expect(await ids(smartScope('todo'))).toEqual(['todo']);
+  });
+
+  it('returns only notes updated today for today', async () => {
+    expect(await ids(smartScope('today'))).toEqual(['fresh']);
+  });
+
+  it('returns only pinned notes for pinned', async () => {
+    expect(await ids(smartScope('pinned'))).toEqual(['pin']);
+  });
+
+  it('returns nothing for locked', async () => {
+    expect(await ids(smartScope('locked'))).toEqual([]);
+  });
+
+  it('delegates a tag scope to the repository', async () => {
+    expect(await ids(tagScope('work'))).toEqual(['tagged']);
+  });
+
+  it('does not read the tag index for lists that do not need it', async () => {
+    // allTagRows is a full table scan. Only `untagged` needs it, and paying
+    // for it on every scope switch would be a needless second scan.
+    let calls = 0;
+    const counting = {
+      ...repo,
+      allTagRows: async () => {
+        calls += 1;
+        return repo.allTagRows();
+      },
+    };
+    await listForScope(smartScope('todo'), counting, () => NOW);
+    expect(calls).toBe(0);
+    await listForScope(smartScope('untagged'), counting, () => NOW);
+    expect(calls).toBe(1);
   });
 });

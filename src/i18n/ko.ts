@@ -16,19 +16,40 @@ export const ko: Record<TranslationKey, string> = {
   'editor.empty.title': '선택된 메모 없음',
   'editor.empty.body': '목록에서 메모를 선택하거나 새로 만드세요.',
 
-  'scope.label': '메모 범위',
-  'scope.notes': '메모',
-  'scope.trash': '휴지통',
+  'smartList.label': '목록',
+  'smartList.all': '메모',
+  'smartList.untagged': '태그 없음',
+  'smartList.todo': '해야 할 일',
+  'smartList.today': '오늘',
+  'smartList.pinned': '고정됨',
+  'smartList.locked': '잠긴 항목',
+  'smartList.trash': '휴지통',
+
+  'locked.empty.title': '잠긴 메모는 아직 사용할 수 없습니다',
+  'locked.empty.body':
+    '암호화에는 암호와 복구 수단이 필요해서 아직 구현하지 않았습니다. 여기에 숨겨진 메모는 없습니다.',
 
   'tags.label': '태그',
   'tags.toggle': '펼치기 또는 접기',
 
   'note.untitled': '제목 없음',
   'note.noText': '추가 내용 없음',
+  'note.pin': '메모 고정',
+  'note.unpin': '고정 해제',
 
   'noteList.create': '새 메모',
   'noteList.trash': '삭제',
   'noteList.restore': '복원',
+  'noteList.deleteForever': '완전히 삭제',
+  'noteList.emptyTrash': '휴지통 비우기',
+
+  'confirm.cancel': '취소',
+  'confirm.deleteForever.title': '이 메모를 완전히 삭제할까요?',
+  'confirm.deleteForever.body':
+    '이 메모는 영구적으로 삭제됩니다. bear-web은 다른 어디에도 사본을 두지 않으므로 되돌릴 수 없습니다.',
+  'confirm.emptyTrash.title': '휴지통을 비울까요?',
+  'confirm.emptyTrash.body':
+    '휴지통의 모든 메모가 영구적으로 삭제됩니다. bear-web은 다른 어디에도 사본을 두지 않으므로 되돌릴 수 없습니다.',
 
   'trash.empty.title': '휴지통이 비어 있습니다',
   'trash.empty.body': '삭제한 메모는 완전히 지우기 전까지 여기에 있습니다.',

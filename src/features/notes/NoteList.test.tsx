@@ -6,7 +6,7 @@ import type { Note } from '@/data';
 import { renderWithI18n } from '@/i18n/testing';
 
 import { NoteList, type NoteListProps } from './NoteList';
-import { ACTIVE_SCOPE, tagScope, TRASHED_SCOPE } from './scope';
+import { ACTIVE_SCOPE, smartScope, tagScope, TRASHED_SCOPE } from './scope';
 
 function makeNote(id: string, title: string): Note {
   return {
@@ -30,6 +30,9 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
     onCreate: vi.fn(),
     onTrash: vi.fn(),
     onRestore: vi.fn(),
+    onTogglePin: vi.fn(),
+    onPurge: vi.fn(),
+    onEmptyTrash: vi.fn(),
     ...overrides,
   };
 }
@@ -109,6 +112,25 @@ describe('NoteList', () => {
     expect(onTrash).toHaveBeenCalledWith('a');
   });
 
+  it('renders no destructive affordance in a locked scope, even with a note selected', () => {
+    // Forced deliberately: Locked is permanently empty in the app, so
+    // `selectedNoteId` is always null there and an app-level assertion passes
+    // for free whatever `allowsTrash` returns. Driving `NoteList` directly is
+    // what makes this able to fail, and it is the unit that owns the gate.
+    renderWithI18n(<NoteList {...props({ scope: smartScope('locked'), selectedNoteId: 'a' })} />);
+
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
+  });
+
+  it('renders Delete in an ordinary scope with a note selected', () => {
+    // The paired positive case. Without it, a gate that hides Delete
+    // everywhere would pass the test above.
+    renderWithI18n(<NoteList {...props({ scope: ACTIVE_SCOPE, selectedNoteId: 'a' })} />);
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+  });
+
   it('offers restore instead of delete in the trashed scope', async () => {
     const onRestore = vi.fn();
     const user = userEvent.setup();
@@ -121,5 +143,54 @@ describe('NoteList', () => {
     await user.click(screen.getByRole('button', { name: 'Restore' }));
 
     expect(onRestore).toHaveBeenCalledWith('a');
+  });
+
+  it('offers delete forever and empty trash only in the trashed scope', () => {
+    renderWithI18n(<NoteList {...props({ scope: ACTIVE_SCOPE, selectedNoteId: 'a' })} />);
+
+    expect(screen.queryByRole('button', { name: 'Delete forever' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Empty trash' })).not.toBeInTheDocument();
+  });
+
+  it('offers delete forever for a selected note in the trashed scope', async () => {
+    const onPurge = vi.fn();
+    const user = userEvent.setup();
+
+    renderWithI18n(<NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: 'a', onPurge })} />);
+
+    await user.click(screen.getByRole('button', { name: 'Delete forever' }));
+
+    expect(onPurge).toHaveBeenCalledWith('a');
+  });
+
+  it('does not offer delete forever in the trashed scope with nothing selected', () => {
+    renderWithI18n(<NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: null })} />);
+
+    expect(screen.queryByRole('button', { name: 'Delete forever' })).not.toBeInTheDocument();
+  });
+
+  it('offers empty trash in the trashed scope regardless of selection', async () => {
+    const onEmptyTrash = vi.fn();
+    const user = userEvent.setup();
+
+    renderWithI18n(
+      <NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: null, onEmptyTrash })} />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Empty trash' });
+    expect(button).toBeEnabled();
+    await user.click(button);
+
+    expect(onEmptyTrash).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables empty trash while loading and when the trash is empty', () => {
+    const { rerender } = renderWithI18n(
+      <NoteList {...props({ scope: TRASHED_SCOPE, items: undefined })} />,
+    );
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
+
+    rerender(<NoteList {...props({ scope: TRASHED_SCOPE, items: [] })} />);
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
   });
 });

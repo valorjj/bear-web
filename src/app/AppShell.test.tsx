@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -47,6 +47,16 @@ function renderShell() {
   );
 }
 
+// Creates a note via "New note" and types `text` into its editor, leaving it
+// selected. Used by the destructive-action tests below, which need a real
+// title in the trash list rather than "Untitled".
+async function createNoteWithText(text: string) {
+  await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+  const editor = await screen.findByRole('textbox');
+  await userEvent.click(editor);
+  await userEvent.type(editor, text);
+}
+
 describe('AppShell', () => {
   it('renders all three panes as labelled regions', () => {
     renderShell();
@@ -59,8 +69,15 @@ describe('AppShell', () => {
   it('shows the scope rows in the sidebar and empty states elsewhere', async () => {
     renderShell();
 
-    expect(screen.getByRole('button', { name: en['scope.notes'] })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: en['scope.trash'] })).toBeInTheDocument();
+    // These rows now carry a live count alongside the label ("Notes 0"), so
+    // the accessible name is matched by prefix rather than exact string —
+    // the count itself is not what this test is about.
+    expect(
+      screen.getByRole('button', { name: new RegExp(`^${en['smartList.all']}\\b`) }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: new RegExp(`^${en['smartList.trash']}\\b`) }),
+    ).toBeInTheDocument();
     expect(screen.getByText(en['editor.empty.title'])).toBeInTheDocument();
 
     // The note list renders nothing until the live query resolves, so that a
@@ -129,11 +146,11 @@ describe('AppShell notes', () => {
       expect(screen.queryByRole('button', { name: /Groceries/ })).not.toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Trash' }));
+    await user.click(screen.getByRole('button', { name: /^Trash\b/ }));
     await user.click(await screen.findByRole('button', { name: /Groceries/ }));
     await user.click(screen.getByRole('button', { name: 'Restore' }));
 
-    await user.click(screen.getByRole('button', { name: 'Notes' }));
+    await user.click(screen.getByRole('button', { name: /^Notes\b/ }));
     expect(await screen.findByRole('button', { name: /Groceries/ })).toBeInTheDocument();
   });
 
@@ -180,11 +197,14 @@ describe('AppShell notes', () => {
     const user = userEvent.setup();
     renderShell();
 
-    await user.click(screen.getByRole('button', { name: 'Trash' }));
+    await user.click(screen.getByRole('button', { name: /^Trash\b/ }));
     await user.click(screen.getByRole('button', { name: 'New note' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Notes' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
     });
   });
 
@@ -220,6 +240,46 @@ describe('AppShell notes', () => {
     await user.click(await screen.findByRole('button', { name: /Second note/ }));
     expect(await screen.findByRole('textbox', { name: 'Note text' })).toHaveTextContent(
       'Second note text',
+    );
+  });
+
+  it('shows a Phase 2 explanation in Locked, not "no notes"', async () => {
+    await renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Locked\b/ }));
+
+    // A user who sees "No notes" here concludes their locked notes were lost.
+    expect(await screen.findByText('Locked notes are not available yet')).toBeInTheDocument();
+    expect(screen.queryByText('No notes')).not.toBeInTheDocument();
+  });
+
+  it('bounces to Notes when creating inside a list that could not show the note', async () => {
+    await renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Pinned\b/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+
+    // A note created in Pinned is not pinned, so it would vanish instantly.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
+  });
+
+  it('stays put when creating inside a list that can show the note', async () => {
+    await renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Untagged\b/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+
+    // A new note genuinely has no tags, so Untagged can hold it.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Untagged\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
     );
   });
 });
@@ -273,7 +333,10 @@ describe('tag scopes', () => {
     await notes.save(note.id, 'alpha');
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Notes' })).toHaveAttribute('aria-current', 'page'),
+      expect(screen.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
     );
   });
 
@@ -291,9 +354,9 @@ describe('tag scopes', () => {
     // this test actually checks is the ordinary, always-reachable path: after
     // a tag is selected, the "Notes" row must not spuriously regain
     // `aria-current`.
-    expect(screen.getByRole('button', { name: 'Notes' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: /^Notes\b/ })).not.toHaveAttribute('aria-current');
     await screen.findByRole('button', { name: /^alpha\b/ });
-    expect(screen.getByRole('button', { name: 'Notes' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: /^Notes\b/ })).not.toHaveAttribute('aria-current');
   });
 
   // The seed is keyed by id, so re-selecting the same just-created note keeps
@@ -322,7 +385,7 @@ describe('tag scopes', () => {
     await userEvent.click(screen.getByRole('button', { name: 'New note' }));
     const created = await screen.findByRole('textbox');
     // The just-created note's row is the only one with `aria-current="true"`
-    // (`ScopeSidebar`/`TagSidebar` rows use `aria-current="page"`), which
+    // (`SmartListSidebar`/`TagSidebar` rows use `aria-current="page"`), which
     // identifies it without depending on its title text.
     const createdRow = screen.getByRole('button', { current: true });
 
@@ -356,5 +419,114 @@ describe('tag scopes', () => {
     await userEvent.click(keeperRow);
 
     await waitFor(() => expect(purge).not.toHaveBeenCalled());
+  });
+});
+
+describe('trash management', () => {
+  it('purges a single note only after confirmation', async () => {
+    await renderShell();
+    await createNoteWithText('doomed');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Trash/ }));
+    // Anchored on the list row's accessible name, not `getByText`: the
+    // just-created note's own editor also renders "doomed" as its
+    // contenteditable content, so a bare text query matches both and throws
+    // for being ambiguous. Same convention as the tag-scope tests above.
+    await userEvent.click(await screen.findByRole('button', { name: /^doomed/ }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
+
+    // Still there — the dialog is open and nothing has happened yet.
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^doomed/ })).toBeInTheDocument();
+
+    await userEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete forever' }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^doomed/ })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('leaves the note alone when the confirmation is cancelled', async () => {
+    await renderShell();
+    await createNoteWithText('spared');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Trash/ }));
+    // See the identical comment above: anchored on the row, not `getByText`.
+    await userEvent.click(await screen.findByRole('button', { name: /^spared/ }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
+    await userEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }),
+    );
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^spared/ })).toBeInTheDocument();
+  });
+
+  it('does not purge twice when confirm is clicked twice rapidly', async () => {
+    await renderShell();
+    await createNoteWithText('doubled');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Trash/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^doubled/ }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
+    const confirmButton = within(await screen.findByRole('alertdialog')).getByRole('button', {
+      name: 'Delete forever',
+    });
+
+    const purgeSpy = vi.spyOn(notes, 'purge');
+
+    // `fireEvent`, not `userEvent`: both clicks must land synchronously,
+    // before `confirmPending`'s first `await notes.purge(...)` resolves —
+    // the same double-fire race the "New note" guard above exists for.
+    // `confirmPending` clears `pending` BEFORE awaiting specifically so this
+    // second click sees a closed dialog and does nothing; clearing it AFTER
+    // awaiting would let this click read the same stale `pending` and start
+    // a second purge of the same note.
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => expect(purgeSpy).toHaveBeenCalledTimes(1));
+  });
+
+  it('disables Empty trash when the trash is empty', async () => {
+    await renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Trash/ }));
+
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
+  });
+
+  it('empties the trash after confirmation', async () => {
+    await renderShell();
+    await createNoteWithText('one');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Trash/ }));
+
+    const emptyTrash = await screen.findByRole('button', { name: 'Empty trash' });
+    await waitFor(() => expect(emptyTrash).toBeEnabled());
+    await userEvent.click(emptyTrash);
+
+    await userEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Empty trash' }),
+    );
+
+    await waitFor(() => expect(screen.queryByText('one')).not.toBeInTheDocument());
+  });
+
+  it('offers neither destructive trash action outside the trash', async () => {
+    await renderShell();
+    await createNoteWithText('safe');
+
+    expect(screen.queryByRole('button', { name: 'Delete forever' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Empty trash' })).not.toBeInTheDocument();
   });
 });

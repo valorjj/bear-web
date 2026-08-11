@@ -293,6 +293,47 @@ describe('notesRepository', () => {
     });
   });
 
+  describe('pinned ordering', () => {
+    it('puts pinned notes first in listActive, newest-first within each group', async () => {
+      let clock = 1000;
+      const repo = createNotesRepository({ db, parseTags, now: () => (clock += 10) });
+
+      const old = await repo.create('old');
+      const mid = await repo.create('mid');
+      const recent = await repo.create('recent');
+      await repo.setPinned(old.id, true);
+
+      const ids = (await repo.listActive()).map((n) => n.id);
+      expect(ids[0]).toBe(old.id);
+      expect(ids.slice(1)).toEqual([recent.id, mid.id]);
+    });
+
+    it('puts pinned notes first in listByTag', async () => {
+      let clock = 1000;
+      const repo = createNotesRepository({ db, parseTags, now: () => (clock += 10) });
+
+      const a = await repo.create('a #work');
+      const b = await repo.create('b #work');
+      await repo.setPinned(a.id, true);
+
+      expect((await repo.listByTag('work')).map((n) => n.id)).toEqual([a.id, b.id]);
+    });
+
+    it('leaves listTrashed ordered by deletion time, ignoring pinned', async () => {
+      let clock = 1000;
+      const repo = createNotesRepository({ db, parseTags, now: () => (clock += 10) });
+
+      const first = await repo.create('first');
+      const second = await repo.create('second');
+      await repo.setPinned(first.id, true);
+      await repo.trash(first.id);
+      await repo.trash(second.id);
+
+      // Most recently trashed first, regardless of pin.
+      expect((await repo.listTrashed())[0]!.id).toBe(second.id);
+    });
+  });
+
   describe('rebuild determinism', () => {
     it('produces an identical row set when run twice', async () => {
       const repo = createNotesRepository({ db, parseTags });

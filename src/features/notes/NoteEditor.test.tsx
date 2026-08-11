@@ -170,6 +170,31 @@ describe('NoteEditor', () => {
     });
   });
 
+  it('does not purge a blank note that has been trashed', async () => {
+    // Delete must mean the same thing everywhere. Before M6 the unmount discard
+    // purged a blank note the instant it was trashed, so the same button was
+    // recoverable or not depending on invisible state.
+    const note = await notes.create('');
+    await notes.trash(note.id);
+
+    const { unmount } = renderWithI18n(<NoteEditor note={(await notes.get(note.id))!} />);
+    unmount();
+
+    await waitFor(async () => expect(await notes.get(note.id)).toBeDefined());
+    expect((await notes.get(note.id))!.trashedAt).not.toBeNull();
+  });
+
+  it('still purges a blank note that was never trashed', async () => {
+    // The reclaim path must survive: navigating away from an untouched blank
+    // note still discards it.
+    const note = await notes.create('');
+
+    const { unmount } = renderWithI18n(<NoteEditor note={note} />);
+    unmount();
+
+    await waitFor(async () => expect(await notes.get(note.id)).toBeUndefined());
+  });
+
   it('shows an inline message when a save fails, keeps the text on screen, and recovers once saves succeed again', async () => {
     const note = await notes.create('');
     const user = userEvent.setup();

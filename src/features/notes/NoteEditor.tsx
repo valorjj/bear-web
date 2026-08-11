@@ -109,6 +109,16 @@ export function NoteEditor({ note, seedText }: NoteEditorProps): ReactElement {
 
   const discard = useCallback(async () => {
     if (hadTextAtMountRef.current && !editedRef.current) return;
+
+    // A trashed note lives in the user's Trash and stays there. Without this,
+    // the Delete button purged a blank note outright while trashing every
+    // other note — one button, two irreversibilities, decided by state the
+    // user cannot see. M6 ruled that Delete always trashes; this is that
+    // ruling. The reclaim path for a blank note the user simply navigates
+    // away from is untouched.
+    const current = await notes.get(note.id);
+    if (current === undefined || current.trashedAt !== null) return;
+
     await notes.purge(note.id);
   }, [note.id]);
 

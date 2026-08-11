@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Button } from './Button';
+import { ConfirmDialog } from './ConfirmDialog';
 import { EmptyState } from './EmptyState';
 import { Pane } from './Pane';
 import { Resizer } from './Resizer';
@@ -285,5 +286,90 @@ describe('SidebarRow', () => {
     });
 
     expect(screen.getByRole('button', { name: /Urgent/ })).toBeInTheDocument();
+  });
+});
+
+describe('ConfirmDialog', () => {
+  const props = {
+    open: true,
+    title: 'Delete forever?',
+    body: 'This cannot be undone.',
+    confirmLabel: 'Delete forever',
+    cancelLabel: 'Cancel',
+    onConfirm: vi.fn(),
+    onCancel: vi.fn(),
+  };
+
+  it('renders nothing when closed', () => {
+    render(<ConfirmDialog {...props} open={false} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('exposes an alertdialog labelled by its title', () => {
+    render(<ConfirmDialog {...props} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+
+    const dialog = screen.getByRole('alertdialog', { name: 'Delete forever?' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByText('This cannot be undone.')).toBeInTheDocument();
+  });
+
+  it('focuses cancel on open, not confirm', () => {
+    render(<ConfirmDialog {...props} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+
+    // An Enter keypress already in flight must not destroy anything.
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  });
+
+  it('confirms and cancels through their buttons', async () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    const { rerender } = render(
+      <ConfirmDialog {...props} onConfirm={onConfirm} onCancel={onCancel} />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+
+    rerender(<ConfirmDialog {...props} onConfirm={onConfirm} onCancel={onCancel} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels on Escape', async () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog {...props} onConfirm={vi.fn()} onCancel={onCancel} />);
+
+    await userEvent.keyboard('{Escape}');
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cancel on Escape when closed', async () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog {...props} open={false} onConfirm={vi.fn()} onCancel={onCancel} />);
+
+    await userEvent.keyboard('{Escape}');
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('traps Tab inside the dialog', async () => {
+    render(<ConfirmDialog {...props} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    const confirm = screen.getByRole('button', { name: 'Delete forever' });
+
+    expect(cancel).toHaveFocus();
+    await userEvent.tab();
+    expect(confirm).toHaveFocus();
+    // Wrapping is the trap: focus must not escape to the document body.
+    await userEvent.tab();
+    expect(cancel).toHaveFocus();
+  });
+
+  it('wraps backwards too', async () => {
+    render(<ConfirmDialog {...props} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(screen.getByRole('button', { name: 'Delete forever' })).toHaveFocus();
   });
 });

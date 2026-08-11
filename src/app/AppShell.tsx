@@ -3,14 +3,18 @@ import { type ReactElement, useCallback, useEffect, useRef, useState } from 'rea
 import { notes } from '@/data';
 import {
   ACTIVE_SCOPE,
+  acceptsNewNote,
   NoteEditor,
   NoteList,
   type NoteScope,
-  ScopeSidebar,
+  seedTagFor,
+  SmartListSidebar,
   useNotes,
+  useSmartListCounts,
 } from '@/features/notes';
 import { TagSidebar, type TagNode, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
+import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
 import { Pane } from '@/ui/Pane';
 import { Resizer } from '@/ui/Resizer';
@@ -25,6 +29,7 @@ export function AppShell(): ReactElement {
   const [scope, setScope] = useState<NoteScope>(ACTIVE_SCOPE);
   const { items, selectedNoteId, selectedNote, select } = useNotes(scope);
   const tree = useTagTree();
+  const counts = useSmartListCounts();
 
   // The text the just-created note was seeded with, so `NoteEditor` can treat
   // it as disposable. Cleared as soon as the selection moves elsewhere.
@@ -55,8 +60,9 @@ export function AppShell(): ReactElement {
       // A note created inside a tag scope carries that tag, so it belongs to
       // the list the user is looking at. The leading newline puts the caret on
       // the title line with the tag below it.
-      const seedText = scope.kind === 'tag' ? `\n#${scope.tag}` : '';
-      if (scope.kind === 'trashed') setScope(ACTIVE_SCOPE);
+      const tag = seedTagFor(scope);
+      const seedText = tag === null ? '' : `\n#${tag}`;
+      if (!acceptsNewNote(scope)) setScope(ACTIVE_SCOPE);
 
       const created = await notes.create(seedText);
       setSeed(seedText === '' ? null : { id: created.id, text: seedText });
@@ -95,11 +101,29 @@ export function AppShell(): ReactElement {
     await notes.restore(id);
   }, []);
 
+  const handleTogglePin = useCallback(async (id: string, pinned: boolean) => {
+    await notes.setPinned(id, pinned);
+  }, []);
+
+  // Which destructive action is awaiting confirmation, if any. A single piece
+  // of state rather than two booleans: the two dialogs are mutually exclusive
+  // and two flags could both be true.
+  const [pending, setPending] = useState<{ kind: 'purge'; id: string } | { kind: 'empty' } | null>(
+    null,
+  );
+
+  const confirmPending = useCallback(async () => {
+    if (pending === null) return;
+    setPending(null);
+    if (pending.kind === 'purge') await notes.purge(pending.id);
+    else await notes.emptyTrash();
+  }, [pending]);
+
   return (
     <main className="flex h-full w-full overflow-hidden bg-bg text-text">
       <Pane label={t('pane.sidebar')} width={widths.sidebarWidth} className="bg-sidebar">
         <div className="flex h-full flex-col overflow-y-auto">
-          <ScopeSidebar scope={scope} onScopeChange={setScope} />
+          <SmartListSidebar scope={scope} onScopeChange={setScope} counts={counts} />
           <TagSidebar
             nodes={tree.nodes}
             scope={scope}
@@ -128,6 +152,9 @@ export function AppShell(): ReactElement {
           onCreate={() => void handleCreate()}
           onTrash={(id) => void handleTrash(id)}
           onRestore={(id) => void handleRestore(id)}
+          onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
+          onPurge={(id) => setPending({ kind: 'purge', id })}
+          onEmptyTrash={() => setPending({ kind: 'empty' })}
         />
       </Pane>
 
@@ -154,6 +181,25 @@ export function AppShell(): ReactElement {
           />
         )}
       </Pane>
+
+      <ConfirmDialog
+        open={pending !== null}
+        destructive
+        title={
+          pending?.kind === 'empty'
+            ? t('confirm.emptyTrash.title')
+            : t('confirm.deleteForever.title')
+        }
+        body={
+          pending?.kind === 'empty' ? t('confirm.emptyTrash.body') : t('confirm.deleteForever.body')
+        }
+        confirmLabel={
+          pending?.kind === 'empty' ? t('noteList.emptyTrash') : t('noteList.deleteForever')
+        }
+        cancelLabel={t('confirm.cancel')}
+        onConfirm={() => void confirmPending()}
+        onCancel={() => setPending(null)}
+      />
     </main>
   );
 }
