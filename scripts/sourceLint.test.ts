@@ -209,3 +209,41 @@ describe('theme tokens', () => {
     expect(reduced.get('--bear-duration')).toBe('0ms');
   });
 });
+
+describe('focus', () => {
+  it('defines one global focus-visible ring driven by the focus token', () => {
+    const css = readFileSync('src/styles/index.css', 'utf8');
+    expect(css).toMatch(/:focus-visible\s*\{[^}]*outline:[^}]*var\(--bear-focus\)/);
+  });
+
+  /**
+   * Files permitted to suppress the focus outline, each mapped to a string
+   * that must appear in it proving it supplies its own indicator. A NEW
+   * suppressor fails this test — adding one means editing this map, which is
+   * reviewable.
+   */
+  const OUTLINE_SUPPRESSORS: Record<string, string> = {
+    // The accent hairline drawn on `group-focus-visible` is the indicator
+    // here. The default ring would frame an 8px invisible hit area instead.
+    'src/ui/Resizer.tsx': 'group-focus-visible:',
+    // The text caret is the focus indicator for a contenteditable surface; no
+    // editor rings its whole writing area. Recorded so the suppression is a
+    // decision rather than the accident it was until M5.5.
+    'src/features/editor/RichEditor.tsx': 'caret is the focus indicator',
+  };
+
+  it('lets only known files suppress the outline, each with a replacement', () => {
+    const suppressors = walk('src', ['.tsx'])
+      .filter((path) => !/\.test\.tsx$/.test(path))
+      .filter((path) => /outline-none/.test(readFileSync(path, 'utf8')));
+
+    expect(suppressors.sort()).toEqual(Object.keys(OUTLINE_SUPPRESSORS).sort());
+
+    for (const [path, marker] of Object.entries(OUTLINE_SUPPRESSORS)) {
+      expect(
+        readFileSync(path, 'utf8'),
+        `${path} suppresses the outline without documenting its replacement`,
+      ).toContain(marker);
+    }
+  });
+});

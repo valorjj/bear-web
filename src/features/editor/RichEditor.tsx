@@ -50,6 +50,9 @@ export function RichEditor({
       attributes: {
         role: 'textbox',
         'aria-label': ariaLabel,
+        // outline-none is intentional: the text caret is the focus indicator
+        // for a contenteditable surface, and no editor rings its whole
+        // writing area.
         class: 'min-h-0 flex-1 bg-bg px-6 py-4 text-sm text-text outline-none',
       },
     },
