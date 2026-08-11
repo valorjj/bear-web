@@ -6,7 +6,7 @@ import type { Note } from '@/data';
 import { renderWithI18n } from '@/i18n/testing';
 
 import { NoteList, type NoteListProps } from './NoteList';
-import { ACTIVE_SCOPE, tagScope, TRASHED_SCOPE } from './scope';
+import { ACTIVE_SCOPE, smartScope, tagScope, TRASHED_SCOPE } from './scope';
 
 function makeNote(id: string, title: string): Note {
   return {
@@ -107,6 +107,25 @@ describe('NoteList', () => {
     await user.click(trashButton);
 
     expect(onTrash).toHaveBeenCalledWith('a');
+  });
+
+  it('renders no destructive affordance in a locked scope, even with a note selected', () => {
+    // Forced deliberately: Locked is permanently empty in the app, so
+    // `selectedNoteId` is always null there and an app-level assertion passes
+    // for free whatever `allowsTrash` returns. Driving `NoteList` directly is
+    // what makes this able to fail, and it is the unit that owns the gate.
+    renderWithI18n(<NoteList {...props({ scope: smartScope('locked'), selectedNoteId: 'a' })} />);
+
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
+  });
+
+  it('renders Delete in an ordinary scope with a note selected', () => {
+    // The paired positive case. Without it, a gate that hides Delete
+    // everywhere would pass the test above.
+    renderWithI18n(<NoteList {...props({ scope: ACTIVE_SCOPE, selectedNoteId: 'a' })} />);
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
 
   it('offers restore instead of delete in the trashed scope', async () => {

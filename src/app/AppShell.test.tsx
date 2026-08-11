@@ -243,15 +243,6 @@ describe('AppShell notes', () => {
     expect(screen.queryByText('No notes')).not.toBeInTheDocument();
   });
 
-  it('renders no Delete button in Locked', async () => {
-    await renderShell();
-
-    await userEvent.click(await screen.findByRole('button', { name: /^Locked\b/ }));
-
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
-  });
-
   it('bounces to Notes when creating inside a list that could not show the note', async () => {
     await renderShell();
 
