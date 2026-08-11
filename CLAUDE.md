@@ -484,7 +484,14 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   queries would let rows land in seven different frames — the mechanism behind
   M5's collapsed-tag flash — and would let untagged plus tagged disagree with
   all. Its deps are constant `[]`, so the tag-and-verify pattern deliberately
-  does not apply.
+  does not apply. **This property is documented but not enforced.** Splitting
+  `useSmartListCounts` into two `useLiveQuery` calls leaves every test green —
+  jsdom resolves fast enough that the race never surfaces. Catching a
+  regression would need injected staggered resolution: mock `notes.listActive`
+  and `notes.allTagRows` with different delays and assert the hook never
+  renders a transient state where untagged plus tagged disagrees with all.
+  Same mechanism as M5's collapsed-tag flash, so it is a real property, just
+  an expensive one to pin.
 - **`useSmartListCounts` returns `undefined` while loading, never a
   zero-filled object.** Zeros render as "empty" rather than "not known yet".
 - **Pinned notes sort first in every list except Trash.** Trash is ordered by
@@ -496,7 +503,12 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   with no server copy, and an Enter keypress already in flight must not
   destroy anything. `window.confirm` was rejected: it ignores the theme, and
   some embedded contexts suppress it silently, turning a guarded delete into
-  an unguarded one.
+  an unguarded one. **The focus trap queries `'button'` specifically, which is
+  a gap, not a guarantee.** Any future non-button focusable inside the dialog —
+  a link, an input — is invisible to both the initial-focus effect and the
+  Tab-wrap arithmetic, so it would be skipped by the trap rather than held at
+  its edge. Harmless today with exactly two buttons; widen to a standard
+  focusable selector the moment a third element is added.
 - **The startup sweep's three content gates are load-bearing but not
   sufficient — a fourth, `createdBefore`, closes a real race.**
   `createdAt === updatedAt` makes a note the user has typed into unreachable
@@ -596,15 +608,30 @@ rediscovering them.
   merely add UI. M5.5's spec deferred editor typography deliberately.
 - **`NoteListItem`'s accessible name runs together.** Its three sibling spans —
   title, date, snippet — concatenate with no separator, so a row announces as
-  `"work note10:24some body text"`. Same root cause as the `SidebarRow`
+  `"work note10:24some body text"` (re-verified during M6 as
+  `"Groceries #work14:32milk"`). Same root cause as the `SidebarRow`
   regression M5.5 caught and reverted: JSX strips inter-element whitespace and
   accessible-name computation ignores CSS gaps. **Verified byte-identical
-  before and after M5.5, so it is pre-existing, not introduced.** Unlike the
-  `SidebarRow` case there is no separator to restore — title, date and snippet
-  want a visually-hidden separator or an explicit `aria-label`, which is a real
-  accessibility design decision rather than a bug fix. M6 owned the note list
-  and did not close this; it is carried forward from M6, not M5, and belongs
-  to whichever milestone next touches `NoteListItem`.
+  before and after M5.5, and again before and after M6, so it is pre-existing,
+  not introduced by either.** Unlike the `SidebarRow` case there is no
+  separator to restore — title, date and snippet want a visually-hidden
+  separator or an explicit `aria-label`, which is a real accessibility design
+  decision rather than a bug fix. M6 owned the note list and did not close
+  this; it is carried forward, and belongs to whichever milestone next touches
+  `NoteListItem`.
+- **`confirmPending` in `AppShell` clears its state and then awaits with no
+  `try`/`catch`.** A rejected `purge` or `emptyTrash` closes the dialog and
+  leaves the user believing the deletion succeeded. This matches the four
+  sibling handlers (`handleTrash`, `handleRestore`, `handleTogglePin`,
+  `handleCreate`), so it is a house pattern rather than a regression — but it
+  is the worst place in the app for it, because the action is destructive,
+  irreversible, and has no copy anywhere else. Worth raising to must-fix when
+  a milestone adds any error surface.
+- **The `current === undefined` half of `NoteEditor`'s `discard` condition is
+  untested.** Removing it leaves all 31 tests in that file green. It exists so
+  a double-discard is a no-op rather than a `TypeError`; `notes.purge` of a
+  missing id is already a documented no-op, so the consequence is small — but
+  a regression there would pass CI silently.
 - **An intermittent Playwright resize-test flake.** Seen once during M5.5, not
   reproducible afterwards across three consecutive full runs (18/18 each). Not
   actionable without a failing artifact, but worth naming because `jsdom` has
