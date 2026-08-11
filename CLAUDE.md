@@ -458,8 +458,10 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
 Real, deliberately deferred with a ruling. Full M3 reasoning is in
 `.superpowers/sdd/2026-08-08-m3-notes/progress.md`; full M4 reasoning is in
 `.superpowers/sdd/2026-08-09-m4-editor/progress.md`; full M5 reasoning is in
-`.superpowers/sdd/2026-08-10-m5-tags/progress.md`. Fold these into the next
-plan rather than rediscovering them.
+`.superpowers/sdd/2026-08-10-m5-tags/progress.md`; full M5.5 reasoning is in
+the M5.5 progress ledger, gitignored and not carried forward — the items below
+are what survived out of it. Fold these into the next plan rather than
+rediscovering them.
 
 - **The tag pill mark and rename/delete are M5b.** M5 shipped the parser, the
   index, the tree, the sidebar, and seeded creation; it never made `#tag` its
@@ -509,6 +511,39 @@ plan rather than rediscovering them.
   siblings sit in `tokens.css` unused while `RichEditor`'s contenteditable is
   `text-sm`. M8 owns the typography sliders and must wire the tokens, not
   merely add UI. M5.5's spec deferred editor typography deliberately.
+- **`NoteListItem`'s accessible name runs together.** Its three sibling spans —
+  title, date, snippet — concatenate with no separator, so a row announces as
+  `"work note10:24some body text"`. Same root cause as the `SidebarRow`
+  regression M5.5 caught and reverted: JSX strips inter-element whitespace and
+  accessible-name computation ignores CSS gaps. **Verified byte-identical
+  before and after M5.5, so it is pre-existing, not introduced.** Unlike the
+  `SidebarRow` case there is no separator to restore — title, date and snippet
+  want a visually-hidden separator or an explicit `aria-label`, which is a real
+  accessibility design decision rather than a bug fix. M6 owns the note list;
+  fold it in there with its own ruling.
+- **An intermittent Playwright resize-test flake.** Seen once during M5.5, not
+  reproducible afterwards across three consecutive full runs (18/18 each). Not
+  actionable without a failing artifact, but worth naming because `jsdom` has
+  no `setPointerCapture` — Playwright is the _only_ coverage for pointer-drag
+  paths, so a flake there is a hole in the one place that can test them. If it
+  recurs, run that spec with `--repeat-each`.
+- **Paper's `--bear-selected` at `rgb(207 59 44 / 0.11)` reads faint.** On the
+  bottom toolbar's pressed toggles it is a light wash over white, and on some
+  displays the pressed state reads mainly through the text-colour shift rather
+  than the background. Ink's `0.18` alpha is comfortable. Raising Paper's alpha
+  is a design call, and it ripples into `e2e/smoke.spec.ts`, which now pins the
+  shipped palette deliberately.
+- **`rounded-md`, `rounded-lg`, `shadow-popover` and `shadow-dialog` are
+  provisioned but unused.** M5.5's spec names them for M6's `ConfirmDialog`.
+  They are not dead code awaiting deletion; deleting them means M6 re-adds
+  them.
+- **`scripts/fonts.test.ts` ignores `font-weight` and `font-style`.** Its
+  `declaredFamilies` collects every `font-family:` an `@font-face` block
+  declares regardless of which face it belongs to, so a family declared _only_
+  at a weight or style the app never uses would satisfy the check. Latent, with
+  no live instance — Pretendard ships `font-weight: 45 920` normal and
+  JetBrains Mono `100 800` normal, so every declared family is one the app can
+  actually render.
 
 ## Working style
 
