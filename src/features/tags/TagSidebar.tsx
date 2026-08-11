@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { type NoteScope, scopeKey, tagScope } from '@/features/notes';
 import { useT } from '@/i18n';
 import { EmptyState } from '@/ui/EmptyState';
+import { SidebarRow } from '@/ui/SidebarRow';
 
 import type { TagNode } from './tagTree';
 
@@ -27,38 +28,18 @@ function TagRow({ node, depth, scope, onScopeChange, isCollapsed, onToggle }: Ro
   const selected = scopeKey(scope) === scopeKey(tagScope(node.tag));
 
   return (
-    <li>
-      <div className="flex items-center gap-1">
-        {hasChildren ? (
-          <button
-            type="button"
-            aria-label={t('tags.toggle')}
-            onClick={() => onToggle(node.tag)}
-            className="shrink-0 rounded px-1 text-xs text-muted hover:bg-bg"
-          >
-            {collapsed ? '▸' : '▾'}
-          </button>
-        ) : (
-          <span className="shrink-0 px-1 text-xs" aria-hidden="true">
-            {' '}
-          </span>
-        )}
-
-        <button
-          type="button"
-          onClick={() => onScopeChange(tagScope(node.tag))}
-          aria-current={selected ? 'page' : undefined}
-          aria-expanded={hasChildren ? !collapsed : undefined}
-          style={{ paddingLeft: `${depth * 0.75}rem` }}
-          className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded px-2 py-1 text-left text-sm text-text ${
-            selected ? 'bg-bg' : 'hover:bg-bg'
-          }`}
-        >
-          <span className="truncate">{node.label}</span>{' '}
-          <span className="shrink-0 text-xs text-muted">{node.count}</span>
-        </button>
-      </div>
-
+    <SidebarRow
+      label={node.label}
+      count={node.count}
+      depth={depth}
+      selected={selected}
+      onSelect={() => onScopeChange(tagScope(node.tag))}
+      disclosure={
+        hasChildren
+          ? { expanded: !collapsed, onToggle: () => onToggle(node.tag), label: t('tags.toggle') }
+          : undefined
+      }
+    >
       {hasChildren && !collapsed && (
         <ul>
           {node.children.map((child) => (
@@ -74,7 +55,7 @@ function TagRow({ node, depth, scope, onScopeChange, isCollapsed, onToggle }: Ro
           ))}
         </ul>
       )}
-    </li>
+    </SidebarRow>
   );
 }
 
