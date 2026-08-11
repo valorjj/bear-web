@@ -1,14 +1,60 @@
 :root {
+  /* Paper — the light theme. Warm neutrals, one red. */
   --bear-bg: #ffffff;
-  --bear-surface: #f7f7f8;
-  --bear-sidebar: #eceef3;
-  --bear-text: #1c1c1e;
-  --bear-muted: #8a8a8e;
-  --bear-accent: #d93a3a;
-  --bear-border: #e2e2e6;
+  --bear-surface: #faf9f8;
+  --bear-sidebar: #f1efec;
+  --bear-text: #1c1b19;
+  --bear-muted: #6b6862;
+  --bear-faint: #9c988f;
+  --bear-border: #e5e2dd;
+  --bear-accent: #cf3b2c;
+
+  /*
+   * `danger` and `focus` resolve to the accent in both shipped themes, and are
+   * still separate tokens: an M8 theme with a green accent must not render its
+   * Delete Forever button green. Call sites express intent, not colour.
+   */
+  --bear-danger: #cf3b2c;
+  --bear-focus: #cf3b2c;
+
+  /*
+   * Translucent, deliberately. These sit over three different backgrounds —
+   * sidebar, note list, and editor canvas — so no solid fill could be one
+   * token. `selected` is accent-tinted rather than neutral, which is what
+   * makes a selected row read as MORE present than its surroundings. Before
+   * M5.5 selection was `bg-bg`, i.e. less contrast than unselected: a hole
+   * rather than a highlight.
+   */
+  --bear-hover: rgb(28 27 25 / 0.05);
+  --bear-selected: rgb(207 59 44 / 0.11);
+  --bear-shadow: rgb(28 27 25 / 0.14);
 
   --bear-font-sans: 'Pretendard Variable', system-ui, sans-serif;
   --bear-font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  /*
+   * UI type, separate from editor type below. 13px is the workhorse: a
+   * macOS-idiom application sets its chrome one notch smaller than the web
+   * default, and before M5.5 this app used 14px throughout.
+   */
+  --bear-text-ui-xs: 0.6875rem; /* 11px — counts, badges */
+  --bear-text-ui-sm: 0.75rem; /* 12px — timestamps, snippets */
+  --bear-text-ui: 0.8125rem; /* 13px — rows, buttons */
+  --bear-text-ui-md: 0.875rem; /* 14px — note titles */
+  --bear-text-ui-lg: 1rem; /* 16px — pane headers, empty states */
+  --bear-leading-ui: 1.45;
+
+  --bear-radius-sm: 4px;
+  --bear-radius-md: 6px;
+  --bear-radius-lg: 10px;
+
+  /* Two, because the app has exactly two floating surfaces. */
+  --bear-shadow-popover: 0 4px 12px var(--bear-shadow);
+  --bear-shadow-dialog: 0 12px 32px var(--bear-shadow);
+
+  --bear-duration-fast: 100ms;
+  --bear-duration: 160ms;
+  --bear-ease: cubic-bezier(0.2, 0, 0.2, 1);
 
   /* Editor typography, bound to the M8 preference sliders. */
   --bear-font-size: 16px;
@@ -18,29 +64,58 @@
   --bear-para-indent: 0em;
 }
 
+/* Ink — the dark theme, chosen explicitly. */
 :root[data-theme='dark'] {
-  --bear-bg: #1c1c1e;
-  --bear-surface: #242426;
-  --bear-sidebar: #202022;
-  --bear-text: #f2f2f7;
-  --bear-muted: #8a8a8e;
-  --bear-accent: #ff6b6b;
-  --bear-border: #3a3a3c;
+  --bear-bg: #1a1a19;
+  --bear-surface: #201f1e;
+  --bear-sidebar: #262523;
+  --bear-text: #ebe9e5;
+  --bear-muted: #a09c94;
+  --bear-faint: #746f68;
+  --bear-border: #35332f;
+  --bear-accent: #ff6f5e;
+  --bear-danger: #ff6f5e;
+  --bear-focus: #ff6f5e;
+  --bear-hover: rgb(255 255 255 / 0.06);
+  --bear-selected: rgb(255 111 94 / 0.18);
+  --bear-shadow: rgb(0 0 0 / 0.5);
 }
 
 /*
  * The system preference is the default, applied with no JavaScript so there is
  * no flash of the wrong theme on first paint. An explicit `data-theme` on the
- * root overrides it — that is the seam the M8 theme picker will drive.
+ * root overrides it — that is the seam the M8 theme picker will drive, and the
+ * `:not([data-theme='light'])` must not be simplified away.
+ *
+ * This block must stay token-for-token identical to the one above;
+ * `scripts/sourceLint.test.ts` asserts it.
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bear-bg: #1c1c1e;
-    --bear-surface: #242426;
-    --bear-sidebar: #202022;
-    --bear-text: #f2f2f7;
-    --bear-muted: #8a8a8e;
-    --bear-accent: #ff6b6b;
-    --bear-border: #3a3a3c;
+    --bear-bg: #1a1a19;
+    --bear-surface: #201f1e;
+    --bear-sidebar: #262523;
+    --bear-text: #ebe9e5;
+    --bear-muted: #a09c94;
+    --bear-faint: #746f68;
+    --bear-border: #35332f;
+    --bear-accent: #ff6f5e;
+    --bear-danger: #ff6f5e;
+    --bear-focus: #ff6f5e;
+    --bear-hover: rgb(255 255 255 / 0.06);
+    --bear-selected: rgb(255 111 94 / 0.18);
+    --bear-shadow: rgb(0 0 0 / 0.5);
+  }
+}
+
+/*
+ * Motion is expressed as two duration tokens rather than per-component
+ * durations for exactly this: one block disables every animation in the app,
+ * including animations added long after it was written.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --bear-duration-fast: 0ms;
+    --bear-duration: 0ms;
   }
 }

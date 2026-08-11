@@ -53,6 +53,22 @@ function resolveImport(fromFile: string, specifier: string): string | null {
   return null;
 }
 
+/** `--name: value` pairs inside the first `{ … }` following `selector`. */
+function blockTokens(css: string, selector: string): Map<string, string> {
+  const start = css.indexOf(selector);
+  expect(start, `selector not found: ${selector}`).toBeGreaterThanOrEqual(0);
+
+  const open = css.indexOf('{', start);
+  const close = css.indexOf('}', open);
+  const body = css.slice(open + 1, close);
+
+  const tokens = new Map<string, string>();
+  for (const match of body.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)) {
+    tokens.set(match[1]!, match[2]!.trim());
+  }
+  return tokens;
+}
+
 describe('design lint', () => {
   const cssFiles = walk('src', ['.css']).filter((path) => path !== TOKENS);
   const codeFiles = walk('src', ['.tsx', '.ts']).filter((path) => !/\.test\.tsx?$/.test(path));
@@ -130,5 +146,66 @@ describe('architecture boundaries', () => {
     for (const { dir } of BOUNDARIES) {
       expect(walk(dir, ['.ts', '.tsx']).length, `${dir} looks empty`).toBeGreaterThan(1);
     }
+  });
+});
+
+describe('theme tokens', () => {
+  const css = readFileSync(TOKENS, 'utf8');
+
+  const light = blockTokens(css, ':root {');
+  const darkExplicit = blockTokens(css, ":root[data-theme='dark']");
+  const darkSystem = blockTokens(css, ":root:not([data-theme='light'])");
+
+  it('defines a non-trivial number of tokens in each theme block', () => {
+    expect(light.size).toBeGreaterThan(20);
+    expect(darkExplicit.size).toBeGreaterThan(10);
+  });
+
+  // The defect this closes: a token added to :root and to the explicit dark
+  // block but forgotten in the media block is correct for a user who picked
+  // dark and wrong for a user whose OS is dark. Nothing else in the suite
+  // can see that.
+  it('keeps both dark blocks token-for-token identical', () => {
+    expect([...darkSystem.keys()].sort()).toEqual([...darkExplicit.keys()].sort());
+    for (const [token, value] of darkExplicit) {
+      expect(darkSystem.get(token), `${token} differs between the dark blocks`).toBe(value);
+    }
+  });
+
+  it('overrides only tokens the light theme already defines', () => {
+    for (const token of darkExplicit.keys()) {
+      expect(light.has(token), `${token} is dark-only; add it to :root`).toBe(true);
+    }
+  });
+
+  it('themes every colour role', () => {
+    const ROLES = [
+      'bg',
+      'surface',
+      'sidebar',
+      'text',
+      'muted',
+      'faint',
+      'border',
+      'accent',
+      'danger',
+      'focus',
+      'hover',
+      'selected',
+      'shadow',
+    ];
+    for (const role of ROLES) {
+      expect(light.has(`--bear-${role}`), `--bear-${role} missing from :root`).toBe(true);
+      expect(darkExplicit.has(`--bear-${role}`), `--bear-${role} missing from Ink`).toBe(true);
+    }
+  });
+
+  it('zeroes both duration tokens under prefers-reduced-motion', () => {
+    // Motion is tokenized rather than written per-component precisely so that
+    // one media block disables every animation in the app, including ones
+    // added after this test was written.
+    const reduced = blockTokens(css, '@media (prefers-reduced-motion: reduce)');
+    expect(reduced.get('--bear-duration-fast')).toBe('0ms');
+    expect(reduced.get('--bear-duration')).toBe('0ms');
   });
 });
