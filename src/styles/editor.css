@@ -1,0 +1,183 @@
+/*
+ * Prose styles for the editor surface.
+ *
+ * Tailwind's preflight resets headings to body size and strips list markers,
+ * and Tiptap ships no CSS of its own — so without this file every button in
+ * the formatting toolbar produced output that rendered identically to plain
+ * text. Headings were 14px/400, `ul` and `ol` had `list-style: none` with no
+ * indent, blockquotes had no border, and a task item stacked its checkbox
+ * above its text instead of beside it.
+ *
+ * The document model was correct throughout: Markdown round-tripped, the
+ * structural tests passed. Nothing in this project can see "renders wrong" —
+ * the round-trip suite drives `MarkdownManager` with no DOM at all, and the
+ * component tests assert document structure rather than computed style.
+ *
+ * Sizes are in `em` so they scale with `--bear-font-size`, which is what M8's
+ * typography slider drives. Every colour is a token; a literal here fails
+ * `scripts/sourceLint.test.ts`.
+ */
+
+.ProseMirror {
+  font-size: var(--bear-font-size);
+  line-height: var(--bear-line-height);
+}
+
+.ProseMirror > * + * {
+  margin-top: 0.75em;
+}
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+  font-weight: 600;
+  line-height: 1.25;
+  margin-top: 1.4em;
+}
+
+/* The first heading in a note is its title line; it should not push off. */
+.ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+.ProseMirror h1 {
+  font-size: 1.6em;
+}
+.ProseMirror h2 {
+  font-size: 1.35em;
+}
+.ProseMirror h3 {
+  font-size: 1.15em;
+}
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+  font-size: 1em;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.5em;
+}
+
+.ProseMirror ul {
+  list-style: disc;
+}
+
+.ProseMirror ol {
+  list-style: decimal;
+}
+
+.ProseMirror li + li {
+  margin-top: 0.25em;
+}
+
+.ProseMirror li > p {
+  margin: 0;
+}
+
+/*
+ * Task lists lay their item out as a row. Tiptap renders
+ * `li > label > input` followed by `li > div > p`, both block-level, so
+ * without this the checkbox sits on its own line and the text is pushed to
+ * the next one — which reads as the editor force-wrapping every todo.
+ */
+.ProseMirror ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.ProseMirror ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.ProseMirror ul[data-type='taskList'] li > label {
+  flex: 0 0 auto;
+  /* Nudges the box onto the text's optical baseline rather than its box top. */
+  margin-top: 0.25em;
+  user-select: none;
+}
+
+.ProseMirror ul[data-type='taskList'] li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ProseMirror ul[data-type='taskList'] input[type='checkbox'] {
+  accent-color: var(--bear-accent);
+  cursor: pointer;
+}
+
+/* A finished todo reads as done without disappearing. */
+.ProseMirror ul[data-type='taskList'] li[data-checked='true'] > div {
+  color: var(--bear-muted);
+  text-decoration: line-through;
+}
+
+.ProseMirror blockquote {
+  border-left: 2px solid var(--bear-border);
+  padding-left: 1em;
+  color: var(--bear-muted);
+}
+
+.ProseMirror code {
+  font-family: var(--bear-font-mono);
+  font-size: 0.9em;
+  background-color: var(--bear-hover);
+  border-radius: var(--bear-radius-sm);
+  padding: 0.1em 0.3em;
+}
+
+.ProseMirror pre {
+  font-family: var(--bear-font-mono);
+  font-size: 0.9em;
+  background-color: var(--bear-surface);
+  border: 1px solid var(--bear-border);
+  border-radius: var(--bear-radius-md);
+  padding: 0.75em 1em;
+  overflow-x: auto;
+}
+
+/* The inline rule above would double up inside a block. */
+.ProseMirror pre code {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: inherit;
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid var(--bear-border);
+  margin: 1.5em 0;
+}
+
+.ProseMirror a {
+  color: var(--bear-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.ProseMirror mark {
+  background-color: var(--bear-selected);
+  color: inherit;
+  border-radius: var(--bear-radius-sm);
+  padding: 0.05em 0.15em;
+}
+
+/*
+ * The placeholder ProseMirror leaves on an empty document. Without a height
+ * the editor collapses and there is nothing to click into.
+ */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--bear-faint);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

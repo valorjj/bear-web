@@ -2,6 +2,7 @@
 @import '@fontsource-variable/jetbrains-mono/index.css';
 @import 'tailwindcss';
 @import './tokens.css';
+@import './editor.css';
 
 @theme inline {
   --color-bg: var(--bear-bg);
