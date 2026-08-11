@@ -16,8 +16,8 @@ export {
   TRASHED_SCOPE,
 } from './scope';
 export type { NoteScope, ScopeLister, SmartListId } from './scope';
-export { ScopeSidebar } from './ScopeSidebar';
-export type { ScopeSidebarProps } from './ScopeSidebar';
+export { SmartListSidebar } from './SmartListSidebar';
+export type { SmartListSidebarProps } from './SmartListSidebar';
 export { useNotes } from './useNotes';
 export type { NotesState } from './useNotes';
 export { useSmartListCounts } from './useSmartListCounts';

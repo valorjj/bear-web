@@ -59,8 +59,15 @@ describe('AppShell', () => {
   it('shows the scope rows in the sidebar and empty states elsewhere', async () => {
     renderShell();
 
-    expect(screen.getByRole('button', { name: en['scope.notes'] })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: en['scope.trash'] })).toBeInTheDocument();
+    // These rows now carry a live count alongside the label ("Notes 0"), so
+    // the accessible name is matched by prefix rather than exact string —
+    // the count itself is not what this test is about.
+    expect(
+      screen.getByRole('button', { name: new RegExp(`^${en['smartList.all']}\\b`) }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: new RegExp(`^${en['smartList.trash']}\\b`) }),
+    ).toBeInTheDocument();
     expect(screen.getByText(en['editor.empty.title'])).toBeInTheDocument();
 
     // The note list renders nothing until the live query resolves, so that a
@@ -129,11 +136,11 @@ describe('AppShell notes', () => {
       expect(screen.queryByRole('button', { name: /Groceries/ })).not.toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Trash' }));
+    await user.click(screen.getByRole('button', { name: /^Trash\b/ }));
     await user.click(await screen.findByRole('button', { name: /Groceries/ }));
     await user.click(screen.getByRole('button', { name: 'Restore' }));
 
-    await user.click(screen.getByRole('button', { name: 'Notes' }));
+    await user.click(screen.getByRole('button', { name: /^Notes\b/ }));
     expect(await screen.findByRole('button', { name: /Groceries/ })).toBeInTheDocument();
   });
 
@@ -180,11 +187,14 @@ describe('AppShell notes', () => {
     const user = userEvent.setup();
     renderShell();
 
-    await user.click(screen.getByRole('button', { name: 'Trash' }));
+    await user.click(screen.getByRole('button', { name: /^Trash\b/ }));
     await user.click(screen.getByRole('button', { name: 'New note' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Notes' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
     });
   });
 
@@ -273,7 +283,10 @@ describe('tag scopes', () => {
     await notes.save(note.id, 'alpha');
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Notes' })).toHaveAttribute('aria-current', 'page'),
+      expect(screen.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
     );
   });
 
@@ -291,9 +304,9 @@ describe('tag scopes', () => {
     // this test actually checks is the ordinary, always-reachable path: after
     // a tag is selected, the "Notes" row must not spuriously regain
     // `aria-current`.
-    expect(screen.getByRole('button', { name: 'Notes' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: /^Notes\b/ })).not.toHaveAttribute('aria-current');
     await screen.findByRole('button', { name: /^alpha\b/ });
-    expect(screen.getByRole('button', { name: 'Notes' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: /^Notes\b/ })).not.toHaveAttribute('aria-current');
   });
 
   // The seed is keyed by id, so re-selecting the same just-created note keeps

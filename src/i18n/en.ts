@@ -14,9 +14,18 @@ export const en = {
   'editor.empty.title': 'No note selected',
   'editor.empty.body': 'Choose a note from the list, or create one.',
 
-  'scope.label': 'Note scopes',
-  'scope.notes': 'Notes',
-  'scope.trash': 'Trash',
+  'smartList.label': 'Lists',
+  'smartList.all': 'Notes',
+  'smartList.untagged': 'Untagged',
+  'smartList.todo': 'Todo',
+  'smartList.today': 'Today',
+  'smartList.pinned': 'Pinned',
+  'smartList.locked': 'Locked',
+  'smartList.trash': 'Trash',
+
+  'locked.empty.title': 'Locked notes are not available yet',
+  'locked.empty.body':
+    'Encryption needs a passphrase and a way to recover it, so it is not built yet. Nothing of yours is hidden here.',
 
   'tags.label': 'Tags',
   'tags.toggle': 'Expand or collapse',

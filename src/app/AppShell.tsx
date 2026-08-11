@@ -7,9 +7,10 @@ import {
   NoteEditor,
   NoteList,
   type NoteScope,
-  ScopeSidebar,
   seedTagFor,
+  SmartListSidebar,
   useNotes,
+  useSmartListCounts,
 } from '@/features/notes';
 import { TagSidebar, type TagNode, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
@@ -27,6 +28,7 @@ export function AppShell(): ReactElement {
   const [scope, setScope] = useState<NoteScope>(ACTIVE_SCOPE);
   const { items, selectedNoteId, selectedNote, select } = useNotes(scope);
   const tree = useTagTree();
+  const counts = useSmartListCounts();
 
   // The text the just-created note was seeded with, so `NoteEditor` can treat
   // it as disposable. Cleared as soon as the selection moves elsewhere.
@@ -102,7 +104,7 @@ export function AppShell(): ReactElement {
     <main className="flex h-full w-full overflow-hidden bg-bg text-text">
       <Pane label={t('pane.sidebar')} width={widths.sidebarWidth} className="bg-sidebar">
         <div className="flex h-full flex-col overflow-y-auto">
-          <ScopeSidebar scope={scope} onScopeChange={setScope} />
+          <SmartListSidebar scope={scope} onScopeChange={setScope} counts={counts} />
           <TagSidebar
             nodes={tree.nodes}
             scope={scope}
