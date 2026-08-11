@@ -1,12 +1,31 @@
 import type { ReactElement } from 'react';
 
 import type { Note } from '@/data';
+import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
 
 import { NoteListItem } from './NoteListItem';
 import { allowsTrash, isTrash, type NoteScope } from './scope';
+
+/**
+ * Locked gets its own copy deliberately. "No notes" would tell a user their
+ * locked notes are missing; the truth is the feature does not exist yet.
+ */
+function isLocked(scope: NoteScope): boolean {
+  return scope.kind === 'smart' && scope.list === 'locked';
+}
+
+function emptyTitle(scope: NoteScope): TranslationKey {
+  if (isLocked(scope)) return 'locked.empty.title';
+  return isTrash(scope) ? 'trash.empty.title' : 'noteList.empty.title';
+}
+
+function emptyBody(scope: NoteScope): TranslationKey {
+  if (isLocked(scope)) return 'locked.empty.body';
+  return isTrash(scope) ? 'trash.empty.body' : 'noteList.empty.body';
+}
 
 export interface NoteListProps {
   scope: NoteScope;
@@ -46,10 +65,7 @@ export function NoteList({
       {/* `undefined` is "not loaded yet", not "empty": showing the empty state
           during the first frame would flash "No notes" on every reload. */}
       {items === undefined ? null : items.length === 0 ? (
-        <EmptyState
-          title={isTrash(scope) ? t('trash.empty.title') : t('noteList.empty.title')}
-          body={isTrash(scope) ? t('trash.empty.body') : t('noteList.empty.body')}
-        />
+        <EmptyState title={t(emptyTitle(scope))} body={t(emptyBody(scope))} />
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto">
           {items.map((note) => (

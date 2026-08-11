@@ -232,6 +232,55 @@ describe('AppShell notes', () => {
       'Second note text',
     );
   });
+
+  it('shows a Phase 2 explanation in Locked, not "no notes"', async () => {
+    await renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Locked\b/ }));
+
+    // A user who sees "No notes" here concludes their locked notes were lost.
+    expect(await screen.findByText('Locked notes are not available yet')).toBeInTheDocument();
+    expect(screen.queryByText('No notes')).not.toBeInTheDocument();
+  });
+
+  it('renders no Delete button in Locked', async () => {
+    await renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Locked\b/ }));
+
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
+  });
+
+  it('bounces to Notes when creating inside a list that could not show the note', async () => {
+    await renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Pinned\b/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+
+    // A note created in Pinned is not pinned, so it would vanish instantly.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
+  });
+
+  it('stays put when creating inside a list that can show the note', async () => {
+    await renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Untagged\b/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+
+    // A new note genuinely has no tags, so Untagged can hold it.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Untagged\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
+  });
 });
 
 describe('tag scopes', () => {
