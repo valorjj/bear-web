@@ -36,6 +36,7 @@ export interface NoteListProps {
   onCreate: () => void;
   onTrash: (id: string) => void;
   onRestore: (id: string) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
 }
 
 export function NoteList({
@@ -46,6 +47,7 @@ export function NoteList({
   onCreate,
   onTrash,
   onRestore,
+  onTogglePin,
 }: NoteListProps): ReactElement {
   const t = useT();
 
@@ -74,6 +76,7 @@ export function NoteList({
               note={note}
               selected={note.id === selectedNoteId}
               onSelect={() => onSelect(note.id)}
+              onTogglePin={onTogglePin}
             />
           ))}
         </ul>

@@ -30,6 +30,7 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
     onCreate: vi.fn(),
     onTrash: vi.fn(),
     onRestore: vi.fn(),
+    onTogglePin: vi.fn(),
     ...overrides,
   };
 }

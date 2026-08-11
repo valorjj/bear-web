@@ -34,6 +34,8 @@ export const ko: Record<TranslationKey, string> = {
 
   'note.untitled': '제목 없음',
   'note.noText': '추가 내용 없음',
+  'note.pin': '메모 고정',
+  'note.unpin': '고정 해제',
 
   'noteList.create': '새 메모',
   'noteList.trash': '삭제',

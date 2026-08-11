@@ -100,6 +100,10 @@ export function AppShell(): ReactElement {
     await notes.restore(id);
   }, []);
 
+  const handleTogglePin = useCallback(async (id: string, pinned: boolean) => {
+    await notes.setPinned(id, pinned);
+  }, []);
+
   return (
     <main className="flex h-full w-full overflow-hidden bg-bg text-text">
       <Pane label={t('pane.sidebar')} width={widths.sidebarWidth} className="bg-sidebar">
@@ -133,6 +137,7 @@ export function AppShell(): ReactElement {
           onCreate={() => void handleCreate()}
           onTrash={(id) => void handleTrash(id)}
           onRestore={(id) => void handleRestore(id)}
+          onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
         />
       </Pane>
 

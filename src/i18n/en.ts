@@ -32,6 +32,8 @@ export const en = {
 
   'note.untitled': 'Untitled',
   'note.noText': 'No additional text',
+  'note.pin': 'Pin note',
+  'note.unpin': 'Unpin note',
 
   'noteList.create': 'New note',
   'noteList.trash': 'Delete',

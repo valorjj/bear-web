@@ -53,6 +53,19 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     return note;
   }
 
+  /**
+   * Pinned first, then newest first. Applied to every non-trash lister so a
+   * pinned note is pinned everywhere it appears, not only in the Pinned list.
+   *
+   * `pinned` cannot drive an IndexedDB index — booleans are not valid keys —
+   * so this is an in-memory sort, which is also why `listActive` already
+   * filters in memory.
+   */
+  function byPinnedThenRecent(a: Note, b: Note): number {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return b.updatedAt - a.updatedAt;
+  }
+
   return {
     async create(text = '') {
       const timestamp = now();
@@ -156,8 +169,8 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
 
     async listActive() {
       // `pinned` and `trashedAt === null` cannot drive an index here; see db.ts.
-      const all = await db.notes.orderBy('updatedAt').reverse().toArray();
-      return all.filter((n) => n.trashedAt === null);
+      const all = await db.notes.toArray();
+      return all.filter((n) => n.trashedAt === null).sort(byPinnedThenRecent);
     },
 
     async listTrashed() {
@@ -201,7 +214,7 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
 
       return found
         .filter((note): note is Note => note !== undefined && note.trashedAt === null)
-        .sort((a, b) => b.updatedAt - a.updatedAt);
+        .sort(byPinnedThenRecent);
     },
 
     async allTagRows() {
