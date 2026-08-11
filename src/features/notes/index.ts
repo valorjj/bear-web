@@ -10,10 +10,12 @@ export {
   listForScope,
   scopeKey,
   seedTagFor,
+  smartScope,
+  SMART_LIST_IDS,
   tagScope,
   TRASHED_SCOPE,
 } from './scope';
-export type { NoteScope, ScopeLister } from './scope';
+export type { NoteScope, ScopeLister, SmartListId } from './scope';
 export { ScopeSidebar } from './ScopeSidebar';
 export type { ScopeSidebarProps } from './ScopeSidebar';
 export { useNotes } from './useNotes';

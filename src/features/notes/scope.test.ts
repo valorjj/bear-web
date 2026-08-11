@@ -10,6 +10,9 @@ import {
   listForScope,
   scopeKey,
   seedTagFor,
+  smartScope,
+  SMART_LIST_IDS,
+  type SmartListId,
   tagScope,
   TRASHED_SCOPE,
 } from './scope';
@@ -35,8 +38,8 @@ function lister() {
 
 describe('scopeKey', () => {
   it('is stable for each scope', () => {
-    expect(scopeKey(ACTIVE_SCOPE)).toBe('active');
-    expect(scopeKey(TRASHED_SCOPE)).toBe('trashed');
+    expect(scopeKey(ACTIVE_SCOPE)).toBe('smart:all');
+    expect(scopeKey(TRASHED_SCOPE)).toBe('smart:trash');
     expect(scopeKey(tagScope('work/urgent'))).toBe('tag:work/urgent');
   });
 
@@ -69,28 +72,49 @@ describe('listForScope', () => {
 });
 
 describe('capabilities', () => {
-  it('reports only the trash scope as trash', () => {
-    expect(isTrash(TRASHED_SCOPE)).toBe(true);
-    expect(isTrash(ACTIVE_SCOPE)).toBe(false);
-    expect(isTrash(tagScope('work'))).toBe(false);
+  // Exhaustive over SmartListId. A new smart list added without a ruling on
+  // its capabilities fails here rather than silently inheriting a default —
+  // this is the assertion that would have caught the M5 defect where a new
+  // union arm rendered no delete affordance at all.
+  const EXPECTED: Record<SmartListId, { trash: boolean; allowsTrash: boolean; accepts: boolean }> =
+    {
+      all: { trash: false, allowsTrash: true, accepts: true },
+      untagged: { trash: false, allowsTrash: true, accepts: true },
+      todo: { trash: false, allowsTrash: true, accepts: false },
+      today: { trash: false, allowsTrash: true, accepts: true },
+      pinned: { trash: false, allowsTrash: true, accepts: false },
+      locked: { trash: false, allowsTrash: false, accepts: false },
+      trash: { trash: true, allowsTrash: false, accepts: false },
+    };
+
+  it('covers every smart list', () => {
+    expect(Object.keys(EXPECTED).sort()).toEqual([...SMART_LIST_IDS].sort());
   });
 
-  it('offers Trash everywhere except the trash scope', () => {
-    expect(allowsTrash(ACTIVE_SCOPE)).toBe(true);
-    expect(allowsTrash(tagScope('work'))).toBe(true);
-    expect(allowsTrash(TRASHED_SCOPE)).toBe(false);
+  for (const list of SMART_LIST_IDS) {
+    it(`rules on ${list}`, () => {
+      const scope = smartScope(list);
+      expect(isTrash(scope)).toBe(EXPECTED[list].trash);
+      expect(allowsTrash(scope)).toBe(EXPECTED[list].allowsTrash);
+      expect(acceptsNewNote(scope)).toBe(EXPECTED[list].accepts);
+      expect(seedTagFor(scope)).toBeNull();
+    });
+  }
+
+  it('treats a tag scope as ordinary and seedable', () => {
+    const scope = tagScope('work');
+    expect(isTrash(scope)).toBe(false);
+    expect(allowsTrash(scope)).toBe(true);
+    expect(acceptsNewNote(scope)).toBe(true);
+    expect(seedTagFor(scope)).toBe('work');
   });
 
-  it('seeds a new note only inside a tag scope', () => {
-    expect(seedTagFor(tagScope('work'))).toBe('work');
-    expect(seedTagFor(ACTIVE_SCOPE)).toBeNull();
-    expect(seedTagFor(TRASHED_SCOPE)).toBeNull();
+  it('keeps the builtin constants pointing at the right lists', () => {
+    expect(scopeKey(ACTIVE_SCOPE)).toBe('smart:all');
+    expect(scopeKey(TRASHED_SCOPE)).toBe('smart:trash');
   });
 
-  it('accepts a new note everywhere a new note would be visible', () => {
-    expect(acceptsNewNote(ACTIVE_SCOPE)).toBe(true);
-    expect(acceptsNewNote(tagScope('work'))).toBe(true);
-    // A note created here would be untrashed, so it would vanish immediately.
-    expect(acceptsNewNote(TRASHED_SCOPE)).toBe(false);
+  it('does not let a tag collide with a builtin name', () => {
+    expect(scopeKey(tagScope('all'))).not.toBe(scopeKey(ACTIVE_SCOPE));
   });
 });
