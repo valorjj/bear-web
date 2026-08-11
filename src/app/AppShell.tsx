@@ -14,6 +14,7 @@ import {
 } from '@/features/notes';
 import { TagSidebar, type TagNode, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
+import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
 import { Pane } from '@/ui/Pane';
 import { Resizer } from '@/ui/Resizer';
@@ -104,6 +105,20 @@ export function AppShell(): ReactElement {
     await notes.setPinned(id, pinned);
   }, []);
 
+  // Which destructive action is awaiting confirmation, if any. A single piece
+  // of state rather than two booleans: the two dialogs are mutually exclusive
+  // and two flags could both be true.
+  const [pending, setPending] = useState<{ kind: 'purge'; id: string } | { kind: 'empty' } | null>(
+    null,
+  );
+
+  const confirmPending = useCallback(async () => {
+    if (pending === null) return;
+    setPending(null);
+    if (pending.kind === 'purge') await notes.purge(pending.id);
+    else await notes.emptyTrash();
+  }, [pending]);
+
   return (
     <main className="flex h-full w-full overflow-hidden bg-bg text-text">
       <Pane label={t('pane.sidebar')} width={widths.sidebarWidth} className="bg-sidebar">
@@ -138,6 +153,8 @@ export function AppShell(): ReactElement {
           onTrash={(id) => void handleTrash(id)}
           onRestore={(id) => void handleRestore(id)}
           onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
+          onPurge={(id) => setPending({ kind: 'purge', id })}
+          onEmptyTrash={() => setPending({ kind: 'empty' })}
         />
       </Pane>
 
@@ -164,6 +181,25 @@ export function AppShell(): ReactElement {
           />
         )}
       </Pane>
+
+      <ConfirmDialog
+        open={pending !== null}
+        destructive
+        title={
+          pending?.kind === 'empty'
+            ? t('confirm.emptyTrash.title')
+            : t('confirm.deleteForever.title')
+        }
+        body={
+          pending?.kind === 'empty' ? t('confirm.emptyTrash.body') : t('confirm.deleteForever.body')
+        }
+        confirmLabel={
+          pending?.kind === 'empty' ? t('noteList.emptyTrash') : t('noteList.deleteForever')
+        }
+        cancelLabel={t('confirm.cancel')}
+        onConfirm={() => void confirmPending()}
+        onCancel={() => setPending(null)}
+      />
     </main>
   );
 }

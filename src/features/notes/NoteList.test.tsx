@@ -31,6 +31,8 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
     onTrash: vi.fn(),
     onRestore: vi.fn(),
     onTogglePin: vi.fn(),
+    onPurge: vi.fn(),
+    onEmptyTrash: vi.fn(),
     ...overrides,
   };
 }
@@ -141,5 +143,54 @@ describe('NoteList', () => {
     await user.click(screen.getByRole('button', { name: 'Restore' }));
 
     expect(onRestore).toHaveBeenCalledWith('a');
+  });
+
+  it('offers delete forever and empty trash only in the trashed scope', () => {
+    renderWithI18n(<NoteList {...props({ scope: ACTIVE_SCOPE, selectedNoteId: 'a' })} />);
+
+    expect(screen.queryByRole('button', { name: 'Delete forever' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Empty trash' })).not.toBeInTheDocument();
+  });
+
+  it('offers delete forever for a selected note in the trashed scope', async () => {
+    const onPurge = vi.fn();
+    const user = userEvent.setup();
+
+    renderWithI18n(<NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: 'a', onPurge })} />);
+
+    await user.click(screen.getByRole('button', { name: 'Delete forever' }));
+
+    expect(onPurge).toHaveBeenCalledWith('a');
+  });
+
+  it('does not offer delete forever in the trashed scope with nothing selected', () => {
+    renderWithI18n(<NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: null })} />);
+
+    expect(screen.queryByRole('button', { name: 'Delete forever' })).not.toBeInTheDocument();
+  });
+
+  it('offers empty trash in the trashed scope regardless of selection', async () => {
+    const onEmptyTrash = vi.fn();
+    const user = userEvent.setup();
+
+    renderWithI18n(
+      <NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: null, onEmptyTrash })} />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Empty trash' });
+    expect(button).toBeEnabled();
+    await user.click(button);
+
+    expect(onEmptyTrash).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables empty trash while loading and when the trash is empty', () => {
+    const { rerender } = renderWithI18n(
+      <NoteList {...props({ scope: TRASHED_SCOPE, items: undefined })} />,
+    );
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
+
+    rerender(<NoteList {...props({ scope: TRASHED_SCOPE, items: [] })} />);
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
   });
 });

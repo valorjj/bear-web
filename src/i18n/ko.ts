@@ -40,6 +40,16 @@ export const ko: Record<TranslationKey, string> = {
   'noteList.create': '새 메모',
   'noteList.trash': '삭제',
   'noteList.restore': '복원',
+  'noteList.deleteForever': '완전히 삭제',
+  'noteList.emptyTrash': '휴지통 비우기',
+
+  'confirm.cancel': '취소',
+  'confirm.deleteForever.title': '이 메모를 완전히 삭제할까요?',
+  'confirm.deleteForever.body':
+    '이 메모는 영구적으로 삭제됩니다. bear-web은 다른 어디에도 사본을 두지 않으므로 되돌릴 수 없습니다.',
+  'confirm.emptyTrash.title': '휴지통을 비울까요?',
+  'confirm.emptyTrash.body':
+    '휴지통의 모든 메모가 영구적으로 삭제됩니다. bear-web은 다른 어디에도 사본을 두지 않으므로 되돌릴 수 없습니다.',
 
   'trash.empty.title': '휴지통이 비어 있습니다',
   'trash.empty.body': '삭제한 메모는 완전히 지우기 전까지 여기에 있습니다.',

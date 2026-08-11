@@ -38,6 +38,16 @@ export const en = {
   'noteList.create': 'New note',
   'noteList.trash': 'Delete',
   'noteList.restore': 'Restore',
+  'noteList.deleteForever': 'Delete forever',
+  'noteList.emptyTrash': 'Empty trash',
+
+  'confirm.cancel': 'Cancel',
+  'confirm.deleteForever.title': 'Delete this note forever?',
+  'confirm.deleteForever.body':
+    'This note will be removed permanently. bear-web keeps no copy anywhere else, so this cannot be undone.',
+  'confirm.emptyTrash.title': 'Empty the trash?',
+  'confirm.emptyTrash.body':
+    'Every note in the trash will be removed permanently. bear-web keeps no copy anywhere else, so this cannot be undone.',
 
   'trash.empty.title': 'Trash is empty',
   'trash.empty.body': 'Notes you delete appear here until you remove them for good.',

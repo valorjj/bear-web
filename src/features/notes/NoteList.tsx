@@ -37,6 +37,8 @@ export interface NoteListProps {
   onTrash: (id: string) => void;
   onRestore: (id: string) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
+  onPurge: (id: string) => void;
+  onEmptyTrash: () => void;
 }
 
 export function NoteList({
@@ -48,6 +50,8 @@ export function NoteList({
   onTrash,
   onRestore,
   onTogglePin,
+  onPurge,
+  onEmptyTrash,
 }: NoteListProps): ReactElement {
   const t = useT();
 
@@ -61,6 +65,20 @@ export function NoteList({
         )}
         {selectedNoteId !== null && isTrash(scope) && (
           <Button onClick={() => onRestore(selectedNoteId)}>{t('noteList.restore')}</Button>
+        )}
+        {selectedNoteId !== null && isTrash(scope) && (
+          <Button variant="danger" onClick={() => onPurge(selectedNoteId)}>
+            {t('noteList.deleteForever')}
+          </Button>
+        )}
+        {isTrash(scope) && (
+          <Button
+            variant="danger"
+            disabled={items === undefined || items.length === 0}
+            onClick={onEmptyTrash}
+          >
+            {t('noteList.emptyTrash')}
+          </Button>
         )}
       </div>
 
