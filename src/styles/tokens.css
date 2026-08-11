@@ -7,8 +7,8 @@
   --bear-accent: #d93a3a;
   --bear-border: #e2e2e6;
 
-  --bear-font-sans: 'Pretendard', system-ui, sans-serif;
-  --bear-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --bear-font-sans: 'Pretendard Variable', system-ui, sans-serif;
+  --bear-font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
 
   /* Editor typography, bound to the M8 preference sliders. */
   --bear-font-size: 16px;
