@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -37,6 +37,22 @@ function suspectLines(path: string): string[] {
     .map(({ line, number }) => `${path}:${number}  ${line.trim()}`);
 }
 
+/**
+ * Normalises an import specifier to a repo-relative path under `src/`, or null
+ * for a package import.
+ *
+ * Both forms must be normalised, not just the alias. `src/ui`, `src/data` and
+ * `src/lib` are flat siblings under `src/`, so `../data` from
+ * `src/ui/EmptyState.tsx` reaches the data layer in a single hop — matching
+ * only `@/` specifiers left that bypass wide open.
+ */
+function resolveImport(fromFile: string, specifier: string): string | null {
+  if (specifier.startsWith('@/')) return `src/${specifier.slice(2)}`;
+  if (specifier.startsWith('.'))
+    return relative(process.cwd(), resolve(dirname(fromFile), specifier));
+  return null;
+}
+
 describe('design lint', () => {
   const cssFiles = walk('src', ['.css']).filter((path) => path !== TOKENS);
   const codeFiles = walk('src', ['.tsx', '.ts']).filter((path) => !/\.test\.tsx?$/.test(path));
@@ -68,17 +84,17 @@ describe('architecture boundaries', () => {
   const BOUNDARIES: ReadonlyArray<{ dir: string; forbidden: readonly string[]; why: string }> = [
     {
       dir: 'src/ui',
-      forbidden: ['@/app', '@/data', '@/features', '@/i18n'],
+      forbidden: ['src/app', 'src/data', 'src/features', 'src/i18n'],
       why: 'presentation primitives take strings and numbers as props',
     },
     {
       dir: 'src/lib',
-      forbidden: ['@/app', '@/data', '@/features', '@/i18n'],
+      forbidden: ['src/app', 'src/data', 'src/features', 'src/i18n'],
       why: 'framework-level hooks carry no product knowledge',
     },
     {
       dir: 'src/data',
-      forbidden: ['@/features'],
+      forbidden: ['src/features'],
       why: 'the data layer is the dependency, never the dependent',
     },
   ];
@@ -90,11 +106,12 @@ describe('architecture boundaries', () => {
         .flatMap((path) => {
           const source = readFileSync(path, 'utf8');
           return [...source.matchAll(/from\s+'([^']+)'/g)]
-            .map((match) => match[1]!)
-            .filter((specifier) =>
-              forbidden.some((root) => specifier === root || specifier.startsWith(`${root}/`)),
+            .map((match) => resolveImport(path, match[1]!))
+            .filter((target): target is string => target !== null)
+            .filter((target) =>
+              forbidden.some((root) => target === root || target.startsWith(`${root}/`)),
             )
-            .map((specifier) => `${path} imports ${specifier}`);
+            .map((target) => `${path} imports ${target}`);
         });
 
       expect(offenders).toEqual([]);
