@@ -12,6 +12,7 @@ import {
   RawTable,
   createRawInlineHtmlNode,
 } from './RawBlock';
+import { TaskItemPromotion } from './taskItemPromotion';
 
 /**
  * Every construct this editor actually supports, independent of the Raw*
@@ -34,6 +35,11 @@ const supportedExtensions: Extensions = [
   StarterKit.configure({ underline: false }),
   TaskList,
   TaskItem.configure({ nested: true }),
+  // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
+  // schema: `computeRecognizedHtmlTags()` below and every round-trip suite are
+  // unaffected by it. It contributes exactly one input rule, and must come
+  // after `TaskList`/`TaskItem` because it drives their commands.
+  TaskItemPromotion,
   Highlight,
 ];
 
