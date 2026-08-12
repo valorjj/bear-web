@@ -8,11 +8,11 @@ import { renderWithI18n } from '@/i18n/testing';
 import { NoteList, type NoteListProps } from './NoteList';
 import { ACTIVE_SCOPE, smartScope, tagScope, TRASHED_SCOPE } from './scope';
 
-function makeNote(id: string, title: string): Note {
+function makeNote(id: string, title: string, text?: string): Note {
   return {
     id,
     title,
-    text: `${title}\nbody of ${title}`,
+    text: text ?? `${title}\nbody of ${title}`,
     createdAt: 0,
     updatedAt: 0,
     pinned: false,
@@ -192,5 +192,39 @@ describe('NoteList', () => {
 
     rerender(<NoteList {...props({ scope: TRASHED_SCOPE, items: [] })} />);
     expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
+  });
+});
+
+describe('search', () => {
+  it('renders the query field', () => {
+    renderWithI18n(<NoteList {...props({ items: [] })} />);
+
+    expect(screen.getByRole('searchbox', { name: 'Search notes' })).toBeInTheDocument();
+  });
+
+  it('shows the empty-list state when there is no query', () => {
+    renderWithI18n(<NoteList {...props({ items: [], query: '' })} />);
+
+    expect(screen.getByText('No notes')).toBeInTheDocument();
+    expect(screen.queryByText('No matching notes')).toBeNull();
+  });
+
+  // Distinct copy, because an empty result caused by a query reads as "this
+  // list is empty" otherwise — and the user cannot tell why.
+  it('shows the no-results state when a query is responsible', () => {
+    renderWithI18n(<NoteList {...props({ items: [], query: 'milk' })} />);
+
+    expect(screen.getByText('No matching notes')).toBeInTheDocument();
+    expect(screen.queryByText('No notes')).toBeNull();
+  });
+
+  it('passes the query down so rows can highlight', () => {
+    const { container } = renderWithI18n(
+      <NoteList
+        {...props({ items: [makeNote('a', 'Groceries', 'Groceries\nmilk')], query: 'milk' })}
+      />,
+    );
+
+    expect(container.querySelector('[data-match]')?.textContent).toBe('milk');
   });
 });

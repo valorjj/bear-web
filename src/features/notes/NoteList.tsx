@@ -7,6 +7,8 @@ import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
 
 import { NoteListItem } from './NoteListItem';
+import { hasQuery } from './search';
+import { SearchField } from './SearchField';
 import { allowsTrash, isTrash, type NoteScope } from './scope';
 
 /**
@@ -39,6 +41,13 @@ export interface NoteListProps {
   onTogglePin: (id: string, pinned: boolean) => void;
   onPurge: (id: string) => void;
   onEmptyTrash: () => void;
+  /**
+   * Optional so `AppShell` can keep rendering `NoteList` before Task 7 wires
+   * the field through. Defaults are deliberately plain: an empty string and a
+   * no-op, never a value that would silently mask a missing wire-up.
+   */
+  query?: string;
+  onQueryChange?: (next: string) => void;
 }
 
 export function NoteList({
@@ -52,6 +61,8 @@ export function NoteList({
   onTogglePin,
   onPurge,
   onEmptyTrash,
+  query = '',
+  onQueryChange = () => {},
 }: NoteListProps): ReactElement {
   const t = useT();
 
@@ -82,10 +93,18 @@ export function NoteList({
         )}
       </div>
 
+      <div className="flex shrink-0 items-center border-b border-border px-2 py-1.5">
+        <SearchField query={query} onQueryChange={onQueryChange} />
+      </div>
+
       {/* `undefined` is "not loaded yet", not "empty": showing the empty state
           during the first frame would flash "No notes" on every reload. */}
       {items === undefined ? null : items.length === 0 ? (
-        <EmptyState title={t(emptyTitle(scope))} body={t(emptyBody(scope))} />
+        hasQuery(query) ? (
+          <EmptyState title={t('noteList.noResults.title')} body={t('noteList.noResults.body')} />
+        ) : (
+          <EmptyState title={t(emptyTitle(scope))} body={t(emptyBody(scope))} />
+        )
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto">
           {items.map((note) => (
@@ -95,6 +114,7 @@ export function NoteList({
               selected={note.id === selectedNoteId}
               onSelect={() => onSelect(note.id)}
               onTogglePin={onTogglePin}
+              query={query}
             />
           ))}
         </ul>
