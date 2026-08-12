@@ -421,3 +421,37 @@ test('Cmd/Ctrl+F focuses the search field', async ({ page }) => {
 
   await expect(page.getByRole('searchbox', { name: 'Search notes' })).toBeFocused();
 });
+
+test('search narrows the list against real stored notes, and creating a note clears it', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  let editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Groceries\nmilk and bread');
+  await editor.blur();
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Sprint planning\nstandup notes');
+  await editor.blur();
+
+  const noteList = page.getByRole('region', { name: 'Note list' });
+  await expect(noteList.getByRole('button', { name: /Groceries/ })).toBeVisible();
+  await expect(noteList.getByRole('button', { name: /Sprint planning/ })).toBeVisible();
+
+  const search = page.getByRole('searchbox', { name: 'Search notes' });
+  await search.fill('milk');
+
+  await expect(noteList.getByRole('button', { name: /Groceries/ })).toBeVisible();
+  await expect(noteList.getByRole('button', { name: /Sprint planning/ })).toHaveCount(0);
+
+  // A note created under an active query would otherwise be invisible the
+  // instant it exists.
+  await page.getByRole('button', { name: 'New note' }).click();
+  await expect(search).toHaveValue('');
+  await expect(noteList.getByRole('button', { name: /Untitled/ })).toBeVisible();
+});

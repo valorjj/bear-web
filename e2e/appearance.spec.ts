@@ -247,3 +247,23 @@ test('the app renders in its own typeface, not the system fallback', async ({ pa
   expect(widths.real).toBeGreaterThan(0);
   expect(widths.real).not.toBe(widths.absent);
 });
+
+test('the search field reads as a control at rest', async ({ page }) => {
+  await page.goto('/');
+
+  const search = page.getByRole('searchbox', { name: 'Search notes' });
+  await expect(search).toBeVisible();
+
+  const style = await search.evaluate((element) => {
+    const own = getComputedStyle(element);
+    const pane = element.closest('[role="region"]');
+    return {
+      borderWidth: own.borderTopWidth,
+      background: own.backgroundColor,
+      paneBackground: pane === null ? null : getComputedStyle(pane).backgroundColor,
+    };
+  });
+
+  expect(style.borderWidth).not.toBe('0px');
+  expect(style.background).not.toBe(style.paneBackground);
+});
