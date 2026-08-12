@@ -13,6 +13,14 @@ export const ko: Record<TranslationKey, string> = {
   'noteList.empty.title': '메모 없음',
   'noteList.empty.body': '작성한 메모가 이 목록에 표시됩니다.',
 
+  'noteList.noResults.title': '일치하는 메모 없음',
+  'noteList.noResults.body':
+    '이 목록에서 검색어와 일치하는 메모가 없습니다. 검색어를 지우면 전체가 다시 표시됩니다.',
+
+  'search.label': '메모 검색',
+  'search.placeholder': '검색',
+  'search.clear': '검색어 지우기',
+
   'editor.empty.title': '선택된 메모 없음',
   'editor.empty.body': '목록에서 메모를 선택하거나 새로 만드세요.',
 
