@@ -464,7 +464,7 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   pixel values, because M8's typography sliders move every absolute size by
   design — pinning them would turn M8 into a test-editing exercise, which is
   the failure mode M5.5 already hit once. `smoke.spec.ts` pins absolutes for
-  the opposite and equally deliberate reason: a palette change *should* cost
+  the opposite and equally deliberate reason: a palette change _should_ cost
   a conscious edit.
 - **`e2e/smoke.spec.ts` pins the shipped palette deliberately.** It is the only
   test proving the `prefers-color-scheme` cascade reaches a rendered pixel, so
