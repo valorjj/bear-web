@@ -1,14 +1,31 @@
+import { hasQuery, normalizeForSearch } from './search';
+
 /**
  * The one-line preview shown beneath a note's title in the list: the first
  * non-empty line *after* the one `deriveTitle` consumed.
  *
- * Markdown syntax is left intact. This previews the raw text the user typed;
- * only the title line is stripped, and only by `deriveTitle`.
+ * With a `query`, it is instead the first line containing that query —
+ * including the title line, which the no-query path deliberately skips. A
+ * snippet that does not contain the match would render with nothing
+ * highlighted, which reads as a false positive.
+ *
+ * Markdown syntax is left intact. This previews the raw text the user typed.
  */
-export function deriveSnippet(text: string): string {
+export function deriveSnippet(text: string, query?: string): string {
   const lines = text.split('\n');
-  let seenTitle = false;
 
+  if (query !== undefined && hasQuery(query)) {
+    const target = normalizeForSearch(query.trim());
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed === '') continue;
+      if (normalizeForSearch(trimmed).includes(target)) return trimmed;
+    }
+    // Nothing matched this line-by-line — fall through to the ordinary
+    // snippet rather than returning nothing.
+  }
+
+  let seenTitle = false;
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed === '') continue;

@@ -63,3 +63,33 @@ describe('midnight', () => {
     expect(rendered).not.toContain('24:30');
   });
 });
+
+describe('deriveSnippet with a query', () => {
+  const text = 'Groceries\nfirst line\nsecond line\nmilk and bread';
+
+  it('is unchanged when no query is given', () => {
+    expect(deriveSnippet(text)).toBe('first line');
+  });
+
+  it('is unchanged when the query is blank', () => {
+    expect(deriveSnippet(text, '  ')).toBe('first line');
+  });
+
+  it('returns the first line containing the match', () => {
+    expect(deriveSnippet(text, 'milk')).toBe('milk and bread');
+  });
+
+  it('matches case-insensitively', () => {
+    expect(deriveSnippet(text, 'MILK')).toBe('milk and bread');
+  });
+
+  // The title line is skipped for the no-query snippet, but a query that only
+  // matches there must still produce a snippet the user can see the match in.
+  it('can return the title line when that is where the match is', () => {
+    expect(deriveSnippet(text, 'Groceries')).toBe('Groceries');
+  });
+
+  it('falls back to the ordinary snippet when nothing matches', () => {
+    expect(deriveSnippet(text, 'zzz')).toBe('first line');
+  });
+});
