@@ -532,6 +532,72 @@ describe('trash management', () => {
   });
 });
 
+describe('search', () => {
+  it('narrows the note list to matching notes', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+    await createNoteWithText('Sprint\nplanning');
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search notes' }), 'milk');
+
+    expect(await screen.findByRole('button', { name: /Groceries/ })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Sprint/ })).toBeNull();
+    });
+  });
+
+  // The positive assertion is the point. An "is not visible" test alone passes
+  // for a build where creation is broken outright — the vacuous shape M6
+  // shipped once and had to move.
+  it('clears the query when a note is created, so the new note is visible', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+
+    const field = screen.getByRole('searchbox', { name: 'Search notes' });
+    await userEvent.type(field, 'milk');
+    await waitFor(() => expect(field).toHaveValue('milk'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+
+    await waitFor(() => expect(field).toHaveValue(''));
+    expect(await screen.findByRole('button', { name: /Untitled/ })).toBeInTheDocument();
+  });
+
+  it('keeps the query when the scope changes', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+
+    const field = screen.getByRole('searchbox', { name: 'Search notes' });
+    await userEvent.type(field, 'milk');
+    await waitFor(() => expect(field).toHaveValue('milk'));
+
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Lists' })).getByRole('button', {
+        name: /^Trash\b/,
+      }),
+    );
+
+    expect(field).toHaveValue('milk');
+  });
+
+  // Same rule as the tag filter: a note the user is editing must not be pulled
+  // out from under them because their query stopped matching it.
+  it('keeps the open note open when the query stops matching it', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+
+    await userEvent.click(await screen.findByRole('button', { name: /Groceries/ }));
+    expect(await screen.findByRole('textbox', { name: 'Note text' })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search notes' }), 'zzzzz');
+
+    await waitFor(() => {
+      expect(screen.getByText('No matching notes')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('textbox', { name: 'Note text' })).toBeInTheDocument();
+  });
+});
+
 describe('StrictMode', () => {
   it('creates a note that survives the remount cycle', async () => {
     // React mounts, cleans up and remounts every component under StrictMode in

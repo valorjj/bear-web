@@ -1,9 +1,10 @@
-import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { notes } from '@/data';
 import {
   ACTIVE_SCOPE,
   acceptsNewNote,
+  filterByQuery,
   NoteEditor,
   NoteList,
   type NoteScope,
@@ -30,6 +31,29 @@ export function AppShell(): ReactElement {
   const { items, selectedNoteId, selectedNote, select } = useNotes(scope);
   const tree = useTagTree();
   const counts = useSmartListCounts();
+
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Filtering happens HERE, outside `useNotes`, and that placement is the
+  // whole design. Inside, `query` would join a `useLiveQuery` dependency
+  // array, and this project has a reproduced rule that `useLiveQuery` returns
+  // the previous deps' value for one tick after a deps change — so the list
+  // would render the previous query's results for a frame on every keystroke.
+  const visibleItems = useMemo(() => filterByQuery(items, query), [items, query]);
+
+  // Cmd/Ctrl+F focuses the app's own search. The browser's find would only
+  // search the rows currently in the DOM, which is never what is wanted here.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'f' || !(event.metaKey || event.ctrlKey)) return;
+      event.preventDefault();
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // The text the just-created note was seeded with, so `NoteEditor` can treat
   // it as disposable. Cleared as soon as the selection moves elsewhere.
@@ -63,6 +87,11 @@ export function AppShell(): ReactElement {
       const tag = seedTagFor(scope);
       const seedText = tag === null ? '' : `\n#${tag}`;
       if (!acceptsNewNote(scope)) setScope(ACTIVE_SCOPE);
+
+      // A new note is empty and matches no query, so it would be created
+      // invisible. Same defect `acceptsNewNote` solves for scopes, same fix:
+      // the action that creates the note moves the view to where it exists.
+      setQuery('');
 
       const created = await notes.create(seedText);
       setSeed(seedText === '' ? null : { id: created.id, text: seedText });
@@ -146,7 +175,7 @@ export function AppShell(): ReactElement {
       <Pane label={t('pane.noteList')} width={widths.noteListWidth} className="bg-surface">
         <NoteList
           scope={scope}
-          items={items}
+          items={visibleItems}
           selectedNoteId={selectedNoteId}
           onSelect={select}
           onCreate={() => void handleCreate()}
@@ -155,6 +184,9 @@ export function AppShell(): ReactElement {
           onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
           onPurge={(id) => setPending({ kind: 'purge', id })}
           onEmptyTrash={() => setPending({ kind: 'empty' })}
+          query={query}
+          onQueryChange={setQuery}
+          searchInputRef={searchRef}
         />
       </Pane>
 

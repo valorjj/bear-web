@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, RefObject } from 'react';
 
 import type { Note } from '@/data';
 import type { TranslationKey } from '@/i18n';
@@ -48,6 +48,8 @@ export interface NoteListProps {
    */
   query?: string;
   onQueryChange?: (next: string) => void;
+  /** So `AppShell` can focus the field from a keyboard shortcut. */
+  searchInputRef?: RefObject<HTMLInputElement | null>;
 }
 
 export function NoteList({
@@ -63,6 +65,7 @@ export function NoteList({
   onEmptyTrash,
   query = '',
   onQueryChange = () => {},
+  searchInputRef,
 }: NoteListProps): ReactElement {
   const t = useT();
 
@@ -94,7 +97,7 @@ export function NoteList({
       </div>
 
       <div className="flex shrink-0 items-center border-b border-border px-2 py-1.5">
-        <SearchField query={query} onQueryChange={onQueryChange} />
+        <SearchField query={query} onQueryChange={onQueryChange} inputRef={searchInputRef} />
       </div>
 
       {/* `undefined` is "not loaded yet", not "empty": showing the empty state
