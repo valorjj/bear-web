@@ -594,7 +594,52 @@ describe('search', () => {
     await waitFor(() => {
       expect(screen.getByText('No matching notes')).toBeInTheDocument();
     });
-    expect(screen.getByRole('textbox', { name: 'Note text' })).toBeInTheDocument();
+    // Not just present — still showing THIS note's content, proving the
+    // editor was never remounted or handed a different (or blank) note.
+    expect(screen.getByRole('textbox', { name: 'Note text' })).toHaveTextContent('Groceries');
+    expect(screen.getByRole('textbox', { name: 'Note text' })).toHaveTextContent('milk and bread');
+  });
+
+  // Same rule as the previous test, from the other direction: a search whose
+  // query matches nothing in the trash must not disable "Empty trash" — the
+  // button acts on every trashed note regardless of the query, and the
+  // dialog copy says so. Closes a defect where `emptyTrashDisabled` was
+  // computed from the query-narrowed list instead of the unfiltered one.
+  it('keeps Empty trash enabled when a query matches nothing in a non-empty trash', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Trash\b/ }));
+
+    const emptyTrash = await screen.findByRole('button', { name: 'Empty trash' });
+    await waitFor(() => expect(emptyTrash).toBeEnabled());
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search notes' }), 'zzzzz');
+
+    await waitFor(() => {
+      expect(screen.getByText('No matching notes')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeEnabled();
+  });
+
+  // Finding 3: Cmd/Ctrl+F must not steal focus into the search field while a
+  // destructive confirmation is pending — `ConfirmDialog` traps focus, and
+  // moving focus out from under it would leave Tab free to walk the page
+  // behind the still-open modal.
+  it('does not focus search when Cmd/Ctrl+F is pressed while a confirmation is pending', async () => {
+    renderShell();
+    await createNoteWithText('doomed');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Trash\b/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^doomed/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
+    await screen.findByRole('alertdialog');
+
+    await userEvent.keyboard('{Control>}f{/Control}');
+
+    expect(screen.getByRole('searchbox', { name: 'Search notes' })).not.toHaveFocus();
   });
 });
 

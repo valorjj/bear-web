@@ -42,19 +42,6 @@ export function AppShell(): ReactElement {
   // would render the previous query's results for a frame on every keystroke.
   const visibleItems = useMemo(() => filterByQuery(items, query), [items, query]);
 
-  // Cmd/Ctrl+F focuses the app's own search. The browser's find would only
-  // search the rows currently in the DOM, which is never what is wanted here.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'f' || !(event.metaKey || event.ctrlKey)) return;
-      event.preventDefault();
-      searchRef.current?.focus();
-      searchRef.current?.select();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
-
   // The text the just-created note was seeded with, so `NoteEditor` can treat
   // it as disposable. Cleared as soon as the selection moves elsewhere.
   const [seed, setSeed] = useState<{ id: string; text: string } | null>(null);
@@ -141,6 +128,24 @@ export function AppShell(): ReactElement {
     null,
   );
 
+  // Cmd/Ctrl+F focuses the app's own search. The browser's find would only
+  // search the rows currently in the DOM, which is never what is wanted here.
+  // Guarded on `pending`: `ConfirmDialog` traps focus while a destructive
+  // action awaits confirmation, and stealing focus into the search field
+  // would escape that trap, leaving Tab free to walk the page behind the
+  // still-open modal.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'f' || !(event.metaKey || event.ctrlKey)) return;
+      if (pending !== null) return;
+      event.preventDefault();
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [pending]);
+
   const confirmPending = useCallback(async () => {
     if (pending === null) return;
     setPending(null);
@@ -184,6 +189,13 @@ export function AppShell(): ReactElement {
           onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
           onPurge={(id) => setPending({ kind: 'purge', id })}
           onEmptyTrash={() => setPending({ kind: 'empty' })}
+          // Gated on the UNFILTERED `items`, not `visibleItems`: a query that
+          // matches nothing in a full trash must not disable the button that
+          // empties it. Emptying always empties every trashed note regardless
+          // of the query — the dialog copy already says so — so what it
+          // needs to know is whether the trash itself is empty, not whether
+          // the current search happens to show anything.
+          emptyTrashDisabled={items === undefined || items.length === 0}
           query={query}
           onQueryChange={setQuery}
           searchInputRef={searchRef}

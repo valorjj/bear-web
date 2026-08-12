@@ -402,3 +402,22 @@ test('deleting a note forever removes it permanently across a reload', async ({ 
   await lists.getByRole('button', { name: /^Trash\b/ }).click();
   await expect(page.getByText('Trash is empty')).toBeVisible();
 });
+
+test('Cmd/Ctrl+F focuses the search field', async ({ page }) => {
+  await page.goto('/');
+
+  // Wait for the shell to actually be interactive before pressing the
+  // shortcut — otherwise the keydown listener AppShell registers on mount
+  // may not be attached yet, which would fail for a reason unrelated to the
+  // shortcut itself.
+  await expect(page.getByRole('button', { name: 'New note' })).toBeVisible();
+
+  // A real browser shortcut, arbitrated by the real page — jsdom has no
+  // notion of "the browser's own find" to compete with, so this belongs
+  // here rather than in a component test. `ControlOrMeta` presses Meta on
+  // macOS and Control everywhere else, matching AppShell's own
+  // `event.metaKey || event.ctrlKey` check.
+  await page.keyboard.press('ControlOrMeta+f');
+
+  await expect(page.getByRole('searchbox', { name: 'Search notes' })).toBeFocused();
+});

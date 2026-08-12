@@ -33,6 +33,7 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
     onTogglePin: vi.fn(),
     onPurge: vi.fn(),
     onEmptyTrash: vi.fn(),
+    emptyTrashDisabled: false,
     ...overrides,
   };
 }
@@ -184,14 +185,28 @@ describe('NoteList', () => {
     expect(onEmptyTrash).toHaveBeenCalledTimes(1);
   });
 
-  it('disables empty trash while loading and when the trash is empty', () => {
+  it('disables empty trash when told to (loading or an empty trash)', () => {
     const { rerender } = renderWithI18n(
-      <NoteList {...props({ scope: TRASHED_SCOPE, items: undefined })} />,
+      <NoteList {...props({ scope: TRASHED_SCOPE, emptyTrashDisabled: true })} />,
     );
     expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
 
-    rerender(<NoteList {...props({ scope: TRASHED_SCOPE, items: [] })} />);
-    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
+    rerender(<NoteList {...props({ scope: TRASHED_SCOPE, emptyTrashDisabled: false })} />);
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeEnabled();
+  });
+
+  // The gating defect this closes: `items` here is the query-narrowed view.
+  // A query that matches none of the trashed notes must not disable the
+  // button that empties the whole trash regardless of the query — only
+  // `emptyTrashDisabled` may do that.
+  it('keeps empty trash enabled when a query matches nothing, as long as the trash itself is not empty', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({ scope: TRASHED_SCOPE, items: [], query: 'zzzzz', emptyTrashDisabled: false })}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeEnabled();
   });
 });
 

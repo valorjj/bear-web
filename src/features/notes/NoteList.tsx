@@ -42,9 +42,18 @@ export interface NoteListProps {
   onPurge: (id: string) => void;
   onEmptyTrash: () => void;
   /**
-   * Optional so `AppShell` can keep rendering `NoteList` before Task 7 wires
-   * the field through. Defaults are deliberately plain: an empty string and a
-   * no-op, never a value that would silently mask a missing wire-up.
+   * Whether "Empty trash" should be disabled. Computed by the caller from the
+   * UNFILTERED note list, never from `items` here: `items` is the
+   * query-narrowed view, and a query that matches nothing in a full trash
+   * must not disable the button that empties the whole trash regardless of
+   * the query.
+   */
+  emptyTrashDisabled: boolean;
+  /**
+   * Optional so component tests that do not exercise search can omit them.
+   * `AppShell` always supplies both. Defaults are deliberately plain: an
+   * empty string and a no-op, never a value that would silently mask a
+   * missing wire-up.
    */
   query?: string;
   onQueryChange?: (next: string) => void;
@@ -63,6 +72,7 @@ export function NoteList({
   onTogglePin,
   onPurge,
   onEmptyTrash,
+  emptyTrashDisabled,
   query = '',
   onQueryChange = () => {},
   searchInputRef,
@@ -86,11 +96,7 @@ export function NoteList({
           </Button>
         )}
         {isTrash(scope) && (
-          <Button
-            variant="danger"
-            disabled={items === undefined || items.length === 0}
-            onClick={onEmptyTrash}
-          >
+          <Button variant="danger" disabled={emptyTrashDisabled} onClick={onEmptyTrash}>
             {t('noteList.emptyTrash')}
           </Button>
         )}
