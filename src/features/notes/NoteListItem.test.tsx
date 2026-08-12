@@ -134,3 +134,77 @@ describe('NoteListItem', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 });
+
+describe('accessible name', () => {
+  it('separates title, date and snippet so they do not run together', () => {
+    // Pre-M7 this announced as "Groceries14:32milk and bread".
+    renderItem({
+      note: makeNote({ title: 'Groceries', text: 'Groceries\nmilk and bread' }),
+    });
+
+    const row = screen.getByRole('button', { name: /Groceries/ });
+    const name = row.getAttribute('aria-label') ?? '';
+    expect(name).toContain('Groceries, ');
+    expect(name).toMatch(/, milk and bread$/);
+  });
+
+  it('names an untitled, empty note without collapsing the two placeholders', () => {
+    renderItem({ note: makeNote({ title: '', text: '' }) });
+
+    const row = screen.getByRole('button', { name: /Untitled/ });
+    expect(row.getAttribute('aria-label')).toContain('Untitled, ');
+  });
+
+  it('is unaffected by highlight markup', () => {
+    renderItem({
+      note: makeNote({ title: 'Groceries', text: 'Groceries\nmilk and bread' }),
+      query: 'milk',
+    });
+
+    const row = screen.getByRole('button', { name: /Groceries/ });
+    expect(row.getAttribute('aria-label')).toMatch(/, milk and bread$/);
+  });
+});
+
+describe('query highlighting', () => {
+  it('marks the match in the snippet', () => {
+    const { container } = renderItem({
+      note: makeNote({ title: 'Groceries', text: 'Groceries\nmilk and bread' }),
+      query: 'milk',
+    });
+
+    expect(container.querySelector('[data-match]')?.textContent).toBe('milk');
+  });
+
+  it('marks the match in the title', () => {
+    const { container } = renderItem({
+      note: makeNote({ title: 'Groceries', text: 'Groceries\nmilk' }),
+      query: 'Groc',
+    });
+
+    const marks = [...container.querySelectorAll('[data-match]')];
+    expect(marks.map((m) => m.textContent)).toContain('Groc');
+  });
+
+  it('shows the matching line as the snippet, not the first line', () => {
+    renderItem({
+      note: makeNote({ title: 'Groceries', text: 'Groceries\nfirst\nmilk here' }),
+      query: 'milk',
+    });
+
+    // Highlighting splits "milk here" across a marked span and a trailing
+    // text node, so the default text matcher — which only reads an
+    // element's own direct text-node children — cannot see the whole
+    // string as one node's text. Match on the element's full textContent
+    // instead of the (reduced) text the default matcher receives.
+    expect(screen.getByText((_, node) => node?.textContent === 'milk here')).toBeInTheDocument();
+  });
+
+  it('renders nothing marked without a query', () => {
+    const { container } = renderItem({
+      note: makeNote({ title: 'Groceries', text: 'Groceries\nmilk' }),
+    });
+
+    expect(container.querySelector('[data-match]')).toBeNull();
+  });
+});
