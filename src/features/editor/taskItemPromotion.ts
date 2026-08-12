@@ -12,6 +12,12 @@ import { Extension, InputRule } from '@tiptap/core';
  *
  * The `^` anchor is against the start of the text block, which is what keeps
  * this from firing mid-paragraph.
+ *
+ * The bracket contents are optional (`[ xX]?`) so that `[] ` promotes here too.
+ * `TaskItem`'s own rule accepts empty brackets, and requiring a character would
+ * mean the identical keystrokes produced a task item in a paragraph and literal
+ * `[] text` in a bullet — the same input, two outcomes, decided by context the
+ * user cannot see.
  */
 export const TaskItemPromotion = Extension.create({
   name: 'taskItemPromotion',
@@ -19,7 +25,7 @@ export const TaskItemPromotion = Extension.create({
   addInputRules() {
     return [
       new InputRule({
-        find: /^\[([ xX])\]\s$/,
+        find: /^\[([ xX]?)\]\s$/,
         handler: ({ state, range, match, chain }) => {
           const $from = state.doc.resolve(range.from);
           if ($from.node(-1)?.type.name !== 'listItem') return null;

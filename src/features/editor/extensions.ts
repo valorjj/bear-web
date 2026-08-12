@@ -37,8 +37,18 @@ const supportedExtensions: Extensions = [
   TaskItem.configure({ nested: true }),
   // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
   // schema: `computeRecognizedHtmlTags()` below and every round-trip suite are
-  // unaffected by it. It contributes exactly one input rule, and must come
-  // after `TaskList`/`TaskItem` because it drives their commands.
+  // unaffected by it. It contributes exactly one input rule.
+  //
+  // Its position relative to `TaskList`/`TaskItem` does not matter, and an
+  // earlier draft of this comment wrongly claimed it did ("must come after
+  // ... because it drives their commands"). Commands resolve from the live
+  // editor, not from registration order, and moving this entry above both was
+  // verified to leave every test in `taskItemPromotion.test.ts` green.
+  // Registration order decides only which rule gets first refusal on a given
+  // keystroke, and that is harmless here: `@tiptap/core`'s input-rules plugin
+  // sets `matched` only when a handler returns non-null AND leaves steps on
+  // the transaction, so a rule that declines — as this one does whenever its
+  // parent is not a `listItem` in a `bulletList` — falls through to the next.
   TaskItemPromotion,
   Highlight,
 ];

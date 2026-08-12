@@ -205,6 +205,65 @@ describe('bullet-to-task promotion', () => {
     editor.destroy();
   });
 
+  // Pinned behaviour, not an endorsement, and the sharper case of the lift
+  // above: a bullet inside a blockquote leaves the blockquote entirely when
+  // promoted. `TaskItem`'s OWN rule does not do this — from
+  // `<blockquote><p></p></blockquote>` it produces
+  // `blockquote > taskList > taskItem`, keeping the quote (asserted below, so
+  // the difference is a fact this suite checks rather than a claim). So this
+  // rule rewrites containment in a way the existing one does not. Accepted on
+  // the same grounds as the nested-list lift — nothing is lost, the quoted
+  // paragraph survives, and it beats the literal-text defect — but pinned so
+  // it is visible rather than discovered.
+  it('lifts a bullet out of a blockquote when promoting it', () => {
+    const editor = editorWith('<blockquote><p>quoted</p><ul><li><p></p></li></ul></blockquote>');
+    editor.commands.setTextSelection(firstEmptyTextBlockPos(editor));
+    type(editor, '[ ] q');
+
+    const blocks = topLevelNodes(editor);
+    expect(blocks.slice(0, 2).map((node) => node.type)).toEqual(['blockquote', 'taskList']);
+    // The quoted paragraph survives, and the task item is NOT inside the quote.
+    expect(JSON.stringify(blocks[0])).toContain('"text":"quoted"');
+    expect(JSON.stringify(blocks[0])).not.toContain('taskItem');
+    expect(JSON.stringify(blocks[1])).toContain('"text":"q"');
+    editor.destroy();
+  });
+
+  // The contrast that makes the test above a real difference and not just a
+  // quirk of blockquotes: TaskItem's own rule keeps the blockquote.
+  it("keeps the blockquote when TaskItem's own rule promotes a paragraph", () => {
+    const editor = editorWith('<blockquote><p></p></blockquote>');
+    editor.commands.setTextSelection(firstEmptyTextBlockPos(editor));
+    type(editor, '[ ] q');
+
+    const quote = topLevelNodes(editor)[0];
+    expect(quote?.type).toBe('blockquote');
+    expect(quote?.content?.[0]?.type).toBe('taskList');
+    expect(JSON.stringify(quote)).toContain('"text":"q"');
+    editor.destroy();
+  });
+
+  // `TaskItem`'s own rule accepts empty brackets, so this one must too.
+  // Otherwise the identical keystrokes give a task item in a paragraph and
+  // literal `[] milk` in a bullet, decided by context the user cannot see.
+  it("accepts empty brackets, matching TaskItem's own rule", () => {
+    const inBullet = editorWith('<p></p>');
+    inBullet.commands.focus('end');
+    type(inBullet, '- [] milk');
+    const promoted = topLevelNodes(inBullet)[0];
+    expect(promoted?.type).toBe('taskList');
+    expect(promoted?.content?.[0]?.attrs?.checked).toBe(false);
+    expect(JSON.stringify(inBullet.getJSON())).not.toContain('[]');
+    inBullet.destroy();
+
+    // The plain-paragraph path it now agrees with.
+    const inParagraph = editorWith('<p></p>');
+    inParagraph.commands.focus('end');
+    type(inParagraph, '[] milk');
+    expect(topLevelNodes(inParagraph)[0]?.type).toBe('taskList');
+    inParagraph.destroy();
+  });
+
   // A `taskItem` may only live in a `taskList`, so promoting inside an ordered
   // list would have to change the list's type. The rule declines instead: the
   // text stays literal, exactly as it did before this rule existed. No
