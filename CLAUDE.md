@@ -23,7 +23,7 @@ IndexedDB.
 | M6 smart lists, trash management | complete               |
 | M7–M9                            | search, themes, polish |
 
-717 unit tests, 21 end-to-end tests. `main` is always green and auto-deploys.
+721 unit tests, 26 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -450,6 +450,22 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   hairline) and `RichEditor.tsx` (the text caret). The test asserts the
   suppressor set first, so a third file fails before the marker check runs.
   `RichEditor`'s suppression was an undocumented accident until M5.5.
+- **`e2e/appearance.spec.ts` is the only test in the project that can see
+  "renders wrong", and it is deliberately RELATIVE where `smoke.spec.ts` is
+  absolute.** Three defects shipped through a fully green 700+ test suite —
+  the missing `--color-hover`, `Button`'s borderless-and-fill-less `default`
+  variant, and the total absence of editor prose CSS — because the round-trip
+  suite drives `MarkdownManager` with no DOM and the component tests assert
+  document structure, never computed style. All five tests were verified by
+  reintroducing each of those exact defects and watching precisely the
+  intended test fail; any new one belongs there only if it fails under a
+  fault injection. Assertions are relationships (a heading is larger than a
+  paragraph, a checkbox's box overlaps its label's vertically) rather than
+  pixel values, because M8's typography sliders move every absolute size by
+  design — pinning them would turn M8 into a test-editing exercise, which is
+  the failure mode M5.5 already hit once. `smoke.spec.ts` pins absolutes for
+  the opposite and equally deliberate reason: a palette change *should* cost
+  a conscious edit.
 - **`e2e/smoke.spec.ts` pins the shipped palette deliberately.** It is the only
   test proving the `prefers-color-scheme` cascade reaches a rendered pixel, so
   a token change SHOULD require a conscious edit there. It went stale for four
