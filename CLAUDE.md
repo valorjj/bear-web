@@ -11,19 +11,20 @@ IndexedDB.
 
 ## Status
 
-| Milestone                        | State                  |
-| -------------------------------- | ---------------------- |
-| M0 scaffold, CI, Pages deploy    | complete               |
-| M1 data layer (Dexie)            | complete               |
-| M2 application shell             | complete               |
-| M3 notes CRUD, textarea editor   | complete               |
-| M4 editor                        | complete               |
-| M5 tags                          | complete               |
-| M5.5 design language             | complete               |
-| M6 smart lists, trash management | complete               |
-| M7–M9                            | search, themes, polish |
+| Milestone                        | State          |
+| -------------------------------- | -------------- |
+| M0 scaffold, CI, Pages deploy    | complete       |
+| M1 data layer (Dexie)            | complete       |
+| M2 application shell             | complete       |
+| M3 notes CRUD, textarea editor   | complete       |
+| M4 editor                        | complete       |
+| M5 tags                          | complete       |
+| M5.5 design language             | complete       |
+| M6 smart lists, trash management | complete       |
+| M7 search                        | complete       |
+| M8–M9                            | themes, polish |
 
-721 unit tests, 26 end-to-end tests. `main` is always green and auto-deploys.
+786 unit tests, 30 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -551,18 +552,84 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
 - **Today does not roll over at midnight.** A note edited at 23:59 stays in
   Today until something else re-runs the query. A timer whose only job is to
   move one row is not worth a live subscription.
-- **Typing `- [ ] milk` does not create a task item, and this is an editor
-  input-rule defect, not a Todo defect.** StarterKit's bullet-list input rule
-  fires on `- ` first and converts the block to a `listItem`; `TaskItem`'s own
-  `wrappingInputRule` then cannot wrap a paragraph that is already inside a
-  `listItem`, so the user is left with a plain bullet and the literal text
-  `[ ] milk`, which never reaches Todo's predicate. M6's Todo predicate,
-  registry, and counts are all verified correct — this is purely the M4-era
-  editor never having its own promotion rule for this keystroke. Do not "fix"
-  this by loosening the Todo predicate to match literal `[ ] text` bullets;
-  the fix belongs in the editor, as an input rule that promotes a bullet item
-  to a task item, with its own round-trip coverage (see the `markdown.ts`
-  fidelity/stability/preservation rules above) — not in M6's counting logic.
+- **Before M7, typing `- [ ] milk` did not create a task item, and that was an
+  editor input-rule defect, not a Todo defect.** StarterKit's bullet-list input
+  rule fired on `- ` first and converted the block to a `listItem`; `TaskItem`'s
+  own `wrappingInputRule` could not then wrap a paragraph already inside a
+  `listItem`, leaving the user with a plain bullet and the literal text
+  `[ ] milk`, which never reached Todo's predicate. M6's Todo predicate,
+  registry, and counts were all verified correct — this was purely the
+  M4-era editor never having its own promotion rule for this keystroke. M7's
+  `TaskItemPromotion` (see the structural-assertion rule below) closed it; do
+  not "fix" a regression here by loosening the Todo predicate to match literal
+  `[ ] text` bullets — that was ruled out in M6 and stays ruled out.
+- **Search is a filter over the list a scope produced, never a `NoteScope`
+  arm and never inside a `useLiveQuery`.** Two properties depend on the
+  placement. A third arm would reopen the M5 defect where a widened union
+  silently made every `===` gate partial. And putting `query` in a
+  `useLiveQuery` dependency array would hand search the documented
+  previous-deps-for-one-tick behaviour, rendering the previous query's
+  results for a frame on every keystroke. `AppShell` applies
+  `filterByQuery` to `useNotes`' output, and `useNotes` is untouched.
+- **`findMatchRanges` returns indices into `text.normalize('NFC')`, not into
+  `text`.** NFC changes string length, so Hangul offsets computed on one form
+  do not address the other; `HighlightedText` renders the normalized string
+  for exactly this reason. It also returns `[]` rather than shifted ranges
+  when `.toLowerCase()` changes length (`'İ'` folds to two code units) —
+  losing a highlight is acceptable, marking the wrong characters is not.
+  Matching uses `indexOf`, not `RegExp`, so metacharacters are literal with
+  no escaping step to get wrong.
+- **Creating a note clears the query.** A new note is empty and matches no
+  non-empty query, so it would be created invisible — the same defect
+  `acceptsNewNote` solves for scopes, with the same resolution. Switching
+  scope deliberately does NOT clear it, which is why the no-results empty
+  state has its own copy naming the query as the cause.
+- **A query never deselects the open note**, for the same reason a tag filter
+  never does: the filter runs outside `useNotes`, which still reconciles on
+  trash state alone.
+- **`NoteListItem` carries an explicit `aria-label`.** Its three sibling
+  spans concatenate with no separator and accessible-name computation ignores
+  the CSS gap, so the row announced as `"Groceries14:32milk"` from M3 until
+  M7. The label also keeps highlight markup out of the name. Same root cause
+  as the `SidebarRow` regression M5.5 caught and reverted — and, as there, a
+  role-based test that fails during a restyle is reporting a behaviour
+  change, not a stale expectation.
+- **The bullet-to-task input rule needs a STRUCTURAL assertion, and that is
+  why the M4-era version of this bug hid.** A promoted task item and a
+  hand-authored one serialize to byte-identical Markdown, so every round-trip
+  suite passes whether or not `TaskItemPromotion` fires — the same blind spot
+  that let a dead `==highlight==` tokenizer and a live-but-banned underline
+  mark both ship. `taskItemPromotion.test.ts` asserts on the parsed document
+  and `e2e/notes.spec.ts` drives the real keystrokes. Do not "fix" a future
+  regression here by loosening the Todo predicate to match literal
+  `[ ] text` bullets; that was ruled out in M6.
+- **Promoting a bullet lifts it out of an enclosing blockquote, while
+  `TaskItem`'s own rule keeps the blockquote in the analogous case.** Accepted,
+  not endorsed — nothing is lost and the parent survives, which beats the
+  defect. Pinned by a PAIR of tests, one for each rule, so the divergence is
+  checked on every run rather than asserted in prose.
+- **A nested bullet promoted with `[ ] ` is lifted to the top level, losing
+  its indentation.** Accepted for the same reason as the blockquote case:
+  nothing is lost and it beats the defect. Pinned by a test.
+- **`1. [ ] milk` inside an ordered list does not promote**, because a
+  `taskItem` cannot live in an `orderedList`. Fail-safe — the user keeps a
+  plain ordered-list item rather than losing anything — and pinned by a test.
+- **`toggleTaskList()` DOES split a bullet list correctly when promoting a
+  single middle item** — the neighbours survive as plain bullets. This was an
+  open question in the M7 spec; the answer is recorded here so nobody
+  re-derives it by trial and error.
+- **Extension registration order does not decide which input rule wins.** A
+  tiptap input rule whose handler declines — returns non-null but leaves no
+  steps on the transaction — does not set `matched`, and falls through to the
+  next rule regardless of where it sits in `supportedExtensions`. An earlier
+  comment in `extensions.ts` asserted the opposite and was disproved by moving
+  `TaskItemPromotion` above `TaskList`/`TaskItem` and watching every test in
+  `taskItemPromotion.test.ts` stay green.
+- **`NoteList` takes an explicit `emptyTrashDisabled` prop, supplied from the
+  UNFILTERED note list.** Gating "Empty trash" on the filtered list meant a
+  fruitless search while viewing Trash disabled emptying a full trash — the
+  button read "disabled" for a reason that had nothing to do with whether
+  Trash actually had anything in it.
 
 ## Carried into M5b and M6
 
@@ -574,14 +641,6 @@ the M5.5 progress ledger, gitignored and not carried forward — the items below
 are what survived out of it. Fold these into the next plan rather than
 rediscovering them.
 
-- **First item of M7: the task-item input-rule defect.** `- [ ] milk` produces
-  a plain bullet with literal `[ ] milk` text instead of a task item, because
-  StarterKit's bullet-list input rule wins the race against `TaskItem`'s
-  `wrappingInputRule` and a paragraph already wrapped in a `listItem` cannot be
-  re-wrapped. Todo's predicate, registry, and counts are all correct — see the
-  rule recorded above under "Rules that must not be silently reversed." Fix
-  needs an input rule that promotes a bullet item to a task item, plus its own
-  round-trip fidelity/stability coverage; not in scope for M6.
 - **The tag pill mark and rename/delete are M5b.** M5 shipped the parser, the
   index, the tree, the sidebar, and seeded creation; it never made `#tag` its
   own inline mark, never let a tag be renamed or deleted in bulk, and never
@@ -622,19 +681,6 @@ rediscovering them.
   siblings sit in `tokens.css` unused while `RichEditor`'s contenteditable is
   `text-sm`. M8 owns the typography sliders and must wire the tokens, not
   merely add UI. M5.5's spec deferred editor typography deliberately.
-- **`NoteListItem`'s accessible name runs together.** Its three sibling spans —
-  title, date, snippet — concatenate with no separator, so a row announces as
-  `"work note10:24some body text"` (re-verified during M6 as
-  `"Groceries #work14:32milk"`). Same root cause as the `SidebarRow`
-  regression M5.5 caught and reverted: JSX strips inter-element whitespace and
-  accessible-name computation ignores CSS gaps. **Verified byte-identical
-  before and after M5.5, and again before and after M6, so it is pre-existing,
-  not introduced by either.** Unlike the `SidebarRow` case there is no
-  separator to restore — title, date and snippet want a visually-hidden
-  separator or an explicit `aria-label`, which is a real accessibility design
-  decision rather than a bug fix. M6 owned the note list and did not close
-  this; it is carried forward, and belongs to whichever milestone next touches
-  `NoteListItem`.
 - **`confirmPending` in `AppShell` clears its state and then awaits with no
   `try`/`catch`.** A rejected `purge` or `emptyTrash` closes the dialog and
   leaves the user believing the deletion succeeded. This matches the four

@@ -455,3 +455,23 @@ test('search narrows the list against real stored notes, and creating a note cle
   await expect(search).toHaveValue('');
   await expect(noteList.getByRole('button', { name: /Untitled/ })).toBeVisible();
 });
+
+test('typing "- [ ] " produces a real checkbox, not a literal bullet', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  // The full sequence a user types, including the leading "- " that hands the
+  // line to StarterKit's bulletList rule first. That race is the defect.
+  await page.keyboard.type('- [ ] milk');
+
+  await expect(editor.getByRole('checkbox')).toBeVisible();
+  await expect(editor).not.toContainText('[ ] milk');
+
+  await editor.blur();
+
+  const lists = page.getByRole('navigation', { name: 'Lists' });
+  await lists.getByRole('button', { name: /^Todo\b/ }).click();
+  await expect(page.getByRole('region', { name: 'Note list' }).getByText('milk')).toBeVisible();
+});
