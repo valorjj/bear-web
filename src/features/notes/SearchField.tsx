@@ -1,6 +1,7 @@
 import type { ReactElement, RefObject } from 'react';
 
 import { useT } from '@/i18n';
+import { Icon, Search, X } from '@/ui/Icon';
 
 export interface SearchFieldProps {
   query: string;
@@ -14,6 +15,9 @@ export function SearchField({ query, onQueryChange, inputRef }: SearchFieldProps
 
   return (
     <div className="relative flex min-w-0 flex-1 items-center">
+      <span aria-hidden="true" className="pointer-events-none absolute left-2 text-faint">
+        <Icon glyph={Search} size="sm" />
+      </span>
       <input
         ref={inputRef}
         type="search"
@@ -24,7 +28,7 @@ export function SearchField({ query, onQueryChange, inputRef }: SearchFieldProps
         onKeyDown={(event) => {
           if (event.key === 'Escape') onQueryChange('');
         }}
-        className="h-7 w-full min-w-0 rounded-sm border border-border bg-bg px-2 pr-6 text-ui text-text placeholder:text-faint"
+        className="h-7 w-full min-w-0 rounded-sm border border-border bg-bg py-1 pr-6 pl-7 text-ui text-text placeholder:text-faint"
       />
       {query !== '' && (
         <button
@@ -33,7 +37,7 @@ export function SearchField({ query, onQueryChange, inputRef }: SearchFieldProps
           onClick={() => onQueryChange('')}
           className="absolute right-1 px-1 text-ui text-faint transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:text-text"
         >
-          ×
+          <Icon glyph={X} size="sm" />
         </button>
       )}
     </div>

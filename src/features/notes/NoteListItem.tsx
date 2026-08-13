@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 
 import type { Note } from '@/data';
 import { useLocale, useT } from '@/i18n';
+import { Icon, Pin, PinOff } from '@/ui/Icon';
 
 import { deriveSnippet, formatNoteDate } from './format';
 import { HighlightedText } from './HighlightedText';
@@ -48,7 +49,7 @@ export function NoteListItem({
         onClick={onSelect}
         aria-current={selected ? 'true' : undefined}
         aria-label={label}
-        className={`flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 text-left transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
+        className={`flex min-w-0 flex-1 flex-col gap-1 px-3 py-3 text-left transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
           selected ? 'bg-selected' : 'hover:bg-hover'
         }`}
       >
@@ -79,7 +80,7 @@ export function NoteListItem({
           note.pinned ? 'text-accent' : 'text-faint'
         }`}
       >
-        ●
+        <Icon glyph={note.pinned ? Pin : PinOff} size="sm" />
       </button>
     </li>
   );

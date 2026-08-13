@@ -135,6 +135,21 @@ describe('NoteListItem', () => {
   });
 });
 
+describe('pin icon', () => {
+  it('renders the pin as an icon and keeps its name', () => {
+    renderItem({ note: makeNote({ pinned: false }) });
+
+    const pin = screen.getByRole('button', { name: 'Pin note' });
+    expect(pin.querySelector('svg')).not.toBeNull();
+    expect(pin.textContent).toBe('');
+  });
+
+  it('keeps the pin button a sibling of the row, never nested inside it', () => {
+    const { container } = renderItem({ note: makeNote({ pinned: false }) });
+    expect(container.querySelector('button button')).toBeNull();
+  });
+});
+
 describe('accessible name', () => {
   it('separates title, date and snippet so they do not run together', () => {
     // Pre-M7 this announced as "Groceries14:32milk and bread".
