@@ -68,10 +68,16 @@ test('a default button reads as a control at rest, not as text', async ({ page }
 
   const style = await created.evaluate((element) => {
     const own = getComputedStyle(element);
-    const pane = element.closest('[role="region"]');
+    // Not `[role="region"]`: Pane.tsx renders `<section aria-label>`, whose
+    // "region" role is implicit ARIA semantics, never reflected as a DOM
+    // attribute. That selector always returns null here, which silently
+    // turned the fill-vs-pane assertion below into "colour !== null" — always
+    // true, whatever the button's actual background was.
+    const pane = element.closest('section[aria-label]');
     return {
       borderWidth: own.borderTopWidth,
       background: own.backgroundColor,
+      paneFound: pane !== null,
       paneBackground: pane === null ? null : getComputedStyle(pane).backgroundColor,
     };
   });
@@ -81,6 +87,10 @@ test('a default button reads as a control at rest, not as text', async ({ page }
   // not quietly re-pass.
   expect(style.borderWidth).not.toBe('0px');
   expect(style.background).not.toBe('rgba(0, 0, 0, 0)');
+
+  // A null pane must fail loudly, not make the next assertion vacuously true
+  // by comparing a colour string to `null`.
+  expect(style.paneFound).toBe(true);
 
   // A fill identical to the pane behind it is not a fill. This is what makes
   // the assertion above more than a tautology.
@@ -302,15 +312,24 @@ test('the search field reads as a control at rest', async ({ page }) => {
 
   const style = await search.evaluate((element) => {
     const own = getComputedStyle(element);
-    const pane = element.closest('[role="region"]');
+    // See the identical note in "a default button reads as a control at
+    // rest": `[role="region"]` never matches Pane.tsx's `<section
+    // aria-label>`, whose region role is implicit ARIA semantics rather than
+    // a DOM attribute.
+    const pane = element.closest('section[aria-label]');
     return {
       borderWidth: own.borderTopWidth,
       background: own.backgroundColor,
+      paneFound: pane !== null,
       paneBackground: pane === null ? null : getComputedStyle(pane).backgroundColor,
     };
   });
 
   expect(style.borderWidth).not.toBe('0px');
+
+  // A null pane must fail loudly, not make the next assertion vacuously true
+  // by comparing a colour string to `null`.
+  expect(style.paneFound).toBe(true);
   expect(style.background).not.toBe(style.paneBackground);
 });
 

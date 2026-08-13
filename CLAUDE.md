@@ -728,15 +728,27 @@ matched = true })`: once any rule commits steps, `matched` is set and every
 - **A CSS attribute selector like `[role="region"]` does not match a
   `<section aria-label>`.** The "region" role there is implicit ARIA
   semantics — the browser computes it for accessibility, but never writes a
-  `role` attribute into the DOM — so a raw `document.querySelectorAll` call
-  for that selector inside a Playwright `page.evaluate` silently returns an
-  empty list. The pane-card test in `e2e/appearance.spec.ts` did exactly this
-  and passed vacuously: zero panes matched, the assertion loop ran zero
-  times, and the test was green whether or not any pane had a background at
-  all. Fixed by selecting on the attribute actually present,
-  `section[aria-label]`, and by asserting the matched count.
-  `page.getByRole('region')`, by contrast, is unaffected — it queries the
-  accessibility tree Playwright itself computes, not raw DOM attributes.
+  `role` attribute into the DOM — so a raw `document.querySelectorAll` or
+  `.closest()` call for that selector inside a Playwright `page.evaluate`
+  silently returns nothing. **Every use of that selector in
+  `e2e/appearance.spec.ts` was audited and corrected, not just the one being
+  added.** Three call sites shared the identical broken selector: the
+  pane-card test (`querySelectorAll`, empty array, loop ran zero times,
+  passed vacuously whether or not any pane had a background), and two older
+  tests — "a default button reads as a control at rest" and "the search
+  field reads as a control at rest" — that used `.closest()`, got `null` back
+  for the pane every time, and so compared a colour string to `null` instead
+  of to the pane's actual background; that comparison is always true, so
+  neither had ever caught a fill identical to its pane. All three now select
+  on the attribute actually present, `section[aria-label]`; the two
+  `.closest()` sites also assert the pane was found at all, so a null lookup
+  fails loudly instead of quietly validating anything compared against it.
+  **The reusable distinction: `page.getByRole('region')` is unaffected by any
+  of this** — it queries the accessibility tree Playwright itself computes,
+  not raw DOM attributes, so it sees the same implicit role a screen reader
+  would. A CSS attribute selector inside `page.evaluate` sees only what is
+  literally written in the DOM. Reach for `getByRole` there; a `[role="..."]`
+  selector inside `evaluate` is a trap for exactly this reason.
 - **A transparent background and "equal to the canvas colour" are not the same
   failure, and one assertion does not catch both.** A pane with no `bg-*`
   class computes a `backgroundColor` of `rgba(0, 0, 0, 0)`, a literal string
