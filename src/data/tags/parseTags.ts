@@ -212,9 +212,31 @@ function closesOnSameLine(text: string, from: number, close: number): boolean {
   return !text.slice(from, close).includes('\n');
 }
 
-export function parseTags(markdown: string): string[] {
+export interface TagRange {
+  /** The normalized tag name, exactly as `parseTags` would report it. */
+  tag: string;
+  /** Index of the opening `#` in the ORIGINAL input. */
+  start: number;
+  /**
+   * Index one past the tag's last character. For the multi-word form this
+   * includes the closing `#` — it is tag syntax, not prose punctuation. For
+   * the simple form, trailing punctuation trimmed by `normalizeTag` (as in
+   * `#done.`) is excluded — a pill has no business painting a sentence's
+   * full stop.
+   */
+  end: number;
+}
+
+/**
+ * Every tag occurrence, with its position. `parseTags` is the deduped
+ * name-only view of this — one grammar, two views.
+ *
+ * `maskCode` replaces characters one-for-one, so an index into the masked
+ * copy is an index into the original. `parseTags.test.ts` pins that.
+ */
+export function findTagRanges(markdown: string): TagRange[] {
   const text = maskCode(markdown);
-  const found: string[] = [];
+  const ranges: TagRange[] = [];
   let i = 0;
 
   while (i < text.length) {
@@ -232,7 +254,8 @@ export function parseTags(markdown: string): string[] {
     const close = text.indexOf('#', open + 1);
 
     let content: string | null;
-    let end: number;
+    let consumedEnd: number;
+    let isMultiWord: boolean;
 
     if (
       close !== -1 &&
@@ -246,20 +269,42 @@ export function parseTags(markdown: string): string[] {
       // otherwise `Fix #bug then see item # 5` reads the far, unrelated `#` as
       // this tag's closer and swallows the prose between them.
       content = text.slice(open + 1, close);
-      end = close + 1;
+      consumedEnd = close + 1;
+      isMultiWord = true;
     } else {
       let j = open + 1;
       while (j < text.length && !isBoundary(text[j])) j += 1;
       const simple = text.slice(open + 1, j);
       // A simple tag may not contain a hash, which is what rejects `###`.
       content = simple.includes('#') ? null : simple;
-      end = j;
+      consumedEnd = j;
+      isMultiWord = false;
     }
 
-    const tag = content === null ? null : normalizeTag(content);
-    if (tag !== null) found.push(tag);
-    i = end;
+    if (content !== null) {
+      const tag = normalizeTag(content);
+      if (tag !== null) {
+        // The multi-word form's closing `#` is tag syntax, so its range runs
+        // to `consumedEnd` (past the closer) unmodified. The simple form has
+        // no closer, so the range instead describes the TRIMMED NAME: `content`
+        // already has no leading or trailing whitespace (canStart/isBoundary
+        // guarantee the first character starts the tag, and the simple-form
+        // scan stops at the first boundary), so the only thing `normalizeTag`
+        // trims that shifts the END is `trimTrailing`'s punctuation strip —
+        // reapplying it here to the untouched `content` reproduces exactly
+        // how many characters were dropped from the tail. Without this,
+        // `#done.` would paint a pill over the sentence's own full stop.
+        const end = isMultiWord ? consumedEnd : open + 1 + trimTrailing(content).length;
+        ranges.push({ tag, start: open, end });
+      }
+    }
+
+    i = consumedEnd;
   }
 
-  return [...new Set(found)];
+  return ranges;
+}
+
+export function parseTags(markdown: string): string[] {
+  return [...new Set(findTagRanges(markdown).map((range) => range.tag))];
 }

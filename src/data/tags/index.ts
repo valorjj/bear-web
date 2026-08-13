@@ -1,1 +1,2 @@
-export { parseTags } from './parseTags';
+export { findTagRanges, parseTags } from './parseTags';
+export type { TagRange } from './parseTags';

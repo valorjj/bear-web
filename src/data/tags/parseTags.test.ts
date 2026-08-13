@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseTags } from './parseTags';
+import { findTagRanges, parseTags } from './parseTags';
 
 describe('parseTags', () => {
   describe('simple form', () => {
@@ -227,6 +227,126 @@ describe('parseTags', () => {
       ].join('\n');
 
       expect(parseTags(note)).toEqual(['work/urgent', 'work', '한국어']);
+    });
+  });
+
+  describe('findTagRanges agrees with parseTags', () => {
+    // The whole point of the extraction: one grammar, two views. While this is
+    // green, a divergent second implementation cannot exist.
+    const REALISTIC_NOTE = [
+      '# Sprint notes',
+      '',
+      'Ship the parser #work/urgent by Friday.',
+      '',
+      '- [ ] write tests #work',
+      '- [x] read `#nope` in the docs',
+      '',
+      '```sh',
+      '# not a tag',
+      '#alsonot',
+      '```',
+      '',
+      'See https://example.com/#anchor for context. #한국어',
+    ].join('\n');
+
+    const CASES: string[] = [
+      '',
+      'no tags here',
+      '#work',
+      'a #work b',
+      '#work/urgent and #home',
+      '#a b#',
+      'Fix #bug then see item # 5',
+      '`#work` is code',
+      '```\n#work\n```',
+      'x`#work`',
+      '#Work and #work',
+      '#123',
+      '#done./',
+      '#.leading',
+      '#/bin/sh',
+      '#!/bin/sh',
+      '###',
+      'https://x/#a',
+      '[x](#a)',
+      '#work\n#home',
+      '#가나 and #다라',
+      // Every input string appearing elsewhere in this file:
+      '#work\n#home',
+      '#work #work',
+      '#work/urgent',
+      '#a/b/c',
+      '#한국어',
+      '#Work',
+      '#WORK and #work',
+      '#work1',
+      '#work/1',
+      '#work-item',
+      '#work_item',
+      '#work\r\n#home',
+      '#b #a #b #c',
+      'https://example.com/#anchor',
+      '[x](#anchor)',
+      '<div id="#x">',
+      'a#b',
+      'see#work',
+      '(#work)',
+      '  #work',
+      '\t#work',
+      'line one\n#work',
+      '#project plan#',
+      '#project plan# trailing',
+      '#a #b',
+      '#a b #c d#',
+      '#big project/phase one#',
+      '#project  plan#',
+      '#project plan\nmore #',
+      'Issue #12 and # of items',
+      'see #tag and # here.',
+      '# Heading',
+      '## Heading',
+      '### Heading',
+      '#### Heading',
+      '# Heading\ntext #work',
+      '#work\n',
+      '#1 priority',
+      '#404',
+      '#12/34',
+      '#',
+      '# ',
+      '#a//b',
+      '#/',
+      '#.',
+      '#-lead',
+      '#done.',
+      '#done..',
+      '#done,',
+      '#done!?',
+      '#work/',
+      '#work//',
+      '#work/urgent.',
+      'use `#work` here',
+      'use ``#work`` here',
+      '`x`#work',
+      '#work`x`',
+      'before\n```\n#work\n```\nafter #home',
+      '~~~\n#work\n~~~',
+      '```ts\n#work\n```',
+      '```\n#work\n~~~\n#home\n```',
+      '```code``` is inline\n\n#work #home',
+      'a\n```\n#incode\n```txt\n#work\n```\n#tail',
+      '~~~\n#incode\n~~~x\n#work',
+      '```\n#work\n``` not-a-closer\n#home',
+      '```\n#work\n```   \n#tail',
+      '~~~ruby\n#work\n~~~',
+      '#project `x` plan#',
+      'a ` b #work',
+      '    #define FOO',
+      REALISTIC_NOTE,
+    ];
+
+    it.each(CASES)('agrees on %j', (input) => {
+      expect([...new Set(findTagRanges(input).map((r) => r.tag))]).toEqual(parseTags(input));
     });
   });
 });
