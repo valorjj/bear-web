@@ -154,7 +154,7 @@ export function AppShell(): ReactElement {
   }, [pending]);
 
   return (
-    <main className="flex h-full w-full overflow-hidden bg-bg text-text">
+    <main className="flex h-full w-full gap-1 overflow-hidden bg-canvas p-1 text-text">
       <Pane label={t('pane.sidebar')} width={widths.sidebarWidth} className="bg-sidebar">
         <div className="flex h-full flex-col overflow-y-auto">
           <SmartListSidebar scope={scope} onScopeChange={setScope} counts={counts} />

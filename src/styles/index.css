@@ -17,6 +17,7 @@
   --color-border: var(--bear-border);
   --color-hover: var(--bear-hover);
   --color-selected: var(--bear-selected);
+  --color-canvas: var(--bear-canvas);
 
   --font-sans: var(--bear-font-sans);
   --font-mono: var(--bear-font-mono);
@@ -49,7 +50,7 @@ body,
 }
 
 body {
-  background-color: var(--color-bg);
+  background-color: var(--color-canvas);
   color: var(--color-text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
