@@ -1,4 +1,4 @@
-import { Editor } from '@tiptap/core';
+import { Editor, getSchema } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
 import { parseTags } from '@/data';
@@ -119,11 +119,13 @@ describe('the pill set and the tag index agree', () => {
 /**
  * The residue, pinned with its real values.
  *
- * All of it is one class: **a mark delimiter that lands inside, or
+ * This block is one class: **a mark delimiter that lands inside, or
  * immediately after, a tag's own characters.** Masking the first character of
  * a marked run cannot reach it — the tag does not start there — and no
  * editor-side masking can, because closing the disagreement would need the
- * pill to cover characters the document does not contain.
+ * pill to cover characters the document does not contain. A second, unrelated
+ * class — a mark applied over a run's own leading whitespace — has its own
+ * block at the foot of this file, because it cannot be written as Markdown.
  *
  * The cause is in the Markdown, not in the plugin: `*`, `~` and `=` are not
  * tag boundaries, so `parseTags` reading `**see #work**` yields the tag
@@ -135,16 +137,19 @@ describe('the pill set and the tag index agree', () => {
  * Two shapes, both recorded in `CLAUDE.md`:
  *
  * - a pill of the WRONG EXTENT — a tag exists, under a different name;
- * - for `link` only, a pill with NO tag behind it at all, because
- *   `](https://…)` puts an empty `/`-segment in the name and `normalizeTag`
- *   rejects the whole candidate.
+ * - within this block, for `link` only, a pill with NO tag behind it at all,
+ *   because `](https://…)` puts an empty `/`-segment in the name and
+ *   `normalizeTag` rejects the whole candidate. It is one of TWO lying-pill
+ *   classes, not the only one — see the leading-whitespace block below.
  */
 const RESIDUAL: Array<[name: string, markdown: string, pilled: string[], indexed: string[]]> = [
   ['a tag closing a bold run', '**see #work**', ['work'], ['work**']],
   ['a tag closing an italic run', '*see #work*', ['work'], ['work*']],
   ['a tag closing a strike run', '~~see #work~~', ['work'], ['work~~']],
   ['a tag closing a highlight run', '==see #work==', ['work'], ['work==']],
-  // The one surviving case where the pill has no tag behind it at all.
+  // One of the two surviving classes where the pill has no tag behind it at
+  // all. The other is the leading-whitespace hoist, below — it cannot be
+  // written as Markdown, so it needs its own fixture shape.
   ['a tag closing a link text', '[see #work](https://e.com)', ['work'], []],
   ['a tag abutting a following bold run', '#work**bold**', ['work'], ['work**bold**']],
   ['a tag continuing into a bold run', 'x #wo**rk** y', ['wo'], ['wo**rk**']],
@@ -168,4 +173,95 @@ describe('accepted residual disagreement', () => {
       }
     });
   }
+});
+
+/**
+ * The second lying-pill class, and the reason the docblock in `blockText.ts`
+ * says a marked run's first character is only USUALLY delimiter-adjacent.
+ *
+ * When a mark is applied over a run that BEGINS with whitespace, the
+ * serializer hoists that whitespace outside the delimiter, so the delimiter
+ * lands against the `#` and `parseTags` rejects the tag — while in the
+ * document the run's second space still permits one to start, because the
+ * mask covers only the first character. The pill is there and the tag is not.
+ *
+ * It needs two or more leading whitespace characters: with exactly one, the
+ * mask covers it and the two views agree. Pre-existing — it lied before the
+ * first-character masking too — and unreachable from Markdown, which is why
+ * these fixtures are built node-wise rather than parsed from a string. That
+ * is also why no `AGREE` corpus entry could have caught it.
+ */
+const schema = getSchema(editorExtensions);
+
+/** A one-paragraph document with `marked` carrying `mark`, built node-wise. */
+function editorForRun(pre: string, marked: string, post: string, mark: string): Editor {
+  const children = [
+    ...(pre === '' ? [] : [schema.text(pre)!]),
+    schema.text(marked, [
+      schema.marks[mark]!.create(mark === 'link' ? { href: 'https://e.com' } : undefined),
+    ])!,
+    ...(post === '' ? [] : [schema.text(post)!]),
+  ];
+  const doc = schema.nodes.doc!.create(null, [schema.nodes.paragraph!.create(null, children)]);
+  return new Editor({ extensions: editorExtensions, content: doc.toJSON() });
+}
+
+describe('a mark applied over leading whitespace', () => {
+  // Measured, not paraphrased: each of these serializes with the run's own
+  // leading space hoisted outside the delimiter.
+  it.each([
+    ['bold', 'pre  **#work**post'],
+    ['italic', 'pre  *#work*post'],
+    ['strike', 'pre  ~~#work~~post'],
+    ['highlight', 'pre  ==#work==post'],
+    ['link', 'pre  [#work](https://e.com)post'],
+  ])('pills with no tag behind it: %s', (mark, expectedMarkdown) => {
+    const editor = editorForRun('pre', '  #work', 'post', mark);
+    try {
+      expect(serializeMarkdown(editor.getJSON())).toBe(expectedMarkdown);
+      expect(pilledTags(editor)).toEqual(['workpost']);
+      expect(indexedTags(editor)).toEqual([]);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('pills with no tag behind it when the run also ends in whitespace', () => {
+    const editor = editorForRun('pre', '   #work ', 'post', 'bold');
+    try {
+      expect(serializeMarkdown(editor.getJSON())).toBe('pre   **#work** post');
+      expect(pilledTags(editor)).toEqual(['work']);
+      expect(indexedTags(editor)).toEqual([]);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('pills with no tag behind it at the start of a block', () => {
+    const editor = editorForRun('', '  #work', '', 'bold');
+    try {
+      expect(serializeMarkdown(editor.getJSON())).toBe('  **#work**');
+      expect(pilledTags(editor)).toEqual(['work']);
+      expect(indexedTags(editor)).toEqual([]);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  // The three controls that fix the precondition at "two or more leading
+  // whitespace characters, and not `code`". Without them the rule above could
+  // be read as "any leading whitespace", which is wrong.
+  it.each([
+    ['a single leading space, which the mask covers', 'pre', ' #work', 'post', 'bold'],
+    ['a single leading tab, likewise one character', 'pre', '\t#work', 'post', 'bold'],
+    ['a code run, which is masked whole', 'pre', '  #work', 'post', 'code'],
+  ])('agrees: %s', (_name, pre, marked, post, mark) => {
+    const editor = editorForRun(pre, marked, post, mark);
+    try {
+      expect(pilledTags(editor)).toEqual([]);
+      expect(indexedTags(editor)).toEqual([]);
+    } finally {
+      editor.destroy();
+    }
+  });
 });

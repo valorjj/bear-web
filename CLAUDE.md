@@ -26,7 +26,7 @@ IndexedDB.
 | M7.6 tag pills                   | complete       |
 | M8–M9                            | themes, polish |
 
-929 unit tests, 37 end-to-end tests. `main` is always green and auto-deploys.
+992 unit tests, 37 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -841,9 +841,10 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   correction. Same shape for `*…*`, `~~…~~`, `==…==`, for `#work**bold**`
   (indexes as `work**bold**`), and for a tag continuing into a mark —
   `x #wo**rk** y` pills `#wo` and indexes `wo**rk**`. **The `link` case is
-  worse and is the one surviving lying pill:** `[see #work](https://e.com)`
-  indexes NOTHING, because `](https://…)` puts an empty `/`-segment in the name
-  and `normalizeTag` rejects the whole candidate — so the pill is there and the
+  worse and is ONE of two surviving lying-pill classes** (the other is the
+  whitespace hoist in the next bullet): `[see #work](https://e.com)` indexes
+  NOTHING, because `](https://…)` puts an empty `/`-segment in the name and
+  `normalizeTag` rejects the whole candidate — so the pill is there and the
   tag is not. No editor-side masking can close any of this: agreement would
   need the pill to cover characters the document does not contain, and the
   cause is a pre-existing parser/serializer interaction that predates pills and
@@ -853,6 +854,24 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   both sides, so a tag continuing into an inline code span agrees exactly. All
   of it is pinned with its real values in `tagAgreement.test.ts`'s `RESIDUAL`
   block.
+- **The second lying-pill class: a mark applied over a run's own LEADING
+  WHITESPACE, which the serializer hoists outside the delimiter.** This is why
+  `maskedBlockText`'s docblock says a marked run's first character is only
+  _usually_ delimiter-adjacent — as an absolute the claim is false. Measured:
+  bold over `'  #work'` between `pre` and `post` serializes to
+  `pre  **#work**post`, so the space moved OUT of the delimiter; the pill
+  covers `#workpost` and the index holds nothing. Identical for `italic`
+  (`pre  *#work*post`), `strike` (`pre  ~~#work~~post`), `highlight`
+  (`pre  ==#work==post`) and `link` (`pre  [#work](https://e.com)post`).
+  `'   #work '` gives `pre   **#work** post`, pill `work`, index none; a run of
+  `'  #work'` alone in a block gives `  **#work**`, same. **The precondition is
+  two or more leading whitespace characters** — with exactly one space, or one
+  tab, the first-character mask covers it and the two views agree, and `code`
+  is masked whole so it agrees too. Pre-existing (it lied before the
+  first-character masking as well) and unreachable from Markdown: only applying
+  a mark over leading whitespace in the UI produces it, which is why no
+  Markdown-sourced corpus entry could catch it and why its fixtures in
+  `tagAgreement.test.ts` are built node-wise.
 - **The spec's own account of its known limit is wrong, and the corpus pins the
   truth instead.** Design doc line 81 says a tag split across a mark boundary
   (`#wo` bold, `rk` plain) still indexes and only loses its pill. It does not:

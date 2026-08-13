@@ -38,12 +38,24 @@ export const MASK = '\u0000';
  * first. Every mark in this schema — `bold`, `italic`, `strike`, `highlight`,
  * `link`, `code` — serializes with an opening delimiter (`**`, `*`, `~~`,
  * `==`, `[`, `` ` ``), verified against the real serializer rather than
- * assumed. So the first character of a marked run is preceded by `*`, `~`,
- * `=`, `[` or `` ` `` in the Markdown, never by whitespace, and `parseTags`
- * refuses to start a tag there. The document holds no such character, so
- * without this the plugin would accept `**#bravo**` as the tag `bravo` while
+ * assumed. So the first character of a marked run is USUALLY preceded by `*`,
+ * `~`, `=`, `[` or `` ` `` in the Markdown rather than by whitespace, and
+ * `parseTags` refuses to start a tag there. The document holds no such
+ * character, so without this the plugin would accept `**#bravo**` as the tag
+ * `bravo` while
  * the index — correctly — holds nothing: **a pill asserting something false
  * about the user's data**, which is strictly worse than a missing pill.
+ *
+ * "Usually" is exact, not hedging. The one exception is a run whose own
+ * LEADING WHITESPACE the serializer hoists outside the delimiter: a bold run
+ * of `'  #work'` between `pre` and `post` serializes to `pre  **#work**post`,
+ * so the space moved out and the delimiter landed against the `#`. Masking
+ * this run's first character consumes only the first of its two spaces, the
+ * second still permits a tag to start, and the pill lies. It needs two or
+ * more leading whitespace characters — with exactly one, the mask covers it
+ * and the two views agree — and it is unreachable from Markdown, only from
+ * applying a mark over leading whitespace in the UI. Pinned in
+ * `tagAgreement.test.ts`; see `CLAUDE.md`.
  *
  * Masking the run WHOLE would be wrong. `**see #work**` serializes with the
  * `#` preceded by a space, `parseTags` finds a tag there, and removing the
