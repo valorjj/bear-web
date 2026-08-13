@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 
 import type { Note } from '@/data';
 import { useLocale, useT } from '@/i18n';
-import { Icon, Pin, PinOff } from '@/ui/Icon';
+import { Icon, Pin } from '@/ui/Icon';
 
 import { deriveSnippet, formatNoteDate } from './format';
 import { HighlightedText } from './HighlightedText';
@@ -80,7 +80,7 @@ export function NoteListItem({
           note.pinned ? 'text-accent' : 'text-faint'
         }`}
       >
-        <Icon glyph={note.pinned ? Pin : PinOff} size="sm" />
+        <Icon glyph={Pin} size="sm" />
       </button>
     </li>
   );

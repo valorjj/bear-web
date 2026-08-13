@@ -85,8 +85,13 @@ describe('SmartListSidebar', () => {
     }
   });
 
-  // The icon must not join the row's name. This is the regression class M5.5
-  // caught in SidebarRow and shipped-then-reverted.
+  // Guards the count's explicit space text node (and any future icon slot
+  // that carried real text) from joining the row's name — the regression
+  // class M5.5 caught in SidebarRow and shipped-then-reverted. It does NOT
+  // guard today's `Icon` specifically: lucide's SVG output carries no
+  // nameable content, so this test cannot be falsified by removing `Icon`'s
+  // own `aria-hidden`. That half is pinned one layer down, in
+  // `Icon.test.tsx`'s "is hidden from assistive technology".
   it('keeps the row name to its label and count', () => {
     renderWithI18n(
       <SmartListSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} counts={counts} />,

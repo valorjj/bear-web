@@ -48,7 +48,6 @@ export {
   ListTodo,
   Calendar,
   Pin,
-  PinOff,
   Lock,
   Trash2,
   Hash,
