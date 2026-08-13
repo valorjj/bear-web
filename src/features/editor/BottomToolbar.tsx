@@ -156,7 +156,7 @@ export function BottomToolbar({ editor }: BottomToolbarProps): ReactElement {
     <div
       role="toolbar"
       aria-label={t('editor.toolbar.bottom')}
-      className="flex h-9 shrink-0 items-center gap-1 border-t border-border bg-bg px-4"
+      className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-bg px-4"
     >
       {ACTIONS.map((action) => (
         <button
@@ -166,7 +166,7 @@ export function BottomToolbar({ editor }: BottomToolbarProps): ReactElement {
           aria-pressed={editor !== null && action.active(editor)}
           disabled={editor === null}
           onClick={() => editor !== null && action.run(editor, t)}
-          className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
+          className="h-7 shrink-0 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
         >
           <Icon glyph={action.glyph} />
         </button>

@@ -83,6 +83,15 @@ These bit us once already. They are not mistakes.
   runtime error — so those buttons had no hover state for two milestones. No
   source-level grep can see this; only the compiled CSS shows a utility that
   never made it in.
+- **Subagent worktrees live under `.claude/worktrees/` inside the repo, and
+  Vitest globs them.** A parallel subagent-driven dispatch that leaves a
+  worktree behind silently runs several extra copies of the whole unit suite
+  on every `npm test`, inflating pass counts with no test-writing mistake to
+  find.
+- **`playwright.config.ts` hardcodes port 4173 with `reuseExistingServer`.**
+  Two parallel `npm run test:e2e` runs — e.g. two subagents, or a human and an
+  agent — share that port, so the second run measures the first run's tree
+  instead of its own.
 
 ## Architecture boundaries
 

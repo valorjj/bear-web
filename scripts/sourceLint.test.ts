@@ -254,7 +254,13 @@ describe('focus', () => {
   it('lets only known files suppress the outline, each with a replacement', () => {
     const suppressors = walk('src', ['.tsx'])
       .filter((path) => !/\.test\.tsx$/.test(path))
-      .filter((path) => /outline-none/.test(readFileSync(path, 'utf8')));
+      // A bare `outline-none` is dead: the unlayered global `:focus-visible`
+      // rule in index.css beats it regardless of specificity (Task 3b, M7.5).
+      // Only the `focus-visible:` variant — matched at (0,2,0) specificity —
+      // actually wins the cascade and suppresses anything. Matching the bare
+      // form here would let a file revert to the dead form and still satisfy
+      // this test, which is exactly what shipped, undetected, until Task 3b.
+      .filter((path) => /focus-visible:outline-none/.test(readFileSync(path, 'utf8')));
 
     expect(suppressors.sort()).toEqual(Object.keys(OUTLINE_SUPPRESSORS).sort());
 

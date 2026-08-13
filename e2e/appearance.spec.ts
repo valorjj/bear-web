@@ -350,6 +350,7 @@ test('each pane reads as a card against the canvas behind it', async ({ page }) 
       return {
         background: style.backgroundColor,
         radius: Number.parseFloat(style.borderTopLeftRadius),
+        boxShadow: style.boxShadow,
       };
     });
     return { canvas, panes };
@@ -368,6 +369,13 @@ test('each pane reads as a card against the canvas behind it', async ({ page }) 
     expect(pane.background).not.toBe('rgba(0, 0, 0, 0)');
     expect(pane.background).not.toBe(measured.canvas);
     expect(pane.radius).toBeGreaterThan(0);
+    // Depth is what separates a card from a flat rectangle against the
+    // canvas — the app has no window chrome to do it for free. Nothing else
+    // in this loop reads `boxShadow`, so `shadow-popover` could vanish from
+    // `Pane.tsx` (the exact `--color-hover` shape: a Tailwind utility whose
+    // theme key disappears emits nothing and warns nothing) and every other
+    // assertion here would stay green.
+    expect(pane.boxShadow).not.toBe('none');
   }
 });
 
@@ -404,6 +412,84 @@ test('the formatting toolbar is icons, not letters', async ({ page }) => {
   expect(shape.withText).toBe(0);
 });
 
+test('every formatting toolbar control is reachable at a narrow viewport', async ({ page }) => {
+  // At 900px the editor pane sits at its 300px minimum while uniform
+  // icon-only buttons need ~408px, so Link, Code block and Quote overflow the
+  // toolbar's width. The fix is a horizontal scroll on the toolbar itself
+  // (`overflow-x-auto` in BottomToolbar.tsx), not a responsive collapse —
+  // that decision is explicitly out of scope for this milestone. This test
+  // proves nothing is unreachable, not that the layout looks any particular
+  // way.
+  //
+  // Deliberately NOT `toBeInViewport()` and NOT a plain `.click()`: the
+  // editor pane's own `overflow-y-auto` computes its `overflow-x` to `auto`
+  // too (the CSS rule that a `visible` axis paired with a non-visible one
+  // becomes `auto`), so even the UN-fixed toolbar remains scrollable and
+  // clickable via the *pane's* scrollbar — Playwright's auto-scrolling
+  // `.click()` reaches it either way, and so does `toBeInViewport()` (both
+  // verified to pass against the un-fixed toolbar). That is the exact "only
+  // reachable by discovering horizontal scroll with no affordance" defect
+  // named in the brief: technically scrollable, by the wrong element, with
+  // no visible cue. The fix scopes the scroll to the toolbar itself
+  // (`overflow-x-auto` in BottomToolbar.tsx) so only the button row moves,
+  // not the note's prose along with it — which is what this test verifies
+  // by driving `scrollLeft` on the toolbar element directly and checking
+  // that a clipped button actually enters ITS bounds, not just the
+  // viewport's.
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const toolbar = page.getByRole('toolbar', { name: 'Formatting toolbar' });
+  await expect(toolbar).toBeVisible();
+
+  const quote = toolbar.getByRole('button', { name: 'Quote' });
+
+  const before = await toolbar.evaluate(
+    (element, target) => {
+      const toolbarBox = element.getBoundingClientRect();
+      const buttonBox = (target as HTMLElement).getBoundingClientRect();
+      return {
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+        clipped: buttonBox.right > toolbarBox.right,
+      };
+    },
+    await quote.elementHandle(),
+  );
+
+  // The toolbar must actually be narrower than its content at this width,
+  // and Quote must actually start outside it — otherwise the scroll check
+  // below would pass vacuously because there was nothing to reach.
+  expect(before.scrollWidth).toBeGreaterThan(before.clientWidth);
+  expect(before.clipped).toBe(true);
+
+  const after = await toolbar.evaluate(
+    (element, target) => {
+      element.scrollLeft = element.scrollWidth;
+      const toolbarBox = element.getBoundingClientRect();
+      const buttonBox = (target as HTMLElement).getBoundingClientRect();
+      return { withinToolbar: buttonBox.right <= toolbarBox.right + 1 };
+    },
+    await quote.elementHandle(),
+  );
+
+  // Scrolling the TOOLBAR's own `scrollLeft` — not the pane's, not the
+  // page's — must bring Quote inside it. If the toolbar itself is not the
+  // scrolling container (the un-fixed state), setting its `scrollLeft` is a
+  // no-op and Quote's position never changes.
+  expect(after.withinToolbar).toBe(true);
+
+  // No regression at a comfortable width: `overflow-x-auto` must not
+  // introduce a visible scrollbar or gap when there is nothing to scroll.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const wide = await toolbar.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+  }));
+  expect(wide.scrollWidth).toBeLessThanOrEqual(wide.clientWidth);
+});
+
 test('the prose column is measured on a wide window', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/');
@@ -419,9 +505,13 @@ test('the prose column is measured on a wide window', async ({ page }) => {
     // the card test above: Pane.tsx's "region" role is implicit, not an
     // explicit attribute.
     const pane = prose.closest('section[aria-label]');
+    // `getComputedStyle` resolves `max-width: 56em` (`--bear-line-width`) to
+    // an absolute pixel length here, so no unit conversion is needed.
+    const lineWidthPx = Number.parseFloat(getComputedStyle(prose).maxWidth);
     return {
       prose: prose.getBoundingClientRect().width,
       pane: pane === null ? 0 : pane.getBoundingClientRect().width,
+      lineWidthPx,
     };
   });
 
@@ -429,4 +519,14 @@ test('the prose column is measured on a wide window', async ({ page }) => {
   // property that must hold is "narrower than the pane", not a pixel count.
   expect(widths.pane).toBeGreaterThan(0);
   expect(widths.prose).toBeLessThan(widths.pane);
+
+  // The upper-bound check alone cannot see a collapsed column: deleting
+  // `width: 100%` from `.ProseMirror` in editor.css shrinks the flex item to
+  // its content (a single short line, ~150px in a 1000px+ pane), and
+  // `prose < pane` stays true. The contract is clamp-then-centre — the
+  // rendered width should equal `min(--bear-line-width, pane width)` — so
+  // assert the lower bound too, against the actual token value rather than a
+  // pixel constant.
+  const expected = Math.min(widths.lineWidthPx, widths.pane);
+  expect(widths.prose).toBeGreaterThan(expected - 2);
 });

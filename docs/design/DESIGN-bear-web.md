@@ -265,25 +265,22 @@ Every pair passes its target, with margin.
 
 M7.5 introduced `{colors.canvas}` — `#e8e4de` in Paper, `#121211` in Ink — as
 the ground the three panes float on, painted on `body` behind the panes' own
-rounded, shadowed cards. It is one step darker than every pane background in
-both themes, so it was re-measured against the tokens that sit near it:
-`border` (the card edge, against the ground it separates panes from) and, for
-completeness, `text`/`faint` above were re-run against every pane background
-rather than just `sidebar`, since M7.5 changed nothing about `bg` or
-`surface` but the sidebar row alone was previously the only one checked for
-`faint`.
+rounded, shadowed cards. Panes carry no border: `src/ui/Pane.tsx` separates a
+pane from the canvas with `rounded-lg shadow-popover` alone, computed
+`borderTopWidth` is `0px` on all three panes in both themes, and the spec's
+own words are "Cards carry depth, not borders." An earlier draft of this
+section measured a `border`-on-`canvas` ratio and justified the low
+canvas/pane ratios below by "the 1px `border` hairline around each pane" —
+that row and that reasoning described a hairline that does not exist in the
+shipped build and has been removed. What actually separates a pane from the
+canvas is `{shadows.popover}` and the background step between `{colors.canvas}`
+and the pane's own fill, both measured below.
 
-| Foreground | Background | Target                | Paper      | Ink        |
-| ----------- | ----------- | ---------------------- | ---------- | ---------- |
-| `border`   | `canvas`   | not a WCAG text pair   | **1.02:1** | **1.49:1** |
-
-`border`-on-`canvas` is not a text contrast pair and has no WCAG target; it is
-reported because it is the card edge against the ground. 1.02:1 in Paper means
-the hairline is nearly invisible against the canvas on its own — the card
-reads as a card through its shadow (`{shadows.popover}`) and its own
-background stepping up from the canvas, not through this edge. Judged
-acceptable: the hairline's job in this app is separating *rows inside* a
-pane, not separating the pane from the canvas.
+Canvas is one step darker than every pane background in both themes, so it
+was measured against each; for completeness, `text`/`faint` above were also
+re-run against every pane background rather than just `sidebar`, since M7.5
+changed nothing about `bg` or `surface` but the sidebar row alone was
+previously the only one checked for `faint`.
 
 The canvas itself, read against each pane background (not a WCAG requirement —
 this is the number that decides whether the panes read as cards floating
@@ -297,12 +294,12 @@ above a ground at all, not a text-legibility check):
 
 These ratios are low by design — the canvas is a subtle, warm-greyscale step,
 not a strong colour break — and the separation a user actually sees comes
-from the combination of this small colour step, the 1px `border` hairline
-around each pane, and `{shadows.popover}`. Judged acceptable: none of the
-three panes' `text` or `faint` ratios above regressed when the canvas
-shipped, which is the property that actually matters (a user must still be
-able to read the app); the panes-as-cards effect is a design choice measured
-here for the record, not a bar to clear.
+from the combination of this small colour step and `{shadows.popover}`, not
+from any border: the panes have none. Judged acceptable: none of the three
+panes' `text` or `faint` ratios above regressed when the canvas shipped,
+which is the property that actually matters (a user must still be able to
+read the app); the panes-as-cards effect is a design choice measured here for
+the record, not a bar to clear.
 
 No token changed as a result of this measurement — every text/faint pair
 against the new canvas era's pane backgrounds already cleared its bar with

@@ -43,14 +43,18 @@ export function NoteListItem({
   const label = `${displayTitle}, ${date}, ${displaySnippet}`;
 
   return (
-    <li className="relative flex items-stretch border-b border-border">
+    <li
+      className={`relative flex items-stretch border-b border-border transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
+        selected ? 'bg-selected' : ''
+      }`}
+    >
       <button
         type="button"
         onClick={onSelect}
         aria-current={selected ? 'true' : undefined}
         aria-label={label}
         className={`flex min-w-0 flex-1 flex-col gap-1 px-3 py-3 text-left transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
-          selected ? 'bg-selected' : 'hover:bg-hover'
+          selected ? '' : 'hover:bg-hover'
         }`}
       >
         {selected && (
