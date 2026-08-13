@@ -196,6 +196,11 @@ export function AppShell(): ReactElement {
           // needs to know is whether the trash itself is empty, not whether
           // the current search happens to show anything.
           emptyTrashDisabled={items === undefined || items.length === 0}
+          // Same reasoning, same source (the UNFILTERED `items`): whether the
+          // no-results empty state may override a scope's own special-cased
+          // empty copy (Locked, Trash) depends on whether the scope had
+          // anything before the query narrowed it, not on the narrowed view.
+          hasUnfilteredItems={items !== undefined && items.length > 0}
           query={query}
           onQueryChange={setQuery}
           searchInputRef={searchRef}

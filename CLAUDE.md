@@ -618,13 +618,24 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   single middle item** — the neighbours survive as plain bullets. This was an
   open question in the M7 spec; the answer is recorded here so nobody
   re-derives it by trial and error.
-- **Extension registration order does not decide which input rule wins.** A
-  tiptap input rule whose handler declines — returns non-null but leaves no
-  steps on the transaction — does not set `matched`, and falls through to the
-  next rule regardless of where it sits in `supportedExtensions`. An earlier
-  comment in `extensions.ts` asserted the opposite and was disproved by moving
-  `TaskItemPromotion` above `TaskList`/`TaskItem` and watching every test in
-  `taskItemPromotion.test.ts` stay green.
+- **Registration order does not decide which input rule wins FOR THIS PAIR —
+  that is not a general law.** `@tiptap/core`'s input-rules runner
+  (`InputRule.ts`) is `let matched = false; rules.forEach(rule => { if
+(matched) return; ...; if (handler === null || !tr.steps.length) return; ...
+matched = true })`: once any rule commits steps, `matched` is set and every
+  later rule in the array is skipped for that keystroke — order is load-bearing
+  in general. `TaskItemPromotion` and `TaskItem`'s own rule are the one pair
+  where order is provably immaterial, because they decline in exactly
+  complementary cases (one fires only inside an existing `listItem` in a
+  `bulletList`, the other only outside one), so at most one of them ever
+  commits steps for a given keystroke regardless of which is checked first.
+  Verified by moving `TaskItemPromotion` above `TaskList`/`TaskItem` and
+  watching every test in `taskItemPromotion.test.ts` stay green — that result
+  does not generalize to any other pair of rules. A rule "declines" by
+  returning `null` from its handler (the `handler === null` half of the guard
+  above); `TaskItemPromotion` uses that half. The `!tr.steps.length` half is a
+  separate guard for a handler that returns non-null but happens not to have
+  queued any steps — not the mechanism this rule relies on.
 - **`NoteList` takes an explicit `emptyTrashDisabled` prop, supplied from the
   UNFILTERED note list.** Gating "Empty trash" on the filtered list meant a
   fruitless search while viewing Trash disabled emptying a full trash — the

@@ -34,6 +34,7 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
     onPurge: vi.fn(),
     onEmptyTrash: vi.fn(),
     emptyTrashDisabled: false,
+    hasUnfilteredItems: true,
     ...overrides,
   };
 }
@@ -185,6 +186,41 @@ describe('NoteList', () => {
     expect(onEmptyTrash).toHaveBeenCalledTimes(1);
   });
 
+  // The class Task 7 fixed for "Empty trash" via `emptyTrashDisabled`; these
+  // three are the remaining instances. `items` is the query-narrowed view, so
+  // a selected note a query has filtered out of view is not on screen, and a
+  // control that acts on it (trash / restore / delete forever) must not
+  // render — otherwise a query that hides the selected note leaves a live
+  // "Delete forever" button next to an empty "No matching notes" list.
+  it('hides Move to trash for a selected note the query has filtered out', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({
+          scope: ACTIVE_SCOPE,
+          items: [makeNote('b', 'Beta')],
+          selectedNoteId: 'a',
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  it('hides Restore and Delete forever for a selected note the query has filtered out', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({
+          scope: TRASHED_SCOPE,
+          items: [makeNote('b', 'Beta')],
+          selectedNoteId: 'a',
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete forever' })).not.toBeInTheDocument();
+  });
+
   it('disables empty trash when told to (loading or an empty trash)', () => {
     const { rerender } = renderWithI18n(
       <NoteList {...props({ scope: TRASHED_SCOPE, emptyTrashDisabled: true })} />,
@@ -231,6 +267,63 @@ describe('search', () => {
 
     expect(screen.getByText('No matching notes')).toBeInTheDocument();
     expect(screen.queryByText('No notes')).toBeNull();
+  });
+
+  // The collision this closes: Locked is always empty by construction, and
+  // its empty copy exists specifically so a user does not read "your locked
+  // notes are missing." Gating the no-results state on `hasQuery` alone let a
+  // query win over that special case and assert exactly the false thing it
+  // was written to prevent.
+  it('does not let a query override the Locked empty copy', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({
+          scope: smartScope('locked'),
+          items: [],
+          query: 'milk',
+          hasUnfilteredItems: false,
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Locked notes are not available yet')).toBeInTheDocument();
+    expect(screen.queryByText('No matching notes')).toBeNull();
+  });
+
+  // Same mechanism, the Trash instance: a genuinely empty trash plus a query
+  // must still say "Trash is empty", not "No matching notes".
+  it('does not let a query override the Trash empty copy when the trash is genuinely empty', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({
+          scope: TRASHED_SCOPE,
+          items: [],
+          query: 'milk',
+          hasUnfilteredItems: false,
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Trash is empty')).toBeInTheDocument();
+    expect(screen.queryByText('No matching notes')).toBeNull();
+  });
+
+  // The paired positive case: when the trash DOES have notes and the query
+  // matches none of them, the no-results copy is correct and must still show.
+  it('shows no-results, not the Trash empty copy, when a non-empty trash has no matches', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({
+          scope: TRASHED_SCOPE,
+          items: [],
+          query: 'milk',
+          hasUnfilteredItems: true,
+        })}
+      />,
+    );
+
+    expect(screen.getByText('No matching notes')).toBeInTheDocument();
+    expect(screen.queryByText('Trash is empty')).toBeNull();
   });
 
   it('passes the query down so rows can highlight', () => {

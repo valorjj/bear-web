@@ -83,10 +83,25 @@ describe('deriveSnippet with a query', () => {
     expect(deriveSnippet(text, 'MILK')).toBe('milk and bread');
   });
 
-  // The title line is skipped for the no-query snippet, but a query that only
-  // matches there must still produce a snippet the user can see the match in.
-  it('can return the title line when that is where the match is', () => {
-    expect(deriveSnippet(text, 'Groceries')).toBe('Groceries');
+  // When the title is the ONLY match, repeating it as the snippet would
+  // print the same text twice (the title already renders, highlighted, above
+  // the snippet) with its raw syntax exposed. Falls back to the ordinary
+  // snippet instead, exactly like the no-query path.
+  it('does not repeat the title as the snippet when the title is the only match', () => {
+    expect(deriveSnippet(text, 'Groceries')).toBe('first line');
+  });
+
+  // The paired case: a match on the title line does NOT suppress a genuine
+  // body-line match elsewhere — this fixture's title itself contains no
+  // separate body occurrence, so cover the case where both lines match.
+  it('keeps the title-line match when a body line matches too', () => {
+    expect(deriveSnippet('Groceries about milk\nfirst line\nmilk and bread', 'milk')).toBe(
+      'Groceries about milk',
+    );
+  });
+
+  it('falls back to the ordinary snippet when a title-only match has no body line to show', () => {
+    expect(deriveSnippet('Groceries', 'Groceries')).toBe('');
   });
 
   it('falls back to the ordinary snippet when nothing matches', () => {

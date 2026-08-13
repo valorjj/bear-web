@@ -28,10 +28,12 @@ export function NoteListItem({
   const t = useT();
   const { locale } = useLocale();
 
-  const displayTitle = note.title === '' ? t('note.untitled') : note.title;
+  const hasTitle = note.title !== '';
+  const displayTitle = hasTitle ? note.title : t('note.untitled');
   const date = formatNoteDate(note.updatedAt, locale, now ?? Date.now());
   const snippet = deriveSnippet(note.text, query);
-  const displaySnippet = snippet === '' ? t('note.noText') : snippet;
+  const hasSnippet = snippet !== '';
+  const displaySnippet = hasSnippet ? snippet : t('note.noText');
 
   // Explicit, because the three spans below concatenate with no separator and
   // accessible-name computation ignores the CSS gap between them: this row
@@ -55,11 +57,16 @@ export function NoteListItem({
         )}
 
         <span className="truncate text-ui-md font-semibold text-text">
-          <HighlightedText text={displayTitle} query={query} />
+          {/* `query` is withheld when the text shown is an i18n placeholder
+              ("Untitled", "No additional text") rather than the note's own
+              content — otherwise a query that happens to match placeholder
+              text (e.g. "text" against "No additional text") highlights it as
+              though the user had written it. */}
+          <HighlightedText text={displayTitle} query={hasTitle ? query : undefined} />
         </span>
         <span className="text-ui-sm text-faint">{date}</span>
         <span className="truncate text-ui-sm text-muted">
-          <HighlightedText text={displaySnippet} query={query} />
+          <HighlightedText text={displaySnippet} query={hasSnippet ? query : undefined} />
         </span>
       </button>
 

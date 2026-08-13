@@ -44,11 +44,17 @@ const supportedExtensions: Extensions = [
   // ... because it drives their commands"). Commands resolve from the live
   // editor, not from registration order, and moving this entry above both was
   // verified to leave every test in `taskItemPromotion.test.ts` green.
-  // Registration order decides only which rule gets first refusal on a given
-  // keystroke, and that is harmless here: `@tiptap/core`'s input-rules plugin
-  // sets `matched` only when a handler returns non-null AND leaves steps on
-  // the transaction, so a rule that declines — as this one does whenever its
-  // parent is not a `listItem` in a `bulletList` — falls through to the next.
+  //
+  // That result is specific to this pair, not a general property of
+  // registration order: `@tiptap/core`'s input-rules runner short-circuits
+  // once any rule commits steps to the transaction (`InputRule.ts`'s
+  // `matched` flag), so order is normally load-bearing. It is immaterial here
+  // only because this rule and `TaskItem`'s own rule decline in exactly
+  // complementary cases — this one returns `null` from its handler whenever
+  // the input is not already inside a `listItem` in a `bulletList`, which is
+  // precisely the case `TaskItem`'s own rule handles — so at most one of the
+  // two ever commits steps for a given keystroke, whichever order they run
+  // in. See the CLAUDE.md entry with the same title for the full guard.
   TaskItemPromotion,
   Highlight,
 ];

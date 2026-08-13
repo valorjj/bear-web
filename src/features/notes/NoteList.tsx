@@ -50,6 +50,19 @@ export interface NoteListProps {
    */
   emptyTrashDisabled: boolean;
   /**
+   * Whether the scope had any notes at all before the query narrowed it.
+   * Computed by the caller from the UNFILTERED note list, for the same
+   * reason as `emptyTrashDisabled`: `items` here is the query-narrowed view,
+   * and an empty `items` can mean either "the query matched nothing" or "the
+   * scope itself has nothing in it" — those need different copy. Locked is
+   * always empty by construction and Trash can genuinely be empty; without
+   * this, a query that narrows either to zero rows overwrites their
+   * deliberately-special empty copy ("locked notes are missing" / "Trash is
+   * empty") with the generic no-results copy, which is a false statement in
+   * both cases once the query is cleared.
+   */
+  hasUnfilteredItems: boolean;
+  /**
    * Optional so component tests that do not exercise search can omit them.
    * `AppShell` always supplies both. Defaults are deliberately plain: an
    * empty string and a no-op, never a value that would silently mask a
@@ -73,25 +86,35 @@ export function NoteList({
   onPurge,
   onEmptyTrash,
   emptyTrashDisabled,
+  hasUnfilteredItems,
   query = '',
   onQueryChange = () => {},
   searchInputRef,
 }: NoteListProps): ReactElement {
   const t = useT();
 
+  // A control that acts on the selected note must not render when that note
+  // is not on screen: `items` is the query-narrowed view, so a note the
+  // query has filtered out is not visible even though it stays selected (a
+  // query never deselects the open note). Gating on `selectedNoteId !== null`
+  // alone let "Move to trash" / "Restore" / "Delete forever" render for a row
+  // the user cannot see.
+  const selectedIsVisible =
+    selectedNoteId !== null && (items ?? []).some((note) => note.id === selectedNoteId);
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-2">
         <Button onClick={onCreate}>{t('noteList.create')}</Button>
 
-        {selectedNoteId !== null && allowsTrash(scope) && (
-          <Button onClick={() => onTrash(selectedNoteId)}>{t('noteList.trash')}</Button>
+        {selectedIsVisible && allowsTrash(scope) && (
+          <Button onClick={() => onTrash(selectedNoteId!)}>{t('noteList.trash')}</Button>
         )}
-        {selectedNoteId !== null && isTrash(scope) && (
-          <Button onClick={() => onRestore(selectedNoteId)}>{t('noteList.restore')}</Button>
+        {selectedIsVisible && isTrash(scope) && (
+          <Button onClick={() => onRestore(selectedNoteId!)}>{t('noteList.restore')}</Button>
         )}
-        {selectedNoteId !== null && isTrash(scope) && (
-          <Button variant="danger" onClick={() => onPurge(selectedNoteId)}>
+        {selectedIsVisible && isTrash(scope) && (
+          <Button variant="danger" onClick={() => onPurge(selectedNoteId!)}>
             {t('noteList.deleteForever')}
           </Button>
         )}
@@ -109,7 +132,7 @@ export function NoteList({
       {/* `undefined` is "not loaded yet", not "empty": showing the empty state
           during the first frame would flash "No notes" on every reload. */}
       {items === undefined ? null : items.length === 0 ? (
-        hasQuery(query) ? (
+        hasQuery(query) && hasUnfilteredItems ? (
           <EmptyState title={t('noteList.noResults.title')} body={t('noteList.noResults.body')} />
         ) : (
           <EmptyState title={t(emptyTitle(scope))} body={t(emptyBody(scope))} />

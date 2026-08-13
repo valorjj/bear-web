@@ -207,4 +207,28 @@ describe('query highlighting', () => {
 
     expect(container.querySelector('[data-match]')).toBeNull();
   });
+
+  // The snippet placeholder is "No additional text" — a query for "text"
+  // would otherwise highlight it as though the user had written it.
+  it('does not highlight a match inside the "no text" placeholder', () => {
+    const { container } = renderItem({
+      note: makeNote({ title: 'Groceries', text: 'Groceries' }),
+      query: 'text',
+    });
+
+    expect(screen.getByText('No additional text')).toBeInTheDocument();
+    expect(container.querySelector('[data-match]')).toBeNull();
+  });
+
+  // Same mechanism for the title placeholder: "Untitled" itself could match
+  // a query for "title" or similar, and must not highlight either.
+  it('does not highlight a match inside the "untitled" placeholder', () => {
+    const { container } = renderItem({
+      note: makeNote({ title: '', text: '' }),
+      query: 'untitled',
+    });
+
+    expect(screen.getByText('Untitled')).toBeInTheDocument();
+    expect(container.querySelector('[data-match]')).toBeNull();
+  });
 });
