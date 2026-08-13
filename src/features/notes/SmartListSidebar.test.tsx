@@ -73,6 +73,27 @@ describe('SmartListSidebar', () => {
     expect(screen.getByRole('button', { name: 'Today 0' })).toBeInTheDocument();
   });
 
+  it('gives every smart list row an icon', () => {
+    const { container } = renderWithI18n(
+      <SmartListSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} counts={counts} />,
+    );
+
+    const rows = container.querySelectorAll('li');
+    expect(rows).toHaveLength(7);
+    for (const row of rows) {
+      expect(row.querySelector('svg')).not.toBeNull();
+    }
+  });
+
+  // The icon must not join the row's name. This is the regression class M5.5
+  // caught in SidebarRow and shipped-then-reverted.
+  it('keeps the row name to its label and count', () => {
+    renderWithI18n(
+      <SmartListSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} counts={counts} />,
+    );
+    expect(screen.getByRole('button', { name: 'Notes 3' })).toBeInTheDocument();
+  });
+
   it('renders rows without counts while they are loading', () => {
     const { unmount } = renderWithI18n(
       <SmartListSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} counts={undefined} />,

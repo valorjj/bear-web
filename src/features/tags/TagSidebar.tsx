@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { type NoteScope, scopeKey, tagScope } from '@/features/notes';
 import { useT } from '@/i18n';
 import { EmptyState } from '@/ui/EmptyState';
+import { Hash, Icon } from '@/ui/Icon';
 import { SidebarRow } from '@/ui/SidebarRow';
 
 import type { TagNode } from './tagTree';
@@ -32,6 +33,7 @@ function TagRow({ node, depth, scope, onScopeChange, isCollapsed, onToggle }: Ro
       label={node.label}
       count={node.count}
       depth={depth}
+      icon={<Icon glyph={Hash} size="sm" />}
       selected={selected}
       onSelect={() => onScopeChange(tagScope(node.tag))}
       disclosure={

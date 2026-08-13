@@ -40,6 +40,8 @@ export function Icon({ glyph: Glyph, size = 'md', className = '' }: IconProps): 
  * the only importer of the package; a feature file needing a new glyph adds
  * it here, not at its own call site.
  */
+export type { LucideIcon };
+
 export {
   FileText,
   Inbox,

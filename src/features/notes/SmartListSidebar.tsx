@@ -2,6 +2,8 @@ import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
 import type { TranslationKey } from '@/i18n';
+import { Calendar, FileText, Icon, Inbox, ListTodo, Lock, Pin, Trash2 } from '@/ui/Icon';
+import type { LucideIcon } from '@/ui/Icon';
 import { SidebarRow } from '@/ui/SidebarRow';
 
 import { type NoteScope, scopeKey, SMART_LIST_IDS, type SmartListId, smartScope } from './scope';
@@ -28,6 +30,16 @@ const LABELS: Record<SmartListId, TranslationKey> = {
   trash: 'smartList.trash',
 };
 
+const ICONS: Record<SmartListId, LucideIcon> = {
+  all: FileText,
+  untagged: Inbox,
+  todo: ListTodo,
+  today: Calendar,
+  pinned: Pin,
+  locked: Lock,
+  trash: Trash2,
+};
+
 export function SmartListSidebar({
   scope,
   onScopeChange,
@@ -49,6 +61,7 @@ export function SmartListSidebar({
               // is `undefined` for a genuine zero only by accident of
               // falsiness, and a zero count must render as "0".
               count={counts?.[id]}
+              icon={<Icon glyph={ICONS[id]} />}
               selected={active === scopeKey(rowScope)}
               onSelect={() => onScopeChange(rowScope)}
             />
