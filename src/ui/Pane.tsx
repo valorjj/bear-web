@@ -13,7 +13,7 @@ export function Pane({ label, width, children, className = '' }: PaneProps): Rea
     <section
       aria-label={label}
       style={width === undefined ? undefined : { width: `${width}px` }}
-      className={`h-full min-w-0 overflow-y-auto ${width === undefined ? 'flex-1' : 'shrink-0'} ${className}`}
+      className={`h-full min-w-0 overflow-y-auto rounded-lg shadow-popover ${width === undefined ? 'flex-1' : 'shrink-0'} ${className}`}
     >
       {children}
     </section>

@@ -140,6 +140,19 @@ describe('architecture boundaries', () => {
     });
   }
 
+  it('imports lucide-react only through src/ui/Icon.tsx', () => {
+    // Size, stroke and aria-hidden are decided in one place. A second importer
+    // would compile and look fine, which is exactly why this is a test rather
+    // than a comment — cf. `@tiptap/markdown`, whose single-importer rule is
+    // convention enforced by nothing.
+    const offenders = walk('src', ['.ts', '.tsx'])
+      .filter((path) => path !== 'src/ui/Icon.tsx')
+      .filter((path) => path !== 'src/ui/Icon.test.tsx')
+      .filter((path) => /from ['"]lucide-react['"]/.test(readFileSync(path, 'utf8')));
+
+    expect(offenders).toEqual([]);
+  });
+
   it('scans a non-trivial number of files in each guarded directory', () => {
     // Guards the guard, again: a typo'd directory name would make every
     // boundary above vacuously true. Threshold is deliberately 1, not the
@@ -241,7 +254,13 @@ describe('focus', () => {
   it('lets only known files suppress the outline, each with a replacement', () => {
     const suppressors = walk('src', ['.tsx'])
       .filter((path) => !/\.test\.tsx$/.test(path))
-      .filter((path) => /outline-none/.test(readFileSync(path, 'utf8')));
+      // A bare `outline-none` is dead: the unlayered global `:focus-visible`
+      // rule in index.css beats it regardless of specificity (Task 3b, M7.5).
+      // Only the `focus-visible:` variant — matched at (0,2,0) specificity —
+      // actually wins the cascade and suppresses anything. Matching the bare
+      // form here would let a file revert to the dead form and still satisfy
+      // this test, which is exactly what shipped, undetected, until Task 3b.
+      .filter((path) => /focus-visible:outline-none/.test(readFileSync(path, 'utf8')));
 
     expect(suppressors.sort()).toEqual(Object.keys(OUTLINE_SUPPRESSORS).sort());
 

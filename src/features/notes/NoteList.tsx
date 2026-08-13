@@ -5,6 +5,7 @@ import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
+import { Icon, SquarePen } from '@/ui/Icon';
 
 import { NoteListItem } from './NoteListItem';
 import { hasQuery } from './search';
@@ -105,7 +106,9 @@ export function NoteList({
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-2">
-        <Button onClick={onCreate}>{t('noteList.create')}</Button>
+        <Button onClick={onCreate} label={t('noteList.create')}>
+          <Icon glyph={SquarePen} />
+        </Button>
 
         {selectedIsVisible && allowsTrash(scope) && (
           <Button onClick={() => onTrash(selectedNoteId!)}>{t('noteList.trash')}</Button>

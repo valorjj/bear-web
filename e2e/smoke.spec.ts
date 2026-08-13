@@ -67,8 +67,10 @@ test('the shell uses the token layer for its colours', async ({ page }) => {
   // These pin the shipped palette deliberately: a token change SHOULD require a
   // conscious edit here, because this is the only test that proves the
   // prefers-color-scheme cascade actually reaches a rendered pixel.
+  // M7.5: the body's ground moved from --bear-bg to --bear-canvas, the darker
+  // surface the three panes float on as cards.
   expect(bodyColors).toEqual({
-    backgroundColor: 'rgb(255, 255, 255)',
+    backgroundColor: 'rgb(232, 228, 222)',
     color: 'rgb(28, 27, 25)',
   });
 });
@@ -84,7 +86,8 @@ test('the system dark preference applies with no JavaScript toggle', async ({ pa
   // These pin the shipped palette deliberately: a token change SHOULD require a
   // conscious edit here, because this is the only test that proves the
   // prefers-color-scheme cascade actually reaches a rendered pixel.
-  expect(background).toBe('rgb(26, 26, 25)');
+  // M7.5: the body's ground moved from --bear-bg to --bear-canvas.
+  expect(background).toBe('rgb(18, 18, 17)');
 });
 
 test('a resized pane keeps its width across a reload', async ({ page }) => {
@@ -199,22 +202,26 @@ test.describe('document language follows the active locale', () => {
   });
 });
 
-test('the resizer has a mouse hit target wider than its 1px visual line', async ({ page }) => {
+test('the resizer fills the gap between panes and is grabbable across it', async ({ page }) => {
   await page.goto('/');
 
   const separator = page.getByRole('separator').first();
   const box = await separator.boundingBox();
   if (!box) throw new Error('separator has no bounding box');
 
-  const centerX = box.x + box.width / 2;
-  const centerY = box.y + box.height / 2;
+  // M7.5: the gap between cards IS the resizer, so the hit target is the
+  // element's own width rather than an overlap grown with a negative margin.
+  // The pre-M7.5 contract was a 1px line with a ±3px overlap; this must be at
+  // least as grabbable as that was.
+  expect(box.width).toBeGreaterThanOrEqual(6);
 
-  for (const offset of [-3, 3]) {
+  const centerY = box.y + box.height / 2;
+  for (const x of [box.x + 1, box.x + box.width - 1]) {
     const role = await page.evaluate(
       ({ x, y }) => document.elementFromPoint(x, y)?.getAttribute('role') ?? null,
-      { x: centerX + offset, y: centerY },
+      { x, y: centerY },
     );
-    expect(role).toBe('separator');
+    expect(role, `x=${x}`).toBe('separator');
   }
 });
 

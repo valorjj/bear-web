@@ -50,10 +50,13 @@ export function RichEditor({
       attributes: {
         role: 'textbox',
         'aria-label': ariaLabel,
-        // outline-none is intentional: the text caret is the focus indicator
-        // for a contenteditable surface, and no editor rings its whole
-        // writing area.
-        class: 'min-h-0 flex-1 bg-bg px-6 py-4 text-text outline-none',
+        // focus-visible:outline-none is intentional: the text caret is the focus indicator
+        // for a contenteditable surface, and no editor rings its whole writing
+        // area. Scoped to the pseudo-class (rather than a bare `outline-none`)
+        // so its compiled specificity matches `Resizer`'s suppression — a bare
+        // `.outline-none` ties in specificity with the global `:focus-visible`
+        // ring and loses to it on source order alone.
+        class: 'min-h-0 flex-1 bg-bg px-6 py-4 text-text focus-visible:outline-none',
       },
     },
   });

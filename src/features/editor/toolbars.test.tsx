@@ -289,6 +289,38 @@ describe('repeated and mixed block toggles do not grow the document', () => {
   });
 });
 
+describe('icons', () => {
+  it('renders every formatting control as an icon with no text', async () => {
+    renderEditor('word');
+    await screen.findByLabelText('Note text');
+
+    const toolbar = bottomToolbar();
+    const buttons = [...toolbar.querySelectorAll('button')];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      expect(button.querySelector('svg'), button.getAttribute('aria-label') ?? '').not.toBeNull();
+      expect(button.textContent, button.getAttribute('aria-label') ?? '').toBe('');
+    }
+  });
+
+  it('keeps every control findable by its name', async () => {
+    renderEditor('word');
+    await screen.findByLabelText('Note text');
+
+    for (const name of [
+      'Bold',
+      'Italic',
+      'Strikethrough',
+      'Highlight',
+      'Link',
+      'Code block',
+      'Quote',
+    ]) {
+      expect(within(bottomToolbar()).getByRole('button', { name })).toBeInTheDocument();
+    }
+  });
+});
+
 describe('the top toolbar', () => {
   it('has its own Bold button, distinguished from the bottom toolbar by the toolbar landmark', async () => {
     renderEditor('word');

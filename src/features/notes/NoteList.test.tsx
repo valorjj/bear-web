@@ -246,6 +246,24 @@ describe('NoteList', () => {
   });
 });
 
+describe('icons', () => {
+  it('renders New note as an icon button that still has a name', () => {
+    renderWithI18n(<NoteList {...props({ items: [] })} />);
+
+    const button = screen.getByRole('button', { name: 'New note' });
+    expect(button.querySelector('svg')).not.toBeNull();
+    expect(button.textContent).toBe('');
+  });
+
+  // Destructive actions keep their words: an icon-only delete asks the user to
+  // recall a glyph before doing something irreversible.
+  it('keeps destructive controls as text', () => {
+    renderWithI18n(<NoteList {...props({ selectedNoteId: 'a' })} />);
+
+    expect(screen.getByRole('button', { name: 'Delete' }).textContent).not.toBe('');
+  });
+});
+
 describe('search', () => {
   it('renders the query field', () => {
     renderWithI18n(<NoteList {...props({ items: [] })} />);

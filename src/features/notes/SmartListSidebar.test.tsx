@@ -73,6 +73,32 @@ describe('SmartListSidebar', () => {
     expect(screen.getByRole('button', { name: 'Today 0' })).toBeInTheDocument();
   });
 
+  it('gives every smart list row an icon', () => {
+    const { container } = renderWithI18n(
+      <SmartListSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} counts={counts} />,
+    );
+
+    const rows = container.querySelectorAll('li');
+    expect(rows).toHaveLength(7);
+    for (const row of rows) {
+      expect(row.querySelector('svg')).not.toBeNull();
+    }
+  });
+
+  // Guards the count's explicit space text node (and any future icon slot
+  // that carried real text) from joining the row's name — the regression
+  // class M5.5 caught in SidebarRow and shipped-then-reverted. It does NOT
+  // guard today's `Icon` specifically: lucide's SVG output carries no
+  // nameable content, so this test cannot be falsified by removing `Icon`'s
+  // own `aria-hidden`. That half is pinned one layer down, in
+  // `Icon.test.tsx`'s "is hidden from assistive technology".
+  it('keeps the row name to its label and count', () => {
+    renderWithI18n(
+      <SmartListSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} counts={counts} />,
+    );
+    expect(screen.getByRole('button', { name: 'Notes 3' })).toBeInTheDocument();
+  });
+
   it('renders rows without counts while they are loading', () => {
     const { unmount } = renderWithI18n(
       <SmartListSidebar scope={ACTIVE_SCOPE} onScopeChange={vi.fn()} counts={undefined} />,

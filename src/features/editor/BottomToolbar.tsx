@@ -3,6 +3,21 @@ import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
 import type { TranslationKey } from '@/i18n';
+import {
+  Bold,
+  Code,
+  Heading,
+  Highlighter,
+  Icon,
+  Italic,
+  Link,
+  List,
+  ListOrdered,
+  ListTodo,
+  Quote,
+  Strikethrough,
+} from '@/ui/Icon';
+import type { LucideIcon } from '@/ui/Icon';
 
 import { pinAllSelectionStep } from './toolbarSelection';
 
@@ -26,7 +41,7 @@ interface Action {
     | 'code'
     | 'quote';
   label: TranslationKey;
-  glyph: string;
+  glyph: LucideIcon;
   /**
    * `t` is threaded in rather than read from a hook because ACTIONS is a
    * module-level constant. The link action needs a translated prompt, and no
@@ -40,7 +55,7 @@ const ACTIONS: readonly Action[] = [
   {
     key: 'heading',
     label: 'editor.toolbar.heading',
-    glyph: 'H',
+    glyph: Heading,
     run: (editor) =>
       editor.chain().command(pinAllSelectionStep).focus().toggleHeading({ level: 1 }).run(),
     active: (editor) => editor.isActive('heading', { level: 1 }),
@@ -48,56 +63,56 @@ const ACTIONS: readonly Action[] = [
   {
     key: 'checklist',
     label: 'editor.toolbar.checklist',
-    glyph: '☑',
+    glyph: ListTodo,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleTaskList().run(),
     active: (editor) => editor.isActive('taskList'),
   },
   {
     key: 'bulletList',
     label: 'editor.toolbar.bulletList',
-    glyph: '•',
+    glyph: List,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleBulletList().run(),
     active: (editor) => editor.isActive('bulletList'),
   },
   {
     key: 'orderedList',
     label: 'editor.toolbar.orderedList',
-    glyph: '1.',
+    glyph: ListOrdered,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleOrderedList().run(),
     active: (editor) => editor.isActive('orderedList'),
   },
   {
     key: 'bold',
     label: 'editor.toolbar.bold',
-    glyph: 'B',
+    glyph: Bold,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleBold().run(),
     active: (editor) => editor.isActive('bold'),
   },
   {
     key: 'italic',
     label: 'editor.toolbar.italic',
-    glyph: 'I',
+    glyph: Italic,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleItalic().run(),
     active: (editor) => editor.isActive('italic'),
   },
   {
     key: 'strike',
     label: 'editor.toolbar.strike',
-    glyph: 'S',
+    glyph: Strikethrough,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleStrike().run(),
     active: (editor) => editor.isActive('strike'),
   },
   {
     key: 'highlight',
     label: 'editor.toolbar.highlight',
-    glyph: '▮',
+    glyph: Highlighter,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleHighlight().run(),
     active: (editor) => editor.isActive('highlight'),
   },
   {
     key: 'link',
     label: 'editor.toolbar.link',
-    glyph: '🔗',
+    glyph: Link,
     run: (editor, t) => {
       const href = window.prompt(t('editor.link.prompt'));
       if (href === null || href === '') {
@@ -117,14 +132,14 @@ const ACTIONS: readonly Action[] = [
   {
     key: 'code',
     label: 'editor.toolbar.code',
-    glyph: '</>',
+    glyph: Code,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleCodeBlock().run(),
     active: (editor) => editor.isActive('codeBlock'),
   },
   {
     key: 'quote',
     label: 'editor.toolbar.quote',
-    glyph: '❝',
+    glyph: Quote,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleBlockquote().run(),
     active: (editor) => editor.isActive('blockquote'),
   },
@@ -141,7 +156,7 @@ export function BottomToolbar({ editor }: BottomToolbarProps): ReactElement {
     <div
       role="toolbar"
       aria-label={t('editor.toolbar.bottom')}
-      className="flex h-9 shrink-0 items-center gap-1 border-t border-border bg-bg px-4"
+      className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-bg px-4"
     >
       {ACTIONS.map((action) => (
         <button
@@ -151,9 +166,9 @@ export function BottomToolbar({ editor }: BottomToolbarProps): ReactElement {
           aria-pressed={editor !== null && action.active(editor)}
           disabled={editor === null}
           onClick={() => editor !== null && action.run(editor, t)}
-          className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
+          className="h-7 shrink-0 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
         >
-          {action.glyph}
+          <Icon glyph={action.glyph} />
         </button>
       ))}
     </div>

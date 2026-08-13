@@ -21,6 +21,18 @@
 .ProseMirror {
   font-size: var(--bear-font-size);
   line-height: var(--bear-line-height);
+  /*
+   * `.ProseMirror` is a flex item inside `EditorContent`'s column-direction
+   * wrapper. A flex item's auto cross-axis margins take priority over its
+   * default stretch alignment — so `margin-inline: auto` alone makes the
+   * item shrink-to-fit its content instead of filling the pane and then
+   * clamping. `width: 100%` restores the fill, so the clamp-then-center
+   * recipe actually holds: fill the pane, cap at the measure, center the
+   * capped column with the freed-up margin.
+   */
+  width: 100%;
+  max-width: var(--bear-line-width);
+  margin-inline: auto;
 }
 
 .ProseMirror > * + * {

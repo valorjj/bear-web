@@ -68,10 +68,16 @@ test('a default button reads as a control at rest, not as text', async ({ page }
 
   const style = await created.evaluate((element) => {
     const own = getComputedStyle(element);
-    const pane = element.closest('[role="region"]');
+    // Not `[role="region"]`: Pane.tsx renders `<section aria-label>`, whose
+    // "region" role is implicit ARIA semantics, never reflected as a DOM
+    // attribute. That selector always returns null here, which silently
+    // turned the fill-vs-pane assertion below into "colour !== null" — always
+    // true, whatever the button's actual background was.
+    const pane = element.closest('section[aria-label]');
     return {
       borderWidth: own.borderTopWidth,
       background: own.backgroundColor,
+      paneFound: pane !== null,
       paneBackground: pane === null ? null : getComputedStyle(pane).backgroundColor,
     };
   });
@@ -81,6 +87,10 @@ test('a default button reads as a control at rest, not as text', async ({ page }
   // not quietly re-pass.
   expect(style.borderWidth).not.toBe('0px');
   expect(style.background).not.toBe('rgba(0, 0, 0, 0)');
+
+  // A null pane must fail loudly, not make the next assertion vacuously true
+  // by comparing a colour string to `null`.
+  expect(style.paneFound).toBe(true);
 
   // A fill identical to the pane behind it is not a fill. This is what makes
   // the assertion above more than a tautology.
@@ -248,6 +258,52 @@ test('the app renders in its own typeface, not the system fallback', async ({ pa
   expect(widths.real).not.toBe(widths.absent);
 });
 
+test('the two allowlisted suppressors hide the default ring; an ordinary control does not', async ({
+  page,
+}) => {
+  // The global `:focus-visible` rule in src/styles/index.css was declared
+  // outside any cascade layer, so it beat every Tailwind utility regardless
+  // of specificity — including `focus-visible:outline-none` on both
+  // allowlisted suppressors. `scripts/sourceLint.test.ts` can only see that
+  // the marker *string* is present in each file; it cannot see whether the
+  // suppression actually renders. This is the assertion that can.
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+
+  const separator = page.getByRole('separator').first();
+  const ordinaryButton = page.getByRole('button', { name: 'New note' });
+
+  // `:focus-visible` does not match every focus method. A plain mouse click
+  // does not reliably trigger it on a div with `tabIndex`, so the separator
+  // is focused with the keyboard the way a real user tabbing through the
+  // shell would.
+  await separator.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowLeft'); // undo the width nudge from the line above
+
+  const separatorOutline = await separator.evaluate((el) => getComputedStyle(el).outlineStyle);
+  expect(separatorOutline).toBe('none');
+
+  await editor.click();
+  const editorOutline = await editor.evaluate((el) => getComputedStyle(el).outlineStyle);
+  expect(editorOutline).toBe('none');
+
+  // The control: an ordinary button is not in the suppressor allowlist, so
+  // the global ring must still reach it. Without this, deleting the global
+  // rule entirely would make the two assertions above pass trivially.
+  // As above, a bare `.focus()` alone does not reliably flip the browser's
+  // input-modality heuristic away from "mouse" (this page's last real input
+  // was the `editor.click()` above) — a harmless keypress that the button
+  // has no handler for does, without triggering a click.
+  await ordinaryButton.focus();
+  await page.keyboard.press('ArrowDown');
+  const buttonOutline = await ordinaryButton.evaluate((el) => getComputedStyle(el).outlineStyle);
+  expect(buttonOutline).toBe('solid');
+});
+
 test('the search field reads as a control at rest', async ({ page }) => {
   await page.goto('/');
 
@@ -256,14 +312,221 @@ test('the search field reads as a control at rest', async ({ page }) => {
 
   const style = await search.evaluate((element) => {
     const own = getComputedStyle(element);
-    const pane = element.closest('[role="region"]');
+    // See the identical note in "a default button reads as a control at
+    // rest": `[role="region"]` never matches Pane.tsx's `<section
+    // aria-label>`, whose region role is implicit ARIA semantics rather than
+    // a DOM attribute.
+    const pane = element.closest('section[aria-label]');
     return {
       borderWidth: own.borderTopWidth,
       background: own.backgroundColor,
+      paneFound: pane !== null,
       paneBackground: pane === null ? null : getComputedStyle(pane).backgroundColor,
     };
   });
 
   expect(style.borderWidth).not.toBe('0px');
+
+  // A null pane must fail loudly, not make the next assertion vacuously true
+  // by comparing a colour string to `null`.
+  expect(style.paneFound).toBe(true);
   expect(style.background).not.toBe(style.paneBackground);
+});
+
+test('each pane reads as a card against the canvas behind it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('region')).toHaveCount(3);
+
+  const measured = await page.evaluate(() => {
+    const canvas = getComputedStyle(document.body).backgroundColor;
+    // Not `[role="region"]`: Pane.tsx renders `<section aria-label>`, whose
+    // "region" role is implicit ARIA semantics, never reflected as a DOM
+    // attribute. That selector matches zero elements, and an empty array
+    // makes the loop below a no-op — the assertions never run and the test
+    // passes vacuously regardless of what the panes look like. `aria-label`
+    // is the attribute actually present, so it is what the selector needs.
+    const panes = [...document.querySelectorAll('section[aria-label]')].map((pane) => {
+      const style = getComputedStyle(pane);
+      return {
+        background: style.backgroundColor,
+        radius: Number.parseFloat(style.borderTopLeftRadius),
+        boxShadow: style.boxShadow,
+      };
+    });
+    return { canvas, panes };
+  });
+
+  expect(measured.panes.length).toBe(3);
+
+  // A pane whose fill equals the ground is not a card. This is what fails if
+  // a pane loses its own bg-* className (the editor pane's `bg-bg` was
+  // missing until Task 2's fix round) or its radius. Transparent is checked
+  // separately from "equals canvas": a transparent pane's computed
+  // `backgroundColor` is the literal string `rgba(0, 0, 0, 0)`, never equal
+  // to the canvas's own `rgb(...)` value, so the equality check alone would
+  // pass even with no fill at all.
+  for (const pane of measured.panes) {
+    expect(pane.background).not.toBe('rgba(0, 0, 0, 0)');
+    expect(pane.background).not.toBe(measured.canvas);
+    expect(pane.radius).toBeGreaterThan(0);
+    // Depth is what separates a card from a flat rectangle against the
+    // canvas — the app has no window chrome to do it for free. Nothing else
+    // in this loop reads `boxShadow`, so `shadow-popover` could vanish from
+    // `Pane.tsx` (the exact `--color-hover` shape: a Tailwind utility whose
+    // theme key disappears emits nothing and warns nothing) and every other
+    // assertion here would stay green.
+    expect(pane.boxShadow).not.toBe('none');
+  }
+});
+
+test('every sidebar row carries an icon', async ({ page }) => {
+  await page.goto('/');
+
+  const rows = page.getByRole('navigation', { name: 'Lists' }).getByRole('listitem');
+  await expect(rows).toHaveCount(7);
+
+  const withIcons = await rows.evaluateAll(
+    (items) => items.filter((item) => item.querySelector('svg') !== null).length,
+  );
+  expect(withIcons).toBe(7);
+});
+
+test('the formatting toolbar is icons, not letters', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const toolbar = page.getByRole('toolbar', { name: 'Formatting toolbar' });
+  await expect(toolbar).toBeVisible();
+
+  const shape = await toolbar.evaluate((element) => {
+    const buttons = [...element.querySelectorAll('button')];
+    return {
+      total: buttons.length,
+      withSvg: buttons.filter((b) => b.querySelector('svg') !== null).length,
+      withText: buttons.filter((b) => (b.textContent ?? '').trim() !== '').length,
+    };
+  });
+
+  expect(shape.total).toBeGreaterThan(0);
+  expect(shape.withSvg).toBe(shape.total);
+  expect(shape.withText).toBe(0);
+});
+
+test('every formatting toolbar control is reachable at a narrow viewport', async ({ page }) => {
+  // At 900px the editor pane sits at its 300px minimum while uniform
+  // icon-only buttons need ~408px, so Link, Code block and Quote overflow the
+  // toolbar's width. The fix is a horizontal scroll on the toolbar itself
+  // (`overflow-x-auto` in BottomToolbar.tsx), not a responsive collapse —
+  // that decision is explicitly out of scope for this milestone. This test
+  // proves nothing is unreachable, not that the layout looks any particular
+  // way.
+  //
+  // Deliberately NOT `toBeInViewport()` and NOT a plain `.click()`: the
+  // editor pane's own `overflow-y-auto` computes its `overflow-x` to `auto`
+  // too (the CSS rule that a `visible` axis paired with a non-visible one
+  // becomes `auto`), so even the UN-fixed toolbar remains scrollable and
+  // clickable via the *pane's* scrollbar — Playwright's auto-scrolling
+  // `.click()` reaches it either way, and so does `toBeInViewport()` (both
+  // verified to pass against the un-fixed toolbar). That is the exact "only
+  // reachable by discovering horizontal scroll with no affordance" defect
+  // named in the brief: technically scrollable, by the wrong element, with
+  // no visible cue. The fix scopes the scroll to the toolbar itself
+  // (`overflow-x-auto` in BottomToolbar.tsx) so only the button row moves,
+  // not the note's prose along with it — which is what this test verifies
+  // by driving `scrollLeft` on the toolbar element directly and checking
+  // that a clipped button actually enters ITS bounds, not just the
+  // viewport's.
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const toolbar = page.getByRole('toolbar', { name: 'Formatting toolbar' });
+  await expect(toolbar).toBeVisible();
+
+  const quote = toolbar.getByRole('button', { name: 'Quote' });
+
+  const before = await toolbar.evaluate(
+    (element, target) => {
+      const toolbarBox = element.getBoundingClientRect();
+      const buttonBox = (target as HTMLElement).getBoundingClientRect();
+      return {
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+        clipped: buttonBox.right > toolbarBox.right,
+      };
+    },
+    await quote.elementHandle(),
+  );
+
+  // The toolbar must actually be narrower than its content at this width,
+  // and Quote must actually start outside it — otherwise the scroll check
+  // below would pass vacuously because there was nothing to reach.
+  expect(before.scrollWidth).toBeGreaterThan(before.clientWidth);
+  expect(before.clipped).toBe(true);
+
+  const after = await toolbar.evaluate(
+    (element, target) => {
+      element.scrollLeft = element.scrollWidth;
+      const toolbarBox = element.getBoundingClientRect();
+      const buttonBox = (target as HTMLElement).getBoundingClientRect();
+      return { withinToolbar: buttonBox.right <= toolbarBox.right + 1 };
+    },
+    await quote.elementHandle(),
+  );
+
+  // Scrolling the TOOLBAR's own `scrollLeft` — not the pane's, not the
+  // page's — must bring Quote inside it. If the toolbar itself is not the
+  // scrolling container (the un-fixed state), setting its `scrollLeft` is a
+  // no-op and Quote's position never changes.
+  expect(after.withinToolbar).toBe(true);
+
+  // No regression at a comfortable width: `overflow-x-auto` must not
+  // introduce a visible scrollbar or gap when there is nothing to scroll.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const wide = await toolbar.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+  }));
+  expect(wide.scrollWidth).toBeLessThanOrEqual(wide.clientWidth);
+});
+
+test('the prose column is measured on a wide window', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await editor.pressSequentially('A line of prose.');
+
+  const widths = await editor.evaluate((element) => {
+    const prose = element.closest('.ProseMirror') ?? element;
+    // `[role="region"]` matches nothing here for the same reason noted in
+    // the card test above: Pane.tsx's "region" role is implicit, not an
+    // explicit attribute.
+    const pane = prose.closest('section[aria-label]');
+    // `getComputedStyle` resolves `max-width: 56em` (`--bear-line-width`) to
+    // an absolute pixel length here, so no unit conversion is needed.
+    const lineWidthPx = Number.parseFloat(getComputedStyle(prose).maxWidth);
+    return {
+      prose: prose.getBoundingClientRect().width,
+      pane: pane === null ? 0 : pane.getBoundingClientRect().width,
+      lineWidthPx,
+    };
+  });
+
+  // Relative, deliberately: M8's sliders move --bear-line-width itself, so the
+  // property that must hold is "narrower than the pane", not a pixel count.
+  expect(widths.pane).toBeGreaterThan(0);
+  expect(widths.prose).toBeLessThan(widths.pane);
+
+  // The upper-bound check alone cannot see a collapsed column: deleting
+  // `width: 100%` from `.ProseMirror` in editor.css shrinks the flex item to
+  // its content (a single short line, ~150px in a 1000px+ pane), and
+  // `prose < pane` stays true. The contract is clamp-then-centre — the
+  // rendered width should equal `min(--bear-line-width, pane width)` — so
+  // assert the lower bound too, against the actual token value rather than a
+  // pixel constant.
+  const expected = Math.min(widths.lineWidthPx, widths.pane);
+  expect(widths.prose).toBeGreaterThan(expected - 2);
 });

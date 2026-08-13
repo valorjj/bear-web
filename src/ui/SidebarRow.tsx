@@ -1,5 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 
+import { ChevronRight, Icon } from '@/ui/Icon';
+
 export interface SidebarRowDisclosure {
   expanded: boolean;
   onToggle: () => void;
@@ -59,7 +61,13 @@ export function SidebarRow({
             onClick={disclosure.onToggle}
             className="w-4 shrink-0 rounded-sm text-ui-xs text-faint transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:text-text"
           >
-            {disclosure.expanded ? '▾' : '▸'}
+            <Icon
+              glyph={ChevronRight}
+              size="sm"
+              className={`transition-transform duration-[var(--bear-duration-fast)] ${
+                disclosure.expanded ? 'rotate-90' : ''
+              }`}
+            />
           </button>
         )}
 
