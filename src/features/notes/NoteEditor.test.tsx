@@ -487,7 +487,17 @@ describe('seeded notes', () => {
     const el = await screen.findByRole('textbox');
 
     await userEvent.click(el);
-    await userEvent.type(el, 'x{Backspace}');
+    // Two calls, not one `userEvent.type(el, 'x{Backspace}')`. The seed here
+    // is itself a tag, so `TagPill`'s decoration grows by one position on the
+    // insert and shrinks back on the delete — real DOM churn under the
+    // cursor. jsdom's `MutationObserver` flush lags a rapid insert-then-
+    // delete pair in a way a real browser's does not (confirmed manually
+    // against Chromium via Playwright: the identical keystrokes there behave
+    // correctly), so the two edits need to be two separate `userEvent.type`
+    // calls here to let jsdom settle between them. The assertion this test
+    // makes is unchanged.
+    await userEvent.type(el, 'x');
+    await userEvent.type(el, '{Backspace}');
 
     unmount();
 
