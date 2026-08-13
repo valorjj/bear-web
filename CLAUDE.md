@@ -770,9 +770,18 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   grammar exists in exactly one place.** The scanner always computed each
   tag's start and end and threw them away; M7.6 stopped throwing them away
   rather than writing a second parser for the editor, which would have been
-  two implementations of one grammar — this project's signature defect. The
-  agreement test in `parseTags.test.ts` runs the whole corpus through both
-  paths; while it is green a divergent implementation cannot exist.
+  two implementations of one grammar — this project's signature defect.
+  `parseTags` is now defined as
+  `[...new Set(findTagRanges(x).map(r => r.tag))]`, so the agreement describe
+  block in `parseTags.test.ts` is tautological while that one-line definition
+  holds — it asserts the exact same expression the implementation already is,
+  so it does not, by itself, prove the grammar's behaviour is preserved. What
+  it does do is act as a tripwire: the instant someone forks the two into
+  separate implementations, the tautology breaks and the test starts
+  asserting something real. Behaviour preservation of the grammar itself is
+  guarded separately, by every other describe block in `parseTags.test.ts` —
+  the corpus of cases that predates M7.6 and asserts `parseTags`' actual
+  output against expected tag lists.
 - **The tag pill is a ProseMirror DECORATION, never a mark.** The document is
   untouched, so no schema, serializer or round-trip path is involved and a
   pill can never survive into a note's Markdown. The cost is that **every
@@ -809,9 +818,13 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   produces a REAL NUL byte on disk anyway, because the JSON layer interprets
   the escape before the bytes reach the filesystem — this happened twice
   during M7.6's Task 2 alone, four times across this project. The rule is not
-  "write the escape sequence", it is "write it, then verify the bytes":
+  "write the escape sequence", it is "write it, then verify the bytes". The
+  scan must be scoped to tracked files: `.rglob('*')` over the repo root also
+  walks `node_modules`, `dist` and Playwright artifacts, which are full of
+  binary NUL bytes and drown the one hit that matters under a thousand that
+  don't.
   ```
-  python3 -c "import pathlib; [print(p) for p in pathlib.Path('.').rglob('*') if p.is_file() and '.git' not in p.parts and b'\x00' in p.read_bytes()]"
+  git ls-files -z | python3 -c "import sys,pathlib; files=sys.stdin.buffer.read().split(b'\x00'); print([f.decode() for f in files if f and b'\x00' in pathlib.Path(f.decode()).read_bytes()] or 'none')"
   ```
   Run this before every commit that touches tag-grammar prose or code.
 
@@ -831,7 +844,11 @@ rediscovering them.
   document has been kept clean through M7.6. How to cross it — a callback
   threaded through `RichEditor`, a context, or an event the shell listens
   for — is that milestone's real design problem. Tag rename and delete are
-  still carried from M5b and unscheduled.
+  still carried from M5b and unscheduled. So is syntax-visibility toggling —
+  M5's original three-item list named it alongside the inline mark and
+  rename/delete; M7.6 ruled only on the inline mark (a decoration, not a
+  mark — see above), and the toggle itself remains unimplemented and
+  unscheduled.
 - **`usePaneWidths` writes `void settings.set(...)` with no flush**, so dragging
   a separator and reloading immediately can lose the width. Deferred because it
   costs a pane width rather than note content, and because `useAutosave` now has
