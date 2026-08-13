@@ -532,6 +532,117 @@ describe('trash management', () => {
   });
 });
 
+describe('search', () => {
+  it('narrows the note list to matching notes', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+    await createNoteWithText('Sprint\nplanning');
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search notes' }), 'milk');
+
+    expect(await screen.findByRole('button', { name: /Groceries/ })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Sprint/ })).toBeNull();
+    });
+  });
+
+  // The positive assertion is the point. An "is not visible" test alone passes
+  // for a build where creation is broken outright — the vacuous shape M6
+  // shipped once and had to move.
+  it('clears the query when a note is created, so the new note is visible', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+
+    const field = screen.getByRole('searchbox', { name: 'Search notes' });
+    await userEvent.type(field, 'milk');
+    await waitFor(() => expect(field).toHaveValue('milk'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+
+    await waitFor(() => expect(field).toHaveValue(''));
+    expect(await screen.findByRole('button', { name: /Untitled/ })).toBeInTheDocument();
+  });
+
+  it('keeps the query when the scope changes', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+
+    const field = screen.getByRole('searchbox', { name: 'Search notes' });
+    await userEvent.type(field, 'milk');
+    await waitFor(() => expect(field).toHaveValue('milk'));
+
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Lists' })).getByRole('button', {
+        name: /^Trash\b/,
+      }),
+    );
+
+    expect(field).toHaveValue('milk');
+  });
+
+  // Same rule as the tag filter: a note the user is editing must not be pulled
+  // out from under them because their query stopped matching it.
+  it('keeps the open note open when the query stops matching it', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+
+    await userEvent.click(await screen.findByRole('button', { name: /Groceries/ }));
+    expect(await screen.findByRole('textbox', { name: 'Note text' })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search notes' }), 'zzzzz');
+
+    await waitFor(() => {
+      expect(screen.getByText('No matching notes')).toBeInTheDocument();
+    });
+    // Not just present — still showing THIS note's content, proving the
+    // editor was never remounted or handed a different (or blank) note.
+    expect(screen.getByRole('textbox', { name: 'Note text' })).toHaveTextContent('Groceries');
+    expect(screen.getByRole('textbox', { name: 'Note text' })).toHaveTextContent('milk and bread');
+  });
+
+  // Same rule as the previous test, from the other direction: a search whose
+  // query matches nothing in the trash must not disable "Empty trash" — the
+  // button acts on every trashed note regardless of the query, and the
+  // dialog copy says so. Closes a defect where `emptyTrashDisabled` was
+  // computed from the query-narrowed list instead of the unfiltered one.
+  it('keeps Empty trash enabled when a query matches nothing in a non-empty trash', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Trash\b/ }));
+
+    const emptyTrash = await screen.findByRole('button', { name: 'Empty trash' });
+    await waitFor(() => expect(emptyTrash).toBeEnabled());
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search notes' }), 'zzzzz');
+
+    await waitFor(() => {
+      expect(screen.getByText('No matching notes')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeEnabled();
+  });
+
+  // Finding 3: Cmd/Ctrl+F must not steal focus into the search field while a
+  // destructive confirmation is pending — `ConfirmDialog` traps focus, and
+  // moving focus out from under it would leave Tab free to walk the page
+  // behind the still-open modal.
+  it('does not focus search when Cmd/Ctrl+F is pressed while a confirmation is pending', async () => {
+    renderShell();
+    await createNoteWithText('doomed');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Trash\b/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^doomed/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
+    await screen.findByRole('alertdialog');
+
+    await userEvent.keyboard('{Control>}f{/Control}');
+
+    expect(screen.getByRole('searchbox', { name: 'Search notes' })).not.toHaveFocus();
+  });
+});
+
 describe('StrictMode', () => {
   it('creates a note that survives the remount cycle', async () => {
     // React mounts, cleans up and remounts every component under StrictMode in

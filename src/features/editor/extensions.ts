@@ -12,6 +12,7 @@ import {
   RawTable,
   createRawInlineHtmlNode,
 } from './RawBlock';
+import { TaskItemPromotion } from './taskItemPromotion';
 
 /**
  * Every construct this editor actually supports, independent of the Raw*
@@ -34,6 +35,27 @@ const supportedExtensions: Extensions = [
   StarterKit.configure({ underline: false }),
   TaskList,
   TaskItem.configure({ nested: true }),
+  // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
+  // schema: `computeRecognizedHtmlTags()` below and every round-trip suite are
+  // unaffected by it. It contributes exactly one input rule.
+  //
+  // Its position relative to `TaskList`/`TaskItem` does not matter, and an
+  // earlier draft of this comment wrongly claimed it did ("must come after
+  // ... because it drives their commands"). Commands resolve from the live
+  // editor, not from registration order, and moving this entry above both was
+  // verified to leave every test in `taskItemPromotion.test.ts` green.
+  //
+  // That result is specific to this pair, not a general property of
+  // registration order: `@tiptap/core`'s input-rules runner short-circuits
+  // once any rule commits steps to the transaction (`InputRule.ts`'s
+  // `matched` flag), so order is normally load-bearing. It is immaterial here
+  // only because this rule and `TaskItem`'s own rule decline in exactly
+  // complementary cases — this one returns `null` from its handler whenever
+  // the input is not already inside a `listItem` in a `bulletList`, which is
+  // precisely the case `TaskItem`'s own rule handles — so at most one of the
+  // two ever commits steps for a given keystroke, whichever order they run
+  // in. See the CLAUDE.md entry with the same title for the full guard.
+  TaskItemPromotion,
   Highlight,
 ];
 

@@ -402,3 +402,76 @@ test('deleting a note forever removes it permanently across a reload', async ({ 
   await lists.getByRole('button', { name: /^Trash\b/ }).click();
   await expect(page.getByText('Trash is empty')).toBeVisible();
 });
+
+test('Cmd/Ctrl+F focuses the search field', async ({ page }) => {
+  await page.goto('/');
+
+  // Wait for the shell to actually be interactive before pressing the
+  // shortcut — otherwise the keydown listener AppShell registers on mount
+  // may not be attached yet, which would fail for a reason unrelated to the
+  // shortcut itself.
+  await expect(page.getByRole('button', { name: 'New note' })).toBeVisible();
+
+  // A real browser shortcut, arbitrated by the real page — jsdom has no
+  // notion of "the browser's own find" to compete with, so this belongs
+  // here rather than in a component test. `ControlOrMeta` presses Meta on
+  // macOS and Control everywhere else, matching AppShell's own
+  // `event.metaKey || event.ctrlKey` check.
+  await page.keyboard.press('ControlOrMeta+f');
+
+  await expect(page.getByRole('searchbox', { name: 'Search notes' })).toBeFocused();
+});
+
+test('search narrows the list against real stored notes, and creating a note clears it', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  let editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Groceries\nmilk and bread');
+  await editor.blur();
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Sprint planning\nstandup notes');
+  await editor.blur();
+
+  const noteList = page.getByRole('region', { name: 'Note list' });
+  await expect(noteList.getByRole('button', { name: /Groceries/ })).toBeVisible();
+  await expect(noteList.getByRole('button', { name: /Sprint planning/ })).toBeVisible();
+
+  const search = page.getByRole('searchbox', { name: 'Search notes' });
+  await search.fill('milk');
+
+  await expect(noteList.getByRole('button', { name: /Groceries/ })).toBeVisible();
+  await expect(noteList.getByRole('button', { name: /Sprint planning/ })).toHaveCount(0);
+
+  // A note created under an active query would otherwise be invisible the
+  // instant it exists.
+  await page.getByRole('button', { name: 'New note' }).click();
+  await expect(search).toHaveValue('');
+  await expect(noteList.getByRole('button', { name: /Untitled/ })).toBeVisible();
+});
+
+test('typing "- [ ] " produces a real checkbox, not a literal bullet', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  // The full sequence a user types, including the leading "- " that hands the
+  // line to StarterKit's bulletList rule first. That race is the defect.
+  await page.keyboard.type('- [ ] milk');
+
+  await expect(editor.getByRole('checkbox')).toBeVisible();
+  await expect(editor).not.toContainText('[ ] milk');
+
+  await editor.blur();
+
+  const lists = page.getByRole('navigation', { name: 'Lists' });
+  await lists.getByRole('button', { name: /^Todo\b/ }).click();
+  await expect(page.getByRole('region', { name: 'Note list' }).getByText('milk')).toBeVisible();
+});

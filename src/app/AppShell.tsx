@@ -1,9 +1,10 @@
-import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { notes } from '@/data';
 import {
   ACTIVE_SCOPE,
   acceptsNewNote,
+  filterByQuery,
   NoteEditor,
   NoteList,
   type NoteScope,
@@ -30,6 +31,16 @@ export function AppShell(): ReactElement {
   const { items, selectedNoteId, selectedNote, select } = useNotes(scope);
   const tree = useTagTree();
   const counts = useSmartListCounts();
+
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Filtering happens HERE, outside `useNotes`, and that placement is the
+  // whole design. Inside, `query` would join a `useLiveQuery` dependency
+  // array, and this project has a reproduced rule that `useLiveQuery` returns
+  // the previous deps' value for one tick after a deps change — so the list
+  // would render the previous query's results for a frame on every keystroke.
+  const visibleItems = useMemo(() => filterByQuery(items, query), [items, query]);
 
   // The text the just-created note was seeded with, so `NoteEditor` can treat
   // it as disposable. Cleared as soon as the selection moves elsewhere.
@@ -63,6 +74,11 @@ export function AppShell(): ReactElement {
       const tag = seedTagFor(scope);
       const seedText = tag === null ? '' : `\n#${tag}`;
       if (!acceptsNewNote(scope)) setScope(ACTIVE_SCOPE);
+
+      // A new note is empty and matches no query, so it would be created
+      // invisible. Same defect `acceptsNewNote` solves for scopes, same fix:
+      // the action that creates the note moves the view to where it exists.
+      setQuery('');
 
       const created = await notes.create(seedText);
       setSeed(seedText === '' ? null : { id: created.id, text: seedText });
@@ -112,6 +128,24 @@ export function AppShell(): ReactElement {
     null,
   );
 
+  // Cmd/Ctrl+F focuses the app's own search. The browser's find would only
+  // search the rows currently in the DOM, which is never what is wanted here.
+  // Guarded on `pending`: `ConfirmDialog` traps focus while a destructive
+  // action awaits confirmation, and stealing focus into the search field
+  // would escape that trap, leaving Tab free to walk the page behind the
+  // still-open modal.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'f' || !(event.metaKey || event.ctrlKey)) return;
+      if (pending !== null) return;
+      event.preventDefault();
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [pending]);
+
   const confirmPending = useCallback(async () => {
     if (pending === null) return;
     setPending(null);
@@ -146,7 +180,7 @@ export function AppShell(): ReactElement {
       <Pane label={t('pane.noteList')} width={widths.noteListWidth} className="bg-surface">
         <NoteList
           scope={scope}
-          items={items}
+          items={visibleItems}
           selectedNoteId={selectedNoteId}
           onSelect={select}
           onCreate={() => void handleCreate()}
@@ -155,6 +189,21 @@ export function AppShell(): ReactElement {
           onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
           onPurge={(id) => setPending({ kind: 'purge', id })}
           onEmptyTrash={() => setPending({ kind: 'empty' })}
+          // Gated on the UNFILTERED `items`, not `visibleItems`: a query that
+          // matches nothing in a full trash must not disable the button that
+          // empties it. Emptying always empties every trashed note regardless
+          // of the query — the dialog copy already says so — so what it
+          // needs to know is whether the trash itself is empty, not whether
+          // the current search happens to show anything.
+          emptyTrashDisabled={items === undefined || items.length === 0}
+          // Same reasoning, same source (the UNFILTERED `items`): whether the
+          // no-results empty state may override a scope's own special-cased
+          // empty copy (Locked, Trash) depends on whether the scope had
+          // anything before the query narrowed it, not on the narrowed view.
+          hasUnfilteredItems={items !== undefined && items.length > 0}
+          query={query}
+          onQueryChange={setQuery}
+          searchInputRef={searchRef}
         />
       </Pane>
 

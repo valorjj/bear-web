@@ -11,6 +11,14 @@ export const en = {
   'noteList.empty.title': 'No notes',
   'noteList.empty.body': 'Notes you create appear in this list.',
 
+  'noteList.noResults.title': 'No matching notes',
+  'noteList.noResults.body':
+    'Nothing in this list matches your search. Clear it to see every note here.',
+
+  'search.label': 'Search notes',
+  'search.placeholder': 'Search',
+  'search.clear': 'Clear search',
+
   'editor.empty.title': 'No note selected',
   'editor.empty.body': 'Choose a note from the list, or create one.',
 

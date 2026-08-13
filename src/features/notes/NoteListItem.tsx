@@ -4,6 +4,7 @@ import type { Note } from '@/data';
 import { useLocale, useT } from '@/i18n';
 
 import { deriveSnippet, formatNoteDate } from './format';
+import { HighlightedText } from './HighlightedText';
 
 export interface NoteListItemProps {
   note: Note;
@@ -12,6 +13,8 @@ export interface NoteListItemProps {
   onTogglePin: (id: string, pinned: boolean) => void;
   /** The current time, for deciding whether a note's date renders as a time or a date. Defaults to the wall clock; tests pin it. */
   now?: number;
+  /** The active search query, if any. Highlights matches and steers the snippet to the matching line. */
+  query?: string;
 }
 
 export function NoteListItem({
@@ -20,11 +23,23 @@ export function NoteListItem({
   onSelect,
   onTogglePin,
   now,
+  query,
 }: NoteListItemProps): ReactElement {
   const t = useT();
   const { locale } = useLocale();
 
-  const snippet = deriveSnippet(note.text);
+  const hasTitle = note.title !== '';
+  const displayTitle = hasTitle ? note.title : t('note.untitled');
+  const date = formatNoteDate(note.updatedAt, locale, now ?? Date.now());
+  const snippet = deriveSnippet(note.text, query);
+  const hasSnippet = snippet !== '';
+  const displaySnippet = hasSnippet ? snippet : t('note.noText');
+
+  // Explicit, because the three spans below concatenate with no separator and
+  // accessible-name computation ignores the CSS gap between them: this row
+  // announced as "Groceries14:32milk and bread" from M3 until M7. The label
+  // also keeps the highlight markup out of the name.
+  const label = `${displayTitle}, ${date}, ${displaySnippet}`;
 
   return (
     <li className="relative flex items-stretch border-b border-border">
@@ -32,6 +47,7 @@ export function NoteListItem({
         type="button"
         onClick={onSelect}
         aria-current={selected ? 'true' : undefined}
+        aria-label={label}
         className={`flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 text-left transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
           selected ? 'bg-selected' : 'hover:bg-hover'
         }`}
@@ -41,13 +57,16 @@ export function NoteListItem({
         )}
 
         <span className="truncate text-ui-md font-semibold text-text">
-          {note.title === '' ? t('note.untitled') : note.title}
+          {/* `query` is withheld when the text shown is an i18n placeholder
+              ("Untitled", "No additional text") rather than the note's own
+              content — otherwise a query that happens to match placeholder
+              text (e.g. "text" against "No additional text") highlights it as
+              though the user had written it. */}
+          <HighlightedText text={displayTitle} query={hasTitle ? query : undefined} />
         </span>
-        <span className="text-ui-sm text-faint">
-          {formatNoteDate(note.updatedAt, locale, now ?? Date.now())}
-        </span>
+        <span className="text-ui-sm text-faint">{date}</span>
         <span className="truncate text-ui-sm text-muted">
-          {snippet === '' ? t('note.noText') : snippet}
+          <HighlightedText text={displaySnippet} query={hasSnippet ? query : undefined} />
         </span>
       </button>
 

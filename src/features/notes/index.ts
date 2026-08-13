@@ -18,6 +18,8 @@ export {
 export type { NoteScope, ScopeLister, SmartListId } from './scope';
 export { SmartListSidebar } from './SmartListSidebar';
 export type { SmartListSidebarProps } from './SmartListSidebar';
+export { filterByQuery, hasQuery } from './search';
+export type { MatchRange } from './search';
 export { useNotes } from './useNotes';
 export type { NotesState } from './useNotes';
 export { useSmartListCounts } from './useSmartListCounts';

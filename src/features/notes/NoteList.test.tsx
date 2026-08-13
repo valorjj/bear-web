@@ -8,11 +8,11 @@ import { renderWithI18n } from '@/i18n/testing';
 import { NoteList, type NoteListProps } from './NoteList';
 import { ACTIVE_SCOPE, smartScope, tagScope, TRASHED_SCOPE } from './scope';
 
-function makeNote(id: string, title: string): Note {
+function makeNote(id: string, title: string, text?: string): Note {
   return {
     id,
     title,
-    text: `${title}\nbody of ${title}`,
+    text: text ?? `${title}\nbody of ${title}`,
     createdAt: 0,
     updatedAt: 0,
     pinned: false,
@@ -33,6 +33,8 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
     onTogglePin: vi.fn(),
     onPurge: vi.fn(),
     onEmptyTrash: vi.fn(),
+    emptyTrashDisabled: false,
+    hasUnfilteredItems: true,
     ...overrides,
   };
 }
@@ -184,13 +186,153 @@ describe('NoteList', () => {
     expect(onEmptyTrash).toHaveBeenCalledTimes(1);
   });
 
-  it('disables empty trash while loading and when the trash is empty', () => {
+  // The class Task 7 fixed for "Empty trash" via `emptyTrashDisabled`; these
+  // three are the remaining instances. `items` is the query-narrowed view, so
+  // a selected note a query has filtered out of view is not on screen, and a
+  // control that acts on it (trash / restore / delete forever) must not
+  // render — otherwise a query that hides the selected note leaves a live
+  // "Delete forever" button next to an empty "No matching notes" list.
+  it('hides Move to trash for a selected note the query has filtered out', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({
+          scope: ACTIVE_SCOPE,
+          items: [makeNote('b', 'Beta')],
+          selectedNoteId: 'a',
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  it('hides Restore and Delete forever for a selected note the query has filtered out', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({
+          scope: TRASHED_SCOPE,
+          items: [makeNote('b', 'Beta')],
+          selectedNoteId: 'a',
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete forever' })).not.toBeInTheDocument();
+  });
+
+  it('disables empty trash when told to (loading or an empty trash)', () => {
     const { rerender } = renderWithI18n(
-      <NoteList {...props({ scope: TRASHED_SCOPE, items: undefined })} />,
+      <NoteList {...props({ scope: TRASHED_SCOPE, emptyTrashDisabled: true })} />,
     );
     expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
 
-    rerender(<NoteList {...props({ scope: TRASHED_SCOPE, items: [] })} />);
-    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
+    rerender(<NoteList {...props({ scope: TRASHED_SCOPE, emptyTrashDisabled: false })} />);
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeEnabled();
+  });
+
+  // The gating defect this closes: `items` here is the query-narrowed view.
+  // A query that matches none of the trashed notes must not disable the
+  // button that empties the whole trash regardless of the query — only
+  // `emptyTrashDisabled` may do that.
+  it('keeps empty trash enabled when a query matches nothing, as long as the trash itself is not empty', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({ scope: TRASHED_SCOPE, items: [], query: 'zzzzz', emptyTrashDisabled: false })}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeEnabled();
+  });
+});
+
+describe('search', () => {
+  it('renders the query field', () => {
+    renderWithI18n(<NoteList {...props({ items: [] })} />);
+
+    expect(screen.getByRole('searchbox', { name: 'Search notes' })).toBeInTheDocument();
+  });
+
+  it('shows the empty-list state when there is no query', () => {
+    renderWithI18n(<NoteList {...props({ items: [], query: '' })} />);
+
+    expect(screen.getByText('No notes')).toBeInTheDocument();
+    expect(screen.queryByText('No matching notes')).toBeNull();
+  });
+
+  // Distinct copy, because an empty result caused by a query reads as "this
+  // list is empty" otherwise — and the user cannot tell why.
+  it('shows the no-results state when a query is responsible', () => {
+    renderWithI18n(<NoteList {...props({ items: [], query: 'milk' })} />);
+
+    expect(screen.getByText('No matching notes')).toBeInTheDocument();
+    expect(screen.queryByText('No notes')).toBeNull();
+  });
+
+  // The collision this closes: Locked is always empty by construction, and
+  // its empty copy exists specifically so a user does not read "your locked
+  // notes are missing." Gating the no-results state on `hasQuery` alone let a
+  // query win over that special case and assert exactly the false thing it
+  // was written to prevent.
+  it('does not let a query override the Locked empty copy', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({
+          scope: smartScope('locked'),
+          items: [],
+          query: 'milk',
+          hasUnfilteredItems: false,
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Locked notes are not available yet')).toBeInTheDocument();
+    expect(screen.queryByText('No matching notes')).toBeNull();
+  });
+
+  // Same mechanism, the Trash instance: a genuinely empty trash plus a query
+  // must still say "Trash is empty", not "No matching notes".
+  it('does not let a query override the Trash empty copy when the trash is genuinely empty', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({
+          scope: TRASHED_SCOPE,
+          items: [],
+          query: 'milk',
+          hasUnfilteredItems: false,
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Trash is empty')).toBeInTheDocument();
+    expect(screen.queryByText('No matching notes')).toBeNull();
+  });
+
+  // The paired positive case: when the trash DOES have notes and the query
+  // matches none of them, the no-results copy is correct and must still show.
+  it('shows no-results, not the Trash empty copy, when a non-empty trash has no matches', () => {
+    renderWithI18n(
+      <NoteList
+        {...props({
+          scope: TRASHED_SCOPE,
+          items: [],
+          query: 'milk',
+          hasUnfilteredItems: true,
+        })}
+      />,
+    );
+
+    expect(screen.getByText('No matching notes')).toBeInTheDocument();
+    expect(screen.queryByText('Trash is empty')).toBeNull();
+  });
+
+  it('passes the query down so rows can highlight', () => {
+    const { container } = renderWithI18n(
+      <NoteList
+        {...props({ items: [makeNote('a', 'Groceries', 'Groceries\nmilk')], query: 'milk' })}
+      />,
+    );
+
+    expect(container.querySelector('[data-match]')?.textContent).toBe('milk');
   });
 });
