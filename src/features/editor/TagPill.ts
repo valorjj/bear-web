@@ -19,6 +19,7 @@ import { maskedBlockText } from './blockText';
  */
 export function tagDecorations(state: EditorState): Decoration[] {
   const decorations: Decoration[] = [];
+  const { from: selFrom, to: selTo } = state.selection;
 
   state.doc.descendants((node, pos) => {
     // `spec.code` is the property this behaviour actually depends on — set by
@@ -33,6 +34,11 @@ export function tagDecorations(state: EditorState): Decoration[] {
       // character at index i sits at pos + 1 + i.
       const from = pos + 1 + range.start;
       const to = pos + 1 + range.end;
+      // A tag the cursor is inside keeps its plain text, so character widths
+      // do not jump while it is being typed or edited. Intersection, not
+      // containment: a caret sitting at either edge is still "inside" as far
+      // as editing comfort goes.
+      if (selFrom <= to && selTo >= from) continue;
       decorations.push(Decoration.inline(from, to, { class: 'bear-tag' }));
     }
     return false;
