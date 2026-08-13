@@ -216,7 +216,7 @@ export function AppShell(): ReactElement {
         onCommit={widths.onNoteListCommit}
       />
 
-      <Pane label={t('pane.editor')}>
+      <Pane label={t('pane.editor')} className="bg-bg">
         {selectedNote === undefined ? null : selectedNote === null ? (
           <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
         ) : (
