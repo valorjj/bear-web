@@ -255,8 +255,58 @@ checked in.
 | `faint`    | `sidebar`  | ≥ 3.0  | **3.21:1**  | **3.40:1**  |
 | `bg`       | `accent`   | ≥ 4.5  | **4.87:1**  | **6.38:1**  |
 | `accent`   | `sidebar`  | ≥ 3.0  | **4.24:1**  | **5.61:1**  |
+| `text`     | `surface`  | ≥ 7.0  | **16.37:1** | **13.57:1** |
+| `faint`    | `bg`       | ≥ 3.0  | **3.69:1**  | **3.86:1**  |
+| `faint`    | `surface`  | ≥ 3.0  | **3.50:1**  | **3.65:1**  |
 
 Every pair passes its target, with margin.
+
+### M7.5: contrast against the canvas
+
+M7.5 introduced `{colors.canvas}` — `#e8e4de` in Paper, `#121211` in Ink — as
+the ground the three panes float on, painted on `body` behind the panes' own
+rounded, shadowed cards. It is one step darker than every pane background in
+both themes, so it was re-measured against the tokens that sit near it:
+`border` (the card edge, against the ground it separates panes from) and, for
+completeness, `text`/`faint` above were re-run against every pane background
+rather than just `sidebar`, since M7.5 changed nothing about `bg` or
+`surface` but the sidebar row alone was previously the only one checked for
+`faint`.
+
+| Foreground | Background | Target                | Paper      | Ink        |
+| ----------- | ----------- | ---------------------- | ---------- | ---------- |
+| `border`   | `canvas`   | not a WCAG text pair   | **1.02:1** | **1.49:1** |
+
+`border`-on-`canvas` is not a text contrast pair and has no WCAG target; it is
+reported because it is the card edge against the ground. 1.02:1 in Paper means
+the hairline is nearly invisible against the canvas on its own — the card
+reads as a card through its shadow (`{shadows.popover}`) and its own
+background stepping up from the canvas, not through this edge. Judged
+acceptable: the hairline's job in this app is separating *rows inside* a
+pane, not separating the pane from the canvas.
+
+The canvas itself, read against each pane background (not a WCAG requirement —
+this is the number that decides whether the panes read as cards floating
+above a ground at all, not a text-legibility check):
+
+| Background pair       | Target | Paper      | Ink        |
+| ----------------------- | ------ | ---------- | ---------- |
+| `canvas` vs `sidebar`  | n/a    | **1.10:1** | **1.22:1** |
+| `canvas` vs `surface`  | n/a    | **1.20:1** | **1.14:1** |
+| `canvas` vs `bg`       | n/a    | **1.27:1** | **1.08:1** |
+
+These ratios are low by design — the canvas is a subtle, warm-greyscale step,
+not a strong colour break — and the separation a user actually sees comes
+from the combination of this small colour step, the 1px `border` hairline
+around each pane, and `{shadows.popover}`. Judged acceptable: none of the
+three panes' `text` or `faint` ratios above regressed when the canvas
+shipped, which is the property that actually matters (a user must still be
+able to read the app); the panes-as-cards effect is a design choice measured
+here for the record, not a bar to clear.
+
+No token changed as a result of this measurement — every text/faint pair
+against the new canvas era's pane backgrounds already cleared its bar with
+margin, so `--bear-faint` was not touched.
 
 **`faint` was deliberately darkened during this milestone to clear this
 bar**, in both themes: Paper's `--bear-faint` moved `#9c988f` → `#88857d`
