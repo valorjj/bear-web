@@ -67,18 +67,15 @@ export function Resizer({
         onResize(next);
         onCommit(next);
       }}
-      // The visible divider stays a hairline (the centred inner span below),
-      // but the interactive box is widened to roughly 8px using a negative
-      // margin that cancels back out in flex layout, so neighbouring panes
-      // never shift (Finding 4). `relative z-10` keeps this element painted
-      // above the flow-adjacent panes so the overlap is actually hit-testable
-      // on both sides, not just whichever pane happens to come first in the
-      // DOM.
-      className="group relative z-10 -mx-1 w-2 shrink-0 cursor-col-resize focus-visible:outline-none"
+      // The gap between cards IS the control. No negative margin: with cards
+      // there is real space here, so the element occupies it rather than
+      // overlapping its neighbours. `relative z-10` is kept so the cards'
+      // shadows never sit above the hit area.
+      className="group relative z-10 w-2 shrink-0 cursor-col-resize focus-visible:outline-none"
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-[background-color,width] duration-[var(--bear-duration-fast)] ease-bear group-hover:w-0.5 group-hover:bg-accent group-focus-visible:w-0.5 group-focus-visible:bg-accent"
+        className="pointer-events-none absolute inset-y-2 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-transparent transition-colors duration-[var(--bear-duration-fast)] ease-bear group-hover:bg-accent group-focus-visible:bg-accent"
       />
     </div>
   );
