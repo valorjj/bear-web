@@ -140,6 +140,19 @@ describe('architecture boundaries', () => {
     });
   }
 
+  it('imports lucide-react only through src/ui/Icon.tsx', () => {
+    // Size, stroke and aria-hidden are decided in one place. A second importer
+    // would compile and look fine, which is exactly why this is a test rather
+    // than a comment — cf. `@tiptap/markdown`, whose single-importer rule is
+    // convention enforced by nothing.
+    const offenders = walk('src', ['.ts', '.tsx'])
+      .filter((path) => path !== 'src/ui/Icon.tsx')
+      .filter((path) => !/\.test\.tsx?$/.test(path))
+      .filter((path) => /from ['"]lucide-react['"]/.test(readFileSync(path, 'utf8')));
+
+    expect(offenders).toEqual([]);
+  });
+
   it('scans a non-trivial number of files in each guarded directory', () => {
     // Guards the guard, again: a typo'd directory name would make every
     // boundary above vacuously true. Threshold is deliberately 1, not the
