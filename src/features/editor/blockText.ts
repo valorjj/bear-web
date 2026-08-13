@@ -19,8 +19,16 @@ export const MASK = '\u0000';
  *
  * `node.textContent` cannot be used: a `hardBreak` contributes no characters
  * but occupies a position, which shifts every later offset. Non-text inline
- * nodes therefore contribute one mask character per position — which is also
- * correct, since a line break must terminate a tag.
+ * nodes therefore contribute one substitute character per position.
+ *
+ * A `hardBreak` specifically contributes `'\n'`, not `MASK`. A hard break
+ * really is a line break: serialized to Markdown, a tag immediately after one
+ * genuinely sits at the start of a line, and `parseTags` finds it there. A
+ * newline is whitespace, so — unlike `MASK` — it both terminates a tag AND
+ * permits one to start, which is exactly the asymmetry this position needs.
+ * `MASK` is deliberately incapable of the "permits a start" half, so it stays
+ * reserved for masked code, and every other non-text inline node still gets
+ * `MASK.repeat(child.nodeSize)`.
  *
  * Text carrying the `code` mark is masked, so an inline code span cannot hold
  * a tag. That mirrors `parseTags`, which masks backticked spans in Markdown.
@@ -29,7 +37,8 @@ export function maskedBlockText(node: Node): string {
   let out = '';
   node.forEach((child) => {
     if (!child.isText || child.text === undefined) {
-      out += MASK.repeat(child.nodeSize);
+      out +=
+        child.type.name === 'hardBreak' ? '\n'.repeat(child.nodeSize) : MASK.repeat(child.nodeSize);
       return;
     }
     const isCode = child.marks.some((mark) => mark.type.name === 'code');
