@@ -313,3 +313,101 @@ test('the search field reads as a control at rest', async ({ page }) => {
   expect(style.borderWidth).not.toBe('0px');
   expect(style.background).not.toBe(style.paneBackground);
 });
+
+test('each pane reads as a card against the canvas behind it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('region')).toHaveCount(3);
+
+  const measured = await page.evaluate(() => {
+    const canvas = getComputedStyle(document.body).backgroundColor;
+    // Not `[role="region"]`: Pane.tsx renders `<section aria-label>`, whose
+    // "region" role is implicit ARIA semantics, never reflected as a DOM
+    // attribute. That selector matches zero elements, and an empty array
+    // makes the loop below a no-op — the assertions never run and the test
+    // passes vacuously regardless of what the panes look like. `aria-label`
+    // is the attribute actually present, so it is what the selector needs.
+    const panes = [...document.querySelectorAll('section[aria-label]')].map((pane) => {
+      const style = getComputedStyle(pane);
+      return {
+        background: style.backgroundColor,
+        radius: Number.parseFloat(style.borderTopLeftRadius),
+      };
+    });
+    return { canvas, panes };
+  });
+
+  expect(measured.panes.length).toBe(3);
+
+  // A pane whose fill equals the ground is not a card. This is what fails if
+  // a pane loses its own bg-* className (the editor pane's `bg-bg` was
+  // missing until Task 2's fix round) or its radius. Transparent is checked
+  // separately from "equals canvas": a transparent pane's computed
+  // `backgroundColor` is the literal string `rgba(0, 0, 0, 0)`, never equal
+  // to the canvas's own `rgb(...)` value, so the equality check alone would
+  // pass even with no fill at all.
+  for (const pane of measured.panes) {
+    expect(pane.background).not.toBe('rgba(0, 0, 0, 0)');
+    expect(pane.background).not.toBe(measured.canvas);
+    expect(pane.radius).toBeGreaterThan(0);
+  }
+});
+
+test('every sidebar row carries an icon', async ({ page }) => {
+  await page.goto('/');
+
+  const rows = page.getByRole('navigation', { name: 'Lists' }).getByRole('listitem');
+  await expect(rows).toHaveCount(7);
+
+  const withIcons = await rows.evaluateAll(
+    (items) => items.filter((item) => item.querySelector('svg') !== null).length,
+  );
+  expect(withIcons).toBe(7);
+});
+
+test('the formatting toolbar is icons, not letters', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const toolbar = page.getByRole('toolbar', { name: 'Formatting toolbar' });
+  await expect(toolbar).toBeVisible();
+
+  const shape = await toolbar.evaluate((element) => {
+    const buttons = [...element.querySelectorAll('button')];
+    return {
+      total: buttons.length,
+      withSvg: buttons.filter((b) => b.querySelector('svg') !== null).length,
+      withText: buttons.filter((b) => (b.textContent ?? '').trim() !== '').length,
+    };
+  });
+
+  expect(shape.total).toBeGreaterThan(0);
+  expect(shape.withSvg).toBe(shape.total);
+  expect(shape.withText).toBe(0);
+});
+
+test('the prose column is measured on a wide window', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await editor.pressSequentially('A line of prose.');
+
+  const widths = await editor.evaluate((element) => {
+    const prose = element.closest('.ProseMirror') ?? element;
+    // `[role="region"]` matches nothing here for the same reason noted in
+    // the card test above: Pane.tsx's "region" role is implicit, not an
+    // explicit attribute.
+    const pane = prose.closest('section[aria-label]');
+    return {
+      prose: prose.getBoundingClientRect().width,
+      pane: pane === null ? 0 : pane.getBoundingClientRect().width,
+    };
+  });
+
+  // Relative, deliberately: M8's sliders move --bear-line-width itself, so the
+  // property that must hold is "narrower than the pane", not a pixel count.
+  expect(widths.pane).toBeGreaterThan(0);
+  expect(widths.prose).toBeLessThan(widths.pane);
+});

@@ -22,9 +22,10 @@ IndexedDB.
 | M5.5 design language             | complete       |
 | M6 smart lists, trash management | complete       |
 | M7 search                        | complete       |
+| M7.5 visual design pass          | complete       |
 | M8–M9                            | themes, polish |
 
-786 unit tests, 30 end-to-end tests. `main` is always green and auto-deploys.
+809 unit tests, 35 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -661,6 +662,88 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   fruitless search while viewing Trash disabled emptying a full trash — the
   button read "disabled" for a reason that had nothing to do with whether
   Trash actually had anything in it.
+- **`lucide-react` is imported only by `src/ui/Icon.tsx`, and that is enforced
+  by `scripts/sourceLint.test.ts`.** The primitive fixes one stroke width, two
+  sizes, and `aria-hidden` on every icon in the app. A second importer would
+  compile and look fine, which is why this is a test rather than a comment —
+  unlike the `@tiptap/markdown` single-importer rule, which is convention
+  enforced by nothing.
+- **Every icon is `aria-hidden` and every icon-only control carries an
+  `aria-label` from `useT`.** Replacing text with icons is the standard way to
+  silently destroy a screen-reader experience, and this project has shipped
+  that defect class twice — `SidebarRow` losing a space so a row announced as
+  `"work3"`, and `NoteListItem` concatenating three spans into
+  `"Groceries14:32milk"`.
+- **Destructive controls keep their words.** "New note" is an icon button;
+  "Move to trash", "Restore", "Delete forever" and "Empty trash" are text. An
+  icon-only control for an irreversible action against a database with no
+  server copy asks the user to recall a glyph before destroying data. This is a
+  deliberate divergence from Bear, which hides destructive actions in menus.
+- **`--bear-canvas` is the ground the three panes float on, and it is what
+  `body` paints.** A browser tab has no window chrome, so depth is what
+  separates the panes — the role Bear's rounded macOS window plays. Panes carry
+  `shadow-popover` and no border: hard borders would compete with the 1px
+  dividers used inside each pane, and separating panes by depth while
+  separating rows by line keeps the two jobs distinct. `bg-canvas` on `<main>`
+  is redundant with `body`'s own paint and is pixel-identical whether present
+  or not — measured twice, independently, during M7.5. It stays for a
+  self-contained shell, but a fault injection meant to prove "a pane is a
+  card" must target a PANE's own `bg-*` class or `rounded-lg`, never
+  `<main>`'s `bg-canvas`; that injection is a no-op.
+- **The gap between cards IS the resizer.** Before M7.5 it was a 1px hairline
+  whose hit box was widened with a negative margin that cancelled out in flex
+  layout. `e2e/smoke.spec.ts`'s hit-target test was rewritten in M7.5 because
+  the contract changed — that is the one licensed instance; a failing
+  geometry or role test during a restyle is otherwise a behaviour report, not a
+  stale expectation. The resizer carries no permanent hairline or highlight at
+  rest; the 16px of visible canvas between cards (4px pane inset + 8px
+  resizer + 4px pane inset, measured at 1440x900) is itself the resting cue,
+  ruled sufficient rather than adding a dedicated visual affordance.
+- **Headings keep `--bear-text`.** `--bear-accent` and `--bear-danger` hold the
+  same value in both shipped themes, so accent-coloured headings would make one
+  colour mean both "heading" and "delete forever", and a page of red headings
+  reads as a warning notice. The accent is for links, checkboxes, highlight,
+  selection and focus.
+- **`--bear-line-width` caps the prose column, not the pane.** The editor pane
+  still fills the window so the toolbars span it; only `.ProseMirror` is capped
+  and centred. It sat declared-and-unused from M5.5 to M7.5, which is why the
+  editor read as a web page rather than an app. `.ProseMirror` also needs an
+  explicit `width: 100%` alongside the `max-width` clamp — it is a flex item
+  inside `EditorContent`'s column-direction wrapper, and a flex item's auto
+  cross-axis margins (`margin-inline: auto`, needed to center the clamped
+  column) suppress default stretch alignment, so without the explicit width
+  the column shrinks to fit its content instead of filling the pane and then
+  clamping.
+- **The pin button reads by colour, not by glyph.** A `Pin`/`PinOff` glyph
+  table keyed on `note.pinned` was tried and reverted: a slashed pin in the
+  unpinned state reads as "pinning is unavailable" (the same grammar as a
+  muted-mic or no-wifi glyph), not "click to pin". The button is always the
+  `Pin` glyph, differentiated by colour; `aria-label` and `aria-pressed` carry
+  the state for assistive tech.
+- **`SearchField` suppresses the native `type="search"` cancel widget.**
+  Chromium renders its own X inside a search input, which sat beside our own
+  labelled clear button — two clear affordances in one freshly designed
+  field. `type="search"` stays (it is what makes the `searchbox` role and its
+  tests hold); only the native widget's rendering is suppressed.
+- **A CSS attribute selector like `[role="region"]` does not match a
+  `<section aria-label>`.** The "region" role there is implicit ARIA
+  semantics — the browser computes it for accessibility, but never writes a
+  `role` attribute into the DOM — so a raw `document.querySelectorAll` call
+  for that selector inside a Playwright `page.evaluate` silently returns an
+  empty list. The pane-card test in `e2e/appearance.spec.ts` did exactly this
+  and passed vacuously: zero panes matched, the assertion loop ran zero
+  times, and the test was green whether or not any pane had a background at
+  all. Fixed by selecting on the attribute actually present,
+  `section[aria-label]`, and by asserting the matched count.
+  `page.getByRole('region')`, by contrast, is unaffected — it queries the
+  accessibility tree Playwright itself computes, not raw DOM attributes.
+- **A transparent background and "equal to the canvas colour" are not the same
+  failure, and one assertion does not catch both.** A pane with no `bg-*`
+  class computes a `backgroundColor` of `rgba(0, 0, 0, 0)`, a literal string
+  that is never equal to the canvas's own `rgb(...)` value — so an equality
+  check alone passes on a fully transparent pane, the exact defect it was
+  meant to catch. The card test in `e2e/appearance.spec.ts` asserts both:
+  not-transparent, and not-equal-to-canvas.
 
 ## Carried into M5b and M6
 
@@ -708,10 +791,13 @@ rediscovering them.
   `seedText` and the editor to agree. Not reshaped at M5's end because the
   current failure mode is fail-safe (a stray note lingers, nothing is deleted),
   unlike the manager/schema divergence that motivated the general rule.
-- **Editor typography is declared but not wired.** `--bear-font-size` and its
-  siblings sit in `tokens.css` unused while `RichEditor`'s contenteditable is
-  `text-sm`. M8 owns the typography sliders and must wire the tokens, not
-  merely add UI. M5.5's spec deferred editor typography deliberately.
+- **Editor typography is wired but has no slider.** M7.5 wired
+  `--bear-font-size` and `--bear-line-height` into `.ProseMirror`
+  (`--bear-line-width` is wired too, but that half of this item is resolved —
+  see `--bear-line-width` above). What is still missing is the UI: nothing
+  lets a user move these tokens, so M8 owns the typography sliders
+  themselves, not the CSS wiring. M5.5's spec deferred editor typography
+  deliberately.
 - **`confirmPending` in `AppShell` clears its state and then awaits with no
   `try`/`catch`.** A rejected `purge` or `emptyTrash` closes the dialog and
   leaves the user believing the deletion succeeded. This matches the four
