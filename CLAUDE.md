@@ -805,6 +805,59 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   not fixed:** a paragraph containing both a fence marker and a hard break
   suppresses the pill while `parseTags` still yields the tag — the tag works,
   only the pill is missing, the same shape as the mark-boundary limit below.
+- **`maskedBlockText` masks the FIRST character of every marked text run, and
+  `code` whole.** All six marks in this schema — `bold`, `italic`, `strike`,
+  `highlight`, `link`, `code` — serialize with an opening delimiter (`**`,
+  `*`, `~~`, `==`, `[`, `` ` ``), verified against the real serializer. So the
+  first character of a marked run is preceded by `*`, `~`, `=`, `[` or a
+  backtick in the Markdown, never by whitespace, and `parseTags` refuses to
+  start a tag there. The document contains no such character, so without this
+  the plugin accepted `**#bravo**` as the tag `bravo` while the index —
+  correctly — held nothing. **That is a pill asserting something false about
+  the user's data**: the user bolds a tag to emphasise it, the pill stays, and
+  the tag silently vanishes from the sidebar, its counts and tag filtering.
+  Strictly worse than a missing pill, and the inverse of the fail-safe
+  direction the spec's known limit assumed. Masking the run WHOLE was rejected:
+  `**see #work here**` puts the `#` after a space, a tag really is there, and
+  removing the pill trades one disagreement for another. One character also
+  keeps the one-character-per-position invariant, and an astral first character
+  is replaced code-unit-for-code-unit rather than by a single mask.
+- **The pill set and the tag index are asserted EQUAL, over a corpus, as one
+  property — `tagAgreement.test.ts`.** That the two agree is the milestone's
+  central claim, and until M7.6's Task 6 nothing anywhere compared them: each
+  side was tested against its own expectations, which is how the `**#bravo**`
+  defect survived five task reviews and a whole-branch review. Both halves come
+  from the real pipeline — decorations read back through
+  `doc.textBetween`, and `parseTags` over `serializeMarkdown(editor.getJSON())`,
+  exactly what `RichEditor.getMarkdown` produces. **Any new construct, mark or
+  masking rule belongs in that corpus**, the same way a new Markdown construct
+  needs entries in both the fidelity and stability suites.
+- **A known limit, accepted and NOT fully fail-safe: a mark delimiter landing
+  inside or immediately after a tag's own characters.** `*`, `~` and `=` are
+  not tag boundaries, so `parseTags` reading `**see #work**` yields the tag
+  `work**`, while the pill covers `#work` — **a pill of the wrong extent, not
+  merely a missing one.** The spec (design doc line 81) describes the residue
+  as fail-safe; after Task 6 that is only partly true, and this bullet is the
+  correction. Same shape for `*…*`, `~~…~~`, `==…==`, for `#work**bold**`
+  (indexes as `work**bold**`), and for a tag continuing into a mark —
+  `x #wo**rk** y` pills `#wo` and indexes `wo**rk**`. **The `link` case is
+  worse and is the one surviving lying pill:** `[see #work](https://e.com)`
+  indexes NOTHING, because `](https://…)` puts an empty `/`-segment in the name
+  and `normalizeTag` rejects the whole candidate — so the pill is there and the
+  tag is not. No editor-side masking can close any of this: agreement would
+  need the pill to cover characters the document does not contain, and the
+  cause is a pre-existing parser/serializer interaction that predates pills and
+  is visible in the sidebar with or without them. Closing it means changing
+  `parseTags`' grammar, which reorganises every existing user's sidebar.
+  A code span is the control that proves the diagnosis: backticks ARE masked on
+  both sides, so a tag continuing into an inline code span agrees exactly. All
+  of it is pinned with its real values in `tagAgreement.test.ts`'s `RESIDUAL`
+  block.
+- **The spec's own account of its known limit is wrong, and the corpus pins the
+  truth instead.** Design doc line 81 says a tag split across a mark boundary
+  (`#wo` bold, `rk` plain) still indexes and only loses its pill. It does not:
+  `**#wo**rk` puts `**` before the `#`, so `parseTags` rejects it too and the
+  two views agree. Do not restore the spec's wording from prose.
 - **The pill lifts while the cursor is inside its tag.** Without it, typing
   `#w`, `#wo`, `#wor` re-pills on every keystroke and character widths jump
   under the cursor. Intersection, not containment: a caret at either edge

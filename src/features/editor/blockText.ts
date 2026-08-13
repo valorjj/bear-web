@@ -30,8 +30,34 @@ export const MASK = '\u0000';
  * reserved for masked code, and every other non-text inline node still gets
  * `MASK.repeat(child.nodeSize)`.
  *
- * Text carrying the `code` mark is masked, so an inline code span cannot hold
- * a tag. That mirrors `parseTags`, which masks backticked spans in Markdown.
+ * Text carrying the `code` mark is masked WHOLE, so an inline code span cannot
+ * hold a tag. That mirrors `parseTags`, which masks backticked spans in
+ * Markdown.
+ *
+ * Text carrying any other mark has its FIRST character masked, and only its
+ * first. Every mark in this schema — `bold`, `italic`, `strike`, `highlight`,
+ * `link`, `code` — serializes with an opening delimiter (`**`, `*`, `~~`,
+ * `==`, `[`, `` ` ``), verified against the real serializer rather than
+ * assumed. So the first character of a marked run is preceded by `*`, `~`,
+ * `=`, `[` or `` ` `` in the Markdown, never by whitespace, and `parseTags`
+ * refuses to start a tag there. The document holds no such character, so
+ * without this the plugin would accept `**#bravo**` as the tag `bravo` while
+ * the index — correctly — holds nothing: **a pill asserting something false
+ * about the user's data**, which is strictly worse than a missing pill.
+ *
+ * Masking the run WHOLE would be wrong. `**see #work**` serializes with the
+ * `#` preceded by a space, `parseTags` finds a tag there, and removing the
+ * pill would trade one disagreement for another. Masking exactly one
+ * character also keeps the one-character-per-position invariant intact.
+ *
+ * Any mark added to this schema later is covered by default, in the fail-safe
+ * direction — a mark that somehow serialized without a leading delimiter
+ * would lose a pill rather than invent one.
+ *
+ * What this does NOT close is a mark's CLOSING delimiter landing inside or
+ * against a tag's own characters, which the document likewise cannot show:
+ * `**see #work**` indexes as `work**`, not `work`. See `CLAUDE.md` and
+ * `tagAgreement.test.ts`, which pins the residue.
  */
 export function maskedBlockText(node: Node): string {
   let out = '';
@@ -41,8 +67,14 @@ export function maskedBlockText(node: Node): string {
         child.type.name === 'hardBreak' ? '\n'.repeat(child.nodeSize) : MASK.repeat(child.nodeSize);
       return;
     }
-    const isCode = child.marks.some((mark) => mark.type.name === 'code');
-    out += isCode ? MASK.repeat(child.text.length) : child.text;
+    if (child.marks.some((mark) => mark.type.name === 'code')) {
+      out += MASK.repeat(child.text.length);
+      return;
+    }
+    // One UTF-16 code unit replaced by one, because ProseMirror positions
+    // count code units: a run opening on an astral character keeps its length
+    // and therefore every later offset.
+    out += child.marks.length === 0 ? child.text : MASK + child.text.slice(1);
   });
   return out;
 }
