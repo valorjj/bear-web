@@ -451,6 +451,26 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   hairline) and `RichEditor.tsx` (the text caret). The test asserts the
   suppressor set first, so a third file fails before the marker check runs.
   `RichEditor`'s suppression was an undocumented accident until M5.5.
+  **Neither suppression actually rendered until M7.5**, and the marker-string
+  check is why it went unnoticed for two milestones: `src/styles/index.css`
+  declared the global `:focus-visible` ring outside any cascade layer, and an
+  unlayered rule beats every rule inside a named layer regardless of
+  specificity — including `focus-visible:outline-none` in both allowlisted
+  files. `scripts/sourceLint.test.ts` can only see that the marker string is
+  present in the source; it cannot see what's actually painted. The fix wraps
+  the global rule in `@layer utilities`, the same layer Tailwind's utilities
+  occupy, which makes it a normal, overridable cascade citizen instead of
+  always winning. That alone was enough for `Resizer` — its compiled selector
+  (`.focus-visible\:outline-none:focus-visible`) has higher specificity than
+  the bare `:focus-visible` ring. `RichEditor` needed a second change:
+  its suppression was a bare `outline-none` (no `focus-visible:` prefix),
+  which compiles to the _same_ specificity as the global ring, so equal-layer
+  source order — not specificity — decided, and the ring still won. It now
+  reads `focus-visible:outline-none`, matching `Resizer`'s pattern.
+  `e2e/appearance.spec.ts` now asserts computed `outlineStyle` in a real
+  browser on both suppressed elements and, as a control, on an ordinary
+  button that is not in the allowlist — the only kind of assertion that can
+  actually fail here.
 - **`e2e/appearance.spec.ts` is the only test in the project that can see
   "renders wrong", and it is deliberately RELATIVE where `smoke.spec.ts` is
   absolute.** Three defects shipped through a fully green 700+ test suite —

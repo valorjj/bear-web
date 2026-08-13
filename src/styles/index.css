@@ -62,8 +62,18 @@ body {
  * `outline-none` without supplying a visible replacement — `Resizer` is the
  * one exception, and it draws its own accent hairline on
  * `group-focus-visible`.
+ *
+ * Layered in `utilities`, the same layer Tailwind's own utility classes
+ * occupy: an unlayered rule beats every layered rule regardless of
+ * specificity, which is what made `focus-visible:outline-none` on both
+ * allowlisted suppressors (`Resizer`, `RichEditor`) dead code for two
+ * milestones — the rule matched, but the unlayered ring still won. Layering
+ * this makes it a normal cascade citizen again: still the default everywhere,
+ * now genuinely overridable by a utility.
  */
-:focus-visible {
-  outline: 2px solid var(--bear-focus);
-  outline-offset: 2px;
+@layer utilities {
+  :focus-visible {
+    outline: 2px solid var(--bear-focus);
+    outline-offset: 2px;
+  }
 }

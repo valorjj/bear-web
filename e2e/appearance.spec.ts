@@ -248,6 +248,52 @@ test('the app renders in its own typeface, not the system fallback', async ({ pa
   expect(widths.real).not.toBe(widths.absent);
 });
 
+test('the two allowlisted suppressors hide the default ring; an ordinary control does not', async ({
+  page,
+}) => {
+  // The global `:focus-visible` rule in src/styles/index.css was declared
+  // outside any cascade layer, so it beat every Tailwind utility regardless
+  // of specificity — including `focus-visible:outline-none` on both
+  // allowlisted suppressors. `scripts/sourceLint.test.ts` can only see that
+  // the marker *string* is present in each file; it cannot see whether the
+  // suppression actually renders. This is the assertion that can.
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+
+  const separator = page.getByRole('separator').first();
+  const ordinaryButton = page.getByRole('button', { name: 'New note' });
+
+  // `:focus-visible` does not match every focus method. A plain mouse click
+  // does not reliably trigger it on a div with `tabIndex`, so the separator
+  // is focused with the keyboard the way a real user tabbing through the
+  // shell would.
+  await separator.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowLeft'); // undo the width nudge from the line above
+
+  const separatorOutline = await separator.evaluate((el) => getComputedStyle(el).outlineStyle);
+  expect(separatorOutline).toBe('none');
+
+  await editor.click();
+  const editorOutline = await editor.evaluate((el) => getComputedStyle(el).outlineStyle);
+  expect(editorOutline).toBe('none');
+
+  // The control: an ordinary button is not in the suppressor allowlist, so
+  // the global ring must still reach it. Without this, deleting the global
+  // rule entirely would make the two assertions above pass trivially.
+  // As above, a bare `.focus()` alone does not reliably flip the browser's
+  // input-modality heuristic away from "mouse" (this page's last real input
+  // was the `editor.click()` above) — a harmless keypress that the button
+  // has no handler for does, without triggering a click.
+  await ordinaryButton.focus();
+  await page.keyboard.press('ArrowDown');
+  const buttonOutline = await ordinaryButton.evaluate((el) => getComputedStyle(el).outlineStyle);
+  expect(buttonOutline).toBe('solid');
+});
+
 test('the search field reads as a control at rest', async ({ page }) => {
   await page.goto('/');
 
