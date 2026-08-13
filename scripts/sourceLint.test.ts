@@ -147,7 +147,7 @@ describe('architecture boundaries', () => {
     // convention enforced by nothing.
     const offenders = walk('src', ['.ts', '.tsx'])
       .filter((path) => path !== 'src/ui/Icon.tsx')
-      .filter((path) => !/\.test\.tsx?$/.test(path))
+      .filter((path) => path !== 'src/ui/Icon.test.tsx')
       .filter((path) => /from ['"]lucide-react['"]/.test(readFileSync(path, 'utf8')));
 
     expect(offenders).toEqual([]);

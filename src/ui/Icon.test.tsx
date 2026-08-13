@@ -1,4 +1,5 @@
 import { render } from '@testing-library/react';
+import type { LucideIcon } from 'lucide-react';
 import { Search } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 
@@ -7,9 +8,23 @@ import { Icon } from './Icon';
 describe('Icon', () => {
   // An icon that is not hidden joins the accessible name of whatever control
   // wraps it. This project has shipped two accessible-name regressions.
+  //
+  // This asserts on the PROPS `Icon` passes to its glyph, not the rendered DOM
+  // attribute. lucide-react's own `Icon` wrapper already defaults
+  // `aria-hidden="true"` whenever no `aria-*`/`role`/`title` prop is present at
+  // all (see `hasA11yProp` in `lucide-react/dist/esm/shared/src/utils/hasA11yProp.mjs`),
+  // so asserting on the DOM would still pass even if this component's own
+  // `aria-hidden="true"` were deleted — that library fallback would silently
+  // cover for it. A stub glyph that records its received props pins this
+  // component's own contract instead of the library's.
   it('is hidden from assistive technology', () => {
-    const { container } = render(<Icon glyph={Search} />);
-    expect(container.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    let received: Record<string, unknown> = {};
+    function StubGlyph(props: Record<string, unknown>): null {
+      received = props;
+      return null;
+    }
+    render(<Icon glyph={StubGlyph as unknown as LucideIcon} />);
+    expect(received['aria-hidden']).toBe('true');
   });
 
   it('is not focusable', () => {
