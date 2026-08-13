@@ -530,3 +530,40 @@ test('the prose column is measured on a wide window', async ({ page }) => {
   const expected = Math.min(widths.lineWidthPx, widths.pane);
   expect(widths.prose).toBeGreaterThan(expected - 2);
 });
+
+test('a tag renders as a pill, distinct from the prose beside it', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await editor.pressSequentially('Sprint planning');
+  await page.keyboard.press('Enter');
+  await editor.pressSequentially('see #work now');
+  // The pill lifts while the cursor is inside the tag, so move the caret off
+  // it before measuring — otherwise this test measures the suppressed state.
+  await page.keyboard.press('End');
+
+  const pill = editor.locator('.bear-tag');
+  await expect(pill).toHaveCount(1);
+  await expect(pill).toHaveText('#work');
+
+  const measured = await pill.evaluate((element) => {
+    const own = getComputedStyle(element);
+    const prose = element.closest('p');
+    return {
+      color: own.color,
+      background: own.backgroundColor,
+      radius: Number.parseFloat(own.borderTopLeftRadius),
+      proseColor: prose === null ? null : getComputedStyle(prose).color,
+      proseFound: prose !== null,
+    };
+  });
+
+  // A null lookup must fail, not satisfy the comparison — the trap that made
+  // two assertions in this file vacuous until M7.5's final review.
+  expect(measured.proseFound).toBe(true);
+  expect(measured.color).not.toBe(measured.proseColor);
+  expect(measured.background).not.toBe('rgba(0, 0, 0, 0)');
+  expect(measured.radius).toBeGreaterThan(0);
+});

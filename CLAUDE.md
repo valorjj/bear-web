@@ -23,9 +23,10 @@ IndexedDB.
 | M6 smart lists, trash management | complete       |
 | M7 search                        | complete       |
 | M7.5 visual design pass          | complete       |
+| M7.6 tag pills                   | complete       |
 | M8–M9                            | themes, polish |
 
-809 unit tests, 35 end-to-end tests. `main` is always green and auto-deploys.
+929 unit tests, 37 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -765,6 +766,54 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   check alone passes on a fully transparent pane, the exact defect it was
   meant to catch. The card test in `e2e/appearance.spec.ts` asserts both:
   not-transparent, and not-equal-to-canvas.
+- **`parseTags` is the deduped name-only view of `findTagRanges`, and the tag
+  grammar exists in exactly one place.** The scanner always computed each
+  tag's start and end and threw them away; M7.6 stopped throwing them away
+  rather than writing a second parser for the editor, which would have been
+  two implementations of one grammar — this project's signature defect. The
+  agreement test in `parseTags.test.ts` runs the whole corpus through both
+  paths; while it is green a divergent implementation cannot exist.
+- **The tag pill is a ProseMirror DECORATION, never a mark.** The document is
+  untouched, so no schema, serializer or round-trip path is involved and a
+  pill can never survive into a note's Markdown. The cost is that **every
+  round-trip test in this project is blind to whether the plugin runs at
+  all** — the same blind spot that let a dead `==highlight==` tokenizer and a
+  live-but-banned underline mark ship in M4. `tagPill.test.ts` asserts on the
+  decoration set itself and is the only thing that can catch a dead plugin.
+- **`maskedBlockText` emits one character per document position, and the
+  plugin's position arithmetic depends on it.** `node.textContent` cannot be
+  used: a `hardBreak` contributes no characters but occupies a position, so
+  every offset after it would shift and pills would paint the wrong
+  characters. Non-text inline nodes contribute one mask character per
+  position, which is also correct — a line break must terminate a tag.
+  **A `hardBreak` itself contributes `'\n'`, not the mask character** — an
+  earlier draft of the plan masked it, and that was wrong: a hard break
+  genuinely is a line break, so serializing the paragraph makes `parseTags`
+  find the same tag `maskedBlockText` must also see. A newline is whitespace,
+  so it both terminates a tag and permits one to start — the opposite of what
+  the mask character is for — but it is still exactly one character, so the
+  one-character-per-position invariant survives. **A known limit, accepted,
+  not fixed:** a paragraph containing both a fence marker and a hard break
+  suppresses the pill while `parseTags` still yields the tag — the tag works,
+  only the pill is missing, the same shape as the mark-boundary limit below.
+- **The pill lifts while the cursor is inside its tag.** Without it, typing
+  `#w`, `#wo`, `#wor` re-pills on every keystroke and character widths jump
+  under the cursor. Intersection, not containment: a caret at either edge
+  counts as inside.
+- **The `#` stays visible inside the pill.** This app does not hide Markdown
+  syntax, and the hash is the only thing distinguishing a tag from the heading
+  that `# ` — one space different — produces.
+- **The NUL-byte hazard is worse than the mask-character rule above states,
+  and writing the escape sequence is not sufficient by itself.** Writing
+  `\u0000` through a file-writing tool's JSON string parameter silently
+  produces a REAL NUL byte on disk anyway, because the JSON layer interprets
+  the escape before the bytes reach the filesystem — this happened twice
+  during M7.6's Task 2 alone, four times across this project. The rule is not
+  "write the escape sequence", it is "write it, then verify the bytes":
+  ```
+  python3 -c "import pathlib; [print(p) for p in pathlib.Path('.').rglob('*') if p.is_file() and '.git' not in p.parts and b'\x00' in p.read_bytes()]"
+  ```
+  Run this before every commit that touches tag-grammar prose or code.
 
 ## Carried into M5b and M6
 
@@ -776,11 +825,13 @@ the M5.5 progress ledger, gitignored and not carried forward — the items below
 are what survived out of it. Fold these into the next plan rather than
 rediscovering them.
 
-- **The tag pill mark and rename/delete are M5b.** M5 shipped the parser, the
-  index, the tree, the sidebar, and seeded creation; it never made `#tag` its
-  own inline mark, never let a tag be renamed or deleted in bulk, and never
-  added syntax-visibility toggling. Not a defect — the M4/M5 specs scope this
-  out deliberately.
+- **Clicking a tag pill to filter by that tag is M7.7, and explicitly wanted.**
+  It is not merely unimplemented: the editor plugin would need to know the
+  app's scope state, and the boundary that the editor knows only about its own
+  document has been kept clean through M7.6. How to cross it — a callback
+  threaded through `RichEditor`, a context, or an event the shell listens
+  for — is that milestone's real design problem. Tag rename and delete are
+  still carried from M5b and unscheduled.
 - **`usePaneWidths` writes `void settings.set(...)` with no flush**, so dragging
   a separator and reloading immediately can lose the width. Deferred because it
   costs a pane width rather than note content, and because `useAutosave` now has

@@ -193,3 +193,18 @@
   height: 0;
   pointer-events: none;
 }
+
+/*
+ * A tag, rendered by the `tagPill` plugin's decoration. Accent on a faint
+ * accent-tinted fill, per M7.5's ruling that the accent marks what the user
+ * can act on or has acted on — headings stay `--bear-text`.
+ *
+ * The `#` stays visible: this app does not hide Markdown syntax, and the hash
+ * is what distinguishes a tag from the heading `# ` produces.
+ */
+.ProseMirror .bear-tag {
+  color: var(--bear-accent);
+  background-color: var(--bear-selected);
+  border-radius: var(--bear-radius-sm);
+  padding: 0.05em 0.25em;
+}
