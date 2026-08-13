@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/react';
 import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
+import { Bold, Icon, Info, Italic } from '@/ui/Icon';
 
 import { pinAllSelectionStep } from './toolbarSelection';
 
@@ -37,9 +38,9 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
         aria-pressed={editor?.isActive('bold') ?? false}
         disabled={editor === null}
         onClick={() => editor?.chain().command(pinAllSelectionStep).focus().toggleBold().run()}
-        className="h-7 rounded-sm px-2 text-ui font-bold text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
+        className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
       >
-        B
+        <Icon glyph={Bold} />
       </button>
       <button
         type="button"
@@ -47,9 +48,9 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
         aria-pressed={editor?.isActive('italic') ?? false}
         disabled={editor === null}
         onClick={() => editor?.chain().command(pinAllSelectionStep).focus().toggleItalic().run()}
-        className="h-7 rounded-sm px-2 text-ui italic text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
+        className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
       >
-        I
+        <Icon glyph={Italic} />
       </button>
       <button
         type="button"
@@ -58,7 +59,7 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
         onClick={onToggleInfo}
         className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover"
       >
-        ⓘ
+        <Icon glyph={Info} />
       </button>
     </div>
   );
