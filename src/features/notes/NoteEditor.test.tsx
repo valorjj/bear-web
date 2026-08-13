@@ -488,13 +488,15 @@ describe('seeded notes', () => {
 
     await userEvent.click(el);
     // Two calls, not one `userEvent.type(el, 'x{Backspace}')`. The seed here
-    // is itself a tag, so `TagPill`'s decoration grows by one position on the
-    // insert and shrinks back on the delete — real DOM churn under the
-    // cursor. jsdom's `MutationObserver` flush lags a rapid insert-then-
-    // delete pair in a way a real browser's does not (confirmed manually
-    // against Chromium via Playwright: the identical keystrokes there behave
-    // correctly), so the two edits need to be two separate `userEvent.type`
-    // calls here to let jsdom settle between them. The assertion this test
+    // is itself a tag, so `TagPill`'s decoration redraws the span on the
+    // insert. Observed directly: after that redraw, jsdom's own selection
+    // reports `anchorOffset: 1` instead of 6, so the `{Backspace}` half of a
+    // single combined `userEvent.type` call lands at the wrong position and
+    // does nothing — this is a jsdom selection-tracking artifact, not a
+    // traced ProseMirror mechanism. Splitting into two calls avoids feeding
+    // the second keystroke through that stale selection. Confirmed correct
+    // in a real Chromium browser via Playwright — the equivalent keystrokes
+    // there revert the text exactly as expected. The assertion this test
     // makes is unchanged.
     await userEvent.type(el, 'x');
     await userEvent.type(el, '{Backspace}');

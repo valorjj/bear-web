@@ -53,11 +53,20 @@ describe('tag pill decorations', () => {
     editor.destroy();
   });
 
-  // The position arithmetic is the whole risk. This asserts the decorated
-  // span really is the tag text, not an off-by-N neighbour.
+  // The position arithmetic is the whole risk, and `textBetween` cannot pin
+  // it here: a hardBreak is a leaf that contributes zero characters to
+  // `textBetween`, so a `from` shifted onto the break's own position reads
+  // back identically to the correct `from` — `textBetween` cannot tell the
+  // two apart. Asserting the integers directly is what actually pins the
+  // arithmetic: the paragraph opens at doc position 0, so its content starts
+  // at 1; `a` occupies position 1, the hardBreak (a one-position leaf)
+  // occupies position 2, and `#work` therefore starts at 3 and runs 5
+  // characters to 8.
   it('decorates exactly the tag text after a hard break', () => {
     const editor = docFor('<p>a<br>#work</p>');
     const [{ from, to }] = decorationsOf(editor);
+    expect(from).toBe(3);
+    expect(to).toBe(8);
     expect(editor.state.doc.textBetween(from!, to!)).toBe('#work');
     editor.destroy();
   });

@@ -21,7 +21,10 @@ export function tagDecorations(state: EditorState): Decoration[] {
   const decorations: Decoration[] = [];
 
   state.doc.descendants((node, pos) => {
-    if (node.type.name === 'codeBlock') return false;
+    // `spec.code` is the property this behaviour actually depends on — set by
+    // `codeBlock` today — rather than a hardcoded node name, so a rename or a
+    // second code-ish node type stays covered.
+    if (node.type.spec.code) return false;
     if (!node.isTextblock) return true;
 
     const text = maskedBlockText(node);
@@ -38,7 +41,11 @@ export function tagDecorations(state: EditorState): Decoration[] {
   return decorations;
 }
 
-export const tagPillKey = new PluginKey('tagPill');
+// Not exported: nothing outside this file needs to target this plugin by
+// key. Kept as a `PluginKey` (the `Plugin` constructor takes one) rather than
+// an anonymous plugin, for the same debuggability every other plugin in this
+// app gets.
+const tagPillKey = new PluginKey('tagPill');
 
 export const TagPill = Extension.create({
   name: 'tagPill',
