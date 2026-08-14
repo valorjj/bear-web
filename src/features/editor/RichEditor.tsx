@@ -25,8 +25,12 @@ export interface RichEditorProps {
   /** Displayed by the info panel. */
   createdAt: number;
   updatedAt: number;
-  /** Called with a tag name when the user Mod-clicks its pill. */
-  onActivateTag?: (tag: string) => void;
+  /**
+   * Called with a tag name when the user Mod-clicks its pill. Returns whether
+   * the app acted on it; `false` makes the gesture behave exactly like a plain
+   * click, caret placement and all.
+   */
+  onActivateTag?: (tag: string) => boolean;
 }
 
 /**
@@ -70,7 +74,11 @@ export function RichEditor({
       // happened. Checked once, at the same mount boundary the plugin itself
       // reads once — a later prop change cannot flip whether listening is
       // "on" here, matching the plugin's own capture-once contract.
-      onActivate: onActivateTag === undefined ? null : (tag) => activateRef.current?.(tag),
+      // The wrapper must PROPAGATE the app's answer, not merely forward the
+      // call: the plugin gates `preventDefault()` on this return value, so a
+      // wrapper returning `undefined` would collapse every case — including
+      // every successful filter — to "declined".
+      onActivate: onActivateTag === undefined ? null : (tag) => activateRef.current?.(tag) === true,
       activateHint: t(isMacOS() ? 'editor.tagPill.hint.mac' : 'editor.tagPill.hint.other'),
     }),
   );

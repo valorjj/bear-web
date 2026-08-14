@@ -26,8 +26,11 @@ export interface NoteEditorProps {
    * untouched, and the truncation guard below keeps its full strength.
    */
   seedText?: string;
-  /** Called with a tag name when the user Mod-clicks its pill. */
-  onActivateTag?: (tag: string) => void;
+  /**
+   * Called with a tag name when the user Mod-clicks its pill. Returns whether
+   * the app acted on it; `false` makes the gesture behave like a plain click.
+   */
+  onActivateTag?: (tag: string) => boolean;
 }
 
 /**

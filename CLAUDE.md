@@ -27,7 +27,7 @@ IndexedDB.
 | M7.7 tag pill activation         | complete       |
 | M8–M9                            | themes, polish |
 
-1030 unit tests, 39 end-to-end tests. `main` is always green and auto-deploys.
+1034 unit tests, 40 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -942,11 +942,56 @@ ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
   difference. Behaviour must not depend on invisible state. It shares
   `tagHitsIn` with `tagDecorations`, so the `blockPos + 1 + offset` arithmetic
   exists once — perturbing it fails both suites, which is the proof.
+- **`tagRangeAt` resolves the clicked position to its own textblock; it does
+  not walk the document.** `state.doc.resolve(pos)` already knows the
+  position's ancestry, so the containing block is reachable directly and the
+  gesture costs the same on a 900-block note as on a one-line one — the
+  whole-document `descendants` walk it replaced measured 1.5 ms median / 5.2 ms
+  worst on 100 KB, imperceptible but proportional to note size where the spec
+  said constant. The two are behaviourally identical (document positions are
+  unique, so no other block's ranges can contain `pos`), which means **this
+  change is pinned by no behavioural test and could be reverted silently.**
+  What IS pinned: `$pos.before()` must take the position of the _immediate_
+  textblock, not an outer one — a paragraph inside a blockquote starts one
+  position later than the blockquote does, and `before(1)` shifts every offset
+  by the difference (a `tagPill.test.ts` test fails on exactly that). And
+  `!$pos.parent.isTextblock` is load-bearing twice: it rejects what cannot hold
+  a tag, and it is what keeps `before()` from throwing at depth 0, where the
+  parent is the document itself. An explicit `$pos.depth === 0` clause was
+  written alongside it and then removed — `doc.isTextblock` is false, so no
+  injection could make that clause fail, and an unfalsifiable branch is a
+  defect here.
 - **Activating a tag the index does not hold does nothing.** M7.6 ships two
   classes of lying pill. Setting a scope for one would trip the vanished-tag
   effect and bounce the user to All Notes — a click that visibly throws them
   somewhere they did not ask to go. The same handler returns early while
   `tree.nodes` is `undefined`, because that means "loading", not "no tags".
+- **`onActivate` returns a boolean, and the app's answer — not the plugin — is
+  what consumes the event. A Mod-click either filters, or behaves exactly like
+  a plain click. Never nothing.** The plugin originally called
+  `preventDefault()` before asking, which made every case the app declines cost
+  the user the caret as well as the filter: the click simply vanished. That is
+  not only the two lying-pill classes and a trashed note's pills — **a tag
+  typed within the last ~350 ms is unactivatable too**, because the index is
+  written by autosave (`AUTOSAVE_DELAY_MS = 300`) and the guard correctly
+  declines a tag that is not in it yet. Measured before the fix: 50/150/300 ms
+  after typing → nothing at all; 400/500/700 ms → filtered. So the plugin now
+  asks first and consumes second, and `AppShell.handleActivateTag` returns
+  `false` on both refusals and `true` after setting the scope. **`RichEditor`'s
+  ref-backed wrapper must PROPAGATE that boolean** — the "simplification" to a
+  statement body returns `undefined`, which reads as declined and silently
+  disables the whole feature while every callback still fires; pinned by a
+  `RichEditor.test.tsx` test asserting both directions.
+- **The tooltip stays optimistic on pills that cannot work, and that is
+  inherent.** Both lying-pill classes and every pill in a trashed note light up
+  under the modifier and read "Cmd-click to filter by this tag", then decline.
+  The editor deliberately learns nothing about scopes or the tag index, and the
+  guard that knows lives downstream of the decoration, so making the copy
+  honest means pushing index knowledge into the editor — the boundary M7.6 and
+  M7.7 were both careful not to cross. After the boolean contract above the
+  _click_ is honest (it places the caret, exactly like a plain click); only the
+  copy still promises. Do not chase this further without a design that crosses
+  that boundary deliberately.
 - **The modifier affordance is a DOM attribute set through a ref, never React
   state.** `data-mod-held` on the editor's outer element; setting state on
   every `keydown` would re-render the editor subtree on every keystroke the

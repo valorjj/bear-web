@@ -112,21 +112,33 @@ export function AppShell(): ReactElement {
   // returned object as a whole is not), so a `[tree]` dependency array would
   // recompute this on every render anyway — `useCallback` here would read as
   // memoization while providing none.
-  const handleActivateTag = (tag: string) => {
+  //
+  // Returns whether it acted. That answer is what the plugin gates
+  // `preventDefault()` on, so declining here costs the user a filter but not
+  // the caret: a Mod-click either filters, or behaves exactly like a plain
+  // click. Never nothing.
+  const handleActivateTag = (tag: string): boolean => {
     // `undefined` means the live query has not resolved. Treating it as "no
     // tags" would make activation silently fail on a slow first paint — the
     // same mistake the vanished-tag effect above already guards against.
-    if (tree.nodes === undefined) return;
+    if (tree.nodes === undefined) return false;
 
     // M7.6 ships two documented classes of pill whose tag is not in the
     // index (a tag ending link text, and a mark over leading whitespace).
     // Setting a scope for one would trip the vanished-tag effect above and
     // bounce the user to All Notes — a click that visibly throws them
     // somewhere they did not ask to go. Doing nothing is the honest answer.
-    if (!hasTag(tree.nodes, tag)) return;
+    //
+    // A tag typed within the last ~350 ms lands here too: the index is
+    // written by autosave, so it has not been written yet. That case is why
+    // this must report its refusal rather than let the plugin swallow the
+    // event — the tag exists, it is simply not saved, and the user gets the
+    // caret they would have got from a plain click instead of silence.
+    if (!hasTag(tree.nodes, tag)) return false;
 
     setScope(tagScope(tag));
     tree.reveal(tag);
+    return true;
   };
 
   const handleTrash = useCallback(async (id: string) => {

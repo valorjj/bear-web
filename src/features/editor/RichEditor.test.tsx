@@ -115,8 +115,8 @@ describe('RichEditor tag activation', () => {
   it('calls the CURRENT callback, not the one captured at mount', () => {
     // The plugin reads `onActivate` once, at construction. A prop passed
     // straight through would freeze the first render's closure.
-    const first = vi.fn();
-    const second = vi.fn();
+    const first = vi.fn(() => true);
+    const second = vi.fn(() => true);
     const handleRef: RefObject<RichEditorHandle | null> = { current: null };
     const baseProps = makeBaseProps();
     const { rerender } = renderWithI18n(
@@ -131,8 +131,35 @@ describe('RichEditor tag activation', () => {
     expect(second).toHaveBeenCalledWith('work');
   });
 
+  // The ref-backed wrapper stands between the app's answer and the plugin's
+  // `preventDefault()`. A wrapper that forwards the call but not the return
+  // value — `(tag) => { activateRef.current?.(tag); }`, the shape an
+  // "arrow-body simplification" produces — reports `undefined` for every case
+  // and collapses them all to "declined", silently disabling the whole
+  // feature while every callback still fires. Both directions are asserted
+  // because only the pair can tell propagation from a hardcoded answer.
+  it('propagates the handler answer: true swallows the event, false does not', () => {
+    const handleRef: RefObject<RichEditorHandle | null> = { current: null };
+    const answer = vi.fn(() => true);
+    renderWithI18n(
+      <RichEditor {...makeBaseProps()} handleRef={handleRef} onActivateTag={answer} />,
+    );
+    const editor = handleRef.current!.editor!;
+
+    const accepted = activateFirstTag(editor);
+    expect(answer).toHaveBeenCalledWith('work');
+    expect(accepted.handled).toBe(true);
+    expect(accepted.defaultPrevented).toBe(true);
+
+    answer.mockReturnValue(false);
+    const declined = activateFirstTag(editor);
+    expect(answer).toHaveBeenCalledTimes(2);
+    expect(declined.handled).toBe(false);
+    expect(declined.defaultPrevented).toBe(false);
+  });
+
   it('marks the editor while the modifier is held, and clears it on blur', () => {
-    renderWithI18n(<RichEditor {...makeBaseProps()} onActivateTag={vi.fn()} />);
+    renderWithI18n(<RichEditor {...makeBaseProps()} onActivateTag={vi.fn(() => true)} />);
     const surface = screen.getByRole('textbox').closest('[data-mod-held]');
     expect(surface).not.toBeNull();
     expect(surface!.getAttribute('data-mod-held')).toBe('false');
@@ -147,7 +174,7 @@ describe('RichEditor tag activation', () => {
   // Hold Cmd, press Tab to switch windows, and the keyup never arrives. The
   // pills would keep claiming to be clickable while a plain click edits.
   it('clears the modifier state when the window loses focus', () => {
-    renderWithI18n(<RichEditor {...makeBaseProps()} onActivateTag={vi.fn()} />);
+    renderWithI18n(<RichEditor {...makeBaseProps()} onActivateTag={vi.fn(() => true)} />);
     const surface = screen.getByRole('textbox').closest('[data-mod-held]')!;
 
     fireEvent.keyDown(window, { key: 'Meta', metaKey: true, ctrlKey: true });
@@ -204,7 +231,7 @@ describe('RichEditor tag pill tooltip', () => {
     try {
       const handleRef: RefObject<RichEditorHandle | null> = { current: null };
       renderWithI18n(
-        <RichEditor {...makeBaseProps()} handleRef={handleRef} onActivateTag={vi.fn()} />,
+        <RichEditor {...makeBaseProps()} handleRef={handleRef} onActivateTag={vi.fn(() => true)} />,
       );
       expect(firstPillTitle(handleRef.current!.editor!)).toBe('Cmd-click to filter by this tag');
     } finally {
@@ -218,7 +245,7 @@ describe('RichEditor tag pill tooltip', () => {
     try {
       const handleRef: RefObject<RichEditorHandle | null> = { current: null };
       renderWithI18n(
-        <RichEditor {...makeBaseProps()} handleRef={handleRef} onActivateTag={vi.fn()} />,
+        <RichEditor {...makeBaseProps()} handleRef={handleRef} onActivateTag={vi.fn(() => true)} />,
       );
       expect(firstPillTitle(handleRef.current!.editor!)).toBe('Ctrl-click to filter by this tag');
     } finally {

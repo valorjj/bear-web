@@ -258,7 +258,7 @@ describe('NoteEditor', () => {
   // component (so the editor still mounts normally) while recording the
   // props it was actually invoked with.
   it('passes its onActivateTag prop through to RichEditor unchanged', async () => {
-    const onActivateTag = vi.fn();
+    const onActivateTag = vi.fn(() => true);
     const note = await notes.create('hello');
     const richEditorSpy = vi.spyOn(editor, 'RichEditor');
 

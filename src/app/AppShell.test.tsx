@@ -21,7 +21,7 @@ const tagTreeOverride = vi.hoisted(() => ({ forceLoading: false }));
 // `NoteEditor`, so a test can call it directly. Also created via
 // `vi.hoisted` for the same hoisting reason as above.
 const capturedActivateTag = vi.hoisted(() => ({
-  current: undefined as ((tag: string) => void) | undefined,
+  current: undefined as ((tag: string) => boolean) | undefined,
 }));
 
 // Every `scope` value `AppShell` has ever rendered with, in order. A guard
@@ -98,15 +98,24 @@ vi.mock('@/features/tags', async (importOriginal) => {
 
 /**
  * Invokes the exact `onActivateTag` prop `AppShell` supplied to the currently
- * mounted `NoteEditor`, captured by the mock above. Requires a note to
- * already be selected — the prop only exists while `NoteEditor` is mounted.
+ * mounted `NoteEditor`, captured by the mock above, and returns its answer.
+ * Requires a note to already be selected — the prop only exists while
+ * `NoteEditor` is mounted.
+ *
+ * The returned boolean is not incidental: it is what the tag-pill plugin gates
+ * `event.preventDefault()` on, so it decides whether a declined Mod-click
+ * still places the caret like a plain click. An assertion on the DOM alone
+ * cannot see it — "declined and returned false" and "declined and returned
+ * true" render identically here and differ only in the browser.
  */
-async function activateTag(tag: string) {
+async function activateTag(tag: string): Promise<boolean> {
   const activate = capturedActivateTag.current;
   if (activate === undefined) throw new Error('activateTag: no NoteEditor is mounted');
+  let answer: boolean | undefined;
   await act(async () => {
-    activate(tag);
+    answer = activate(tag);
   });
+  return answer!;
 }
 
 // jsdom has no layout engine, so ProseMirror's caret/scroll math
@@ -538,7 +547,9 @@ describe('activating a tag from the editor', () => {
     // NOT about (the loading guard) cannot be what makes it pass.
     await screen.findByRole('button', { name: /^work\b/ });
 
-    await activateTag('work');
+    // `true` is the app reporting it acted, which is what licenses the plugin
+    // to consume the event and keep the caret out of the tag.
+    expect(await activateTag('work')).toBe(true);
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^alpha\b/ })).toBeInTheDocument();
@@ -563,7 +574,7 @@ describe('activating a tag from the editor', () => {
       expect(screen.queryByRole('button', { name: /^urgent\b/ })).not.toBeInTheDocument(),
     );
 
-    await activateTag('work/urgent');
+    expect(await activateTag('work/urgent')).toBe(true);
 
     // The nested row must now be rendered AND current — `reveal` opening the
     // collapsed ancestor is what makes the second half possible at all.
@@ -591,7 +602,13 @@ describe('activating a tag from the editor', () => {
     // reverted" scope and a "never set" scope render identically — see
     // `scopeHistory` above for why this asserts against the full render
     // history instead.
-    await activateTag('ghost');
+    // Reporting the refusal is the whole point: the plugin gates
+    // `preventDefault()` on this, so `false` is what turns a Mod-click on a
+    // lying pill into an ordinary caret-placing click instead of a gesture
+    // that does nothing at all. `undefined` here — a handler that forgets to
+    // return — reads as declined too, but only by accident, so the assertion
+    // is on `false` exactly.
+    expect(await activateTag('ghost')).toBe(false);
 
     expect(scopeHistory).not.toContainEqual({ kind: 'tag', tag: 'ghost' });
     expect(screen.getByRole('button', { name: /^alpha\b/ })).toBeInTheDocument();
@@ -633,14 +650,18 @@ describe('activating a tag from the editor', () => {
     // thrown value explicitly, separately from the scope-history assertion
     // below, so a crash cannot masquerade as "did nothing".
     let thrown: unknown;
+    let answer: boolean | undefined;
     try {
-      await activateTag('work');
+      answer = await activateTag('work');
     } catch (error) {
       thrown = error;
     }
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(thrown).toBeUndefined();
+    // Declined, and it said so — so the user still gets the caret a plain
+    // click would have given rather than a swallowed gesture.
+    expect(answer).toBe(false);
     // `undefined` must be treated as "not loaded", never as "no tags" — the
     // same mistake the vanished-tag effect already guards against. Checked
     // against the full render history (see `scopeHistory` above), not just

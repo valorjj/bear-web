@@ -39,25 +39,32 @@ function tagHitsIn(node: Node, blockPos: number): TagHit[] {
  * activation hit-tested the pills instead of the grammar, the same gesture
  * would work or not work with nothing on screen to explain the difference.
  * Behaviour must not depend on invisible state.
+ *
+ * Scans exactly one block — the one containing `pos` — rather than descending
+ * from the document root. `resolve` already knows the position's ancestry, so
+ * the containing textblock is reachable directly and the gesture's cost is
+ * constant instead of proportional to note size. The two are behaviourally
+ * identical (document positions are unique, so no other block's tag ranges
+ * could ever contain `pos`); the whole-document walk was simply doing the
+ * work of ~900 blocks to answer a question about one.
  */
 export function tagRangeAt(state: EditorState, pos: number): TagHit | null {
-  let found: TagHit | null = null;
+  const $pos = state.doc.resolve(pos);
+  // `isTextblock` is load-bearing twice over. It rejects everything that
+  // cannot hold a tag, and it is also what keeps `before()` below safe: a
+  // position sitting between two top-level blocks resolves to depth 0, where
+  // the parent is the document itself and `before()` would throw. An explicit
+  // `$pos.depth === 0` clause was written here first and then removed —
+  // `doc.isTextblock` is false, so the clause could not be made to fail by any
+  // injection, and an unfalsifiable branch is a defect in this project.
+  // `spec.code` is the same property `tagDecorations` gates on, so the
+  // behaviour depends on code-ness rather than on a node name.
+  if (!$pos.parent.isTextblock || $pos.parent.type.spec.code) return null;
 
-  state.doc.descendants((node, blockPos) => {
-    if (found !== null) return false;
-    if (node.type.spec.code) return false;
-    if (!node.isTextblock) return true;
-
-    for (const hit of tagHitsIn(node, blockPos)) {
-      if (pos >= hit.from && pos <= hit.to) {
-        found = hit;
-        break;
-      }
-    }
-    return false;
-  });
-
-  return found;
+  for (const hit of tagHitsIn($pos.parent, $pos.before())) {
+    if (pos >= hit.from && pos <= hit.to) return hit;
+  }
+  return null;
 }
 
 export interface TagPillOptions {
@@ -65,8 +72,17 @@ export interface TagPillOptions {
    * Called with the tag name when the user Mod-clicks a tag. `null` when
    * nobody is listening, which is the state of the schema-only
    * `editorExtensions` constant.
+   *
+   * **Returns whether the app acted on the tag**, and that answer decides
+   * whether the event is consumed. The plugin cannot know what the tag index
+   * holds — it deliberately learns nothing about scopes — so if it consumed
+   * the event before asking, every case the app declines (a lying pill, a
+   * trashed note, a tag typed inside the autosave debounce and therefore not
+   * yet written to the index) would give the user no filter, no caret, and no
+   * feedback at all. The plugin reports a fact; the app decides what it means;
+   * and now the app's answer decides what the gesture costs.
    */
-  onActivate: ((tag: string) => void) | null;
+  onActivate: ((tag: string) => boolean) | null;
   /**
    * Tooltip naming the gesture. Supplied already translated and already
    * platform-correct, because an extension has no access to `useT` and
@@ -203,8 +219,15 @@ export const TagPill = Extension.create<TagPillOptions>({
               const hit = tagRangeAt(view.state, at.pos);
               if (hit === null) return false;
 
+              // Ask first, consume second. A Mod-click either filters, or
+              // behaves exactly like a plain click — never nothing. When the
+              // app declines, falling through with no `preventDefault()` and
+              // `false` leaves ProseMirror's own mousedown handling to place
+              // the caret, which is the honest answer for a pill that cannot
+              // do what its tooltip promises.
+              if (!onActivate(hit.tag)) return false;
+
               event.preventDefault();
-              onActivate(hit.tag);
               return true;
             },
           },

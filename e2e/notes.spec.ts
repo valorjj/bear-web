@@ -520,6 +520,58 @@ test('a modifier click on a tag pill filters by that tag, and does not move the 
   expect(activeAfterModClick).toBe(false);
 });
 
+// The invariant Task 6 established: a Mod-click either filters, or behaves
+// exactly like a plain click. Never nothing. The app declines whenever the tag
+// is absent from the index, and the plugin gates `preventDefault()` on that
+// answer — so a declined gesture must still place the caret.
+//
+// A trashed note is the deterministic way to reach a declining pill from the
+// UI alone: `noteTags` reflects active notes only, so the editor paints the
+// pill (it knows nothing about trash) while the tag is genuinely not in the
+// tree. The other two declining cases are a lying pill (needs Markdown the
+// serializer will not produce from typing) and a tag typed inside the 300 ms
+// autosave debounce (a race, not an assertion).
+test('a modifier click on a tag the app declines places the caret instead of doing nothing', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Ship #work today');
+  await editor.blur();
+
+  await page.getByRole('button', { name: 'Delete' }).click();
+
+  const lists = page.getByRole('navigation', { name: 'Lists' });
+  await lists.getByRole('button', { name: /^Trash\b/ }).click();
+  await page
+    .getByRole('region', { name: 'Note list' })
+    .getByRole('button', { name: /Ship/ })
+    .click();
+
+  // The pill is painted even though the tag is not in the index — the editor
+  // deliberately learns nothing about scopes.
+  const pill = editor.locator('.bear-tag');
+  await expect(pill).toHaveText('#work');
+
+  await pill.click({ modifiers: ['ControlOrMeta'] });
+
+  // The caret landed inside the tag, so suppression lifted the pill: the same
+  // observable the plain-click test below uses, because the two gestures are
+  // required to be indistinguishable here. Before this contract the plugin
+  // called `preventDefault()` before asking, so the pill stayed, the caret
+  // never moved and the scope never changed — the click simply vanished.
+  await expect(pill).toHaveCount(0);
+  // And it is still a decline, not a filter: no tag row exists for a trashed
+  // note's tag, and Trash stays current.
+  await expect(lists.getByRole('button', { name: /^Trash\b/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+});
+
 test('a plain click on a tag pill places the caret and does not filter', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'New note' }).click();

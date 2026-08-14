@@ -252,6 +252,31 @@ describe('tagRangeAt', () => {
     editor.destroy();
   });
 
+  // `tagRangeAt` resolves the clicked position to its own textblock rather
+  // than walking the document. Depth 0 — a position sitting between two
+  // top-level blocks, which `posAtCoords` can return for a click in the gap —
+  // has no textblock parent and no `before()` to take, so it must be rejected
+  // before the arithmetic runs, not after.
+  it('returns null at a position between two blocks', () => {
+    const editor = docFor('<p>#work</p><p>#home</p>');
+    const boundary = editor.state.doc.firstChild!.nodeSize;
+    expect(editor.state.doc.resolve(boundary).depth).toBe(0);
+    expect(tagRangeAt(editor.state, boundary)).toBeNull();
+    editor.destroy();
+  });
+
+  // The block a position belongs to is its immediate textblock ancestor, not
+  // the top-level node containing it — a paragraph inside a blockquote starts
+  // one position later than the blockquote does, and taking the outer node's
+  // position would shift every offset by that difference.
+  it('finds a tag in a nested textblock, at the right positions', () => {
+    const editor = docFor('<blockquote><p>a #work b</p></blockquote>');
+    const hit = tagRangeAt(editor.state, 6)!;
+    expect(hit.tag).toBe('work');
+    expect(editor.state.doc.textBetween(hit.from, hit.to)).toBe('#work');
+    editor.destroy();
+  });
+
   // The property that makes activation independent of invisible state.
   it('finds a tag whose pill is suppressed by the selection', () => {
     const editor = docFor('<p>a #work b</p>');
@@ -360,11 +385,23 @@ function mousedownAt(
   return { handled, defaultPrevented: event.defaultPrevented };
 }
 
+/**
+ * An `onActivate` that records the tags it is asked about and answers with
+ * `answer`. The boolean is the app's half of the contract: `true` means the
+ * app acted on the tag, and only then may the plugin consume the event.
+ */
+function recording(into: string[], answer = true): (tag: string) => boolean {
+  return (tag) => {
+    into.push(tag);
+    return answer;
+  };
+}
+
 describe('tag activation', () => {
-  it('reports the tag and swallows the event on a modifier click', () => {
+  it('reports the tag and swallows the event when the app accepts it', () => {
     const activated: string[] = [];
     const editor = new Editor({
-      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
       content: '<p>a #work b</p>',
     });
 
@@ -378,10 +415,34 @@ describe('tag activation', () => {
     editor.destroy();
   });
 
+  // The invariant this contract exists for: a Mod-click either filters, or
+  // behaves exactly like a plain click. Never nothing. The plugin cannot know
+  // whether a tag is in the index — a lying pill, a trashed note's pill, or a
+  // tag typed inside the autosave debounce all look identical to it — so the
+  // app's refusal must be what leaves the event unconsumed, and ProseMirror's
+  // own mousedown handling free to place the caret.
+  it('leaves the event alone when the app declines the tag', () => {
+    const asked: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(asked, false) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+
+    // The app WAS asked — declining is an answer, not a failure to detect the
+    // gesture, and this distinguishes "the app said no" from "the hit test
+    // found nothing".
+    expect(asked).toEqual(['work']);
+    expect(result.handled).toBe(false);
+    expect(result.defaultPrevented).toBe(false);
+    editor.destroy();
+  });
+
   it('does nothing on a plain click, so the caret still moves', () => {
     const activated: string[] = [];
     const editor = new Editor({
-      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
       content: '<p>a #work b</p>',
     });
 
@@ -396,7 +457,7 @@ describe('tag activation', () => {
   it('does nothing on a modifier click outside any tag', () => {
     const activated: string[] = [];
     const editor = new Editor({
-      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
       content: '<p>a #work b</p>',
     });
 
@@ -410,7 +471,7 @@ describe('tag activation', () => {
   it('does not activate on a non-primary button', () => {
     const activated: string[] = [];
     const editor = new Editor({
-      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
       content: '<p>a #work b</p>',
     });
 
@@ -434,7 +495,7 @@ describe('tag activation', () => {
     try {
       const activated: string[] = [];
       const editor = new Editor({
-        extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+        extensions: buildEditorExtensions({ onActivate: recording(activated) }),
         content: '<p>a #work b</p>',
       });
 
@@ -459,7 +520,7 @@ describe('tag activation', () => {
     try {
       const activated: string[] = [];
       const editor = new Editor({
-        extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+        extensions: buildEditorExtensions({ onActivate: recording(activated) }),
         content: '<p>a #work b</p>',
       });
 
@@ -482,7 +543,7 @@ describe('tag activation', () => {
   it('activates a tag whose pill is currently suppressed', () => {
     const activated: string[] = [];
     const editor = new Editor({
-      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
       content: '<p>a #work b</p>',
     });
     editor.commands.setTextSelection(5);
@@ -550,7 +611,7 @@ describe('tag activation', () => {
     const editor = new Editor({ extensions: editorExtensions, content: '<p>a #work b</p>' });
 
     const options: TagPillOptions = {
-      onActivate: (tag) => original.push(tag),
+      onActivate: recording(original),
       activateHint: null,
     };
     const plugins = TagPill.config.addProseMirrorPlugins!.call({
@@ -565,7 +626,7 @@ describe('tag activation', () => {
 
     // Mutate the exact object `this.options` referenced above, simulating a
     // caller that replaces the callback after the plugin was built.
-    options.onActivate = (tag) => replaced.push(tag);
+    options.onActivate = recording(replaced);
 
     const event = new MouseEvent('mousedown', {
       cancelable: true,
