@@ -1,8 +1,10 @@
 import { Editor, isMacOS } from '@tiptap/core';
+import type { Decoration } from '@tiptap/pm/view';
 import { describe, expect, it } from 'vitest';
 
 import { buildEditorExtensions, editorExtensions } from './extensions';
-import { tagDecorations, tagRangeAt } from './TagPill';
+import { TagPill, tagDecorations, tagRangeAt } from './TagPill';
+import type { TagPillOptions } from './TagPill';
 
 function docFor(content: string): Editor {
   return new Editor({ extensions: editorExtensions, content });
@@ -419,28 +421,61 @@ describe('tag activation', () => {
     editor.destroy();
   });
 
-  // Ctrl-click on macOS is the context-menu gesture. Getting this wrong is
-  // invisible on Linux CI, so it needs its own assertion on both platforms.
-  it('treats Ctrl as the modifier only off Apple platforms', () => {
-    const activated: string[] = [];
-    const editor = new Editor({
-      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
-      content: '<p>a #work b</p>',
-    });
+  // Ctrl-click on macOS is the context-menu gesture. `isMacOS()` reads
+  // `navigator.platform`, which jsdom reports as `''` — so `isMacOS()` is
+  // false in every test run regardless of the host machine, and a test that
+  // merely branches on `isMacOS()` (as this pair used to, as one test) only
+  // ever exercises the non-Apple arm: the Apple branch was dead code, guarded
+  // by nothing. Each test below stubs `navigator.platform` explicitly and
+  // restores it afterwards, so both arms are actually driven.
+  it('on an Apple platform, Cmd activates and Ctrl does not', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    try {
+      const activated: string[] = [];
+      const editor = new Editor({
+        extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+        content: '<p>a #work b</p>',
+      });
 
-    const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
-    const meta = mousedownAt(editor, 5, { metaKey: true });
+      const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
+      const meta = mousedownAt(editor, 5, { metaKey: true });
 
-    if (isMacOS()) {
       expect(ctrl.handled).toBe(false);
       expect(meta.handled).toBe(true);
       expect(activated).toEqual(['work']);
-    } else {
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  it('off Apple platforms, Ctrl activates and Cmd does not', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+    try {
+      const activated: string[] = [];
+      const editor = new Editor({
+        extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+        content: '<p>a #work b</p>',
+      });
+
+      const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
+      const meta = mousedownAt(editor, 5, { metaKey: true });
+
       expect(ctrl.handled).toBe(true);
       expect(meta.handled).toBe(false);
       expect(activated).toEqual(['work']);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
     }
-    editor.destroy();
   });
 
   // Independence from invisible state, end to end through the real plugin.
@@ -477,12 +512,75 @@ describe('tag activation', () => {
       content: '<p>#work and #home</p>',
     });
 
-    const titles = tagDecorations(editor.state, false).map(
-      // A Decoration's spec is where `Decoration.inline`'s attribute object lands.
+    // Through the real registered plugin's `decorations` prop — same
+    // `someProp` mechanism `mousedownAt` uses for `handleDOMEvents` — so this
+    // proves the option actually reaches the mounted extension, not just a
+    // direct call to `tagDecorations`.
+    const decorationSet = editor.view.someProp('decorations', (f) => f(editor.state));
+    const titles = (decorationSet as unknown as { find(): Decoration[] }).find().map(
+      // Measured directly: `Decoration.inline(from, to, attrs)` puts `attrs`
+      // at `decoration.type.attrs`; `decoration.type.spec` is `{}`.
       (decoration) =>
         (decoration as unknown as { type: { attrs: Record<string, string> } }).type.attrs.title,
     );
     expect(titles).toEqual(['Cmd-click to filter', 'Cmd-click to filter']);
+    editor.destroy();
+  });
+
+  it('keeps calling the original callback after the extension options are mutated', () => {
+    // Pins capture-once at the exact boundary where it matters:
+    // `addProseMirrorPlugins()` destructures `onActivate` out of `this.options`
+    // a single time, and the closure keeps that value for the plugin's whole
+    // lifetime — even though `this.options` itself is the SAME live object
+    // passed in below, so a later mutation to it is visible to anything that
+    // reads `this.options.onActivate` fresh instead.
+    //
+    // Going through a mounted `Editor` cannot pin this: Tiptap's own
+    // `getExtensionField` rebuilds `this.options` as a fresh spread copy on
+    // every access (confirmed by instrumenting `Extendable.options`'s
+    // getter), so `editor.extensionManager.extensions.find(...).options.x =
+    // ...` mutates a throwaway copy and is invisible to the running plugin
+    // regardless of whether the plugin captures once or reads fresh — a test
+    // written that way passes for the wrong reason and cannot fail. Calling
+    // the extension's own `addProseMirrorPlugins` directly, with a `this`
+    // whose `options` is an object THIS test still holds a reference to, is
+    // what makes a later mutation observable at all.
+    const original: string[] = [];
+    const replaced: string[] = [];
+    const editor = new Editor({ extensions: editorExtensions, content: '<p>a #work b</p>' });
+
+    const options: TagPillOptions = {
+      onActivate: (tag) => original.push(tag),
+      activateHint: null,
+    };
+    const plugins = TagPill.config.addProseMirrorPlugins!.call({
+      name: 'tagPill',
+      options,
+      storage: {},
+      editor,
+      type: undefined as never,
+      parent: undefined,
+    });
+    const [plugin] = plugins;
+
+    // Mutate the exact object `this.options` referenced above, simulating a
+    // caller that replaces the callback after the plugin was built.
+    options.onActivate = (tag) => replaced.push(tag);
+
+    const event = new MouseEvent('mousedown', {
+      cancelable: true,
+      button: 0,
+      ...(isMacOS() ? { metaKey: true } : { ctrlKey: true }),
+    });
+    const view = { state: editor.state, posAtCoords: () => ({ pos: 5, inside: 5 }) };
+    const mousedown = plugin!.props.handleDOMEvents!.mousedown as unknown as (
+      view: unknown,
+      event: unknown,
+    ) => boolean;
+    mousedown(view, event);
+
+    expect(original).toEqual(['work']);
+    expect(replaced).toEqual([]);
     editor.destroy();
   });
 });

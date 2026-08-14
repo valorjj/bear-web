@@ -79,13 +79,7 @@ export interface TagPillOptions {
 // key. Kept as a `PluginKey` (the `Plugin` constructor takes one) rather than
 // an anonymous plugin, for the same debuggability every other plugin in this
 // app gets.
-//
-// Typed on the plugin's own state, which holds nothing but the configured
-// `activateHint` — captured once at plugin construction, exactly like
-// `onActivate` below, and read back by `tagDecorations` via
-// `tagPillKey.getState(state)` so the decorations() prop's call site stays
-// unchanged.
-const tagPillKey = new PluginKey<string | null>('tagPill');
+const tagPillKey = new PluginKey('tagPill');
 
 /**
  * Renders `#tag` as a pill.
@@ -97,11 +91,19 @@ const tagPillKey = new PluginKey<string | null>('tagPill');
  * The consequence is that every round-trip test in this project is blind to
  * whether this plugin runs at all — see `tagPill.test.ts`, which asserts on
  * the decoration set itself.
+ *
+ * `activateHint`, when non-null, is written onto every decoration's `title`
+ * attribute — an explicit parameter, not plugin state, so the function's
+ * inputs are visible in its own signature rather than hidden behind
+ * `PluginKey.getState`.
  */
-export function tagDecorations(state: EditorState, focused = true): Decoration[] {
+export function tagDecorations(
+  state: EditorState,
+  focused = true,
+  activateHint: string | null = null,
+): Decoration[] {
   const decorations: Decoration[] = [];
   const { from: selFrom, to: selTo } = state.selection;
-  const hint = tagPillKey.getState(state) ?? null;
 
   state.doc.descendants((node, pos) => {
     // `spec.code` is the property this behaviour actually depends on — set by
@@ -131,7 +133,9 @@ export function tagDecorations(state: EditorState, focused = true): Decoration[]
         Decoration.inline(
           from,
           to,
-          hint === null ? { class: 'bear-tag' } : { class: 'bear-tag', title: hint },
+          activateHint === null
+            ? { class: 'bear-tag' }
+            : { class: 'bear-tag', title: activateHint },
         ),
       );
     }
@@ -156,22 +160,25 @@ export const TagPill = Extension.create<TagPillOptions>({
     // props below: both props are invoked by ProseMirror's view machinery
     // with no guarantee of `this` binding to the extension instance.
     //
-    // `onActivate` is read once, here, at plugin construction — this is why
-    // a caller that needs the callback's *behaviour* to stay current while
-    // its *identity* stays stable must thread a ref-backed function rather
-    // than the callback itself (see Task 3).
+    // `onActivate` (and `activateHint` beside it) is read once, here, at
+    // plugin construction, and stays this closure's value for the plugin's
+    // whole lifetime even if `this.options` is mutated afterwards — pinned by
+    // the "keeps calling the original callback after the extension options
+    // are mutated" test in `tagPill.test.ts`. This is why a caller that needs
+    // the callback's *behaviour* to stay current while its *identity* stays
+    // stable must thread a ref-backed function rather than the callback
+    // itself (see Task 3).
     const { editor } = this;
     const { onActivate, activateHint } = this.options;
     return [
       new Plugin({
         key: tagPillKey,
-        state: {
-          init: () => activateHint,
-          apply: (_tr, prev) => prev,
-        },
         props: {
           decorations(state) {
-            return DecorationSet.create(state.doc, tagDecorations(state, editor.isFocused));
+            return DecorationSet.create(
+              state.doc,
+              tagDecorations(state, editor.isFocused, activateHint),
+            );
           },
 
           handleDOMEvents: {
