@@ -1,7 +1,7 @@
-import { Editor } from '@tiptap/core';
+import { Editor, isMacOS } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
-import { editorExtensions } from './extensions';
+import { buildEditorExtensions, editorExtensions } from './extensions';
 import { tagDecorations, tagRangeAt } from './TagPill';
 
 function docFor(content: string): Editor {
@@ -335,6 +335,154 @@ describe('mounted plugin (real DOM, not a direct tagDecorations call)', () => {
     expect(editor.isFocused).toBe(false);
     expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(2);
 
+    editor.destroy();
+  });
+});
+
+/**
+ * Invokes the plugin's own mousedown handler with a fake view, so the test
+ * exercises the real registered plugin without needing jsdom layout —
+ * `posAtCoords` has no meaning without a layout engine.
+ */
+function mousedownAt(
+  editor: Editor,
+  pos: number,
+  init: MouseEventInit,
+): { handled: boolean; defaultPrevented: boolean } {
+  const event = new MouseEvent('mousedown', { cancelable: true, button: 0, ...init });
+  const view = { state: editor.state, posAtCoords: () => ({ pos, inside: pos }) };
+  const handled =
+    editor.view.someProp('handleDOMEvents', (handlers) =>
+      handlers.mousedown === undefined ? false : handlers.mousedown(view as never, event as never),
+    ) === true;
+  return { handled, defaultPrevented: event.defaultPrevented };
+}
+
+describe('tag activation', () => {
+  it('reports the tag and swallows the event on a modifier click', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+
+    expect(activated).toEqual(['work']);
+    expect(result.handled).toBe(true);
+    // Preventing the default is what stops the browser moving the caret into
+    // the tag, which would lift the pill the user just clicked.
+    expect(result.defaultPrevented).toBe(true);
+    editor.destroy();
+  });
+
+  it('does nothing on a plain click, so the caret still moves', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, {});
+
+    expect(activated).toEqual([]);
+    expect(result.handled).toBe(false);
+    expect(result.defaultPrevented).toBe(false);
+    editor.destroy();
+  });
+
+  it('does nothing on a modifier click outside any tag', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 1, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+
+    expect(activated).toEqual([]);
+    expect(result.handled).toBe(false);
+    editor.destroy();
+  });
+
+  it('does not activate on a non-primary button', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const modifier = isMacOS() ? { metaKey: true } : { ctrlKey: true };
+    expect(mousedownAt(editor, 5, { ...modifier, button: 1 }).handled).toBe(false);
+    expect(mousedownAt(editor, 5, { ...modifier, button: 2 }).handled).toBe(false);
+    expect(activated).toEqual([]);
+    editor.destroy();
+  });
+
+  // Ctrl-click on macOS is the context-menu gesture. Getting this wrong is
+  // invisible on Linux CI, so it needs its own assertion on both platforms.
+  it('treats Ctrl as the modifier only off Apple platforms', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
+    const meta = mousedownAt(editor, 5, { metaKey: true });
+
+    if (isMacOS()) {
+      expect(ctrl.handled).toBe(false);
+      expect(meta.handled).toBe(true);
+      expect(activated).toEqual(['work']);
+    } else {
+      expect(ctrl.handled).toBe(true);
+      expect(meta.handled).toBe(false);
+      expect(activated).toEqual(['work']);
+    }
+    editor.destroy();
+  });
+
+  // Independence from invisible state, end to end through the real plugin.
+  it('activates a tag whose pill is currently suppressed', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: (tag) => activated.push(tag) }),
+      content: '<p>a #work b</p>',
+    });
+    editor.commands.setTextSelection(5);
+    editor.commands.focus();
+
+    mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+
+    expect(activated).toEqual(['work']);
+    editor.destroy();
+  });
+
+  it('is inert when no callback is injected', () => {
+    const editor = new Editor({
+      extensions: editorExtensions,
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+
+    expect(result.handled).toBe(false);
+    editor.destroy();
+  });
+
+  it('puts the injected hint on every pill', () => {
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ activateHint: 'Cmd-click to filter' }),
+      content: '<p>#work and #home</p>',
+    });
+
+    const titles = tagDecorations(editor.state, false).map(
+      // A Decoration's spec is where `Decoration.inline`'s attribute object lands.
+      (decoration) =>
+        (decoration as unknown as { type: { attrs: Record<string, string> } }).type.attrs.title,
+    );
+    expect(titles).toEqual(['Cmd-click to filter', 'Cmd-click to filter']);
     editor.destroy();
   });
 });
