@@ -13,7 +13,7 @@ import {
   useNotes,
   useSmartListCounts,
 } from '@/features/notes';
-import { TagSidebar, type TagNode, useTagTree } from '@/features/tags';
+import { hasTag, TagSidebar, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
@@ -102,12 +102,29 @@ export function AppShell(): ReactElement {
   // `AppShell.test.tsx`, which documents why.
   useEffect(() => {
     if (scope.kind !== 'tag' || tree.nodes === undefined) return;
-
-    const exists = (nodes: TagNode[]): boolean =>
-      nodes.some((node) => node.tag === scope.tag || exists(node.children));
-
-    if (!exists(tree.nodes)) setScope(ACTIVE_SCOPE);
+    if (!hasTag(tree.nodes, scope.tag)) setScope(ACTIVE_SCOPE);
   }, [scope, tree.nodes]);
+
+  // Answers a Mod-click on a tag pill in the editor.
+  const handleActivateTag = useCallback(
+    (tag: string) => {
+      // `undefined` means the live query has not resolved. Treating it as "no
+      // tags" would make activation silently fail on a slow first paint — the
+      // same mistake the vanished-tag effect above already guards against.
+      if (tree.nodes === undefined) return;
+
+      // M7.6 ships two documented classes of pill whose tag is not in the
+      // index (a tag ending link text, and a mark over leading whitespace).
+      // Setting a scope for one would trip the vanished-tag effect above and
+      // bounce the user to All Notes — a click that visibly throws them
+      // somewhere they did not ask to go. Doing nothing is the honest answer.
+      if (!hasTag(tree.nodes, tag)) return;
+
+      setScope({ kind: 'tag', tag });
+      tree.reveal(tag);
+    },
+    [tree],
+  );
 
   const handleTrash = useCallback(async (id: string) => {
     await notes.trash(id);
@@ -227,6 +244,7 @@ export function AppShell(): ReactElement {
             key={selectedNote.id}
             note={selectedNote}
             seedText={seed?.id === selectedNote.id ? seed.text : undefined}
+            onActivateTag={handleActivateTag}
           />
         )}
       </Pane>

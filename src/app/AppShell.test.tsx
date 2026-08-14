@@ -1,13 +1,113 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { StrictMode } from 'react';
+import { StrictMode, useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db, notes } from '@/data';
 import { I18nProvider } from '@/i18n';
 import { en } from '@/i18n/en';
+import type { NoteEditorProps } from '@/features/notes';
 
 import { AppShell } from './AppShell';
+
+// Lets one test simulate `useTagTree`'s pre-resolution `undefined` without
+// timing games against the real `dexie-react-hooks` subscription. `vi.mock`
+// factories are hoisted above the rest of the module, so the flag they close
+// over must be created through `vi.hoisted` rather than a plain module-level
+// `let` — referencing the latter would throw at import time.
+const tagTreeOverride = vi.hoisted(() => ({ forceLoading: false }));
+
+// Captures the exact `onActivateTag` prop `AppShell` passes down to
+// `NoteEditor`, so a test can call it directly. Also created via
+// `vi.hoisted` for the same hoisting reason as above.
+const capturedActivateTag = vi.hoisted(() => ({
+  current: undefined as ((tag: string) => void) | undefined,
+}));
+
+// Every `scope` value `AppShell` has ever rendered with, in order. A guard
+// that sets a scope and lets the vanished-tag effect revert it a moment
+// later is NOT the same as a guard that never sets it — but by the time a
+// test can look at the DOM again, both converge on an identical final state,
+// because `act` flushes the setting render, the reverting effect, and the
+// reverted render all within one synchronous batch (there is no real
+// browser frame in between for a transient scope to be observed in). Scope
+// itself is exactly what `useNotes` is called with on every render of
+// `AppShell`, so recording its argument there — a call that happens
+// synchronously during render, before any effect can revert anything —
+// is what makes a transient, later-reverted scope change visible to a test
+// at all.
+const scopeHistory = vi.hoisted(() => [] as Array<import('@/features/notes').NoteScope>);
+
+// `handleActivateTag` lives deep inside `AppShell`, past `NoteEditor` and
+// `RichEditor`, and the real gesture it answers to (a Mod-click on a tag
+// pill) is driven, everywhere else in this project, by faking
+// `EditorView.posAtCoords` — jsdom has no layout engine, so the real method
+// never resolves a screen coordinate to a document position (see
+// `RichEditor.test.tsx`'s `activateFirstTag` and `tagPill.test.ts`'s
+// `mousedownAt`). Reaching the mounted `EditorView` instance from here, three
+// components down and with no ref threaded through any of them, would need
+// new production plumbing whose only customer is a test.
+//
+// A first attempt rendered a real, clickable escape-hatch button inside a
+// wrapped `NoteEditor` instead — but any extra `<input>` there collides with
+// `getByRole('textbox')` (the real editor's own role) used everywhere else in
+// this file, including by fixtures this test does not own. So this wrapper
+// renders nothing extra; it only captures the exact `onActivateTag` prop
+// `AppShell` passes down, via a ref-like module value, so a test can invoke
+// it directly — the brief's named fallback. Every other test in this file
+// still exercises the real, unwrapped `NoteEditor`.
+vi.mock('@/features/notes', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/notes')>();
+
+  function TestNoteEditor(props: NoteEditorProps) {
+    useEffect(() => {
+      capturedActivateTag.current = props.onActivateTag;
+      return () => {
+        capturedActivateTag.current = undefined;
+      };
+    }, [props.onActivateTag]);
+    return <actual.NoteEditor {...props} />;
+  }
+
+  return {
+    ...actual,
+    NoteEditor: TestNoteEditor,
+    // Records the scope argument on every render — see `scopeHistory` above
+    // for why this, and not a DOM assertion, is what can catch a scope that
+    // was set and then reverted within a single synchronous test flush.
+    useNotes: (scope: import('@/features/notes').NoteScope) => {
+      scopeHistory.push(scope);
+      return actual.useNotes(scope);
+    },
+  };
+});
+
+// Real `useTagTree`, real subscriptions, real `reveal`/`toggle` — only
+// `nodes` is forced to `undefined` when `tagTreeOverride.forceLoading` is set,
+// to simulate the live query's pre-resolution state on demand.
+vi.mock('@/features/tags', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/tags')>();
+  return {
+    ...actual,
+    useTagTree: () => {
+      const real = actual.useTagTree();
+      return tagTreeOverride.forceLoading ? { ...real, nodes: undefined } : real;
+    },
+  };
+});
+
+/**
+ * Invokes the exact `onActivateTag` prop `AppShell` supplied to the currently
+ * mounted `NoteEditor`, captured by the mock above. Requires a note to
+ * already be selected — the prop only exists while `NoteEditor` is mounted.
+ */
+async function activateTag(tag: string) {
+  const activate = capturedActivateTag.current;
+  if (activate === undefined) throw new Error('activateTag: no NoteEditor is mounted');
+  await act(async () => {
+    activate(tag);
+  });
+}
 
 // jsdom has no layout engine, so ProseMirror's caret/scroll math
 // (`coordsAtPos`, `posAtCoords`) throws on APIs jsdom never implements. These
@@ -38,6 +138,8 @@ document.elementFromPoint = () => null;
 
 afterEach(() => {
   vi.restoreAllMocks();
+  tagTreeOverride.forceLoading = false;
+  scopeHistory.length = 0;
 });
 
 function renderShell() {
@@ -420,6 +522,116 @@ describe('tag scopes', () => {
     await userEvent.click(keeperRow);
 
     await waitFor(() => expect(purge).not.toHaveBeenCalled());
+  });
+});
+
+describe('activating a tag from the editor', () => {
+  it('filters the note list by a tag the sidebar knows', async () => {
+    await notes.create('alpha #work');
+    await notes.create('beta');
+
+    renderShell();
+
+    // Select a note so `NoteEditor` (and the `onActivateTag` prop) mounts.
+    await userEvent.click(await screen.findByRole('button', { name: /^alpha\b/ }));
+    // Wait for the sidebar to know about the tag, so the guard this test is
+    // NOT about (the loading guard) cannot be what makes it pass.
+    await screen.findByRole('button', { name: /^work\b/ });
+
+    await activateTag('work');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^alpha\b/ })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^beta\b/ })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /^work\b/ })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('reveals a collapsed ancestor so the activated row is actually rendered', async () => {
+    await notes.create('alpha #work/urgent');
+    await notes.create('beta');
+
+    renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^alpha\b/ }));
+    // The nested tag's row only exists once its ancestor is expanded — expand
+    // once to find it, then collapse the ancestor again so this test starts
+    // from the state `reveal` exists to fix.
+    await screen.findByRole('button', { name: /^work\b/ });
+    await userEvent.click(screen.getByRole('button', { name: en['tags.toggle'] }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^urgent\b/ })).not.toBeInTheDocument(),
+    );
+
+    await activateTag('work/urgent');
+
+    // The nested row must now be rendered AND current — `reveal` opening the
+    // collapsed ancestor is what makes the second half possible at all.
+    const nested = await screen.findByRole('button', { name: /^urgent\b/ });
+    expect(nested).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('does nothing for a tag that is not in the index', async () => {
+    await notes.create('alpha #work');
+    await notes.create('beta');
+
+    renderShell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^alpha\b/ }));
+    // Wait for the tree to resolve — a real tag must be visible before this
+    // test can mean anything about an UNKNOWN one.
+    await screen.findByRole('button', { name: /^work\b/ });
+    scopeHistory.length = 0;
+
+    // A lying pill: painted by the plugin, absent from `parseTags`' index —
+    // see the two documented classes in CLAUDE.md. Setting a scope for it
+    // would trip the vanished-tag effect and bounce back to All Notes; that
+    // bounce happens within the same synchronous test flush as the setting
+    // render, so by the time the DOM can be inspected again a "set, then
+    // reverted" scope and a "never set" scope render identically — see
+    // `scopeHistory` above for why this asserts against the full render
+    // history instead.
+    await activateTag('ghost');
+
+    expect(scopeHistory).not.toContainEqual({ kind: 'tag', tag: 'ghost' });
+    expect(screen.getByRole('button', { name: /^alpha\b/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^beta\b/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: new RegExp(`^${en['smartList.all']}\\b`) }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('does nothing while the tag tree is still loading', async () => {
+    await notes.create('alpha #work');
+
+    const { rerender } = renderShell();
+    await userEvent.click(await screen.findByRole('button', { name: /^alpha\b/ }));
+    // Establish the tree has genuinely resolved once, with the real tag
+    // visible, before forcing the loading state — otherwise this test could
+    // pass merely because the tag was never in the index to begin with (the
+    // previous test's failure mode).
+    await screen.findByRole('button', { name: /^work\b/ });
+
+    tagTreeOverride.forceLoading = true;
+    // Force `AppShell` to re-render with the override applied: the mocked
+    // `useTagTree` re-runs on this render and now reports `nodes: undefined`,
+    // which is what recomputes `handleActivateTag`'s closure before the
+    // capture below reads it.
+    rerender(
+      <I18nProvider locale="en">
+        <AppShell />
+      </I18nProvider>,
+    );
+
+    await activateTag('work');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // `undefined` must be treated as "not loaded", never as "no tags" — the
+    // same mistake the vanished-tag effect already guards against. The scope
+    // must be untouched even though `work` genuinely is in the real index.
+    expect(
+      screen.getByRole('button', { name: new RegExp(`^${en['smartList.all']}\\b`) }),
+    ).toHaveAttribute('aria-current', 'page');
   });
 });
 

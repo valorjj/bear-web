@@ -66,3 +66,56 @@ describe('useTagTree', () => {
     await waitFor(() => expect(result.current.isCollapsed('work')).toBe(false));
   });
 });
+
+describe('reveal', () => {
+  it('expands every collapsed ancestor of a nested tag', async () => {
+    await notes.create('#work/urgent');
+
+    const { result } = renderHook(() => useTagTree());
+    await waitFor(() => expect(result.current.nodes).toBeDefined());
+
+    await act(async () => {
+      result.current.toggle('work');
+    });
+    await waitFor(() => expect(result.current.isCollapsed('work')).toBe(true));
+
+    await act(async () => {
+      result.current.reveal('work/urgent');
+    });
+
+    await waitFor(() => expect(result.current.isCollapsed('work')).toBe(false));
+  });
+
+  it('leaves the tag itself collapsed — only its ancestors open', async () => {
+    await notes.create('#work/urgent');
+
+    const { result } = renderHook(() => useTagTree());
+    await waitFor(() => expect(result.current.nodes).toBeDefined());
+
+    await act(async () => {
+      result.current.toggle('work');
+    });
+    await waitFor(() => expect(result.current.isCollapsed('work')).toBe(true));
+
+    await act(async () => {
+      result.current.reveal('work');
+    });
+
+    // `reveal('work')` has no ancestors of its own — it must not touch
+    // `work`'s own disclosure state.
+    expect(result.current.isCollapsed('work')).toBe(true);
+  });
+
+  it('is a no-op for a top-level tag', async () => {
+    await notes.create('#home');
+
+    const { result } = renderHook(() => useTagTree());
+    await waitFor(() => expect(result.current.nodes).toBeDefined());
+
+    await act(async () => {
+      result.current.reveal('home');
+    });
+
+    expect(result.current.isCollapsed('home')).toBe(false);
+  });
+});
