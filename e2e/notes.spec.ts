@@ -456,19 +456,39 @@ test('search narrows the list against real stored notes, and creating a note cle
   await expect(noteList.getByRole('button', { name: /Untitled/ })).toBeVisible();
 });
 
-test('a modifier click on a tag pill filters by that tag', async ({ page }) => {
+test('a modifier click on a tag pill filters by that tag, and does not move the caret', async ({
+  page,
+}) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New note' }).click();
 
-  const editor = page.getByRole('textbox', { name: 'Note text' });
+  // An untagged note first, so the note list actually has something to
+  // narrow away — a single-note list can't distinguish "filtered" from
+  // "nothing changed".
+  await page.getByRole('button', { name: 'New note' }).click();
+  let editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Groceries');
+  await editor.blur();
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  editor = page.getByRole('textbox', { name: 'Note text' });
   await editor.click();
   await page.keyboard.type('Ship #work today');
   await editor.blur();
+
+  const noteList = page.getByRole('region', { name: 'Note list' });
+  await expect(noteList.getByText('Groceries')).toBeVisible();
+  await expect(noteList.getByText('Ship #work today')).toBeVisible();
 
   const pill = editor.locator('.bear-tag');
   await expect(pill).toHaveText('#work');
 
   await pill.click({ modifiers: ['ControlOrMeta'] });
+
+  // The user-visible half of the feature: the untagged note leaves the list
+  // and the tagged one stays.
+  await expect(noteList.getByText('Groceries')).toHaveCount(0);
+  await expect(noteList.getByText('Ship #work today')).toBeVisible();
 
   // `SidebarRow`'s `current` prop defaults to `'page'`, and neither
   // `TagSidebar` nor `SmartListSidebar` override it, so a tag row's
@@ -479,6 +499,25 @@ test('a modifier click on a tag pill filters by that tag', async ({ page }) => {
     'aria-current',
     'page',
   );
+
+  // This milestone's named first risk: `preventDefault()` on mousedown must
+  // stop the browser from placing the caret. Deliberately a single,
+  // non-retrying `page.evaluate` read taken immediately after the click
+  // resolves, not a `locator` assertion — ProseMirror rebuilds the `.bear-tag`
+  // decoration on every transaction, so an auto-retrying assertion (e.g.
+  // `expect(pill).toHaveCount(1)`) can straddle a redraw and observe the
+  // settled state, missing a caret that moved and came back. The editor was
+  // blurred above, so if the caret had moved into the tag, focus would have
+  // returned to the contenteditable; if it did not, focus stays wherever the
+  // click actually landed (the note-list button `document.activeElement`
+  // ends up on after Playwright's click). Verified this discriminates: with
+  // `event.preventDefault()` removed from the mousedown handler,
+  // `document.activeElement` is the contenteditable `DIV` every time (3/3
+  // runs); with it present, it never is (3/3 runs) — see task-5-fix-report.md.
+  const activeAfterModClick = await page.evaluate(
+    () => document.activeElement?.getAttribute('contenteditable') === 'true',
+  );
+  expect(activeAfterModClick).toBe(false);
 });
 
 test('a plain click on a tag pill places the caret and does not filter', async ({ page }) => {

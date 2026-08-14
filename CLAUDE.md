@@ -953,11 +953,16 @@ ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
   user types. It is derived from each event's own modifier flags on both
   `keydown` and `keyup`, and cleared on window `blur` — hold Cmd, press Tab to
   leave the window, and the `keyup` never arrives, leaving pills claiming to
-  be clickable while a plain click edits.
+  be clickable while a plain click edits. **This is convention enforced by
+  nothing** — there is no lint rule or test forbidding a future edit from
+  routing this through `useState` instead, the same gap the
+  `@tiptap/markdown` single-importer rule already names for itself.
 - **`editorExtensions` is `buildEditorExtensions()` with no options**, so
   `getSchema(editorExtensions)` and `computeRecognizedHtmlTags()` are
   unaffected by anything the app injects. An `Extension` registers nothing in
-  the schema, and the options must never be able to change that.
+  the schema, and the options must never be able to change that. **This too is
+  convention enforced by nothing**: no test asserts that a future option added
+  to `TagPillOptions` (or any sibling extension) leaves the schema untouched.
 - **The tooltip's locale is frozen at mount.** `RichEditor` builds its
   extension array once, so switching locale leaves every pill's `title` in
   the old language until the editor remounts — which a note switch does
@@ -979,23 +984,6 @@ ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
   `useState` initializer — and restore it in a `finally`. This milestone
   shipped two tests named for platform branches that could never execute
   them.
-- **A real Mod-click was verified in a real Chromium browser, not only
-  through jsdom's fake view.** Holding Cmd/Ctrl over a `#work/urgent` pill
-  changed both `cursor` (`auto` → `pointer`) and the pill's background alpha
-  in both light and dark `colorScheme` emulations. Mod-clicking it narrowed
-  the note list to notes carrying that tag and put `aria-current="page"` on
-  the `urgent` sidebar row, while a plain click left the caret inside the tag
-  (observed as the pill's decoration lifting) with the scope unchanged. With
-  `work` collapsed in the sidebar, Mod-clicking a `#work/urgent` pill both
-  filtered and revealed `urgent`. Confirmed the caret's DOM `Selection` does
-  not move on a Mod-click, which was this milestone's named first risk.
-  Removing `event.preventDefault()` from the mousedown handler leaves the
-  modifier e2e test green (it asserts filtering, not caret position) while
-  the caret misbehaves — that non-failure is expected, not a gap, and is why
-  the caret was also checked directly against `window.getSelection()` in a
-  real browser rather than trusted to the e2e suite alone. Removing
-  `onActivateTag` from `AppShell`'s `<NoteEditor>` does fail the modifier
-  test, and leaves the plain-click test green, as it should.
 
 ## Carried into M5b and M6
 
