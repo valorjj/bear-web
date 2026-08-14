@@ -456,6 +456,51 @@ test('search narrows the list against real stored notes, and creating a note cle
   await expect(noteList.getByRole('button', { name: /Untitled/ })).toBeVisible();
 });
 
+test('a modifier click on a tag pill filters by that tag', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Ship #work today');
+  await editor.blur();
+
+  const pill = editor.locator('.bear-tag');
+  await expect(pill).toHaveText('#work');
+
+  await pill.click({ modifiers: ['ControlOrMeta'] });
+
+  // `SidebarRow`'s `current` prop defaults to `'page'`, and neither
+  // `TagSidebar` nor `SmartListSidebar` override it, so a tag row's
+  // `aria-current` is `'page'`, not `'true'` (that value is reserved for
+  // `NoteListItem`'s note rows). The accessible name is "work" followed by a
+  // trailing count, hence `/^work\b/` rather than an exact match.
+  await expect(page.getByRole('button', { name: /^work\b/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+});
+
+test('a plain click on a tag pill places the caret and does not filter', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Ship #work today');
+  await editor.blur();
+
+  await editor.locator('.bear-tag').click();
+
+  // The caret landed in the tag, so its pill is suppressed — that is the
+  // observable proof the click was an edit rather than an activation.
+  await expect(editor.locator('.bear-tag')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+});
+
 test('typing "- [ ] " produces a real checkbox, not a literal bullet', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'New note' }).click();

@@ -24,9 +24,10 @@ IndexedDB.
 | M7 search                        | complete       |
 | M7.5 visual design pass          | complete       |
 | M7.6 tag pills                   | complete       |
+| M7.7 tag pill activation         | complete       |
 | M8–M9                            | themes, polish |
 
-992 unit tests, 37 end-to-end tests. `main` is always green and auto-deploys.
+1030 unit tests, 39 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -916,6 +917,85 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   git ls-files -z | python3 -c "import sys,pathlib; files=sys.stdin.buffer.read().split(b'\x00'); print([f.decode() for f in files if f and b'\x00' in pathlib.Path(f.decode()).read_bytes()] or 'none')"
   ```
   Run this before every commit that touches tag-grammar prose or code.
+- **Plain click on a tag pill edits; Mod-click activates.** Bear filters on a
+  plain click, and this is a deliberate divergence: Bear can afford it because
+  its tag autocomplete makes mistyped tags rare, while this app has none, so
+  editing a tag in place is the normal repair path and a pill that defended
+  itself against being edited would be worse than an inert one. **If
+  autocomplete ever ships, revisit this ruling** — it is the premise the
+  divergence rests on.
+- **Mod is Cmd on Apple platforms and Ctrl elsewhere, never `metaKey ||
+ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
+  means one gesture opens a menu AND changes scope. `isMacOS` from
+  `@tiptap/core` decides. Getting this wrong is invisible on Linux CI, so
+  `tagPill.test.ts` asserts both branches.
+- **Activation is handled in `handleDOMEvents.mousedown`, not `handleClick`.**
+  ProseMirror does not place the caret itself on a plain click — the browser
+  moves the DOM selection natively during `mousedown` and ProseMirror reads it
+  back. By `handleClick` (which runs on `mouseup`) the caret has already moved,
+  suppression has already lifted the pill, and the thing the user clicked has
+  vanished under the cursor. `event.preventDefault()` on mousedown is the only
+  point that stops it.
+- **`tagRangeAt` hit-tests the grammar, never the decoration set.** A tag the
+  caret sits inside has no pill; if activation followed the pills, the same
+  gesture would work or not work with nothing on screen to explain the
+  difference. Behaviour must not depend on invisible state. It shares
+  `tagHitsIn` with `tagDecorations`, so the `blockPos + 1 + offset` arithmetic
+  exists once — perturbing it fails both suites, which is the proof.
+- **Activating a tag the index does not hold does nothing.** M7.6 ships two
+  classes of lying pill. Setting a scope for one would trip the vanished-tag
+  effect and bounce the user to All Notes — a click that visibly throws them
+  somewhere they did not ask to go. The same handler returns early while
+  `tree.nodes` is `undefined`, because that means "loading", not "no tags".
+- **The modifier affordance is a DOM attribute set through a ref, never React
+  state.** `data-mod-held` on the editor's outer element; setting state on
+  every `keydown` would re-render the editor subtree on every keystroke the
+  user types. It is derived from each event's own modifier flags on both
+  `keydown` and `keyup`, and cleared on window `blur` — hold Cmd, press Tab to
+  leave the window, and the `keyup` never arrives, leaving pills claiming to
+  be clickable while a plain click edits.
+- **`editorExtensions` is `buildEditorExtensions()` with no options**, so
+  `getSchema(editorExtensions)` and `computeRecognizedHtmlTags()` are
+  unaffected by anything the app injects. An `Extension` registers nothing in
+  the schema, and the options must never be able to change that.
+- **The tooltip's locale is frozen at mount.** `RichEditor` builds its
+  extension array once, so switching locale leaves every pill's `title` in
+  the old language until the editor remounts — which a note switch does
+  anyway, since `NoteEditor` is keyed by note id. Fixing it properly means
+  either recreating the editor on locale change (throwing away undo history)
+  or turning `activateHint` into a getter, changing an option shape that is
+  now pinned by tests. Accepted, not a defect.
+- **`RichEditor` passes `null` for `onActivate` when no `onActivateTag` prop
+  is supplied, and that is load-bearing.** With a non-null callback the
+  plugin believes someone is listening, so a Mod-click calls
+  `preventDefault()` and swallows the event — the user gets neither filtering
+  nor the caret placement a plain click would have given. The decision is
+  made once, in the `useState` initializer, matching the plugin's read-once
+  semantics.
+- **Under jsdom `navigator.platform === ''`, so `isMacOS()` is false on every
+  machine, including a Mac.** Any test of a platform-dependent branch must
+  stub `navigator.platform` explicitly before the code under test runs — for
+  `RichEditor` that means before render, since `isMacOS()` runs inside a
+  `useState` initializer — and restore it in a `finally`. This milestone
+  shipped two tests named for platform branches that could never execute
+  them.
+- **A real Mod-click was verified in a real Chromium browser, not only
+  through jsdom's fake view.** Holding Cmd/Ctrl over a `#work/urgent` pill
+  changed both `cursor` (`auto` → `pointer`) and the pill's background alpha
+  in both light and dark `colorScheme` emulations. Mod-clicking it narrowed
+  the note list to notes carrying that tag and put `aria-current="page"` on
+  the `urgent` sidebar row, while a plain click left the caret inside the tag
+  (observed as the pill's decoration lifting) with the scope unchanged. With
+  `work` collapsed in the sidebar, Mod-clicking a `#work/urgent` pill both
+  filtered and revealed `urgent`. Confirmed the caret's DOM `Selection` does
+  not move on a Mod-click, which was this milestone's named first risk.
+  Removing `event.preventDefault()` from the mousedown handler leaves the
+  modifier e2e test green (it asserts filtering, not caret position) while
+  the caret misbehaves — that non-failure is expected, not a gap, and is why
+  the caret was also checked directly against `window.getSelection()` in a
+  real browser rather than trusted to the e2e suite alone. Removing
+  `onActivateTag` from `AppShell`'s `<NoteEditor>` does fail the modifier
+  test, and leaves the plain-click test green, as it should.
 
 ## Carried into M5b and M6
 
@@ -927,17 +1007,19 @@ the M5.5 progress ledger, gitignored and not carried forward — the items below
 are what survived out of it. Fold these into the next plan rather than
 rediscovering them.
 
-- **Clicking a tag pill to filter by that tag is M7.7, and explicitly wanted.**
-  It is not merely unimplemented: the editor plugin would need to know the
-  app's scope state, and the boundary that the editor knows only about its own
-  document has been kept clean through M7.6. How to cross it — a callback
-  threaded through `RichEditor`, a context, or an event the shell listens
-  for — is that milestone's real design problem. Tag rename and delete are
-  still carried from M5b and unscheduled. So is syntax-visibility toggling —
-  M5's original three-item list named it alongside the inline mark and
-  rename/delete; M7.6 ruled only on the inline mark (a decoration, not a
-  mark — see above), and the toggle itself remains unimplemented and
-  unscheduled.
+- **A tag pill has no keyboard activation, deliberately.** Making a span inside
+  a contenteditable focusable fights the editor for the selection and for Tab,
+  and the tag sidebar is already a complete keyboard route to every filter.
+  Recorded as a ruling rather than an omission.
+- **The note list has no header naming the current scope.** Bear has one. The
+  only on-screen indication of an active filter is the `aria-current` sidebar
+  row, which is why activation reveals collapsed ancestors. A real header
+  belongs with M8's polish.
+- Tag rename and delete are still carried from M5b and unscheduled. So is
+  syntax-visibility toggling — M5's original three-item list named it
+  alongside the inline mark and rename/delete; M7.6 ruled only on the inline
+  mark (a decoration, not a mark — see above), and the toggle itself remains
+  unimplemented and unscheduled.
 - **`usePaneWidths` writes `void settings.set(...)` with no flush**, so dragging
   a separator and reloading immediately can lose the width. Deferred because it
   costs a pane width rather than note content, and because `useAutosave` now has
