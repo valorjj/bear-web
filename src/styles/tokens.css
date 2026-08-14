@@ -30,6 +30,17 @@
   --bear-shadow: rgb(28 27 25 / 0.14);
 
   /*
+   * The tag pill's fill, deliberately a separate token from `selected` even
+   * though the two are the same colour at a different alpha. A pill is a few
+   * characters of inline text and must read as a discrete chip; a selected row
+   * is a whole band and only has to read as present. Paper needs the extra
+   * alpha for that — at `selected`'s 0.11 the pill read as a highlighted word
+   * rather than a chip. Ink does not: its 0.18 is already comfortable, so the
+   * two tokens coincide there and diverge only here.
+   */
+  --bear-tag-fill: rgb(207 59 44 / 0.16);
+
+  /*
    * The ground the three panes float on. A browser tab has no window chrome,
    * so depth is what separates the panes from each other and from the page —
    * the role Bear's rounded macOS window plays.
@@ -87,6 +98,7 @@
   --bear-selected: rgb(255 111 94 / 0.18);
   --bear-shadow: rgb(0 0 0 / 0.5);
   --bear-canvas: #121211;
+  --bear-tag-fill: rgb(255 111 94 / 0.18);
 }
 
 /*
@@ -114,6 +126,7 @@
     --bear-selected: rgb(255 111 94 / 0.18);
     --bear-shadow: rgb(0 0 0 / 0.5);
     --bear-canvas: #121211;
+    --bear-tag-fill: rgb(255 111 94 / 0.18);
   }
 }
 

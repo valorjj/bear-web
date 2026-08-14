@@ -201,10 +201,16 @@
  *
  * The `#` stays visible: this app does not hide Markdown syntax, and the hash
  * is what distinguishes a tag from the heading `# ` produces.
+ *
+ * The padding is deliberately ASYMMETRIC. Equal padding pushed a following
+ * comma or full stop visibly away from the word it belongs to — `#friday ,` —
+ * because a tag ends far more often at punctuation than it begins after it.
+ * The leading side keeps its full inset, since the `#` needs the room to read
+ * as part of the chip rather than as loose prose.
  */
 .ProseMirror .bear-tag {
   color: var(--bear-accent);
-  background-color: var(--bear-selected);
+  background-color: var(--bear-tag-fill);
   border-radius: var(--bear-radius-sm);
-  padding: 0.05em 0.25em;
+  padding: 0.05em 0.15em 0.05em 0.25em;
 }

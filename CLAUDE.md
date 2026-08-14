@@ -884,6 +884,23 @@ matched = true })`: once any rule commits steps, `matched` is set and every
 - **The `#` stays visible inside the pill.** This app does not hide Markdown
   syntax, and the hash is the only thing distinguishing a tag from the heading
   that `# ` — one space different — produces.
+- **`--bear-tag-fill` is a separate token from `--bear-selected`, and the two
+  deliberately diverge in Paper only.** Same hue, different alpha: Paper's
+  `selected` at 0.11 is right for a selected row — a whole band that only has
+  to read as present — and too weak for a pill, which is a few characters of
+  inline text and has to read as a discrete chip. At 0.11 the pill read as a
+  highlighted word. Paper is 0.16; Ink's 0.18 was already comfortable, so the
+  two tokens coincide there. Like every token it must appear in all three
+  blocks — `:root`, `:root[data-theme='dark']`, and the
+  `prefers-color-scheme` block — which `scripts/sourceLint.test.ts` asserts
+  value-for-value across the two dark ones.
+- **The pill's horizontal padding is asymmetric, and that is not a typo.**
+  `0.05em 0.15em 0.05em 0.25em`. Equal padding pushed a following comma or
+  full stop visibly away from the word it belongs to — `#friday ,` — because
+  a tag ends at punctuation far more often than it begins after it. The
+  leading side keeps its full inset so the `#` reads as part of the chip.
+  A negative inline margin was considered and rejected: it hides the gap by
+  letting the pill overlap its neighbouring characters.
 - **The NUL-byte hazard is worse than the mask-character rule above states,
   and writing the escape sequence is not sufficient by itself.** Writing
   `\u0000` through a file-writing tool's JSON string parameter silently
