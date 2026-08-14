@@ -10,6 +10,7 @@ import {
   type NoteScope,
   seedTagFor,
   SmartListSidebar,
+  tagScope,
   useNotes,
   useSmartListCounts,
 } from '@/features/notes';
@@ -105,26 +106,28 @@ export function AppShell(): ReactElement {
     if (!hasTag(tree.nodes, scope.tag)) setScope(ACTIVE_SCOPE);
   }, [scope, tree.nodes]);
 
-  // Answers a Mod-click on a tag pill in the editor.
-  const handleActivateTag = useCallback(
-    (tag: string) => {
-      // `undefined` means the live query has not resolved. Treating it as "no
-      // tags" would make activation silently fail on a slow first paint — the
-      // same mistake the vanished-tag effect above already guards against.
-      if (tree.nodes === undefined) return;
+  // Answers a Mod-click on a tag pill in the editor. Deliberately a plain
+  // function, not `useCallback`: `useTagTree` returns a fresh `tree` object
+  // every render (see its own comment on why `nodes` is memoized but the
+  // returned object as a whole is not), so a `[tree]` dependency array would
+  // recompute this on every render anyway — `useCallback` here would read as
+  // memoization while providing none.
+  const handleActivateTag = (tag: string) => {
+    // `undefined` means the live query has not resolved. Treating it as "no
+    // tags" would make activation silently fail on a slow first paint — the
+    // same mistake the vanished-tag effect above already guards against.
+    if (tree.nodes === undefined) return;
 
-      // M7.6 ships two documented classes of pill whose tag is not in the
-      // index (a tag ending link text, and a mark over leading whitespace).
-      // Setting a scope for one would trip the vanished-tag effect above and
-      // bounce the user to All Notes — a click that visibly throws them
-      // somewhere they did not ask to go. Doing nothing is the honest answer.
-      if (!hasTag(tree.nodes, tag)) return;
+    // M7.6 ships two documented classes of pill whose tag is not in the
+    // index (a tag ending link text, and a mark over leading whitespace).
+    // Setting a scope for one would trip the vanished-tag effect above and
+    // bounce the user to All Notes — a click that visibly throws them
+    // somewhere they did not ask to go. Doing nothing is the honest answer.
+    if (!hasTag(tree.nodes, tag)) return;
 
-      setScope({ kind: 'tag', tag });
-      tree.reveal(tag);
-    },
-    [tree],
-  );
+    setScope(tagScope(tag));
+    tree.reveal(tag);
+  };
 
   const handleTrash = useCallback(async (id: string) => {
     await notes.trash(id);

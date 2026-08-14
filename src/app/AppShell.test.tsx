@@ -622,13 +622,32 @@ describe('activating a tag from the editor', () => {
         <AppShell />
       </I18nProvider>,
     );
+    scopeHistory.length = 0;
 
-    await activateTag('work');
+    // A prior version of this test only asserted the final rendered state,
+    // which passes for two different reasons that must not be conflated:
+    // deleting the `tree.nodes === undefined` guard entirely makes
+    // `hasTag(tree.nodes, tag)` THROW (a `TypeError` on `undefined.some`),
+    // which also leaves "All Notes" current — but only because the whole
+    // handler crashed, not because it behaved. Capture and assert on the
+    // thrown value explicitly, separately from the scope-history assertion
+    // below, so a crash cannot masquerade as "did nothing".
+    let thrown: unknown;
+    try {
+      await activateTag('work');
+    } catch (error) {
+      thrown = error;
+    }
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(thrown).toBeUndefined();
     // `undefined` must be treated as "not loaded", never as "no tags" — the
-    // same mistake the vanished-tag effect already guards against. The scope
-    // must be untouched even though `work` genuinely is in the real index.
+    // same mistake the vanished-tag effect already guards against. Checked
+    // against the full render history (see `scopeHistory` above), not just
+    // the final DOM state, for the same reason the unknown-tag test above
+    // does: a scope that was set and then reverted can render identically to
+    // one that was never set.
+    expect(scopeHistory).not.toContainEqual({ kind: 'tag', tag: 'work' });
     expect(
       screen.getByRole('button', { name: new RegExp(`^${en['smartList.all']}\\b`) }),
     ).toHaveAttribute('aria-current', 'page');
