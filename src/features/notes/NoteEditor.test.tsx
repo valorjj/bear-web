@@ -246,6 +246,28 @@ describe('NoteEditor', () => {
 
     save.mockRestore();
   });
+
+  // `AppShell`'s own tests prove `handleActivateTag` obeys the three
+  // activation rulings; `RichEditor`'s own tests prove it threads whatever
+  // callback it is given into the tag-pill plugin. Neither proves this
+  // component's own middle hop: that the `onActivateTag` prop `NoteEditor`
+  // receives is the SAME one it hands to `RichEditor`, rather than, say, a
+  // wrapper, `undefined`, or (as a refactor could do by accident) simply
+  // dropped. `vi.spyOn` on the `RichEditor` binding — the same technique this
+  // file already uses for `normalizeMarkdown` — calls through to the real
+  // component (so the editor still mounts normally) while recording the
+  // props it was actually invoked with.
+  it('passes its onActivateTag prop through to RichEditor unchanged', async () => {
+    const onActivateTag = vi.fn(() => true);
+    const note = await notes.create('hello');
+    const richEditorSpy = vi.spyOn(editor, 'RichEditor');
+
+    renderWithI18n(<NoteEditor note={note} onActivateTag={onActivateTag} />);
+    await screen.findByRole('textbox');
+
+    const lastCall = richEditorSpy.mock.calls.at(-1);
+    expect(lastCall?.[0].onActivateTag).toBe(onActivateTag);
+  });
 });
 
 describe('opening a note', () => {

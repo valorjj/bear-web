@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildTagTree } from './tagTree';
+import { buildTagTree, hasTag } from './tagTree';
 
 describe('buildTagTree', () => {
   it('returns nothing for no rows', () => {
@@ -81,5 +81,34 @@ describe('buildTagTree', () => {
     ]);
 
     expect(tree[0].children.map((c) => c.label)).toEqual(['alpha', 'zeta']);
+  });
+});
+
+describe('hasTag', () => {
+  it('finds a top-level tag', () => {
+    const tree = buildTagTree([{ noteId: 'n1', tag: 'work' }]);
+    expect(hasTag(tree, 'work')).toBe(true);
+  });
+
+  it('finds a nested tag at any depth', () => {
+    const tree = buildTagTree([{ noteId: 'n1', tag: 'work/urgent/today' }]);
+    expect(hasTag(tree, 'work/urgent/today')).toBe(true);
+  });
+
+  it('does not find an ancestor-only match as a different tag', () => {
+    const tree = buildTagTree([{ noteId: 'n1', tag: 'work/urgent' }]);
+    expect(hasTag(tree, 'work/later')).toBe(false);
+  });
+
+  it('returns false for an empty tree', () => {
+    expect(hasTag([], 'anything')).toBe(false);
+  });
+
+  it('returns false for a tag that does not exist alongside ones that do', () => {
+    const tree = buildTagTree([
+      { noteId: 'n1', tag: 'work' },
+      { noteId: 'n2', tag: 'home' },
+    ]);
+    expect(hasTag(tree, 'ghost')).toBe(false);
   });
 });

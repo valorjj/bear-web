@@ -1,8 +1,10 @@
-import { Editor } from '@tiptap/core';
+import { Editor, isMacOS } from '@tiptap/core';
+import type { Decoration } from '@tiptap/pm/view';
 import { describe, expect, it } from 'vitest';
 
-import { editorExtensions } from './extensions';
-import { tagDecorations } from './TagPill';
+import { buildEditorExtensions, editorExtensions } from './extensions';
+import { TagPill, tagDecorations, tagRangeAt } from './TagPill';
+import type { TagPillOptions } from './TagPill';
 
 function docFor(content: string): Editor {
   return new Editor({ extensions: editorExtensions, content });
@@ -203,6 +205,101 @@ describe('cursor suppression', () => {
   });
 });
 
+describe('tagRangeAt', () => {
+  it('finds the tag covering a position inside it', () => {
+    const editor = docFor('<p>a #work b</p>');
+    // '#work' occupies positions 3..8: paragraph starts at 0, its text at 1,
+    // so 'a ' is 1..3 and the '#' is at 3.
+    const hit = tagRangeAt(editor.state, 5);
+    expect(hit).toEqual({ tag: 'work', from: 3, to: 8 });
+    expect(editor.state.doc.textBetween(hit!.from, hit!.to)).toBe('#work');
+    editor.destroy();
+  });
+
+  it('finds the tag at each of its edges', () => {
+    const editor = docFor('<p>a #work b</p>');
+    expect(tagRangeAt(editor.state, 3)?.tag).toBe('work');
+    expect(tagRangeAt(editor.state, 8)?.tag).toBe('work');
+    editor.destroy();
+  });
+
+  it('returns null for ordinary prose', () => {
+    const editor = docFor('<p>a #work b</p>');
+    expect(tagRangeAt(editor.state, 1)).toBeNull();
+    expect(tagRangeAt(editor.state, 10)).toBeNull();
+    editor.destroy();
+  });
+
+  it('returns null inside an inline code span', () => {
+    const editor = docFor('<p>a <code>#work</code> b</p>');
+    expect(tagRangeAt(editor.state, 5)).toBeNull();
+    editor.destroy();
+  });
+
+  it('returns null inside a code block', () => {
+    const editor = docFor('<pre><code>#work</code></pre>');
+    expect(tagRangeAt(editor.state, 3)).toBeNull();
+    editor.destroy();
+  });
+
+  it('finds a tag in the second of two blocks', () => {
+    const editor = docFor('<p>#work</p><p>#home</p>');
+    const first = tagRangeAt(editor.state, 2)!;
+    const second = tagRangeAt(editor.state, 9)!;
+    expect(first.tag).toBe('work');
+    expect(second.tag).toBe('home');
+    expect(editor.state.doc.textBetween(second.from, second.to)).toBe('#home');
+    editor.destroy();
+  });
+
+  // `tagRangeAt` resolves the clicked position to its own textblock rather
+  // than walking the document. Depth 0 — a position sitting between two
+  // top-level blocks, which `posAtCoords` can return for a click in the gap —
+  // has no textblock parent and no `before()` to take, so it must be rejected
+  // before the arithmetic runs, not after.
+  it('returns null at a position between two blocks', () => {
+    const editor = docFor('<p>#work</p><p>#home</p>');
+    const boundary = editor.state.doc.firstChild!.nodeSize;
+    expect(editor.state.doc.resolve(boundary).depth).toBe(0);
+    expect(tagRangeAt(editor.state, boundary)).toBeNull();
+    editor.destroy();
+  });
+
+  // The block a position belongs to is its immediate textblock ancestor, not
+  // the top-level node containing it — a paragraph inside a blockquote starts
+  // one position later than the blockquote does, and taking the outer node's
+  // position would shift every offset by that difference.
+  it('finds a tag in a nested textblock, at the right positions', () => {
+    const editor = docFor('<blockquote><p>a #work b</p></blockquote>');
+    const hit = tagRangeAt(editor.state, 6)!;
+    expect(hit.tag).toBe('work');
+    expect(editor.state.doc.textBetween(hit.from, hit.to)).toBe('#work');
+    editor.destroy();
+  });
+
+  // The property that makes activation independent of invisible state.
+  it('finds a tag whose pill is suppressed by the selection', () => {
+    const editor = docFor('<p>a #work b</p>');
+    editor.commands.setTextSelection(5);
+    expect(tagDecorations(editor.state, true)).toEqual([]);
+    expect(tagRangeAt(editor.state, 5)?.tag).toBe('work');
+    editor.destroy();
+  });
+
+  // The two must agree on extent wherever a pill IS painted — one scan, two
+  // callers.
+  it('agrees with the decoration a pill would paint', () => {
+    const editor = docFor('<p>a #work b</p>');
+    const [decoration] = tagDecorations(editor.state, false);
+    const hit = tagRangeAt(editor.state, 5)!;
+    expect({ from: hit.from, to: hit.to }).toEqual({
+      from: decoration!.from,
+      to: decoration!.to,
+    });
+    editor.destroy();
+  });
+});
+
 describe('mounted plugin (real DOM, not a direct tagDecorations call)', () => {
   // `tagDecorations` is called directly everywhere above. Nothing above
   // proves the registered ProseMirror plugin itself re-renders when only
@@ -265,6 +362,286 @@ describe('mounted plugin (real DOM, not a direct tagDecorations call)', () => {
     expect(editor.isFocused).toBe(false);
     expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(2);
 
+    editor.destroy();
+  });
+});
+
+/**
+ * Invokes the plugin's own mousedown handler with a fake view, so the test
+ * exercises the real registered plugin without needing jsdom layout —
+ * `posAtCoords` has no meaning without a layout engine.
+ */
+function mousedownAt(
+  editor: Editor,
+  pos: number,
+  init: MouseEventInit,
+): { handled: boolean; defaultPrevented: boolean } {
+  const event = new MouseEvent('mousedown', { cancelable: true, button: 0, ...init });
+  const view = { state: editor.state, posAtCoords: () => ({ pos, inside: pos }) };
+  const handled =
+    editor.view.someProp('handleDOMEvents', (handlers) =>
+      handlers.mousedown === undefined ? false : handlers.mousedown(view as never, event as never),
+    ) === true;
+  return { handled, defaultPrevented: event.defaultPrevented };
+}
+
+/**
+ * An `onActivate` that records the tags it is asked about and answers with
+ * `answer`. The boolean is the app's half of the contract: `true` means the
+ * app acted on the tag, and only then may the plugin consume the event.
+ */
+function recording(into: string[], answer = true): (tag: string) => boolean {
+  return (tag) => {
+    into.push(tag);
+    return answer;
+  };
+}
+
+describe('tag activation', () => {
+  it('reports the tag and swallows the event when the app accepts it', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+
+    expect(activated).toEqual(['work']);
+    expect(result.handled).toBe(true);
+    // Preventing the default is what stops the browser moving the caret into
+    // the tag, which would lift the pill the user just clicked.
+    expect(result.defaultPrevented).toBe(true);
+    editor.destroy();
+  });
+
+  // The invariant this contract exists for: a Mod-click either filters, or
+  // behaves exactly like a plain click. Never nothing. The plugin cannot know
+  // whether a tag is in the index — a lying pill, a trashed note's pill, or a
+  // tag typed inside the autosave debounce all look identical to it — so the
+  // app's refusal must be what leaves the event unconsumed, and ProseMirror's
+  // own mousedown handling free to place the caret.
+  it('leaves the event alone when the app declines the tag', () => {
+    const asked: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(asked, false) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+
+    // The app WAS asked — declining is an answer, not a failure to detect the
+    // gesture, and this distinguishes "the app said no" from "the hit test
+    // found nothing".
+    expect(asked).toEqual(['work']);
+    expect(result.handled).toBe(false);
+    expect(result.defaultPrevented).toBe(false);
+    editor.destroy();
+  });
+
+  it('does nothing on a plain click, so the caret still moves', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, {});
+
+    expect(activated).toEqual([]);
+    expect(result.handled).toBe(false);
+    expect(result.defaultPrevented).toBe(false);
+    editor.destroy();
+  });
+
+  it('does nothing on a modifier click outside any tag', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 1, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+
+    expect(activated).toEqual([]);
+    expect(result.handled).toBe(false);
+    editor.destroy();
+  });
+
+  it('does not activate on a non-primary button', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const modifier = isMacOS() ? { metaKey: true } : { ctrlKey: true };
+    expect(mousedownAt(editor, 5, { ...modifier, button: 1 }).handled).toBe(false);
+    expect(mousedownAt(editor, 5, { ...modifier, button: 2 }).handled).toBe(false);
+    expect(activated).toEqual([]);
+    editor.destroy();
+  });
+
+  // Ctrl-click on macOS is the context-menu gesture. `isMacOS()` reads
+  // `navigator.platform`, which jsdom reports as `''` — so `isMacOS()` is
+  // false in every test run regardless of the host machine, and a test that
+  // merely branches on `isMacOS()` (as this pair used to, as one test) only
+  // ever exercises the non-Apple arm: the Apple branch was dead code, guarded
+  // by nothing. Each test below stubs `navigator.platform` explicitly and
+  // restores it afterwards, so both arms are actually driven.
+  it('on an Apple platform, Cmd activates and Ctrl does not', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    try {
+      const activated: string[] = [];
+      const editor = new Editor({
+        extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+        content: '<p>a #work b</p>',
+      });
+
+      const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
+      const meta = mousedownAt(editor, 5, { metaKey: true });
+
+      expect(ctrl.handled).toBe(false);
+      expect(meta.handled).toBe(true);
+      expect(activated).toEqual(['work']);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  it('off Apple platforms, Ctrl activates and Cmd does not', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+    try {
+      const activated: string[] = [];
+      const editor = new Editor({
+        extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+        content: '<p>a #work b</p>',
+      });
+
+      const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
+      const meta = mousedownAt(editor, 5, { metaKey: true });
+
+      expect(ctrl.handled).toBe(true);
+      expect(meta.handled).toBe(false);
+      expect(activated).toEqual(['work']);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  // Independence from invisible state, end to end through the real plugin.
+  it('activates a tag whose pill is currently suppressed', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+      content: '<p>a #work b</p>',
+    });
+    editor.commands.setTextSelection(5);
+    editor.commands.focus();
+
+    mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+
+    expect(activated).toEqual(['work']);
+    editor.destroy();
+  });
+
+  it('is inert when no callback is injected', () => {
+    const editor = new Editor({
+      extensions: editorExtensions,
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+
+    expect(result.handled).toBe(false);
+    editor.destroy();
+  });
+
+  it('puts the injected hint on every pill', () => {
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ activateHint: 'Cmd-click to filter' }),
+      content: '<p>#work and #home</p>',
+    });
+
+    // Through the real registered plugin's `decorations` prop — same
+    // `someProp` mechanism `mousedownAt` uses for `handleDOMEvents` — so this
+    // proves the option actually reaches the mounted extension, not just a
+    // direct call to `tagDecorations`.
+    const decorationSet = editor.view.someProp('decorations', (f) => f(editor.state));
+    const titles = (decorationSet as unknown as { find(): Decoration[] }).find().map(
+      // Measured directly: `Decoration.inline(from, to, attrs)` puts `attrs`
+      // at `decoration.type.attrs`; `decoration.type.spec` is `{}`.
+      (decoration) =>
+        (decoration as unknown as { type: { attrs: Record<string, string> } }).type.attrs.title,
+    );
+    expect(titles).toEqual(['Cmd-click to filter', 'Cmd-click to filter']);
+    editor.destroy();
+  });
+
+  it('keeps calling the original callback after the extension options are mutated', () => {
+    // Pins capture-once at the exact boundary where it matters:
+    // `addProseMirrorPlugins()` destructures `onActivate` out of `this.options`
+    // a single time, and the closure keeps that value for the plugin's whole
+    // lifetime — even though `this.options` itself is the SAME live object
+    // passed in below, so a later mutation to it is visible to anything that
+    // reads `this.options.onActivate` fresh instead.
+    //
+    // Going through a mounted `Editor` cannot pin this: Tiptap's own
+    // `getExtensionField` rebuilds `this.options` as a fresh spread copy on
+    // every access (confirmed by instrumenting `Extendable.options`'s
+    // getter), so `editor.extensionManager.extensions.find(...).options.x =
+    // ...` mutates a throwaway copy and is invisible to the running plugin
+    // regardless of whether the plugin captures once or reads fresh — a test
+    // written that way passes for the wrong reason and cannot fail. Calling
+    // the extension's own `addProseMirrorPlugins` directly, with a `this`
+    // whose `options` is an object THIS test still holds a reference to, is
+    // what makes a later mutation observable at all.
+    const original: string[] = [];
+    const replaced: string[] = [];
+    const editor = new Editor({ extensions: editorExtensions, content: '<p>a #work b</p>' });
+
+    const options: TagPillOptions = {
+      onActivate: recording(original),
+      activateHint: null,
+    };
+    const plugins = TagPill.config.addProseMirrorPlugins!.call({
+      name: 'tagPill',
+      options,
+      storage: {},
+      editor,
+      type: undefined as never,
+      parent: undefined,
+    });
+    const [plugin] = plugins;
+
+    // Mutate the exact object `this.options` referenced above, simulating a
+    // caller that replaces the callback after the plugin was built.
+    options.onActivate = recording(replaced);
+
+    const event = new MouseEvent('mousedown', {
+      cancelable: true,
+      button: 0,
+      ...(isMacOS() ? { metaKey: true } : { ctrlKey: true }),
+    });
+    const view = { state: editor.state, posAtCoords: () => ({ pos: 5, inside: 5 }) };
+    const mousedown = plugin!.props.handleDOMEvents!.mousedown as unknown as (
+      view: unknown,
+      event: unknown,
+    ) => boolean;
+    mousedown(view, event);
+
+    expect(original).toEqual(['work']);
+    expect(replaced).toEqual([]);
     editor.destroy();
   });
 });

@@ -12,59 +12,65 @@ import {
   RawTable,
   createRawInlineHtmlNode,
 } from './RawBlock';
+import type { TagPillOptions } from './TagPill';
 import { TagPill } from './TagPill';
 import { TaskItemPromotion } from './taskItemPromotion';
 
 /**
  * Every construct this editor actually supports, independent of the Raw*
- * fallbacks below. Kept as its own array (rather than inline in
- * `editorExtensions`) because `recognizedHtmlTags` below needs to build a
- * schema from exactly this set, before any Raw* node is added to it.
+ * fallbacks below, as a function of the tag-pill options the app injects.
+ * Kept as its own function (rather than inline in `buildEditorExtensions`)
+ * because `computeRecognizedHtmlTags` below needs to build a schema from
+ * exactly this set, before any Raw* node is added to it — and an `Extension`
+ * registers nothing in the schema, so the options passed to `TagPill` cannot
+ * change what that schema build sees.
  */
-const supportedExtensions: Extensions = [
-  // `underline: false` is load-bearing, not tidying. StarterKit registers
-  // `@tiptap/extension-underline`, which binds Mod-U and serializes to
-  // `++text++` — a syntax this project never chose, and one the spec explicitly
-  // rejected (no Markdown representation; `_underline_` collides with
-  // CommonMark italic). Leaving it on also put `u` into `recognizedHtmlTags`,
-  // so `<u>x</u>` in an existing note was REWRITTEN to `++x++` instead of being
-  // preserved verbatim by the raw-inline fallback.
-  //
-  // The absence of an underline BUTTON was tested and passed while all of the
-  // above shipped. The rule needs a schema-level assertion; see
-  // `extensions.test.ts`.
-  StarterKit.configure({ underline: false }),
-  TaskList,
-  TaskItem.configure({ nested: true }),
-  // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
-  // schema: `computeRecognizedHtmlTags()` below and every round-trip suite are
-  // unaffected by it. It contributes exactly one input rule.
-  //
-  // Its position relative to `TaskList`/`TaskItem` does not matter, and an
-  // earlier draft of this comment wrongly claimed it did ("must come after
-  // ... because it drives their commands"). Commands resolve from the live
-  // editor, not from registration order, and moving this entry above both was
-  // verified to leave every test in `taskItemPromotion.test.ts` green.
-  //
-  // That result is specific to this pair, not a general property of
-  // registration order: `@tiptap/core`'s input-rules runner short-circuits
-  // once any rule commits steps to the transaction (`InputRule.ts`'s
-  // `matched` flag), so order is normally load-bearing. It is immaterial here
-  // only because this rule and `TaskItem`'s own rule decline in exactly
-  // complementary cases — this one returns `null` from its handler whenever
-  // the input is not already inside a `listItem` in a `bulletList`, which is
-  // precisely the case `TaskItem`'s own rule handles — so at most one of the
-  // two ever commits steps for a given keystroke, whichever order they run
-  // in. See the CLAUDE.md entry with the same title for the full guard.
-  TaskItemPromotion,
-  Highlight,
-  // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
-  // schema: `computeRecognizedHtmlTags()` below and every round-trip suite
-  // are unaffected by it. It contributes exactly one ProseMirror plugin that
-  // decorates `#tag` text as a pill; the document and its Markdown are
-  // untouched. See `TagPill.ts` and `tagPill.test.ts`.
-  TagPill,
-];
+function buildSupportedExtensions(options: Partial<TagPillOptions>): Extensions {
+  return [
+    // `underline: false` is load-bearing, not tidying. StarterKit registers
+    // `@tiptap/extension-underline`, which binds Mod-U and serializes to
+    // `++text++` — a syntax this project never chose, and one the spec explicitly
+    // rejected (no Markdown representation; `_underline_` collides with
+    // CommonMark italic). Leaving it on also put `u` into `recognizedHtmlTags`,
+    // so `<u>x</u>` in an existing note was REWRITTEN to `++x++` instead of being
+    // preserved verbatim by the raw-inline fallback.
+    //
+    // The absence of an underline BUTTON was tested and passed while all of the
+    // above shipped. The rule needs a schema-level assertion; see
+    // `extensions.test.ts`.
+    StarterKit.configure({ underline: false }),
+    TaskList,
+    TaskItem.configure({ nested: true }),
+    // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
+    // schema: `computeRecognizedHtmlTags()` below and every round-trip suite are
+    // unaffected by it. It contributes exactly one input rule.
+    //
+    // Its position relative to `TaskList`/`TaskItem` does not matter, and an
+    // earlier draft of this comment wrongly claimed it did ("must come after
+    // ... because it drives their commands"). Commands resolve from the live
+    // editor, not from registration order, and moving this entry above both was
+    // verified to leave every test in `taskItemPromotion.test.ts` green.
+    //
+    // That result is specific to this pair, not a general property of
+    // registration order: `@tiptap/core`'s input-rules runner short-circuits
+    // once any rule commits steps to the transaction (`InputRule.ts`'s
+    // `matched` flag), so order is normally load-bearing. It is immaterial here
+    // only because this rule and `TaskItem`'s own rule decline in exactly
+    // complementary cases — this one returns `null` from its handler whenever
+    // the input is not already inside a `listItem` in a `bulletList`, which is
+    // precisely the case `TaskItem`'s own rule handles — so at most one of the
+    // two ever commits steps for a given keystroke, whichever order they run
+    // in. See the CLAUDE.md entry with the same title for the full guard.
+    TaskItemPromotion,
+    Highlight,
+    // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
+    // schema: `computeRecognizedHtmlTags()` below and every round-trip suite
+    // are unaffected by it. It contributes exactly one ProseMirror plugin that
+    // decorates `#tag` text as a pill; the document and its Markdown are
+    // untouched. See `TagPill.ts` and `tagPill.test.ts`.
+    TagPill.configure(options),
+  ];
+}
 
 /**
  * The lower-cased HTML tag names this schema has a `parseHTML` rule for —
@@ -77,7 +83,11 @@ const supportedExtensions: Extensions = [
  * on its own).
  */
 function computeRecognizedHtmlTags(): Set<string> {
-  const schema = getSchema(supportedExtensions);
+  // No options: an `Extension` (`TagPill`) registers nothing in the schema,
+  // so the options passed to it must not be able to change what this schema
+  // build sees. Calling with `{}` — never the caller's actual options —
+  // is what keeps that true.
+  const schema = getSchema(buildSupportedExtensions({}));
   const tags = new Set<string>();
   const collect = (spec: { parseDOM?: ReadonlyArray<{ tag?: string }> }) => {
     for (const rule of spec.parseDOM ?? []) {
@@ -101,12 +111,21 @@ function computeRecognizedHtmlTags(): Set<string> {
  * by running `marked.lexer` over a sample containing each construct and
  * checking which top-level token types no extension above already registers
  * via `markdownTokenName` — see `RawBlock.ts` and the M4 task 5 report.
+ *
+ * Also the extension set with the tag-pill callbacks the app injects.
+ * `editorExtensions` below is this with no options — so `getSchema`,
+ * `computeRecognizedHtmlTags()` and every existing test keep working
+ * untouched, and only `RichEditor` ever passes anything.
  */
-export const editorExtensions: Extensions = [
-  ...supportedExtensions,
-  RawTable,
-  RawDefinition,
-  RawHtmlBlock,
-  RawImage,
-  createRawInlineHtmlNode(computeRecognizedHtmlTags()),
-];
+export function buildEditorExtensions(options: Partial<TagPillOptions> = {}): Extensions {
+  return [
+    ...buildSupportedExtensions(options),
+    RawTable,
+    RawDefinition,
+    RawHtmlBlock,
+    RawImage,
+    createRawInlineHtmlNode(computeRecognizedHtmlTags()),
+  ];
+}
+
+export const editorExtensions: Extensions = buildEditorExtensions();

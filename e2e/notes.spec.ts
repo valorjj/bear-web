@@ -456,6 +456,142 @@ test('search narrows the list against real stored notes, and creating a note cle
   await expect(noteList.getByRole('button', { name: /Untitled/ })).toBeVisible();
 });
 
+test('a modifier click on a tag pill filters by that tag, and does not move the caret', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  // An untagged note first, so the note list actually has something to
+  // narrow away — a single-note list can't distinguish "filtered" from
+  // "nothing changed".
+  await page.getByRole('button', { name: 'New note' }).click();
+  let editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Groceries');
+  await editor.blur();
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Ship #work today');
+  await editor.blur();
+
+  const noteList = page.getByRole('region', { name: 'Note list' });
+  await expect(noteList.getByText('Groceries')).toBeVisible();
+  await expect(noteList.getByText('Ship #work today')).toBeVisible();
+
+  const pill = editor.locator('.bear-tag');
+  await expect(pill).toHaveText('#work');
+
+  await pill.click({ modifiers: ['ControlOrMeta'] });
+
+  // The user-visible half of the feature: the untagged note leaves the list
+  // and the tagged one stays.
+  await expect(noteList.getByText('Groceries')).toHaveCount(0);
+  await expect(noteList.getByText('Ship #work today')).toBeVisible();
+
+  // `SidebarRow`'s `current` prop defaults to `'page'`, and neither
+  // `TagSidebar` nor `SmartListSidebar` override it, so a tag row's
+  // `aria-current` is `'page'`, not `'true'` (that value is reserved for
+  // `NoteListItem`'s note rows). The accessible name is "work" followed by a
+  // trailing count, hence `/^work\b/` rather than an exact match.
+  await expect(page.getByRole('button', { name: /^work\b/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  // This milestone's named first risk: `preventDefault()` on mousedown must
+  // stop the browser from placing the caret. Deliberately a single,
+  // non-retrying `page.evaluate` read taken immediately after the click
+  // resolves, not a `locator` assertion — ProseMirror rebuilds the `.bear-tag`
+  // decoration on every transaction, so an auto-retrying assertion (e.g.
+  // `expect(pill).toHaveCount(1)`) can straddle a redraw and observe the
+  // settled state, missing a caret that moved and came back. The editor was
+  // blurred above, so if the caret had moved into the tag, focus would have
+  // returned to the contenteditable; if it did not, focus stays wherever the
+  // click actually landed (the note-list button `document.activeElement`
+  // ends up on after Playwright's click). Verified this discriminates: with
+  // `event.preventDefault()` removed from the mousedown handler,
+  // `document.activeElement` is the contenteditable `DIV` every time (3/3
+  // runs); with it present, it never is (3/3 runs) — see task-5-fix-report.md.
+  const activeAfterModClick = await page.evaluate(
+    () => document.activeElement?.getAttribute('contenteditable') === 'true',
+  );
+  expect(activeAfterModClick).toBe(false);
+});
+
+// The invariant Task 6 established: a Mod-click either filters, or behaves
+// exactly like a plain click. Never nothing. The app declines whenever the tag
+// is absent from the index, and the plugin gates `preventDefault()` on that
+// answer — so a declined gesture must still place the caret.
+//
+// A trashed note is the deterministic way to reach a declining pill from the
+// UI alone: `noteTags` reflects active notes only, so the editor paints the
+// pill (it knows nothing about trash) while the tag is genuinely not in the
+// tree. The other two declining cases are a lying pill (needs Markdown the
+// serializer will not produce from typing) and a tag typed inside the 300 ms
+// autosave debounce (a race, not an assertion).
+test('a modifier click on a tag the app declines places the caret instead of doing nothing', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Ship #work today');
+  await editor.blur();
+
+  await page.getByRole('button', { name: 'Delete' }).click();
+
+  const lists = page.getByRole('navigation', { name: 'Lists' });
+  await lists.getByRole('button', { name: /^Trash\b/ }).click();
+  await page
+    .getByRole('region', { name: 'Note list' })
+    .getByRole('button', { name: /Ship/ })
+    .click();
+
+  // The pill is painted even though the tag is not in the index — the editor
+  // deliberately learns nothing about scopes.
+  const pill = editor.locator('.bear-tag');
+  await expect(pill).toHaveText('#work');
+
+  await pill.click({ modifiers: ['ControlOrMeta'] });
+
+  // The caret landed inside the tag, so suppression lifted the pill: the same
+  // observable the plain-click test below uses, because the two gestures are
+  // required to be indistinguishable here. Before this contract the plugin
+  // called `preventDefault()` before asking, so the pill stayed, the caret
+  // never moved and the scope never changed — the click simply vanished.
+  await expect(pill).toHaveCount(0);
+  // And it is still a decline, not a filter: no tag row exists for a trashed
+  // note's tag, and Trash stays current.
+  await expect(lists.getByRole('button', { name: /^Trash\b/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+});
+
+test('a plain click on a tag pill places the caret and does not filter', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Ship #work today');
+  await editor.blur();
+
+  await editor.locator('.bear-tag').click();
+
+  // The caret landed in the tag, so its pill is suppressed — that is the
+  // observable proof the click was an edit rather than an activation.
+  await expect(editor.locator('.bear-tag')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+});
+
 test('typing "- [ ] " produces a real checkbox, not a literal bullet', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'New note' }).click();

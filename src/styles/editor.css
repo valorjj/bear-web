@@ -214,3 +214,18 @@
   border-radius: var(--bear-radius-sm);
   padding: 0.05em 0.15em 0.05em 0.25em;
 }
+
+/*
+ * While Mod is held, pills read as controls. Someone holding Cmd on the way to
+ * Cmd-B sees every pill in the note answer, which teaches the gesture without
+ * a word of copy — and it is the only affordance there is, since plain click
+ * deliberately still edits. `--bear-tag-fill-strong` sits at an alpha above
+ * `--bear-tag-fill` in both themes; `--bear-selected` was rejected here
+ * because it is FAINTER than a resting pill in Paper and identical to it in
+ * Ink, which would make holding the modifier look like the pill fading
+ * rather than lighting up.
+ */
+[data-mod-held='true'] .ProseMirror .bear-tag {
+  cursor: pointer;
+  background-color: var(--bear-tag-fill-strong);
+}

@@ -80,3 +80,14 @@ export function buildTagTree(rows: ReadonlyArray<NoteTag>): TagNode[] {
 
   return childrenOf(null);
 }
+
+/**
+ * Whether `tag` appears anywhere in `nodes`, at any depth.
+ *
+ * Shared by `AppShell`'s vanished-tag effect and its tag-activation guard —
+ * both need "does the sidebar know this tag" and must agree by construction,
+ * not by two hand-written walks staying in sync.
+ */
+export function hasTag(nodes: TagNode[], tag: string): boolean {
+  return nodes.some((node) => node.tag === tag || hasTag(node.children, tag));
+}

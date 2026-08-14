@@ -10,6 +10,13 @@ export interface TagTreeState {
   nodes: TagNode[] | undefined;
   isCollapsed: (tag: string) => boolean;
   toggle: (tag: string) => void;
+  /**
+   * Opens every collapsed ancestor of `tag`, so its row is actually rendered.
+   *
+   * The tag itself keeps its own disclosure state: revealing `work` means
+   * "show me that row", not "expand what hangs off it".
+   */
+  reveal: (tag: string) => void;
 }
 
 export function useTagTree(): TagTreeState {
@@ -41,5 +48,16 @@ export function useTagTree(): TagTreeState {
     [collapsed],
   );
 
-  return { nodes, isCollapsed, toggle };
+  const reveal = useCallback(
+    (tag: string) => {
+      const segments = tag.split('/');
+      for (let i = 1; i < segments.length; i += 1) {
+        const ancestor = segments.slice(0, i).join('/');
+        if (collapsed.has(ancestor)) void tags.setCollapsed(ancestor, false);
+      }
+    },
+    [collapsed],
+  );
+
+  return { nodes, isCollapsed, toggle, reveal };
 }

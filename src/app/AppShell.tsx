@@ -10,10 +10,11 @@ import {
   type NoteScope,
   seedTagFor,
   SmartListSidebar,
+  tagScope,
   useNotes,
   useSmartListCounts,
 } from '@/features/notes';
-import { TagSidebar, type TagNode, useTagTree } from '@/features/tags';
+import { hasTag, TagSidebar, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
@@ -102,12 +103,43 @@ export function AppShell(): ReactElement {
   // `AppShell.test.tsx`, which documents why.
   useEffect(() => {
     if (scope.kind !== 'tag' || tree.nodes === undefined) return;
-
-    const exists = (nodes: TagNode[]): boolean =>
-      nodes.some((node) => node.tag === scope.tag || exists(node.children));
-
-    if (!exists(tree.nodes)) setScope(ACTIVE_SCOPE);
+    if (!hasTag(tree.nodes, scope.tag)) setScope(ACTIVE_SCOPE);
   }, [scope, tree.nodes]);
+
+  // Answers a Mod-click on a tag pill in the editor. Deliberately a plain
+  // function, not `useCallback`: `useTagTree` returns a fresh `tree` object
+  // every render (see its own comment on why `nodes` is memoized but the
+  // returned object as a whole is not), so a `[tree]` dependency array would
+  // recompute this on every render anyway — `useCallback` here would read as
+  // memoization while providing none.
+  //
+  // Returns whether it acted. That answer is what the plugin gates
+  // `preventDefault()` on, so declining here costs the user a filter but not
+  // the caret: a Mod-click either filters, or behaves exactly like a plain
+  // click. Never nothing.
+  const handleActivateTag = (tag: string): boolean => {
+    // `undefined` means the live query has not resolved. Treating it as "no
+    // tags" would make activation silently fail on a slow first paint — the
+    // same mistake the vanished-tag effect above already guards against.
+    if (tree.nodes === undefined) return false;
+
+    // M7.6 ships two documented classes of pill whose tag is not in the
+    // index (a tag ending link text, and a mark over leading whitespace).
+    // Setting a scope for one would trip the vanished-tag effect above and
+    // bounce the user to All Notes — a click that visibly throws them
+    // somewhere they did not ask to go. Doing nothing is the honest answer.
+    //
+    // A tag typed within the last ~350 ms lands here too: the index is
+    // written by autosave, so it has not been written yet. That case is why
+    // this must report its refusal rather than let the plugin swallow the
+    // event — the tag exists, it is simply not saved, and the user gets the
+    // caret they would have got from a plain click instead of silence.
+    if (!hasTag(tree.nodes, tag)) return false;
+
+    setScope(tagScope(tag));
+    tree.reveal(tag);
+    return true;
+  };
 
   const handleTrash = useCallback(async (id: string) => {
     await notes.trash(id);
@@ -227,6 +259,7 @@ export function AppShell(): ReactElement {
             key={selectedNote.id}
             note={selectedNote}
             seedText={seed?.id === selectedNote.id ? seed.text : undefined}
+            onActivateTag={handleActivateTag}
           />
         )}
       </Pane>
