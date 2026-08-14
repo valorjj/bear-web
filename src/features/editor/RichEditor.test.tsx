@@ -64,15 +64,24 @@ describe('RichEditor', () => {
   });
 });
 
-const baseProps: Omit<RichEditorProps, 'onActivateTag'> = {
-  initialMarkdown: 'a #work b',
-  onChange: vi.fn(),
-  onBlur: vi.fn(),
-  ariaLabel: 'Note text',
-  handleRef: { current: null } as RefObject<RichEditorHandle | null>,
-  createdAt: 0,
-  updatedAt: 0,
-};
+/**
+ * Fresh every call, deliberately: a shared module-level object would carry
+ * `vi.fn()` call history and a mutable `handleRef.current` across tests,
+ * which is exactly the kind of cross-test state leak this project's
+ * `afterEach(() => vi.restoreAllMocks())` convention elsewhere exists to
+ * avoid.
+ */
+function makeBaseProps(): Omit<RichEditorProps, 'onActivateTag'> {
+  return {
+    initialMarkdown: 'a #work b',
+    onChange: vi.fn(),
+    onBlur: vi.fn(),
+    ariaLabel: 'Note text',
+    handleRef: { current: null } as RefObject<RichEditorHandle | null>,
+    createdAt: 0,
+    updatedAt: 0,
+  };
+}
 
 /**
  * Locates the fixture's tag with `tagRangeAt` (the same grammar the plugin
@@ -81,7 +90,7 @@ const baseProps: Omit<RichEditorProps, 'onActivateTag'> = {
  * `tagPill.test.ts` — no real layout is needed because `posAtCoords` is
  * stubbed rather than exercised.
  */
-function activateFirstTag(editor: Editor): void {
+function activateFirstTag(editor: Editor): { handled: boolean; defaultPrevented: boolean } {
   let hit: ReturnType<typeof tagRangeAt> = null;
   for (let pos = 0; pos <= editor.state.doc.content.size && hit === null; pos++) {
     hit = tagRangeAt(editor.state, pos);
@@ -95,9 +104,11 @@ function activateFirstTag(editor: Editor): void {
   });
   const at = hit.from + 1;
   const view = { state: editor.state, posAtCoords: () => ({ pos: at, inside: at }) };
-  editor.view.someProp('handleDOMEvents', (handlers) =>
-    handlers.mousedown === undefined ? false : handlers.mousedown(view as never, event as never),
-  );
+  const handled =
+    editor.view.someProp('handleDOMEvents', (handlers) =>
+      handlers.mousedown === undefined ? false : handlers.mousedown(view as never, event as never),
+    ) === true;
+  return { handled, defaultPrevented: event.defaultPrevented };
 }
 
 describe('RichEditor tag activation', () => {
@@ -107,6 +118,7 @@ describe('RichEditor tag activation', () => {
     const first = vi.fn();
     const second = vi.fn();
     const handleRef: RefObject<RichEditorHandle | null> = { current: null };
+    const baseProps = makeBaseProps();
     const { rerender } = renderWithI18n(
       <RichEditor {...baseProps} handleRef={handleRef} onActivateTag={first} />,
     );
@@ -120,7 +132,7 @@ describe('RichEditor tag activation', () => {
   });
 
   it('marks the editor while the modifier is held, and clears it on blur', () => {
-    renderWithI18n(<RichEditor {...baseProps} onActivateTag={vi.fn()} />);
+    renderWithI18n(<RichEditor {...makeBaseProps()} onActivateTag={vi.fn()} />);
     const surface = screen.getByRole('textbox').closest('[data-mod-held]');
     expect(surface).not.toBeNull();
     expect(surface!.getAttribute('data-mod-held')).toBe('false');
@@ -135,7 +147,7 @@ describe('RichEditor tag activation', () => {
   // Hold Cmd, press Tab to switch windows, and the keyup never arrives. The
   // pills would keep claiming to be clickable while a plain click edits.
   it('clears the modifier state when the window loses focus', () => {
-    renderWithI18n(<RichEditor {...baseProps} onActivateTag={vi.fn()} />);
+    renderWithI18n(<RichEditor {...makeBaseProps()} onActivateTag={vi.fn()} />);
     const surface = screen.getByRole('textbox').closest('[data-mod-held]')!;
 
     fireEvent.keyDown(window, { key: 'Meta', metaKey: true, ctrlKey: true });
@@ -143,5 +155,74 @@ describe('RichEditor tag activation', () => {
 
     fireEvent.blur(window);
     expect(surface.getAttribute('data-mod-held')).toBe('false');
+  });
+
+  // A `RichEditor` rendered with no `onActivateTag` must behave as though the
+  // feature is off: `TagPillOptions.onActivate === null` is what gates the
+  // plugin's own `preventDefault()`, so passing a wrapper unconditionally
+  // would swallow a Mod-click and suppress the caret placement a plain click
+  // would have given, while the tooltip kept promising a filter that never
+  // happens.
+  it('does not swallow a Mod-click when no onActivateTag handler is supplied', () => {
+    const handleRef: RefObject<RichEditorHandle | null> = { current: null };
+    renderWithI18n(<RichEditor {...makeBaseProps()} handleRef={handleRef} />);
+
+    const { handled, defaultPrevented } = activateFirstTag(handleRef.current!.editor!);
+
+    // The plugin itself declined: `onActivate === null` short-circuits its
+    // mousedown handler before `preventDefault()`, so the browser's own
+    // caret-placement mousedown behaviour is left to run, exactly as if the
+    // pill were plain text.
+    expect(handled).toBe(false);
+    expect(defaultPrevented).toBe(false);
+  });
+});
+
+describe('RichEditor tag pill tooltip', () => {
+  /**
+   * Reads the `title` the mounted plugin actually wrote onto its decorations,
+   * through the real `decorations` prop — the same mechanism `tagPill.test.ts`
+   * uses for "puts the injected hint on every pill". Reading the extension's
+   * OPTIONS back would only prove the value was passed in, not that the
+   * plugin used it; this proves the string reached a live decoration.
+   */
+  function firstPillTitle(editor: Editor): string | undefined {
+    const decorationSet = editor.view.someProp('decorations', (f) => f(editor.state));
+    const [decoration] = (decorationSet as unknown as { find(): Array<{ type: unknown }> }).find();
+    return (decoration as { type: { attrs: Record<string, string> } } | undefined)?.type.attrs
+      .title;
+  }
+
+  // `isMacOS()` runs inside `RichEditor`'s `useState` initializer, which runs
+  // during the FIRST render — so the platform stub must be in place before
+  // `renderWithI18n` is called, not merely before the assertion. Stubbing
+  // afterward would leave `RichEditor` reading whatever `navigator.platform`
+  // was at mount, silently passing for the wrong reason.
+  it('shows the Mac hint on an Apple platform', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    try {
+      const handleRef: RefObject<RichEditorHandle | null> = { current: null };
+      renderWithI18n(
+        <RichEditor {...makeBaseProps()} handleRef={handleRef} onActivateTag={vi.fn()} />,
+      );
+      expect(firstPillTitle(handleRef.current!.editor!)).toBe('Cmd-click to filter by this tag');
+    } finally {
+      Object.defineProperty(navigator, 'platform', { value: originalPlatform, configurable: true });
+    }
+  });
+
+  it('shows the Ctrl hint off an Apple platform', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+    try {
+      const handleRef: RefObject<RichEditorHandle | null> = { current: null };
+      renderWithI18n(
+        <RichEditor {...makeBaseProps()} handleRef={handleRef} onActivateTag={vi.fn()} />,
+      );
+      expect(firstPillTitle(handleRef.current!.editor!)).toBe('Ctrl-click to filter by this tag');
+    } finally {
+      Object.defineProperty(navigator, 'platform', { value: originalPlatform, configurable: true });
+    }
   });
 });

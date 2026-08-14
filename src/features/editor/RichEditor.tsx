@@ -59,7 +59,18 @@ export function RichEditor({
 
   const [extensions] = useState(() =>
     buildEditorExtensions({
-      onActivate: (tag) => activateRef.current?.(tag),
+      // `null`, not a wrapper that happens to call nothing, when no handler
+      // was supplied at mount: `TagPillOptions.onActivate === null` is the
+      // plugin's own "nobody is listening" signal, and it decides more than
+      // whether the callback fires — it gates `preventDefault()` on the
+      // mousedown handler too. Passing a non-null wrapper unconditionally
+      // meant a `RichEditor` rendered with no `onActivateTag` still swallowed
+      // a Mod-click and suppressed the caret placement a plain click would
+      // have given, while its tooltip kept promising a filter that never
+      // happened. Checked once, at the same mount boundary the plugin itself
+      // reads once — a later prop change cannot flip whether listening is
+      // "on" here, matching the plugin's own capture-once contract.
+      onActivate: onActivateTag === undefined ? null : (tag) => activateRef.current?.(tag),
       activateHint: t(isMacOS() ? 'editor.tagPill.hint.mac' : 'editor.tagPill.hint.other'),
     }),
   );
