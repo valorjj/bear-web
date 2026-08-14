@@ -1,10 +1,35 @@
 import { Extension } from '@tiptap/core';
+import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 import { findTagRanges } from '@/data';
 
 import { maskedBlockText } from './blockText';
+
+export interface TagHit {
+  /** The normalized tag name, exactly as `parseTags` would report it. */
+  tag: string;
+  /** Document position of the opening `#`. */
+  from: number;
+  /** Document position one past the tag's last character. */
+  to: number;
+}
+
+/**
+ * Every tag in a textblock, as document positions.
+ *
+ * The single place the offset arithmetic lives: `maskedBlockText` emits one
+ * character per document position, so the character at index `i` inside a
+ * block starting at `blockPos` sits at `blockPos + 1 + i`.
+ */
+function tagHitsIn(node: Node, blockPos: number): TagHit[] {
+  return findTagRanges(maskedBlockText(node)).map((range) => ({
+    tag: range.tag,
+    from: blockPos + 1 + range.start,
+    to: blockPos + 1 + range.end,
+  }));
+}
 
 /**
  * Renders `#tag` as a pill.
@@ -28,12 +53,8 @@ export function tagDecorations(state: EditorState, focused = true): Decoration[]
     if (node.type.spec.code) return false;
     if (!node.isTextblock) return true;
 
-    const text = maskedBlockText(node);
-    for (const range of findTagRanges(text)) {
-      // maskedBlockText emits one character per document position, so the
-      // character at index i sits at pos + 1 + i.
-      const from = pos + 1 + range.start;
-      const to = pos + 1 + range.end;
+    for (const hit of tagHitsIn(node, pos)) {
+      const { from, to } = hit;
       // A tag the cursor is inside keeps its plain text, so character widths
       // do not jump while it is being typed or edited. Intersection, not
       // containment: a caret sitting at either edge is still "inside" as far
@@ -55,6 +76,35 @@ export function tagDecorations(state: EditorState, focused = true): Decoration[]
   });
 
   return decorations;
+}
+
+/**
+ * The tag covering `pos`, or `null`.
+ *
+ * Deliberately independent of the decoration set: a tag the caret sits inside
+ * has no pill (see the suppression rule in `tagDecorations`), and if
+ * activation hit-tested the pills instead of the grammar, the same gesture
+ * would work or not work with nothing on screen to explain the difference.
+ * Behaviour must not depend on invisible state.
+ */
+export function tagRangeAt(state: EditorState, pos: number): TagHit | null {
+  let found: TagHit | null = null;
+
+  state.doc.descendants((node, blockPos) => {
+    if (found !== null) return false;
+    if (node.type.spec.code) return false;
+    if (!node.isTextblock) return true;
+
+    for (const hit of tagHitsIn(node, blockPos)) {
+      if (pos >= hit.from && pos <= hit.to) {
+        found = hit;
+        break;
+      }
+    }
+    return false;
+  });
+
+  return found;
 }
 
 // Not exported: nothing outside this file needs to target this plugin by

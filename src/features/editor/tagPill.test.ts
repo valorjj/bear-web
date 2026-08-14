@@ -2,7 +2,7 @@ import { Editor } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
 import { editorExtensions } from './extensions';
-import { tagDecorations } from './TagPill';
+import { tagDecorations, tagRangeAt } from './TagPill';
 
 function docFor(content: string): Editor {
   return new Editor({ extensions: editorExtensions, content });
@@ -199,6 +199,76 @@ describe('cursor suppression', () => {
       editor.state.doc.textBetween(from, to),
     );
     expect(decorated).toEqual(['#work', '#home']);
+    editor.destroy();
+  });
+});
+
+describe('tagRangeAt', () => {
+  it('finds the tag covering a position inside it', () => {
+    const editor = docFor('<p>a #work b</p>');
+    // '#work' occupies positions 3..8: paragraph starts at 0, its text at 1,
+    // so 'a ' is 1..3 and the '#' is at 3.
+    const hit = tagRangeAt(editor.state, 5);
+    expect(hit).toEqual({ tag: 'work', from: 3, to: 8 });
+    expect(editor.state.doc.textBetween(hit!.from, hit!.to)).toBe('#work');
+    editor.destroy();
+  });
+
+  it('finds the tag at each of its edges', () => {
+    const editor = docFor('<p>a #work b</p>');
+    expect(tagRangeAt(editor.state, 3)?.tag).toBe('work');
+    expect(tagRangeAt(editor.state, 8)?.tag).toBe('work');
+    editor.destroy();
+  });
+
+  it('returns null for ordinary prose', () => {
+    const editor = docFor('<p>a #work b</p>');
+    expect(tagRangeAt(editor.state, 1)).toBeNull();
+    expect(tagRangeAt(editor.state, 10)).toBeNull();
+    editor.destroy();
+  });
+
+  it('returns null inside an inline code span', () => {
+    const editor = docFor('<p>a <code>#work</code> b</p>');
+    expect(tagRangeAt(editor.state, 5)).toBeNull();
+    editor.destroy();
+  });
+
+  it('returns null inside a code block', () => {
+    const editor = docFor('<pre><code>#work</code></pre>');
+    expect(tagRangeAt(editor.state, 3)).toBeNull();
+    editor.destroy();
+  });
+
+  it('finds a tag in the second of two blocks', () => {
+    const editor = docFor('<p>#work</p><p>#home</p>');
+    const first = tagRangeAt(editor.state, 2)!;
+    const second = tagRangeAt(editor.state, 9)!;
+    expect(first.tag).toBe('work');
+    expect(second.tag).toBe('home');
+    expect(editor.state.doc.textBetween(second.from, second.to)).toBe('#home');
+    editor.destroy();
+  });
+
+  // The property that makes activation independent of invisible state.
+  it('finds a tag whose pill is suppressed by the selection', () => {
+    const editor = docFor('<p>a #work b</p>');
+    editor.commands.setTextSelection(5);
+    expect(tagDecorations(editor.state, true)).toEqual([]);
+    expect(tagRangeAt(editor.state, 5)?.tag).toBe('work');
+    editor.destroy();
+  });
+
+  // The two must agree on extent wherever a pill IS painted — one scan, two
+  // callers.
+  it('agrees with the decoration a pill would paint', () => {
+    const editor = docFor('<p>a #work b</p>');
+    const [decoration] = tagDecorations(editor.state, false);
+    const hit = tagRangeAt(editor.state, 5)!;
+    expect({ from: hit.from, to: hit.to }).toEqual({
+      from: decoration!.from,
+      to: decoration!.to,
+    });
     editor.destroy();
   });
 });
