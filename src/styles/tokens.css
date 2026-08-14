@@ -41,6 +41,16 @@
   --bear-tag-fill: rgb(207 59 44 / 0.16);
 
   /*
+   * The pill's held-modifier state, while Mod is held over the editor: an
+   * alpha ABOVE `--bear-tag-fill`'s own, so the affordance reads as MORE
+   * present than a resting pill rather than less. `--bear-selected` was
+   * considered and rejected — at 0.11 here it is fainter than the resting
+   * pill's own 0.16, which would make holding the modifier look like the
+   * pill fading rather than lighting up.
+   */
+  --bear-tag-fill-strong: rgb(207 59 44 / 0.32);
+
+  /*
    * The ground the three panes float on. A browser tab has no window chrome,
    * so depth is what separates the panes from each other and from the page —
    * the role Bear's rounded macOS window plays.
@@ -99,6 +109,7 @@
   --bear-shadow: rgb(0 0 0 / 0.5);
   --bear-canvas: #121211;
   --bear-tag-fill: rgb(255 111 94 / 0.18);
+  --bear-tag-fill-strong: rgb(255 111 94 / 0.32);
 }
 
 /*
@@ -127,6 +138,7 @@
     --bear-shadow: rgb(0 0 0 / 0.5);
     --bear-canvas: #121211;
     --bear-tag-fill: rgb(255 111 94 / 0.18);
+    --bear-tag-fill-strong: rgb(255 111 94 / 0.32);
   }
 }
 

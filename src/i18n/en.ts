@@ -93,6 +93,8 @@ export const en = {
   'editor.info.created': 'Created',
   'editor.info.modified': 'Modified',
   'editor.link.prompt': 'Link address',
+  'editor.tagPill.hint.mac': 'Cmd-click to filter by this tag',
+  'editor.tagPill.hint.other': 'Ctrl-click to filter by this tag',
 } as const;
 
 export type TranslationKey = keyof typeof en;

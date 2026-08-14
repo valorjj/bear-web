@@ -26,6 +26,8 @@ export interface NoteEditorProps {
    * untouched, and the truncation guard below keeps its full strength.
    */
   seedText?: string;
+  /** Called with a tag name when the user Mod-clicks its pill. */
+  onActivateTag?: (tag: string) => void;
 }
 
 /**
@@ -46,7 +48,7 @@ export interface NoteEditorProps {
  */
 const pendingDiscards = new Map<string, ReturnType<typeof setTimeout>>();
 
-export function NoteEditor({ note, seedText }: NoteEditorProps): ReactElement {
+export function NoteEditor({ note, seedText, onActivateTag }: NoteEditorProps): ReactElement {
   const t = useT();
 
   const handleRef = useRef<RichEditorHandle | null>(null);
@@ -225,6 +227,7 @@ export function NoteEditor({ note, seedText }: NoteEditorProps): ReactElement {
         handleRef={handleRef}
         createdAt={note.createdAt}
         updatedAt={note.updatedAt}
+        onActivateTag={onActivateTag}
       />
 
       {(failed || serializeFailed) && (
