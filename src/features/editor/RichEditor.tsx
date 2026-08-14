@@ -74,10 +74,16 @@ export function RichEditor({
       // happened. Checked once, at the same mount boundary the plugin itself
       // reads once — a later prop change cannot flip whether listening is
       // "on" here, matching the plugin's own capture-once contract.
+      //
       // The wrapper must PROPAGATE the app's answer, not merely forward the
       // call: the plugin gates `preventDefault()` on this return value, so a
       // wrapper returning `undefined` would collapse every case — including
-      // every successful filter — to "declined".
+      // every successful filter — to "declined". It also makes the `null`
+      // above LOOK redundant, because `undefined === true` is `false` and both
+      // paths then decline. They are not the same: `null` declines before the
+      // hit test, a `false` answer after it, and `RichEditor.test.tsx` pins the
+      // difference through a `posAtCoords` spy rather than through an outcome
+      // the two now share.
       onActivate: onActivateTag === undefined ? null : (tag) => activateRef.current?.(tag) === true,
       activateHint: t(isMacOS() ? 'editor.tagPill.hint.mac' : 'editor.tagPill.hint.other'),
     }),

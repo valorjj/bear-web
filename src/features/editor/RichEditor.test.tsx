@@ -89,8 +89,18 @@ function makeBaseProps(): Omit<RichEditorProps, 'onActivateTag'> {
  * `mousedown` handler with a fake view, mirroring `mousedownAt` in
  * `tagPill.test.ts` — no real layout is needed because `posAtCoords` is
  * stubbed rather than exercised.
+ *
+ * Reports how many times the stub was ASKED, which is the only thing that
+ * distinguishes the plugin's two ways of declining: `onActivate === null`
+ * short-circuits BEFORE the hit test, while a `false` answer from the app
+ * comes after it. Both produce `handled: false` and `defaultPrevented: false`,
+ * so an assertion on the outcome alone cannot tell them apart.
  */
-function activateFirstTag(editor: Editor): { handled: boolean; defaultPrevented: boolean } {
+function activateFirstTag(editor: Editor): {
+  handled: boolean;
+  defaultPrevented: boolean;
+  posAtCoordsCalls: number;
+} {
   let hit: ReturnType<typeof tagRangeAt> = null;
   for (let pos = 0; pos <= editor.state.doc.content.size && hit === null; pos++) {
     hit = tagRangeAt(editor.state, pos);
@@ -103,12 +113,17 @@ function activateFirstTag(editor: Editor): { handled: boolean; defaultPrevented:
     ...(isMacOS() ? { metaKey: true } : { ctrlKey: true }),
   });
   const at = hit.from + 1;
-  const view = { state: editor.state, posAtCoords: () => ({ pos: at, inside: at }) };
+  const posAtCoords = vi.fn(() => ({ pos: at, inside: at }));
+  const view = { state: editor.state, posAtCoords };
   const handled =
     editor.view.someProp('handleDOMEvents', (handlers) =>
       handlers.mousedown === undefined ? false : handlers.mousedown(view as never, event as never),
     ) === true;
-  return { handled, defaultPrevented: event.defaultPrevented };
+  return {
+    handled,
+    defaultPrevented: event.defaultPrevented,
+    posAtCoordsCalls: posAtCoords.mock.calls.length,
+  };
 }
 
 describe('RichEditor tag activation', () => {
@@ -156,6 +171,10 @@ describe('RichEditor tag activation', () => {
     expect(answer).toHaveBeenCalledTimes(2);
     expect(declined.handled).toBe(false);
     expect(declined.defaultPrevented).toBe(false);
+    // The contrast that gives the `null`-contract test its meaning: declining
+    // by ANSWER happens after the hit test, declining by having no listener at
+    // all happens before it. Same outcome, different exit.
+    expect(declined.posAtCoordsCalls).toBe(1);
   });
 
   it('marks the editor while the modifier is held, and clears it on blur', () => {
@@ -190,11 +209,25 @@ describe('RichEditor tag activation', () => {
   // would swallow a Mod-click and suppress the caret placement a plain click
   // would have given, while the tooltip kept promising a filter that never
   // happens.
+  //
+  // The outcome alone stopped proving this once the boolean contract landed.
+  // With an unconditional wrapper and no prop, `activateRef.current` is
+  // `undefined`, `undefined === true` is `false`, and the app-declined path
+  // produces a byte-identical `handled: false` / `defaultPrevented: false` —
+  // so the `null` guard became untestable by its own effects, two guards
+  // agreeing everywhere. `posAtCoords` is what separates them: the `null`
+  // option short-circuits BEFORE the hit test runs, a `false` answer only
+  // after it. Asserting the plugin never even asked where the click landed
+  // pins the earlier of the two exits, which is the one this test is about.
   it('does not swallow a Mod-click when no onActivateTag handler is supplied', () => {
     const handleRef: RefObject<RichEditorHandle | null> = { current: null };
     renderWithI18n(<RichEditor {...makeBaseProps()} handleRef={handleRef} />);
 
-    const { handled, defaultPrevented } = activateFirstTag(handleRef.current!.editor!);
+    const { handled, defaultPrevented, posAtCoordsCalls } = activateFirstTag(
+      handleRef.current!.editor!,
+    );
+
+    expect(posAtCoordsCalls).toBe(0);
 
     // The plugin itself declined: `onActivate === null` short-circuits its
     // mousedown handler before `preventDefault()`, so the browser's own

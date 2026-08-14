@@ -982,6 +982,19 @@ ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
   statement body returns `undefined`, which reads as declined and silently
   disables the whole feature while every callback still fires; pinned by a
   `RichEditor.test.tsx` test asserting both directions.
+- **The boolean gate made the `null`-`onActivate` contract look redundant, and
+  the test that guards it had to change shape to stay falsifiable.** With an
+  unconditional wrapper and no `onActivateTag` prop, `activateRef.current` is
+  `undefined`, `undefined === true` is `false`, and the app-declined path
+  produces a byte-identical `handled: false` / `defaultPrevented: false` — so
+  deleting the `null` guard left 1034/1034 green, one commit after the same
+  injection failed a test. The two exits are still genuinely different: `null`
+  declines **before** the hit test, a `false` answer **after** it. The test
+  therefore spies on `posAtCoords` and asserts the plugin never even asked
+  where the click landed; the decline-by-answer test asserts the mirror. **Any
+  future guard added in front of this handler needs the same treatment** —
+  outcome-only assertions cannot separate two exits that produce the same
+  outcome.
 - **The tooltip stays optimistic on pills that cannot work, and that is
   inherent.** Both lying-pill classes and every pill in a trashed note light up
   under the modifier and read "Cmd-click to filter by this tag", then decline.
@@ -991,7 +1004,12 @@ ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
   M7.7 were both careful not to cross. After the boolean contract above the
   _click_ is honest (it places the caret, exactly like a plain click); only the
   copy still promises. Do not chase this further without a design that crosses
-  that boundary deliberately.
+  that boundary deliberately. One related latency with no live instance:
+  `RichEditor` passes `activateHint` unconditionally, so a `RichEditor`
+  rendered with no `onActivateTag` — where `onActivate` is `null` and the
+  gesture is genuinely off — would still paint promising tooltips. Every live
+  call site supplies the prop; if one ever does not, gate the hint on the same
+  condition.
 - **The modifier affordance is a DOM attribute set through a ref, never React
   state.** `data-mod-held` on the editor's outer element; setting state on
   every `keydown` would re-render the editor subtree on every keystroke the
