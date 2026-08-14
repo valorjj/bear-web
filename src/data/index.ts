@@ -15,7 +15,8 @@ export { persistStorage, requestPersistentStorage } from './persist';
 export type { PersistDeps, PersistOutcome } from './persist';
 export { runStartupSweep, sweepBlankNotes } from './sweep';
 export type { SweepDeps } from './sweep';
-export { parseTags } from './tags';
+export { findTagRanges, parseTags } from './tags';
+export type { TagRange } from './tags';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
 export { files, notes, settings, tags } from './repositories';
 export type {

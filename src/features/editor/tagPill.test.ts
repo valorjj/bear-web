@@ -1,0 +1,270 @@
+import { Editor } from '@tiptap/core';
+import { describe, expect, it } from 'vitest';
+
+import { editorExtensions } from './extensions';
+import { tagDecorations } from './TagPill';
+
+function docFor(content: string): Editor {
+  return new Editor({ extensions: editorExtensions, content });
+}
+
+/** The decorations this plugin would produce for the given state. */
+function decorationsOf(editor: Editor): Array<{ from: number; to: number }> {
+  return tagDecorations(editor.state).map((d) => ({ from: d.from, to: d.to }));
+}
+
+describe('tag pill decorations', () => {
+  it('decorates a tag in a paragraph', () => {
+    const editor = docFor('<p>a #work b</p>');
+    const decorations = decorationsOf(editor);
+    expect(decorations).toHaveLength(1);
+    const [{ from, to }] = decorations;
+    expect(editor.state.doc.textBetween(from!, to!)).toBe('#work');
+    editor.destroy();
+  });
+
+  it('decorates every occurrence, including a repeat', () => {
+    const editor = docFor('<p>#work then #work</p>');
+    // Task 4 added cursor-based suppression. Mounting with no explicit
+    // selection parks the cursor at the first valid text position (1),
+    // which is the edge of this fixture's first '#work' and would
+    // otherwise suppress it — this test is about occurrence counting, not
+    // cursor suppression, so move the cursor into neutral territory
+    // ("then") first.
+    const full = editor.state.doc.textBetween(0, editor.state.doc.content.size);
+    const neutral = 1 + full.indexOf('then') + 2;
+    editor.commands.setTextSelection(neutral);
+    expect(decorationsOf(editor)).toHaveLength(2);
+    editor.destroy();
+  });
+
+  it('decorates tags in more than one block', () => {
+    const editor = docFor('<p>#work</p><p>#home</p>');
+    // Same cursor-parks-on-a-tag issue as above: the default selection sits
+    // at position 1, the edge of '#work' in the first paragraph. Move the
+    // cursor to the boundary between the two paragraphs, which touches
+    // neither tag.
+    const boundary = editor.state.doc.firstChild!.nodeSize;
+    editor.commands.setTextSelection(boundary);
+    expect(decorationsOf(editor)).toHaveLength(2);
+    editor.destroy();
+  });
+
+  it('does not decorate inside an inline code span', () => {
+    const editor = docFor('<p>a <code>#work</code> b</p>');
+    expect(decorationsOf(editor)).toEqual([]);
+    editor.destroy();
+  });
+
+  it('does not decorate inside a code block', () => {
+    const editor = docFor('<pre><code>#work</code></pre>');
+    expect(decorationsOf(editor)).toEqual([]);
+    editor.destroy();
+  });
+
+  it('does not treat a heading marker as a tag', () => {
+    const editor = docFor('<h1>Heading</h1>');
+    expect(decorationsOf(editor)).toEqual([]);
+    editor.destroy();
+  });
+
+  // The position arithmetic is the whole risk, and `textBetween` cannot pin
+  // it here: a hardBreak is a leaf that contributes zero characters to
+  // `textBetween`, so a `from` shifted onto the break's own position reads
+  // back identically to the correct `from` — `textBetween` cannot tell the
+  // two apart. Asserting the integers directly is what actually pins the
+  // arithmetic: the paragraph opens at doc position 0, so its content starts
+  // at 1; `a` occupies position 1, the hardBreak (a one-position leaf)
+  // occupies position 2, and `#work` therefore starts at 3 and runs 5
+  // characters to 8.
+  it('decorates exactly the tag text after a hard break', () => {
+    const editor = docFor('<p>a<br>#work</p>');
+    const [{ from, to }] = decorationsOf(editor);
+    expect(from).toBe(3);
+    expect(to).toBe(8);
+    expect(editor.state.doc.textBetween(from!, to!)).toBe('#work');
+    editor.destroy();
+  });
+});
+
+describe('cursor suppression', () => {
+  it('lifts the pill on the tag the cursor is inside', () => {
+    const editor = docFor('<p>#work and #home</p>');
+    const full = editor.state.doc.textBetween(0, editor.state.doc.content.size);
+    const workIndex = full.indexOf('#work');
+    expect(workIndex).not.toBe(-1);
+
+    // A single-paragraph doc opens at 0, so its content starts at position 1:
+    // a text-string index i sits at doc position 1 + i. Land the caret three
+    // characters into '#work' (between 'o' and 'r').
+    const target = 1 + workIndex + 3;
+    editor.commands.setTextSelection(target);
+
+    // Confirm the caret actually landed where this test's name claims,
+    // rather than trusting the arithmetic above.
+    const { from: caretFrom, to: caretTo } = editor.state.selection;
+    expect(caretFrom).toBe(target);
+    expect(caretTo).toBe(target);
+    expect(caretFrom).toBeGreaterThan(1 + workIndex);
+    expect(caretFrom).toBeLessThan(1 + workIndex + '#work'.length);
+
+    const decorated = decorationsOf(editor).map(({ from, to }) =>
+      editor.state.doc.textBetween(from, to),
+    );
+    expect(decorated).toEqual(['#home']);
+    editor.destroy();
+  });
+
+  it('restores the pill once the cursor leaves', () => {
+    const editor = docFor('<p>#work and #home</p>');
+    const full = editor.state.doc.textBetween(0, editor.state.doc.content.size);
+    const workIndex = full.indexOf('#work');
+    const insideWork = 1 + workIndex + 2;
+    editor.commands.setTextSelection(insideWork);
+    expect(editor.state.selection.from).toBe(insideWork);
+    expect(decorationsOf(editor)).toHaveLength(1);
+
+    // Move to neutral territory in " and ", away from both tags. The
+    // absolute end of the document is NOT a safe "cursor has left" position
+    // here: '#home' is the last thing in the paragraph, so the document's
+    // final text position sits exactly on its closing edge, which the
+    // intersection rule (deliberately) still treats as inside that tag.
+    const andIndex = full.indexOf(' and ');
+    expect(andIndex).not.toBe(-1);
+    const neutral = 1 + andIndex + 2;
+    editor.commands.setTextSelection(neutral);
+    expect(editor.state.selection.from).toBe(neutral);
+    expect(decorationsOf(editor)).toHaveLength(2);
+    editor.destroy();
+  });
+
+  it('lifts the pill when a selection merely touches the tag', () => {
+    const editor = docFor('<p>#work and #home</p>');
+    const full = editor.state.doc.textBetween(0, editor.state.doc.content.size);
+    const homeIndex = full.indexOf('#home');
+    expect(homeIndex).not.toBe(-1);
+    const tagStart = 1 + homeIndex;
+
+    // A selection ending exactly at the tag's opening position: touches the
+    // boundary without entering the tag's own characters. (`tagStart - 1`
+    // is a valid text position here because '#home' is preceded by a space,
+    // unlike '#work', which opens the paragraph — position 0 there is a
+    // node-level boundary, not a text position, and setTextSelection would
+    // clamp it forward into the tag itself.)
+    editor.commands.setTextSelection({ from: tagStart - 1, to: tagStart });
+    expect(editor.state.selection.from).toBe(tagStart - 1);
+    expect(editor.state.selection.to).toBe(tagStart);
+
+    const decorated = decorationsOf(editor).map(({ from, to }) =>
+      editor.state.doc.textBetween(from, to),
+    );
+    expect(decorated).toEqual(['#work']);
+    editor.destroy();
+  });
+
+  it("lifts the pill when the caret sits at the tag's closing edge", () => {
+    // The closing edge is what every keystroke of *typing* a tag produces
+    // (the caret trails the last character typed so far), and it is what a
+    // freshly seeded note's tag-at-end-of-line case reduces to. Only the
+    // opening edge was covered before this test.
+    const editor = docFor('<p>#work and #home</p>');
+    const full = editor.state.doc.textBetween(0, editor.state.doc.content.size);
+    const workIndex = full.indexOf('#work');
+    const closingEdge = 1 + workIndex + '#work'.length;
+    editor.commands.setTextSelection(closingEdge);
+    expect(editor.state.selection.from).toBe(closingEdge);
+    expect(editor.state.selection.to).toBe(closingEdge);
+
+    const decorated = decorationsOf(editor).map(({ from, to }) =>
+      editor.state.doc.textBetween(from, to),
+    );
+    expect(decorated).toEqual(['#home']);
+    editor.destroy();
+  });
+
+  it('does not suppress when the editor is unfocused, even with the caret inside a tag', () => {
+    // The rule's entire justification is caret comfort: an unfocused editor
+    // has no caret visibly on screen, so there is nothing to protect. A
+    // freshly created note is seeded with its scope's tag and opens
+    // unfocused with the selection at position 1 — the tag's own opening
+    // edge — so without this gate the pill never appeared on open.
+    const editor = docFor('<p>#work and #home</p>');
+    const full = editor.state.doc.textBetween(0, editor.state.doc.content.size);
+    const workIndex = full.indexOf('#work');
+    const insideWork = 1 + workIndex + 3;
+    editor.commands.setTextSelection(insideWork);
+    expect(editor.state.selection.from).toBe(insideWork);
+
+    const decorated = tagDecorations(editor.state, false).map(({ from, to }) =>
+      editor.state.doc.textBetween(from, to),
+    );
+    expect(decorated).toEqual(['#work', '#home']);
+    editor.destroy();
+  });
+});
+
+describe('mounted plugin (real DOM, not a direct tagDecorations call)', () => {
+  // `tagDecorations` is called directly everywhere above. Nothing above
+  // proves the registered ProseMirror plugin itself re-renders when only
+  // the selection or the focus state changes — and a decoration leaves no
+  // trace in the document or its Markdown, so a plugin that silently never
+  // reruns looks identical to one that works (the same blind spot this
+  // file's header comment already warns about for the plugin's existence).
+
+  it('the rendered .bear-tag spans change on a selection-only transaction', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const editor = new Editor({
+      extensions: editorExtensions,
+      content: '<p>#work and #home</p>',
+      element: container,
+    });
+    // Force the focused branch without depending on real DOM focus timing,
+    // isolating this test to the selection-only claim.
+    editor.isFocused = true;
+
+    const full = editor.state.doc.textBetween(0, editor.state.doc.content.size);
+    const workIndex = full.indexOf('#work');
+    const insideWork = 1 + workIndex + 2;
+    const andIndex = full.indexOf(' and ');
+    const neutral = 1 + andIndex + 2;
+
+    editor.commands.setTextSelection(insideWork);
+    expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(1);
+
+    editor.commands.setTextSelection(neutral);
+    expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(2);
+
+    editor.destroy();
+  });
+
+  it('the rendered .bear-tag spans change on real DOM focus and blur', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const editor = new Editor({
+      extensions: editorExtensions,
+      content: '<p>#work and #home</p>',
+      element: container,
+    });
+
+    // A fresh, unmounted-into-focus editor: not focused, caret at position
+    // 1 (the opening edge of '#work') by default. Unfocused, both tags
+    // should be pilled.
+    expect(editor.isFocused).toBe(false);
+    expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(2);
+
+    // A real 'focus' DOM event, not a property assignment: this is what
+    // exercises Tiptap's own `FocusEvents` extension, which sets
+    // `editor.isFocused` and dispatches a transaction — the mechanism this
+    // plugin's suppression depends on to ever repaint.
+    editor.view.dom.focus();
+    expect(editor.isFocused).toBe(true);
+    expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(1);
+
+    editor.view.dom.blur();
+    expect(editor.isFocused).toBe(false);
+    expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(2);
+
+    editor.destroy();
+  });
+});

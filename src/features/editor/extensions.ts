@@ -12,6 +12,7 @@ import {
   RawTable,
   createRawInlineHtmlNode,
 } from './RawBlock';
+import { TagPill } from './TagPill';
 import { TaskItemPromotion } from './taskItemPromotion';
 
 /**
@@ -57,6 +58,12 @@ const supportedExtensions: Extensions = [
   // in. See the CLAUDE.md entry with the same title for the full guard.
   TaskItemPromotion,
   Highlight,
+  // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
+  // schema: `computeRecognizedHtmlTags()` below and every round-trip suite
+  // are unaffected by it. It contributes exactly one ProseMirror plugin that
+  // decorates `#tag` text as a pill; the document and its Markdown are
+  // untouched. See `TagPill.ts` and `tagPill.test.ts`.
+  TagPill,
 ];
 
 /**

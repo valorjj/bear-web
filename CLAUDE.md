@@ -23,9 +23,10 @@ IndexedDB.
 | M6 smart lists, trash management | complete       |
 | M7 search                        | complete       |
 | M7.5 visual design pass          | complete       |
+| M7.6 tag pills                   | complete       |
 | M8–M9                            | themes, polish |
 
-809 unit tests, 35 end-to-end tests. `main` is always green and auto-deploys.
+992 unit tests, 37 end-to-end tests. `main` is always green and auto-deploys.
 
 ## Commands
 
@@ -765,6 +766,156 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   check alone passes on a fully transparent pane, the exact defect it was
   meant to catch. The card test in `e2e/appearance.spec.ts` asserts both:
   not-transparent, and not-equal-to-canvas.
+- **`parseTags` is the deduped name-only view of `findTagRanges`, and the tag
+  grammar exists in exactly one place.** The scanner always computed each
+  tag's start and end and threw them away; M7.6 stopped throwing them away
+  rather than writing a second parser for the editor, which would have been
+  two implementations of one grammar — this project's signature defect.
+  `parseTags` is now defined as
+  `[...new Set(findTagRanges(x).map(r => r.tag))]`, so the agreement describe
+  block in `parseTags.test.ts` is tautological while that one-line definition
+  holds — it asserts the exact same expression the implementation already is,
+  so it does not, by itself, prove the grammar's behaviour is preserved. What
+  it does do is act as a tripwire: the instant someone forks the two into
+  separate implementations, the tautology breaks and the test starts
+  asserting something real. Behaviour preservation of the grammar itself is
+  guarded separately, by every other describe block in `parseTags.test.ts` —
+  the corpus of cases that predates M7.6 and asserts `parseTags`' actual
+  output against expected tag lists.
+- **The tag pill is a ProseMirror DECORATION, never a mark.** The document is
+  untouched, so no schema, serializer or round-trip path is involved and a
+  pill can never survive into a note's Markdown. The cost is that **every
+  round-trip test in this project is blind to whether the plugin runs at
+  all** — the same blind spot that let a dead `==highlight==` tokenizer and a
+  live-but-banned underline mark ship in M4. `tagPill.test.ts` asserts on the
+  decoration set itself and is the only thing that can catch a dead plugin.
+- **`maskedBlockText` emits one character per document position, and the
+  plugin's position arithmetic depends on it.** `node.textContent` cannot be
+  used: a `hardBreak` contributes no characters but occupies a position, so
+  every offset after it would shift and pills would paint the wrong
+  characters. Non-text inline nodes contribute one mask character per
+  position, which is also correct — a line break must terminate a tag.
+  **A `hardBreak` itself contributes `'\n'`, not the mask character** — an
+  earlier draft of the plan masked it, and that was wrong: a hard break
+  genuinely is a line break, so serializing the paragraph makes `parseTags`
+  find the same tag `maskedBlockText` must also see. A newline is whitespace,
+  so it both terminates a tag and permits one to start — the opposite of what
+  the mask character is for — but it is still exactly one character, so the
+  one-character-per-position invariant survives. **A known limit, accepted,
+  not fixed:** a paragraph containing both a fence marker and a hard break
+  suppresses the pill while `parseTags` still yields the tag — the tag works,
+  only the pill is missing, the same shape as the mark-boundary limit below.
+- **`maskedBlockText` masks the FIRST character of every marked text run, and
+  `code` whole.** All six marks in this schema — `bold`, `italic`, `strike`,
+  `highlight`, `link`, `code` — serialize with an opening delimiter (`**`,
+  `*`, `~~`, `==`, `[`, `` ` ``), verified against the real serializer. So the
+  first character of a marked run is preceded by `*`, `~`, `=`, `[` or a
+  backtick in the Markdown, never by whitespace, and `parseTags` refuses to
+  start a tag there. The document contains no such character, so without this
+  the plugin accepted `**#bravo**` as the tag `bravo` while the index —
+  correctly — held nothing. **That is a pill asserting something false about
+  the user's data**: the user bolds a tag to emphasise it, the pill stays, and
+  the tag silently vanishes from the sidebar, its counts and tag filtering.
+  Strictly worse than a missing pill, and the inverse of the fail-safe
+  direction the spec's known limit assumed. Masking the run WHOLE was rejected:
+  `**see #work here**` puts the `#` after a space, a tag really is there, and
+  removing the pill trades one disagreement for another. One character also
+  keeps the one-character-per-position invariant, and an astral first character
+  is replaced code-unit-for-code-unit rather than by a single mask.
+- **The pill set and the tag index are asserted EQUAL, over a corpus, as one
+  property — `tagAgreement.test.ts`.** That the two agree is the milestone's
+  central claim, and until M7.6's Task 6 nothing anywhere compared them: each
+  side was tested against its own expectations, which is how the `**#bravo**`
+  defect survived five task reviews and a whole-branch review. Both halves come
+  from the real pipeline — decorations read back through
+  `doc.textBetween`, and `parseTags` over `serializeMarkdown(editor.getJSON())`,
+  exactly what `RichEditor.getMarkdown` produces. **Any new construct, mark or
+  masking rule belongs in that corpus**, the same way a new Markdown construct
+  needs entries in both the fidelity and stability suites.
+- **A known limit, accepted and NOT fully fail-safe: a mark delimiter landing
+  inside or immediately after a tag's own characters.** `*`, `~` and `=` are
+  not tag boundaries, so `parseTags` reading `**see #work**` yields the tag
+  `work**`, while the pill covers `#work` — **a pill of the wrong extent, not
+  merely a missing one.** The spec (design doc line 81) describes the residue
+  as fail-safe; after Task 6 that is only partly true, and this bullet is the
+  correction. Same shape for `*…*`, `~~…~~`, `==…==`, for `#work**bold**`
+  (indexes as `work**bold**`), and for a tag continuing into a mark —
+  `x #wo**rk** y` pills `#wo` and indexes `wo**rk**`. **The `link` case is
+  worse and is ONE of two surviving lying-pill classes** (the other is the
+  whitespace hoist in the next bullet): `[see #work](https://e.com)` indexes
+  NOTHING, because `](https://…)` puts an empty `/`-segment in the name and
+  `normalizeTag` rejects the whole candidate — so the pill is there and the
+  tag is not. No editor-side masking can close any of this: agreement would
+  need the pill to cover characters the document does not contain, and the
+  cause is a pre-existing parser/serializer interaction that predates pills and
+  is visible in the sidebar with or without them. Closing it means changing
+  `parseTags`' grammar, which reorganises every existing user's sidebar.
+  A code span is the control that proves the diagnosis: backticks ARE masked on
+  both sides, so a tag continuing into an inline code span agrees exactly. All
+  of it is pinned with its real values in `tagAgreement.test.ts`'s `RESIDUAL`
+  block.
+- **The second lying-pill class: a mark applied over a run's own LEADING
+  WHITESPACE, which the serializer hoists outside the delimiter.** This is why
+  `maskedBlockText`'s docblock says a marked run's first character is only
+  _usually_ delimiter-adjacent — as an absolute the claim is false. Measured:
+  bold over `'  #work'` between `pre` and `post` serializes to
+  `pre  **#work**post`, so the space moved OUT of the delimiter; the pill
+  covers `#workpost` and the index holds nothing. Identical for `italic`
+  (`pre  *#work*post`), `strike` (`pre  ~~#work~~post`), `highlight`
+  (`pre  ==#work==post`) and `link` (`pre  [#work](https://e.com)post`).
+  `'   #work '` gives `pre   **#work** post`, pill `work`, index none; a run of
+  `'  #work'` alone in a block gives `  **#work**`, same. **The precondition is
+  two or more leading whitespace characters** — with exactly one space, or one
+  tab, the first-character mask covers it and the two views agree, and `code`
+  is masked whole so it agrees too. Pre-existing (it lied before the
+  first-character masking as well) and unreachable from Markdown: only applying
+  a mark over leading whitespace in the UI produces it, which is why no
+  Markdown-sourced corpus entry could catch it and why its fixtures in
+  `tagAgreement.test.ts` are built node-wise.
+- **The spec's own account of its known limit is wrong, and the corpus pins the
+  truth instead.** Design doc line 81 says a tag split across a mark boundary
+  (`#wo` bold, `rk` plain) still indexes and only loses its pill. It does not:
+  `**#wo**rk` puts `**` before the `#`, so `parseTags` rejects it too and the
+  two views agree. Do not restore the spec's wording from prose.
+- **The pill lifts while the cursor is inside its tag.** Without it, typing
+  `#w`, `#wo`, `#wor` re-pills on every keystroke and character widths jump
+  under the cursor. Intersection, not containment: a caret at either edge
+  counts as inside.
+- **The `#` stays visible inside the pill.** This app does not hide Markdown
+  syntax, and the hash is the only thing distinguishing a tag from the heading
+  that `# ` — one space different — produces.
+- **`--bear-tag-fill` is a separate token from `--bear-selected`, and the two
+  deliberately diverge in Paper only.** Same hue, different alpha: Paper's
+  `selected` at 0.11 is right for a selected row — a whole band that only has
+  to read as present — and too weak for a pill, which is a few characters of
+  inline text and has to read as a discrete chip. At 0.11 the pill read as a
+  highlighted word. Paper is 0.16; Ink's 0.18 was already comfortable, so the
+  two tokens coincide there. Like every token it must appear in all three
+  blocks — `:root`, `:root[data-theme='dark']`, and the
+  `prefers-color-scheme` block — which `scripts/sourceLint.test.ts` asserts
+  value-for-value across the two dark ones.
+- **The pill's horizontal padding is asymmetric, and that is not a typo.**
+  `0.05em 0.15em 0.05em 0.25em`. Equal padding pushed a following comma or
+  full stop visibly away from the word it belongs to — `#friday ,` — because
+  a tag ends at punctuation far more often than it begins after it. The
+  leading side keeps its full inset so the `#` reads as part of the chip.
+  A negative inline margin was considered and rejected: it hides the gap by
+  letting the pill overlap its neighbouring characters.
+- **The NUL-byte hazard is worse than the mask-character rule above states,
+  and writing the escape sequence is not sufficient by itself.** Writing
+  `\u0000` through a file-writing tool's JSON string parameter silently
+  produces a REAL NUL byte on disk anyway, because the JSON layer interprets
+  the escape before the bytes reach the filesystem — this happened twice
+  during M7.6's Task 2 alone, four times across this project. The rule is not
+  "write the escape sequence", it is "write it, then verify the bytes". The
+  scan must be scoped to tracked files: `.rglob('*')` over the repo root also
+  walks `node_modules`, `dist` and Playwright artifacts, which are full of
+  binary NUL bytes and drown the one hit that matters under a thousand that
+  don't.
+  ```
+  git ls-files -z | python3 -c "import sys,pathlib; files=sys.stdin.buffer.read().split(b'\x00'); print([f.decode() for f in files if f and b'\x00' in pathlib.Path(f.decode()).read_bytes()] or 'none')"
+  ```
+  Run this before every commit that touches tag-grammar prose or code.
 
 ## Carried into M5b and M6
 
@@ -776,11 +927,17 @@ the M5.5 progress ledger, gitignored and not carried forward — the items below
 are what survived out of it. Fold these into the next plan rather than
 rediscovering them.
 
-- **The tag pill mark and rename/delete are M5b.** M5 shipped the parser, the
-  index, the tree, the sidebar, and seeded creation; it never made `#tag` its
-  own inline mark, never let a tag be renamed or deleted in bulk, and never
-  added syntax-visibility toggling. Not a defect — the M4/M5 specs scope this
-  out deliberately.
+- **Clicking a tag pill to filter by that tag is M7.7, and explicitly wanted.**
+  It is not merely unimplemented: the editor plugin would need to know the
+  app's scope state, and the boundary that the editor knows only about its own
+  document has been kept clean through M7.6. How to cross it — a callback
+  threaded through `RichEditor`, a context, or an event the shell listens
+  for — is that milestone's real design problem. Tag rename and delete are
+  still carried from M5b and unscheduled. So is syntax-visibility toggling —
+  M5's original three-item list named it alongside the inline mark and
+  rename/delete; M7.6 ruled only on the inline mark (a decoration, not a
+  mark — see above), and the toggle itself remains unimplemented and
+  unscheduled.
 - **`usePaneWidths` writes `void settings.set(...)` with no flush**, so dragging
   a separator and reloading immediately can lose the width. Deferred because it
   costs a pane width rather than note content, and because `useAutosave` now has
