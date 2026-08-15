@@ -138,22 +138,43 @@ These bit us once already. They are not mistakes.
 
 ## Rules that must not be silently reversed
 
+Grouped by area. Every bullet below is a live constraint: an audit on
+2026-08-14 checked all 115 against the code and found none dead, false or
+duplicated. Roughly a third are enforced by no test at all — contrast
+ratios, "these tokens must stay independent", ordering guarantees — which
+is exactly why they are written down.
+
+- [Tag grammar](#tag-grammar)
+- [The tag index, persistence, and startup](#the-tag-index-persistence-and-startup)
+- [Notes: editing lifecycle, autosave, reconciliation](#notes-editing-lifecycle-autosave-reconciliation)
+- [Scopes, smart lists, and search](#scopes-smart-lists-and-search)
+- [Markdown round-trip and the editor schema](#markdown-round-trip-and-the-editor-schema)
+- [Tag pills and activation](#tag-pills-and-activation)
+- [Design tokens, theme, and layout](#design-tokens-theme-and-layout)
+- [Accessibility](#accessibility)
+- [Testing and tooling conventions](#testing-and-tooling-conventions)
+
+### Tag grammar
+
 - **Tags are keyed lowercase, and that is what makes `rebuildTagIndex`
   deterministic.** `#Work` and `#work` are one tag. Bear preserves first-seen
   casing instead; that was rejected because "first" is undefined during a
   rebuild — note iteration order would decide display casing, so dropping and
   rebuilding the index could change it. The parent spec's rule that a rebuild
   is always safe depends on this.
+
 - **A tag may only start at a `#` preceded by start-of-line or whitespace.**
   This single precondition is why `parseTags` needs no URL, link-destination or
   HTML-attribute detection: `https://x/#a`, `[x](#a)` and `<div id="#x">` are
   all excluded by the preceding character alone. Removing it means adding all
   three.
+
 - **Content beginning with `.,;:!?` is rejected whole, not trimmed** —
   otherwise a shebang in an unmasked indented code block becomes a tag named
   `bin/sh`. A leading slash is rejected by the empty-segment rule instead:
   `#/bin/sh` splits on `/` and produces an empty first segment. The set is
   deliberately narrow: `#-lead` is a legitimate tag.
+
 - **The mask character is `\u0000`, deliberately not a space.** Masked code
   must terminate a tag without permitting one to start — with a space,
   `` `x`#work `` becomes a tag. `src/data/tags/parseTags.test.ts` pins this.
@@ -161,6 +182,7 @@ These bit us once already. They are not mistakes.
   pasted or typed as a literal NUL byte — a raw NUL byte looks identical to
   the escape sequence in most editors, but `grep` and `diff` both silently
   mangle it. This milestone hit that twice.
+
 - **A tag's closing `#` must be followed by a boundary and preceded by a
   non-whitespace character.** The multi-word form originally required only that
   the character after the closer be a boundary; a lone `#` later on the same
@@ -170,15 +192,36 @@ These bit us once already. They are not mistakes.
   of `bug`, silently destroying the user's actual tag. Fixed by also
   requiring the character before the closing `#` to be non-whitespace,
   symmetric with the existing rule.
+
 - **Indented code blocks and raw HTML blocks are deliberately unmasked.**
   `#define FOO` inside indented C yields one junk tag. That is the accepted
   price of not hand-rolling CommonMark's list-aware indentation rules; the
   obvious cases (`# comment`, `#!/bin/sh`) reject on the grammar alone. Do not
   "fix" this with more masking.
+
 - **Fenced-code recognition needs tail assertions on the fence regex.**
   Without them, `'```code``` is inline'` opens a fence that never closes,
   silently deleting every tag in the rest of the note; and a closer carrying an
   info string inverts fence state, inventing tags from inside code blocks.
+
+- **The NUL-byte hazard is worse than the mask-character rule above states,
+  and writing the escape sequence is not sufficient by itself.** Writing
+  `\u0000` through a file-writing tool's JSON string parameter silently
+  produces a REAL NUL byte on disk anyway, because the JSON layer interprets
+  the escape before the bytes reach the filesystem — this happened twice
+  during M7.6's Task 2 alone, four times across this project. The rule is not
+  "write the escape sequence", it is "write it, then verify the bytes". The
+  scan must be scoped to tracked files: `.rglob('*')` over the repo root also
+  walks `node_modules`, `dist` and Playwright artifacts, which are full of
+  binary NUL bytes and drown the one hit that matters under a thousand that
+  don't.
+  ```
+  git ls-files -z | python3 -c "import sys,pathlib; files=sys.stdin.buffer.read().split(b'\x00'); print([f.decode() for f in files if f and b'\x00' in pathlib.Path(f.decode()).read_bytes()] or 'none')"
+  ```
+  Run this before every commit that touches tag-grammar prose or code.
+
+### The tag index, persistence, and startup
+
 - **The tag-index rebuild is a settings marker, never a Dexie `upgrade()`
   hook.** A throw inside a versioning transaction means the database never
   opens — the app is bricked with the user's notes on disk and unreachable.
@@ -187,6 +230,7 @@ These bit us once already. They are not mistakes.
   that includes a caller-supplied `onError` that itself throws, which is
   guarded separately — and `TAG_INDEX_VERSION` is bumped whenever the parser's
   output changes.
+
 - **`persistStorage` checks `persisted()` before it ever calls `persist()`, and
   only asks once the database already holds a note.** The order is the whole
   design. `persisted()` only reads state; `persist()` raises a permission
@@ -199,37 +243,46 @@ These bit us once already. They are not mistakes.
   this by requesting at boot unconditionally. Like `runMigrations`, it never
   rejects, is feature-detected rather than assumed (`navigator.storage` is
   absent in older Safari and some webviews), and guards its own `onError`.
+
 - **`importDatabase` ignores the bundle's `noteTags` rows and rebuilds**, via an
   injected callback. The index is derived; trusting a file's copy contradicts
   that, and it is what made a pre-M5 backup restore an empty index. `backup.ts`
   still has no tag parser and must not acquire one.
-- **`NoteScope` is an object union, so every `useLiveQuery` keyed on it uses
-  `scopeKey`, never the object.** An object literal has a fresh identity every
-  render; passing it as a dependency is an unbounded refetch loop. `ACTIVE_SCOPE`
-  and `TRASHED_SCOPE` are module constants for the same reason. The only call
-  site that can falsify this is `useNotes.test.tsx`'s refetch test, which needs
-  an explicit effect flush to observe anything.
-- **Widening a two-armed union to three is not a safe default when logic is
-  gated with `===`.** `NoteScope` grew a `tag` arm; `NoteList`'s Trash button
-  stayed gated on `scope.kind === 'active'`, which was total over the old two
-  scopes and silently became partial — a tag scope rendered neither Trash nor
-  Restore, so a note filtered to `#work` had no delete affordance at all, and
-  no test covered the missing third arm. Gate the total case (`!== 'trashed'`)
-  rather than enumerating the arms that should pass, and add a test for the
-  new arm whenever a union grows.
-- **A tag filter never deselects the open note.** `useNotes` reconciles on
-  trash state alone. Deselecting on tag membership would pull the editor out
-  from under someone deleting a hashtag — or merely typing `#wo` on the way to
-  `#work`.
-- **The vanished-tag fallback must not fire while the tag tree is loading.**
-  `useTagTree` returns `undefined` before its live query resolves, and
-  `AppShell`'s effect returns early on it. Treating `undefined` as "no tags"
-  ejects the user from their own filter on every unrelated edit. **This loading
-  guard is currently unreachable in the shipped app** — `scope` starts at
-  `ACTIVE_SCOPE` and is not persisted, so nothing selects a tag before the tree
-  has resolved once. It is kept as defence in depth against a future persisted
-  scope, not because it is load-bearing today; it has no falsifying app-level
-  test.
+
+- **IndexedDB cannot index booleans or nulls.** `pinned` is unindexed and filtered
+  in memory — a `.where('pinned')` query throws at runtime, not compile time. The
+  `trashedAt` index contains _only_ trashed notes, because IndexedDB omits
+  null-valued records; that is why `.aboveOrEqual(0)` is the correct idiom.
+
+- **The `noteTags` index reflects active notes only**, consistently across `trash`,
+  `restore`, and `rebuildTagIndex`. Dropping the table and rebuilding from
+  `notes.text` must always be safe.
+
+- **Import is replace-only**, and validates fully before clearing anything, so a
+  rejected import cannot destroy existing data.
+
+- **The startup sweep's three content gates are load-bearing but not
+  sufficient — a fourth, `createdBefore`, closes a real race.**
+  `createdAt === updatedAt` makes a note the user has typed into unreachable
+  even if the emptiness check is wrong — the M4 shape where a truncation
+  reached `notes.purge`. But the sweep is unawaited and runs after React has
+  already mounted and made the app interactive, so a note created in that
+  window (widened to seconds by a tag-index rebuild) has empty text, no
+  `trashedAt`, and `createdAt === updatedAt` — it passes all three content
+  gates legitimately, and the sweep would purge work in progress out from
+  under a pending autosave. `SweepDeps.createdBefore` is captured at module
+  scope in `main.tsx` before anything else can run, and the sweep skips any
+  note whose `createdAt` is at or after it. Like `runMigrations` and
+  `persistStorage`, the sweep never rejects, including when `onError` throws;
+  a single note's purge throwing is now also caught per-note so it neither
+  aborts the rest of the sweep nor gets silently counted as succeeding.
+
+- **The sweep runs after the tag-index rebuild resolves, not concurrently.**
+  Both write inside transactions over `notes`; sequencing removes the question
+  of what a rebuild sees mid-purge.
+
+### Notes: editing lifecycle, autosave, reconciliation
+
 - **`NoteEditor`'s `seedText` is scoped to the just-created note, and `AppShell`
   must clear it when the selection leaves that note.** A note created inside a
   tag scope is seeded with that tag, so it is not empty and the blank-note
@@ -239,37 +292,32 @@ These bit us once already. They are not mistakes.
   tag-only deletion the spec rejected. Widening `isEmpty` to "contains only
   tags" was also rejected — it would delete a note the user deliberately filled
   with nothing but tags.
+
 - **`deriveTitle` is deliberately not idempotent.** `'# # nested'` yields
   `'# nested'`, which is that heading's true Markdown content. Stripping twice would
   delete a character the user typed.
-- **IndexedDB cannot index booleans or nulls.** `pinned` is unindexed and filtered
-  in memory — a `.where('pinned')` query throws at runtime, not compile time. The
-  `trashedAt` index contains _only_ trashed notes, because IndexedDB omits
-  null-valued records; that is why `.aboveOrEqual(0)` is the correct idiom.
-- **The `noteTags` index reflects active notes only**, consistently across `trash`,
-  `restore`, and `rebuildTagIndex`. Dropping the table and rebuilding from
-  `notes.text` must always be safe.
-- **Import is replace-only**, and validates fully before clearing anything, so a
-  rejected import cannot destroy existing data.
-- **M8 owns theme switching.** M2 only set the system default via a
-  `prefers-color-scheme` media query. An explicit `data-theme` on the root overrides
-  it — that is the seam the picker will use. Do not simplify the
-  `:root:not([data-theme='light'])` selector.
-- Pane widths are **durable** (settings table), not Zustand state. Zustand is
-  reserved for genuinely ephemeral state and has not been added yet.
+
 - **`NoteEditor` must be rendered with `key={note.id}`.** The remount is what
   makes an editor instance know exactly one note for its lifetime, so its
   unmount cleanup is a correct flush-on-switch. Removing the key reintroduces
-  the entire class of "wrote note A's text over note B" bugs.
+  the entire class of "wrote note A's text over note B" bugs. **No test
+  enforces this** — removing the key leaves the whole suite green, because
+  `useNotes` routes every selection change through a transient `undefined`
+  that remounts `NoteEditor` anyway. See the fuller account under "Carried
+  into M5b and M6"; read the two together, because this bullet alone reads as
+  if the suite has your back and it does not.
+
 - **`useNotes` reconciles against the database, not the note list.** The list
   lags a creation by one tick, so reconciling against it deselects every note
   the instant it is created. The `{ note }` wrapper on the probe query exists
   to distinguish "still loading" from "loaded, and it is gone".
+
 - **`useAutosave` claims a sequence token per flush.** Overlapping saves are
   real: type, pause past the debounce, keep typing. Only the latest claim may
   mutate `savedRef` or `failed`. Comparing text instead is NOT sound — after a
   rollback, `savedRef.current` can coincidentally equal an older save's own
   pending text, so a value guard passes for a superseded write.
+
 - **`useLiveQuery` returns the _previous_ deps' value for one tick after the
   deps change — never `undefined`.** `dexie-react-hooks`' `useObservable` keeps
   one `monitor` ref across dependency-array changes and only takes a
@@ -302,50 +350,7 @@ These bit us once already. They are not mistakes.
   the same
   thing: a wrong, empty, or stale note list or editor for a frame after
   switching scopes or notes.
-- **`markdown.ts` is the only importer of `@tiptap/markdown`.** The round-trip
-  suite drives `MarkdownManager` standalone, with no `Editor` and no DOM, which
-  is what lets it be exhaustive and fast. Importing the package elsewhere
-  couples serialization to a mounted editor and puts the suite behind jsdom's
-  contenteditable limitations. **This is convention enforced by nothing** — there
-  is no lint rule, and oxlint has no import-restriction equivalent configured.
-  A second importer would simply work. `characterization.test.ts` is a deliberate
-  exception: it describes the dependency itself.
-- **The round-trip suite asserts three properties, not one.** Fidelity pins what
-  each construct must produce; stability proves normalization settles;
-  preservation proves unsupported constructs survive. Idempotence alone —
-  the parent spec's original wording — is satisfied by a serializer that
-  discards every note, so dropping the fidelity suite silently guts the others.
-  **These three properties are not interchangeable, and fidelity is the
-  load-bearing one.** Fidelity pins exactly one string per construct; stability
-  only covers its listed inputs. A defect that is a no-op on the pinned string
-  and corrupts every other instance of that construct passed the entire suite
-  until stability coverage was extended. Any new construct needs entries in
-  **both**.
-- **A known, irreducible limit of the round-trip suite:** any serializer defect
-  whose output is _itself valid Markdown for the same construct_ — so
-  reparsing reproduces it exactly — corrupts every input except the one pinned
-  fidelity string, and no amount of stability coverage catches it. Closing that
-  needs semantic-equivalence checks or property-based fuzzing, not more cases.
-  Do not attempt to fix it with more test cases.
-- **Known stable-but-lossy transformations. These are instances of the limit
-  above, not new bugs — do not "fix" them.** Each one round-trips to a fixed
-  point, so the suite is green, and each one is a legitimate reading of the
-  source by CommonMark's rules; only a semantic-equivalence check could tell
-  them apart from correct output. Found by the M4 final review:
-  `&copy;` → `&amp;copy;`, `a < b` → `a &lt; b`, `my_var_name` →
-  `my\_var\_name`, autolinks and reference links rewritten to inline form,
-  YAML front matter mangled, and whitespace-only notes normalizing to empty
-  (they are no longer purged for it — see the `discard` guard above).
-- **A dead custom tokenizer is invisible to round-trip tests.** Inert
-  `==text==` serializes byte-identically to a working highlight. Constructs
-  whose tokenizer is ours need **structural** assertions on the parsed
-  document, not just round-trip assertions.
-- **`RawBlock` is why deferring tables and images is safe.** A note containing a
-  table already exists in real databases, written in M3's textarea or restored
-  from a JSON import. Without the verbatim fallback, opening one and typing
-  destroys it with no error and no recovery. Do not remove it when M4b adds real
-  table and image nodes — it still covers every other construct `marked` can
-  tokenize.
+
 - **`NoteEditor` seeds autosave from the MOUNTED EDITOR's own reading, never
   from `note.text`.** Seeded from the raw text, every non-canonical note differs
   from its own serialization the instant it opens, so merely looking at a note
@@ -362,6 +367,7 @@ These bit us once already. They are not mistakes.
   two components no longer have to match for the rule to hold. React runs a
   child's effects before its parent's, which is what makes reading `handleRef`
   in `NoteEditor`'s mount effect safe.
+
 - **The manager and the mounted schema must be asserted to AGREE, through the
   real component.** Every serializer test drives `MarkdownManager` standalone,
   and `NoteEditor`'s correctness depends on exactly the agreement none of them
@@ -378,11 +384,205 @@ These bit us once already. They are not mistakes.
   unacceptable. The
   `manager/schema agreement` suite in `NoteEditor.test.tsx` drives the real
   component and is where a new degenerate input belongs.
+
 - **`useAutosave` rolls back to confirmed-persisted text.** `persistedRef`
   advances only when a save RESOLVES; the failure branch restores the dedupe
   baseline to it. Rolling back to the optimistic marker instead reintroduces the
   M3 defect where a buffer that coincidentally re-equals a never-written value
   skips a needed save. The sequence token is separate and still required.
+
+- **Delete always trashes, blank or not.** The blank-note purge was emergent —
+  trash, unmount, discard — so one button meant two irreversibilities
+  depending on invisible state. `NoteEditor`'s `discard` now refuses to purge
+  an already-trashed note. The reclaim path for a blank note the user
+  navigates away from is unchanged.
+
+### Scopes, smart lists, and search
+
+- **`NoteScope` is an object union, so every `useLiveQuery` keyed on it uses
+  `scopeKey`, never the object.** An object literal has a fresh identity every
+  render; passing it as a dependency is an unbounded refetch loop. `ACTIVE_SCOPE`
+  and `TRASHED_SCOPE` are module constants for the same reason. The only call
+  site that can falsify this is `useNotes.test.tsx`'s refetch test, which needs
+  an explicit effect flush to observe anything.
+
+- **Widening a two-armed union to three is not a safe default when logic is
+  gated with `===`.** `NoteScope` grew a `tag` arm; `NoteList`'s Trash button
+  stayed gated on `scope.kind === 'active'`, which was total over the old two
+  scopes and silently became partial — a tag scope rendered neither Trash nor
+  Restore, so a note filtered to `#work` had no delete affordance at all, and
+  no test covered the missing third arm. Gate the total case (`!== 'trashed'`)
+  rather than enumerating the arms that should pass, and add a test for the
+  new arm whenever a union grows.
+
+- **A tag filter never deselects the open note.** `useNotes` reconciles on
+  trash state alone. Deselecting on tag membership would pull the editor out
+  from under someone deleting a hashtag — or merely typing `#wo` on the way to
+  `#work`.
+
+- **The vanished-tag fallback must not fire while the tag tree is loading.**
+  `useTagTree` returns `undefined` before its live query resolves, and
+  `AppShell`'s effect returns early on it. Treating `undefined` as "no tags"
+  ejects the user from their own filter on every unrelated edit. **This loading
+  guard is currently unreachable in the shipped app** — `scope` starts at
+  `ACTIVE_SCOPE` and is not persisted, so nothing selects a tag before the tree
+  has resolved once. It is kept as defence in depth against a future persisted
+  scope, not because it is load-bearing today; it has no falsifying app-level
+  test.
+
+- **`NoteScope` has two arms permanently, and every behavioural question is a
+  named capability function.** Adding a smart list is a row in
+  `SMART_LIST_IDS`, never a union arm and never a `scope.kind` comparison at a
+  call site. `scope.test.ts` asserts capabilities exhaustively over
+  `SmartListId`, so a new list without a ruling fails the suite. This is the
+  defence against the M5 defect where a widened union silently removed the
+  delete affordance from tag scopes.
+
+- **The Todo predicate's test fixture is derived from `MarkdownManager`, never
+  hand-written.** The parent spec writes it as "contains an unchecked `- [ ]`",
+  which is an assumption about our own output. Our serializer emits `- [ ]`
+  and normalizes `* [ ]` to it, but that is a fact about the serializer, not a
+  licence to hardcode it.
+
+- **`UNCHECKED_TASK` must not carry the `g` flag.** A global regex keeps
+  `lastIndex` between `.test()` calls, so a module-level constant reused per
+  note alternates true and false on identical input and drops roughly half the
+  matching notes.
+
+- **`UNCHECKED_TASK` matches `-`, `*` and `+` bullets** because `importDatabase`
+  accepts arbitrary Markdown and a note is only canonical once it has been
+  through the editor. A checkbox the user can see must not be invisible until
+  they open the note.
+
+- **A task inside a fenced code block counts as a todo.** Accepted: masking
+  code spans lives in `parseTags` in the data layer, and duplicating it for one
+  smart list is not worth a second copy.
+
+- **Only `untagged` reads the tag index in `listForScope`.** `allTagRows` is a
+  full table scan; paying for it on every scope switch would double the work
+  for six of the seven builtins.
+
+- **All seven sidebar counts come from one live query.** Seven independent
+  queries would let rows land in seven different frames — the mechanism behind
+  M5's collapsed-tag flash — and would let untagged plus tagged disagree with
+  all. Its deps are constant `[]`, so the tag-and-verify pattern deliberately
+  does not apply. **This property is documented but not enforced.** Splitting
+  `useSmartListCounts` into two `useLiveQuery` calls leaves every test green —
+  jsdom resolves fast enough that the race never surfaces. Catching a
+  regression would need injected staggered resolution: mock `notes.listActive`
+  and `notes.allTagRows` with different delays and assert the hook never
+  renders a transient state where untagged plus tagged disagrees with all.
+  Same mechanism as M5's collapsed-tag flash, so it is a real property, just
+  an expensive one to pin.
+
+- **`useSmartListCounts` returns `undefined` while loading, never a
+  zero-filled object.** Zeros render as "empty" rather than "not known yet".
+
+- **Pinned notes sort first in every list except Trash.** Trash is ordered by
+  deletion time; a pinned note deleted earlier is not more important than one
+  deleted later. `pinned` stays unindexed — IndexedDB rejects boolean keys.
+
+- **`ConfirmDialog` focuses Cancel on open.** These guard irreversible deletion
+  with no server copy, and an Enter keypress already in flight must not
+  destroy anything. `window.confirm` was rejected: it ignores the theme, and
+  some embedded contexts suppress it silently, turning a guarded delete into
+  an unguarded one. **The focus trap queries `'button'` specifically, which is
+  a gap, not a guarantee.** Any future non-button focusable inside the dialog —
+  a link, an input — is invisible to both the initial-focus effect and the
+  Tab-wrap arithmetic, so it would be skipped by the trap rather than held at
+  its edge. Harmless today with exactly two buttons; widen to a standard
+  focusable selector the moment a third element is added.
+
+- **Today does not roll over at midnight.** A note edited at 23:59 stays in
+  Today until something else re-runs the query. A timer whose only job is to
+  move one row is not worth a live subscription.
+
+- **Search is a filter over the list a scope produced, never a `NoteScope`
+  arm and never inside a `useLiveQuery`.** Two properties depend on the
+  placement. A third arm would reopen the M5 defect where a widened union
+  silently made every `===` gate partial. And putting `query` in a
+  `useLiveQuery` dependency array would hand search the documented
+  previous-deps-for-one-tick behaviour, rendering the previous query's
+  results for a frame on every keystroke. `AppShell` applies
+  `filterByQuery` to `useNotes`' output, and `useNotes` is untouched.
+
+- **`findMatchRanges` returns indices into `text.normalize('NFC')`, not into
+  `text`.** NFC changes string length, so Hangul offsets computed on one form
+  do not address the other; `HighlightedText` renders the normalized string
+  for exactly this reason. It also returns `[]` rather than shifted ranges
+  when `.toLowerCase()` changes length (`'İ'` folds to two code units) —
+  losing a highlight is acceptable, marking the wrong characters is not.
+  Matching uses `indexOf`, not `RegExp`, so metacharacters are literal with
+  no escaping step to get wrong.
+
+- **Creating a note clears the query.** A new note is empty and matches no
+  non-empty query, so it would be created invisible — the same defect
+  `acceptsNewNote` solves for scopes, with the same resolution. Switching
+  scope deliberately does NOT clear it, which is why the no-results empty
+  state has its own copy naming the query as the cause.
+
+- **A query never deselects the open note**, for the same reason a tag filter
+  never does: the filter runs outside `useNotes`, which still reconciles on
+  trash state alone.
+
+- **`NoteList` takes an explicit `emptyTrashDisabled` prop, supplied from the
+  UNFILTERED note list.** Gating "Empty trash" on the filtered list meant a
+  fruitless search while viewing Trash disabled emptying a full trash — the
+  button read "disabled" for a reason that had nothing to do with whether
+  Trash actually had anything in it.
+
+### Markdown round-trip and the editor schema
+
+- **`markdown.ts` is the only importer of `@tiptap/markdown`.** The round-trip
+  suite drives `MarkdownManager` standalone, with no `Editor` and no DOM, which
+  is what lets it be exhaustive and fast. Importing the package elsewhere
+  couples serialization to a mounted editor and puts the suite behind jsdom's
+  contenteditable limitations. **This is convention enforced by nothing** — there
+  is no lint rule, and oxlint has no import-restriction equivalent configured.
+  A second importer would simply work. `characterization.test.ts` is a deliberate
+  exception: it describes the dependency itself.
+
+- **The round-trip suite asserts three properties, not one.** Fidelity pins what
+  each construct must produce; stability proves normalization settles;
+  preservation proves unsupported constructs survive. Idempotence alone —
+  the parent spec's original wording — is satisfied by a serializer that
+  discards every note, so dropping the fidelity suite silently guts the others.
+  **These three properties are not interchangeable, and fidelity is the
+  load-bearing one.** Fidelity pins exactly one string per construct; stability
+  only covers its listed inputs. A defect that is a no-op on the pinned string
+  and corrupts every other instance of that construct passed the entire suite
+  until stability coverage was extended. Any new construct needs entries in
+  **both**.
+
+- **A known, irreducible limit of the round-trip suite:** any serializer defect
+  whose output is _itself valid Markdown for the same construct_ — so
+  reparsing reproduces it exactly — corrupts every input except the one pinned
+  fidelity string, and no amount of stability coverage catches it. Closing that
+  needs semantic-equivalence checks or property-based fuzzing, not more cases.
+  Do not attempt to fix it with more test cases.
+
+- **Known stable-but-lossy transformations. These are instances of the limit
+  above, not new bugs — do not "fix" them.** Each one round-trips to a fixed
+  point, so the suite is green, and each one is a legitimate reading of the
+  source by CommonMark's rules; only a semantic-equivalence check could tell
+  them apart from correct output. Found by the M4 final review:
+  `&copy;` → `&amp;copy;`, `a < b` → `a &lt; b`, `my_var_name` →
+  `my\_var\_name`, autolinks and reference links rewritten to inline form,
+  YAML front matter mangled, and whitespace-only notes normalizing to empty
+  (they are no longer purged for it — see the `discard` guard above).
+
+- **A dead custom tokenizer is invisible to round-trip tests.** Inert
+  `==text==` serializes byte-identically to a working highlight. Constructs
+  whose tokenizer is ours need **structural** assertions on the parsed
+  document, not just round-trip assertions.
+
+- **`RawBlock` is why deferring tables and images is safe.** A note containing a
+  table already exists in real databases, written in M3's textarea or restored
+  from a JSON import. Without the verbatim fallback, opening one and typing
+  destroys it with no error and no recovery. Do not remove it when M4b adds real
+  table and image nodes — it still covers every other construct `marked` can
+  tokenize.
+
 - **Underline is switched off at the schema, in
   `StarterKit.configure({ underline: false })`, and must stay off.** It has no
   Markdown representation; `_underline_` collides with CommonMark italic, and
@@ -399,6 +599,7 @@ These bit us once already. They are not mistakes.
   mark, the command, the `Mod-U` binding and `<u>` preservation. Any future
   "not supported" ruling about a StarterKit-bundled extension needs the same
   treatment: assert on `getSchema(editorExtensions)`, never on the UI.
+
 - **`AllSelection` must be pinned to a `TextSelection` before any block-level
   toolbar command.** ProseMirror's `AllSelection` (what
   `editor.commands.selectAll()` and the real `Ctrl/Cmd+A` keyboard shortcut both
@@ -412,6 +613,370 @@ These bit us once already. They are not mistakes.
   `selectAll()` path and the real keyboard `Ctrl/Cmd+A` path — the two are
   driven by the identical `AllSelection` mechanism and the identical fix closes
   both.
+
+- **Before M7, typing `- [ ] milk` did not create a task item, and that was an
+  editor input-rule defect, not a Todo defect.** StarterKit's bullet-list input
+  rule fired on `- ` first and converted the block to a `listItem`; `TaskItem`'s
+  own `wrappingInputRule` could not then wrap a paragraph already inside a
+  `listItem`, leaving the user with a plain bullet and the literal text
+  `[ ] milk`, which never reached Todo's predicate. M6's Todo predicate,
+  registry, and counts were all verified correct — this was purely the
+  M4-era editor never having its own promotion rule for this keystroke. M7's
+  `TaskItemPromotion` (see the structural-assertion rule below) closed it; do
+  not "fix" a regression here by loosening the Todo predicate to match literal
+  `[ ] text` bullets — that was ruled out in M6 and stays ruled out.
+
+- **The bullet-to-task input rule needs a STRUCTURAL assertion, and that is
+  why the M4-era version of this bug hid.** A promoted task item and a
+  hand-authored one serialize to byte-identical Markdown, so every round-trip
+  suite passes whether or not `TaskItemPromotion` fires — the same blind spot
+  that let a dead `==highlight==` tokenizer and a live-but-banned underline
+  mark both ship. `taskItemPromotion.test.ts` asserts on the parsed document
+  and `e2e/notes.spec.ts` drives the real keystrokes. Do not "fix" a future
+  regression here by loosening the Todo predicate to match literal
+  `[ ] text` bullets; that was ruled out in M6.
+
+- **Promoting a bullet lifts it out of an enclosing blockquote, while
+  `TaskItem`'s own rule keeps the blockquote in the analogous case.** Accepted,
+  not endorsed — nothing is lost and the parent survives, which beats the
+  defect. Pinned by a PAIR of tests, one for each rule, so the divergence is
+  checked on every run rather than asserted in prose.
+
+- **A nested bullet promoted with `[ ] ` is lifted to the top level, losing
+  its indentation.** Accepted for the same reason as the blockquote case:
+  nothing is lost and it beats the defect. Pinned by a test.
+
+- **`1. [ ] milk` inside an ordered list does not promote**, because a
+  `taskItem` cannot live in an `orderedList`. Fail-safe — the user keeps a
+  plain ordered-list item rather than losing anything — and pinned by a test.
+
+- **`toggleTaskList()` DOES split a bullet list correctly when promoting a
+  single middle item** — the neighbours survive as plain bullets. This was an
+  open question in the M7 spec; the answer is recorded here so nobody
+  re-derives it by trial and error.
+
+- **Registration order does not decide which input rule wins FOR THIS PAIR —
+  that is not a general law.** `@tiptap/core`'s input-rules runner
+  (`InputRule.ts`) is `let matched = false; rules.forEach(rule => { if
+(matched) return; ...; if (handler === null || !tr.steps.length) return; ...
+matched = true })`: once any rule commits steps, `matched` is set and every
+  later rule in the array is skipped for that keystroke — order is load-bearing
+  in general. `TaskItemPromotion` and `TaskItem`'s own rule are the one pair
+  where order is provably immaterial, because they decline in exactly
+  complementary cases (one fires only inside an existing `listItem` in a
+  `bulletList`, the other only outside one), so at most one of them ever
+  commits steps for a given keystroke regardless of which is checked first.
+  Verified by moving `TaskItemPromotion` above `TaskList`/`TaskItem` and
+  watching every test in `taskItemPromotion.test.ts` stay green — that result
+  does not generalize to any other pair of rules. A rule "declines" by
+  returning `null` from its handler (the `handler === null` half of the guard
+  above); `TaskItemPromotion` uses that half. The `!tr.steps.length` half is a
+  separate guard for a handler that returns non-null but happens not to have
+  queued any steps — not the mechanism this rule relies on.
+
+### Tag pills and activation
+
+- **`parseTags` is the deduped name-only view of `findTagRanges`, and the tag
+  grammar exists in exactly one place.** The scanner always computed each
+  tag's start and end and threw them away; M7.6 stopped throwing them away
+  rather than writing a second parser for the editor, which would have been
+  two implementations of one grammar — this project's signature defect.
+  `parseTags` is now defined as
+  `[...new Set(findTagRanges(x).map(r => r.tag))]`, so the agreement describe
+  block in `parseTags.test.ts` is tautological while that one-line definition
+  holds — it asserts the exact same expression the implementation already is,
+  so it does not, by itself, prove the grammar's behaviour is preserved. What
+  it does do is act as a tripwire: the instant someone forks the two into
+  separate implementations, the tautology breaks and the test starts
+  asserting something real. Behaviour preservation of the grammar itself is
+  guarded separately, by every other describe block in `parseTags.test.ts` —
+  the corpus of cases that predates M7.6 and asserts `parseTags`' actual
+  output against expected tag lists.
+
+- **The tag pill is a ProseMirror DECORATION, never a mark.** The document is
+  untouched, so no schema, serializer or round-trip path is involved and a
+  pill can never survive into a note's Markdown. The cost is that **every
+  round-trip test in this project is blind to whether the plugin runs at
+  all** — the same blind spot that let a dead `==highlight==` tokenizer and a
+  live-but-banned underline mark ship in M4. `tagPill.test.ts` asserts on the
+  decoration set itself and is the only thing that can catch a dead plugin.
+
+- **`maskedBlockText` emits one character per document position, and the
+  plugin's position arithmetic depends on it.** `node.textContent` cannot be
+  used: a `hardBreak` contributes no characters but occupies a position, so
+  every offset after it would shift and pills would paint the wrong
+  characters. Non-text inline nodes contribute one mask character per
+  position, which is also correct — a line break must terminate a tag.
+  **A `hardBreak` itself contributes `'\n'`, not the mask character** — an
+  earlier draft of the plan masked it, and that was wrong: a hard break
+  genuinely is a line break, so serializing the paragraph makes `parseTags`
+  find the same tag `maskedBlockText` must also see. A newline is whitespace,
+  so it both terminates a tag and permits one to start — the opposite of what
+  the mask character is for — but it is still exactly one character, so the
+  one-character-per-position invariant survives. **A known limit, accepted,
+  not fixed:** a paragraph containing both a fence marker and a hard break
+  suppresses the pill while `parseTags` still yields the tag — the tag works,
+  only the pill is missing, the same shape as the mark-boundary limit below.
+
+- **`maskedBlockText` masks the FIRST character of every marked text run, and
+  `code` whole.** All six marks in this schema — `bold`, `italic`, `strike`,
+  `highlight`, `link`, `code` — serialize with an opening delimiter (`**`,
+  `*`, `~~`, `==`, `[`, `` ` ``), verified against the real serializer. So the
+  first character of a marked run is preceded by `*`, `~`, `=`, `[` or a
+  backtick in the Markdown, never by whitespace, and `parseTags` refuses to
+  start a tag there. The document contains no such character, so without this
+  the plugin accepted `**#bravo**` as the tag `bravo` while the index —
+  correctly — held nothing. **That is a pill asserting something false about
+  the user's data**: the user bolds a tag to emphasise it, the pill stays, and
+  the tag silently vanishes from the sidebar, its counts and tag filtering.
+  Strictly worse than a missing pill, and the inverse of the fail-safe
+  direction the spec's known limit assumed. Masking the run WHOLE was rejected:
+  `**see #work here**` puts the `#` after a space, a tag really is there, and
+  removing the pill trades one disagreement for another. One character also
+  keeps the one-character-per-position invariant, and an astral first character
+  is replaced code-unit-for-code-unit rather than by a single mask.
+
+- **The pill set and the tag index are asserted EQUAL, over a corpus, as one
+  property — `tagAgreement.test.ts`.** That the two agree is the milestone's
+  central claim, and until M7.6's Task 6 nothing anywhere compared them: each
+  side was tested against its own expectations, which is how the `**#bravo**`
+  defect survived five task reviews and a whole-branch review. Both halves come
+  from the real pipeline — decorations read back through
+  `doc.textBetween`, and `parseTags` over `serializeMarkdown(editor.getJSON())`,
+  exactly what `RichEditor.getMarkdown` produces. **Any new construct, mark or
+  masking rule belongs in that corpus**, the same way a new Markdown construct
+  needs entries in both the fidelity and stability suites.
+
+- **A known limit, accepted and NOT fully fail-safe: a mark delimiter landing
+  inside or immediately after a tag's own characters.** `*`, `~` and `=` are
+  not tag boundaries, so `parseTags` reading `**see #work**` yields the tag
+  `work**`, while the pill covers `#work` — **a pill of the wrong extent, not
+  merely a missing one.** The spec (design doc line 81) describes the residue
+  as fail-safe; after Task 6 that is only partly true, and this bullet is the
+  correction. Same shape for `*…*`, `~~…~~`, `==…==`, for `#work**bold**`
+  (indexes as `work**bold**`), and for a tag continuing into a mark —
+  `x #wo**rk** y` pills `#wo` and indexes `wo**rk**`. **The `link` case is
+  worse and is ONE of two surviving lying-pill classes** (the other is the
+  whitespace hoist in the next bullet): `[see #work](https://e.com)` indexes
+  NOTHING, because `](https://…)` puts an empty `/`-segment in the name and
+  `normalizeTag` rejects the whole candidate — so the pill is there and the
+  tag is not. No editor-side masking can close any of this: agreement would
+  need the pill to cover characters the document does not contain, and the
+  cause is a pre-existing parser/serializer interaction that predates pills and
+  is visible in the sidebar with or without them. Closing it means changing
+  `parseTags`' grammar, which reorganises every existing user's sidebar.
+  A code span is the control that proves the diagnosis: backticks ARE masked on
+  both sides, so a tag continuing into an inline code span agrees exactly. All
+  of it is pinned with its real values in `tagAgreement.test.ts`'s `RESIDUAL`
+  block.
+
+- **The second lying-pill class: a mark applied over a run's own LEADING
+  WHITESPACE, which the serializer hoists outside the delimiter.** This is why
+  `maskedBlockText`'s docblock says a marked run's first character is only
+  _usually_ delimiter-adjacent — as an absolute the claim is false. Measured:
+  bold over `'  #work'` between `pre` and `post` serializes to
+  `pre  **#work**post`, so the space moved OUT of the delimiter; the pill
+  covers `#workpost` and the index holds nothing. Identical for `italic`
+  (`pre  *#work*post`), `strike` (`pre  ~~#work~~post`), `highlight`
+  (`pre  ==#work==post`) and `link` (`pre  [#work](https://e.com)post`).
+  `'   #work '` gives `pre   **#work** post`, pill `work`, index none; a run of
+  `'  #work'` alone in a block gives `  **#work**`, same. **The precondition is
+  two or more leading whitespace characters** — with exactly one space, or one
+  tab, the first-character mask covers it and the two views agree, and `code`
+  is masked whole so it agrees too. Pre-existing (it lied before the
+  first-character masking as well) and unreachable from Markdown: only applying
+  a mark over leading whitespace in the UI produces it, which is why no
+  Markdown-sourced corpus entry could catch it and why its fixtures in
+  `tagAgreement.test.ts` are built node-wise.
+
+- **The spec's own account of its known limit is wrong, and the corpus pins the
+  truth instead.** Design doc line 81 says a tag split across a mark boundary
+  (`#wo` bold, `rk` plain) still indexes and only loses its pill. It does not:
+  `**#wo**rk` puts `**` before the `#`, so `parseTags` rejects it too and the
+  two views agree. Do not restore the spec's wording from prose.
+
+- **The pill lifts while the cursor is inside its tag.** Without it, typing
+  `#w`, `#wo`, `#wor` re-pills on every keystroke and character widths jump
+  under the cursor. Intersection, not containment: a caret at either edge
+  counts as inside.
+
+- **The `#` stays visible inside the pill.** This app does not hide Markdown
+  syntax, and the hash is the only thing distinguishing a tag from the heading
+  that `# ` — one space different — produces.
+
+- **`--bear-tag-fill` is a separate token from `--bear-selected`, and the two
+  deliberately diverge in Paper only.** Same hue, different alpha: Paper's
+  `selected` at 0.11 is right for a selected row — a whole band that only has
+  to read as present — and too weak for a pill, which is a few characters of
+  inline text and has to read as a discrete chip. At 0.11 the pill read as a
+  highlighted word. Paper is 0.16; Ink's 0.18 was already comfortable, so the
+  two tokens coincide there. Like every token it must appear in all three
+  blocks — `:root`, `:root[data-theme='dark']`, and the
+  `prefers-color-scheme` block — which `scripts/sourceLint.test.ts` asserts
+  value-for-value across the two dark ones.
+
+- **The pill's horizontal padding is asymmetric, and that is not a typo.**
+  `0.05em 0.15em 0.05em 0.25em`. Equal padding pushed a following comma or
+  full stop visibly away from the word it belongs to — `#friday ,` — because
+  a tag ends at punctuation far more often than it begins after it. The
+  leading side keeps its full inset so the `#` reads as part of the chip.
+  A negative inline margin was considered and rejected: it hides the gap by
+  letting the pill overlap its neighbouring characters.
+
+- **Plain click on a tag pill edits; Mod-click activates.** Bear filters on a
+  plain click, and this is a deliberate divergence: Bear can afford it because
+  its tag autocomplete makes mistyped tags rare, while this app has none, so
+  editing a tag in place is the normal repair path and a pill that defended
+  itself against being edited would be worse than an inert one. **If
+  autocomplete ever ships, revisit this ruling** — it is the premise the
+  divergence rests on.
+
+- **Mod is Cmd on Apple platforms and Ctrl elsewhere, never `metaKey ||
+ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
+  means one gesture opens a menu AND changes scope. `isMacOS` from
+  `@tiptap/core` decides. Getting this wrong is invisible on Linux CI, so
+  `tagPill.test.ts` asserts both branches.
+
+- **Activation is handled in `handleDOMEvents.mousedown`, not `handleClick`.**
+  ProseMirror does not place the caret itself on a plain click — the browser
+  moves the DOM selection natively during `mousedown` and ProseMirror reads it
+  back. By `handleClick` (which runs on `mouseup`) the caret has already moved,
+  suppression has already lifted the pill, and the thing the user clicked has
+  vanished under the cursor. `event.preventDefault()` on mousedown is the only
+  point that stops it.
+
+- **`tagRangeAt` hit-tests the grammar, never the decoration set.** A tag the
+  caret sits inside has no pill; if activation followed the pills, the same
+  gesture would work or not work with nothing on screen to explain the
+  difference. Behaviour must not depend on invisible state. It shares
+  `tagHitsIn` with `tagDecorations`, so the `blockPos + 1 + offset` arithmetic
+  exists once — perturbing it fails both suites, which is the proof.
+
+- **`tagRangeAt` resolves the clicked position to its own textblock; it does
+  not walk the document.** `state.doc.resolve(pos)` already knows the
+  position's ancestry, so the containing block is reachable directly and the
+  gesture costs the same on a 900-block note as on a one-line one — the
+  whole-document `descendants` walk it replaced measured 1.5 ms median / 5.2 ms
+  worst on 100 KB, imperceptible but proportional to note size where the spec
+  said constant. The two are behaviourally identical (document positions are
+  unique, so no other block's ranges can contain `pos`), which means **this
+  change is pinned by no behavioural test and could be reverted silently.**
+  What IS pinned: `$pos.before()` must take the position of the _immediate_
+  textblock, not an outer one — a paragraph inside a blockquote starts one
+  position later than the blockquote does, and `before(1)` shifts every offset
+  by the difference (a `tagPill.test.ts` test fails on exactly that). And
+  `!$pos.parent.isTextblock` is load-bearing twice: it rejects what cannot hold
+  a tag, and it is what keeps `before()` from throwing at depth 0, where the
+  parent is the document itself. An explicit `$pos.depth === 0` clause was
+  written alongside it and then removed — `doc.isTextblock` is false, so no
+  injection could make that clause fail, and an unfalsifiable branch is a
+  defect here.
+
+- **Activating a tag the index does not hold does nothing.** M7.6 ships two
+  classes of lying pill. Setting a scope for one would trip the vanished-tag
+  effect and bounce the user to All Notes — a click that visibly throws them
+  somewhere they did not ask to go. The same handler returns early while
+  `tree.nodes` is `undefined`, because that means "loading", not "no tags".
+
+- **`onActivate` returns a boolean, and the app's answer — not the plugin — is
+  what consumes the event. A Mod-click either filters, or behaves exactly like
+  a plain click. Never nothing.** The plugin originally called
+  `preventDefault()` before asking, which made every case the app declines cost
+  the user the caret as well as the filter: the click simply vanished. That is
+  not only the two lying-pill classes and a trashed note's pills — **a tag
+  typed within the last ~350 ms is unactivatable too**, because the index is
+  written by autosave (`AUTOSAVE_DELAY_MS = 300`) and the guard correctly
+  declines a tag that is not in it yet. Measured before the fix: 50/150/300 ms
+  after typing → nothing at all; 400/500/700 ms → filtered. So the plugin now
+  asks first and consumes second, and `AppShell.handleActivateTag` returns
+  `false` on both refusals and `true` after setting the scope. **`RichEditor`'s
+  ref-backed wrapper must PROPAGATE that boolean** — the "simplification" to a
+  statement body returns `undefined`, which reads as declined and silently
+  disables the whole feature while every callback still fires; pinned by a
+  `RichEditor.test.tsx` test asserting both directions.
+
+- **The boolean gate made the `null`-`onActivate` contract look redundant, and
+  the test that guards it had to change shape to stay falsifiable.** With an
+  unconditional wrapper and no `onActivateTag` prop, `activateRef.current` is
+  `undefined`, `undefined === true` is `false`, and the app-declined path
+  produces a byte-identical `handled: false` / `defaultPrevented: false` — so
+  deleting the `null` guard left 1034/1034 green, one commit after the same
+  injection failed a test. The two exits are still genuinely different: `null`
+  declines **before** the hit test, a `false` answer **after** it. The test
+  therefore spies on `posAtCoords` and asserts the plugin never even asked
+  where the click landed; the decline-by-answer test asserts the mirror. **Any
+  future guard added in front of this handler needs the same treatment** —
+  outcome-only assertions cannot separate two exits that produce the same
+  outcome.
+
+- **The tooltip stays optimistic on pills that cannot work, and that is
+  inherent.** Both lying-pill classes and every pill in a trashed note light up
+  under the modifier and read "Cmd-click to filter by this tag", then decline.
+  The editor deliberately learns nothing about scopes or the tag index, and the
+  guard that knows lives downstream of the decoration, so making the copy
+  honest means pushing index knowledge into the editor — the boundary M7.6 and
+  M7.7 were both careful not to cross. After the boolean contract above the
+  _click_ is honest (it places the caret, exactly like a plain click); only the
+  copy still promises. Do not chase this further without a design that crosses
+  that boundary deliberately. One related latency with no live instance:
+  `RichEditor` passes `activateHint` unconditionally, so a `RichEditor`
+  rendered with no `onActivateTag` — where `onActivate` is `null` and the
+  gesture is genuinely off — would still paint promising tooltips. Every live
+  call site supplies the prop; if one ever does not, gate the hint on the same
+  condition.
+
+- **The modifier affordance is a DOM attribute set through a ref, never React
+  state.** `data-mod-held` on the editor's outer element; setting state on
+  every `keydown` would re-render the editor subtree on every keystroke the
+  user types. It is derived from each event's own modifier flags on both
+  `keydown` and `keyup`, and cleared on window `blur` — hold Cmd, press Tab to
+  leave the window, and the `keyup` never arrives, leaving pills claiming to
+  be clickable while a plain click edits. **This is convention enforced by
+  nothing** — there is no lint rule or test forbidding a future edit from
+  routing this through `useState` instead, the same gap the
+  `@tiptap/markdown` single-importer rule already names for itself.
+
+- **`editorExtensions` is `buildEditorExtensions()` with no options**, so
+  `getSchema(editorExtensions)` and `computeRecognizedHtmlTags()` are
+  unaffected by anything the app injects. An `Extension` registers nothing in
+  the schema, and the options must never be able to change that. **This too is
+  convention enforced by nothing**: no test asserts that a future option added
+  to `TagPillOptions` (or any sibling extension) leaves the schema untouched.
+
+- **The tooltip's locale is frozen at mount.** `RichEditor` builds its
+  extension array once, so switching locale leaves every pill's `title` in
+  the old language until the editor remounts — which a note switch does
+  anyway, since `NoteEditor` is keyed by note id. Fixing it properly means
+  either recreating the editor on locale change (throwing away undo history)
+  or turning `activateHint` into a getter, changing an option shape that is
+  now pinned by tests. Accepted, not a defect.
+
+- **`RichEditor` passes `null` for `onActivate` when no `onActivateTag` prop
+  is supplied, and that is load-bearing.** With a non-null callback the
+  plugin believes someone is listening, so a Mod-click calls
+  `preventDefault()` and swallows the event — the user gets neither filtering
+  nor the caret placement a plain click would have given. The decision is
+  made once, in the `useState` initializer, matching the plugin's read-once
+  semantics.
+
+- **Under jsdom `navigator.platform === ''`, so `isMacOS()` is false on every
+  machine, including a Mac.** Any test of a platform-dependent branch must
+  stub `navigator.platform` explicitly before the code under test runs — for
+  `RichEditor` that means before render, since `isMacOS()` runs inside a
+  `useState` initializer — and restore it in a `finally`. This milestone
+  shipped two tests named for platform branches that could never execute
+  them.
+
+### Design tokens, theme, and layout
+
+- **M8 owns theme switching.** M2 only set the system default via a
+  `prefers-color-scheme` media query. An explicit `data-theme` on the root overrides
+  it — that is the seam the picker will use. Do not simplify the
+  `:root:not([data-theme='light'])` selector.
+
+- Pane widths are **durable** (settings table), not Zustand state. Zustand is
+  reserved for genuinely ephemeral state and has not been added yet.
+
 - **The font families are `'Pretendard Variable'` and `'JetBrains Mono
 Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   `@font-face` anywhere, so the app silently ran on `system-ui` for five
@@ -419,37 +984,29 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   name must match too. `scripts/fonts.test.ts` compares the token's family
   against the families the shipped stylesheet declares; that is the only form
   of the assertion that can fail.
+
 - **Colour literals outside `tokens.css` fail `npm test`** (not the build), via
   `scripts/sourceLint.test.ts`. The scan is a documented heuristic scoped to
   CSS files and `className`/`style` regions, because `#face` and `#dad` are
   valid hex and valid tags.
+
 - **Both dark theme blocks must stay token-for-token identical**, asserted by
   `scripts/sourceLint.test.ts`, which compares values and not just key sets. A
   token present in `:root[data-theme='dark']` but missing from the
   `prefers-color-scheme` block is correct for a user who picked dark and wrong
   for a user whose OS is dark — invisible to every other test.
+
 - **Motion lives in two duration tokens, never per-component**, so one
   `prefers-reduced-motion` block covers animations added later.
+
 - **`danger` and `focus` are separate tokens from `accent`** though all three
   are identical in both shipped themes. An M8 theme with a green accent must
   not get a green delete button.
+
 - **Tailwind v4 has no `--duration-*` theme namespace.** Durations are written
   `duration-[var(--bear-duration-fast)]`. Adding a `--duration-fast` theme key
   does not produce a `duration-fast` utility.
-- **Source-scanning tests live in `scripts/`, not `src/`.** `tsconfig.app.json`
-  deliberately omits Node types; `tsconfig.node.json` already includes
-  `scripts`.
-- **Never rely on a CSS `gap` to separate text for assistive tech.**
-  Accessible-name computation concatenates text content and ignores gaps. M5.5
-  shipped and reverted a regression where a tag row announced as `"work3"`
-  instead of `"work 3"` after `SidebarRow` dropped an explicit space text
-  node — the visual `gap-2` hid it completely, and the first fix attempt
-  edited the failing tests to match. `src/ui/SidebarRow.tsx` carries an
-  explicit `{' '}` and `ui.test.tsx` pins the resulting accessible name.
-- **A role-based test that fails during a restyle is reporting a behaviour
-  change, not a stale expectation.** Editing it to match the new output is the
-  same defect as asserting a class name. This is how the `SidebarRow` space
-  regression above nearly shipped.
+
 - **`--bear-faint` was darkened to clear WCAG 3.0 and must not be lightened for
   aesthetics.** Paper `#88857d` measures 3.21:1 on `--bear-sidebar`; the
   original `#9c988f` measured 2.51:1 and failed. Ink is `#7b766e` at 3.40:1.
@@ -457,6 +1014,7 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   **No test can catch this** — contrast over alpha-composited overlays needs a
   real cascade and jsdom has none, so the ratios are measured by hand and
   recorded in `docs/design/DESIGN-bear-web.md`.
+
 - **Exactly two files may suppress the focus outline**, allowlisted in
   `scripts/sourceLint.test.ts`, each mapped to a marker string proving it
   supplies its own indicator: `Resizer.tsx` (`group-focus-visible:` accent
@@ -483,6 +1041,104 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   browser on both suppressed elements and, as a control, on an ordinary
   button that is not in the allowlist — the only kind of assertion that can
   actually fail here.
+
+- **`--bear-canvas` is the ground the three panes float on, and it is what
+  `body` paints.** A browser tab has no window chrome, so depth is what
+  separates the panes — the role Bear's rounded macOS window plays. Panes carry
+  `shadow-popover` and no border: hard borders would compete with the 1px
+  dividers used inside each pane, and separating panes by depth while
+  separating rows by line keeps the two jobs distinct. `bg-canvas` on `<main>`
+  is redundant with `body`'s own paint and is pixel-identical whether present
+  or not — measured twice, independently, during M7.5. It stays for a
+  self-contained shell, but a fault injection meant to prove "a pane is a
+  card" must target a PANE's own `bg-*` class or `rounded-lg`, never
+  `<main>`'s `bg-canvas`; that injection is a no-op.
+
+- **The gap between cards IS the resizer.** Before M7.5 it was a 1px hairline
+  whose hit box was widened with a negative margin that cancelled out in flex
+  layout. `e2e/smoke.spec.ts`'s hit-target test was rewritten in M7.5 because
+  the contract changed — that is the one licensed instance; a failing
+  geometry or role test during a restyle is otherwise a behaviour report, not a
+  stale expectation. The resizer carries no permanent hairline or highlight at
+  rest; the 16px of visible canvas between cards (4px pane inset + 8px
+  resizer + 4px pane inset, measured at 1440x900) is itself the resting cue,
+  ruled sufficient rather than adding a dedicated visual affordance.
+
+- **Headings keep `--bear-text`.** `--bear-accent` and `--bear-danger` hold the
+  same value in both shipped themes, so accent-coloured headings would make one
+  colour mean both "heading" and "delete forever", and a page of red headings
+  reads as a warning notice. The accent is for links, checkboxes, highlight,
+  selection and focus.
+
+- **`--bear-line-width` caps the prose column, not the pane.** The editor pane
+  still fills the window so the toolbars span it; only `.ProseMirror` is capped
+  and centred. It sat declared-and-unused from M5.5 to M7.5, which is why the
+  editor read as a web page rather than an app. `.ProseMirror` also needs an
+  explicit `width: 100%` alongside the `max-width` clamp — it is a flex item
+  inside `EditorContent`'s column-direction wrapper, and a flex item's auto
+  cross-axis margins (`margin-inline: auto`, needed to center the clamped
+  column) suppress default stretch alignment, so without the explicit width
+  the column shrinks to fit its content instead of filling the pane and then
+  clamping.
+
+- **`SearchField` suppresses the native `type="search"` cancel widget.**
+  Chromium renders its own X inside a search input, which sat beside our own
+  labelled clear button — two clear affordances in one freshly designed
+  field. `type="search"` stays (it is what makes the `searchbox` role and its
+  tests hold); only the native widget's rendering is suppressed.
+
+### Accessibility
+
+- **Never rely on a CSS `gap` to separate text for assistive tech.**
+  Accessible-name computation concatenates text content and ignores gaps. M5.5
+  shipped and reverted a regression where a tag row announced as `"work3"`
+  instead of `"work 3"` after `SidebarRow` dropped an explicit space text
+  node — the visual `gap-2` hid it completely, and the first fix attempt
+  edited the failing tests to match. `src/ui/SidebarRow.tsx` carries an
+  explicit `{' '}` and `ui.test.tsx` pins the resulting accessible name.
+
+- **The pin button is a sibling of the row button, never nested.** A `<button>`
+  inside a `<button>` is invalid HTML and unclickable in some browsers.
+
+- **`NoteListItem` carries an explicit `aria-label`.** Its three sibling
+  spans concatenate with no separator and accessible-name computation ignores
+  the CSS gap, so the row announced as `"Groceries14:32milk"` from M3 until
+  M7. The label also keeps highlight markup out of the name. Same root cause
+  as the `SidebarRow` regression M5.5 caught and reverted — and, as there, a
+  role-based test that fails during a restyle is reporting a behaviour
+  change, not a stale expectation.
+
+- **Every icon is `aria-hidden` and every icon-only control carries an
+  `aria-label` from `useT`.** Replacing text with icons is the standard way to
+  silently destroy a screen-reader experience, and this project has shipped
+  that defect class twice — `SidebarRow` losing a space so a row announced as
+  `"work3"`, and `NoteListItem` concatenating three spans into
+  `"Groceries14:32milk"`.
+
+- **Destructive controls keep their words.** "New note" is an icon button;
+  "Move to trash", "Restore", "Delete forever" and "Empty trash" are text. An
+  icon-only control for an irreversible action against a database with no
+  server copy asks the user to recall a glyph before destroying data. This is a
+  deliberate divergence from Bear, which hides destructive actions in menus.
+
+- **The pin button reads by colour, not by glyph.** A `Pin`/`PinOff` glyph
+  table keyed on `note.pinned` was tried and reverted: a slashed pin in the
+  unpinned state reads as "pinning is unavailable" (the same grammar as a
+  muted-mic or no-wifi glyph), not "click to pin". The button is always the
+  `Pin` glyph, differentiated by colour; `aria-label` and `aria-pressed` carry
+  the state for assistive tech.
+
+### Testing and tooling conventions
+
+- **Source-scanning tests live in `scripts/`, not `src/`.** `tsconfig.app.json`
+  deliberately omits Node types; `tsconfig.node.json` already includes
+  `scripts`.
+
+- **A role-based test that fails during a restyle is reporting a behaviour
+  change, not a stale expectation.** Editing it to match the new output is the
+  same defect as asserting a class name. This is how the `SidebarRow` space
+  regression above nearly shipped.
+
 - **`e2e/appearance.spec.ts` is the only test in the project that can see
   "renders wrong", and it is deliberately RELATIVE where `smoke.spec.ts` is
   absolute.** Three defects shipped through a fully green 700+ test suite —
@@ -499,243 +1155,19 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   the failure mode M5.5 already hit once. `smoke.spec.ts` pins absolutes for
   the opposite and equally deliberate reason: a palette change _should_ cost
   a conscious edit.
+
 - **`e2e/smoke.spec.ts` pins the shipped palette deliberately.** It is the only
   test proving the `prefers-color-scheme` cascade reaches a rendered pixel, so
   a token change SHOULD require a conscious edit there. It went stale for four
   tasks during M5.5 because e2e was not run on every restyle task.
-- **`NoteScope` has two arms permanently, and every behavioural question is a
-  named capability function.** Adding a smart list is a row in
-  `SMART_LIST_IDS`, never a union arm and never a `scope.kind` comparison at a
-  call site. `scope.test.ts` asserts capabilities exhaustively over
-  `SmartListId`, so a new list without a ruling fails the suite. This is the
-  defence against the M5 defect where a widened union silently removed the
-  delete affordance from tag scopes.
-- **The Todo predicate's test fixture is derived from `MarkdownManager`, never
-  hand-written.** The parent spec writes it as "contains an unchecked `- [ ]`",
-  which is an assumption about our own output. Our serializer emits `- [ ]`
-  and normalizes `* [ ]` to it, but that is a fact about the serializer, not a
-  licence to hardcode it.
-- **`UNCHECKED_TASK` must not carry the `g` flag.** A global regex keeps
-  `lastIndex` between `.test()` calls, so a module-level constant reused per
-  note alternates true and false on identical input and drops roughly half the
-  matching notes.
-- **`UNCHECKED_TASK` matches `-`, `*` and `+` bullets** because `importDatabase`
-  accepts arbitrary Markdown and a note is only canonical once it has been
-  through the editor. A checkbox the user can see must not be invisible until
-  they open the note.
-- **A task inside a fenced code block counts as a todo.** Accepted: masking
-  code spans lives in `parseTags` in the data layer, and duplicating it for one
-  smart list is not worth a second copy.
-- **Only `untagged` reads the tag index in `listForScope`.** `allTagRows` is a
-  full table scan; paying for it on every scope switch would double the work
-  for six of the seven builtins.
-- **All seven sidebar counts come from one live query.** Seven independent
-  queries would let rows land in seven different frames — the mechanism behind
-  M5's collapsed-tag flash — and would let untagged plus tagged disagree with
-  all. Its deps are constant `[]`, so the tag-and-verify pattern deliberately
-  does not apply. **This property is documented but not enforced.** Splitting
-  `useSmartListCounts` into two `useLiveQuery` calls leaves every test green —
-  jsdom resolves fast enough that the race never surfaces. Catching a
-  regression would need injected staggered resolution: mock `notes.listActive`
-  and `notes.allTagRows` with different delays and assert the hook never
-  renders a transient state where untagged plus tagged disagrees with all.
-  Same mechanism as M5's collapsed-tag flash, so it is a real property, just
-  an expensive one to pin.
-- **`useSmartListCounts` returns `undefined` while loading, never a
-  zero-filled object.** Zeros render as "empty" rather than "not known yet".
-- **Pinned notes sort first in every list except Trash.** Trash is ordered by
-  deletion time; a pinned note deleted earlier is not more important than one
-  deleted later. `pinned` stays unindexed — IndexedDB rejects boolean keys.
-- **The pin button is a sibling of the row button, never nested.** A `<button>`
-  inside a `<button>` is invalid HTML and unclickable in some browsers.
-- **`ConfirmDialog` focuses Cancel on open.** These guard irreversible deletion
-  with no server copy, and an Enter keypress already in flight must not
-  destroy anything. `window.confirm` was rejected: it ignores the theme, and
-  some embedded contexts suppress it silently, turning a guarded delete into
-  an unguarded one. **The focus trap queries `'button'` specifically, which is
-  a gap, not a guarantee.** Any future non-button focusable inside the dialog —
-  a link, an input — is invisible to both the initial-focus effect and the
-  Tab-wrap arithmetic, so it would be skipped by the trap rather than held at
-  its edge. Harmless today with exactly two buttons; widen to a standard
-  focusable selector the moment a third element is added.
-- **The startup sweep's three content gates are load-bearing but not
-  sufficient — a fourth, `createdBefore`, closes a real race.**
-  `createdAt === updatedAt` makes a note the user has typed into unreachable
-  even if the emptiness check is wrong — the M4 shape where a truncation
-  reached `notes.purge`. But the sweep is unawaited and runs after React has
-  already mounted and made the app interactive, so a note created in that
-  window (widened to seconds by a tag-index rebuild) has empty text, no
-  `trashedAt`, and `createdAt === updatedAt` — it passes all three content
-  gates legitimately, and the sweep would purge work in progress out from
-  under a pending autosave. `SweepDeps.createdBefore` is captured at module
-  scope in `main.tsx` before anything else can run, and the sweep skips any
-  note whose `createdAt` is at or after it. Like `runMigrations` and
-  `persistStorage`, the sweep never rejects, including when `onError` throws;
-  a single note's purge throwing is now also caught per-note so it neither
-  aborts the rest of the sweep nor gets silently counted as succeeding.
-- **The sweep runs after the tag-index rebuild resolves, not concurrently.**
-  Both write inside transactions over `notes`; sequencing removes the question
-  of what a rebuild sees mid-purge.
-- **Delete always trashes, blank or not.** The blank-note purge was emergent —
-  trash, unmount, discard — so one button meant two irreversibilities
-  depending on invisible state. `NoteEditor`'s `discard` now refuses to purge
-  an already-trashed note. The reclaim path for a blank note the user
-  navigates away from is unchanged.
-- **Today does not roll over at midnight.** A note edited at 23:59 stays in
-  Today until something else re-runs the query. A timer whose only job is to
-  move one row is not worth a live subscription.
-- **Before M7, typing `- [ ] milk` did not create a task item, and that was an
-  editor input-rule defect, not a Todo defect.** StarterKit's bullet-list input
-  rule fired on `- ` first and converted the block to a `listItem`; `TaskItem`'s
-  own `wrappingInputRule` could not then wrap a paragraph already inside a
-  `listItem`, leaving the user with a plain bullet and the literal text
-  `[ ] milk`, which never reached Todo's predicate. M6's Todo predicate,
-  registry, and counts were all verified correct — this was purely the
-  M4-era editor never having its own promotion rule for this keystroke. M7's
-  `TaskItemPromotion` (see the structural-assertion rule below) closed it; do
-  not "fix" a regression here by loosening the Todo predicate to match literal
-  `[ ] text` bullets — that was ruled out in M6 and stays ruled out.
-- **Search is a filter over the list a scope produced, never a `NoteScope`
-  arm and never inside a `useLiveQuery`.** Two properties depend on the
-  placement. A third arm would reopen the M5 defect where a widened union
-  silently made every `===` gate partial. And putting `query` in a
-  `useLiveQuery` dependency array would hand search the documented
-  previous-deps-for-one-tick behaviour, rendering the previous query's
-  results for a frame on every keystroke. `AppShell` applies
-  `filterByQuery` to `useNotes`' output, and `useNotes` is untouched.
-- **`findMatchRanges` returns indices into `text.normalize('NFC')`, not into
-  `text`.** NFC changes string length, so Hangul offsets computed on one form
-  do not address the other; `HighlightedText` renders the normalized string
-  for exactly this reason. It also returns `[]` rather than shifted ranges
-  when `.toLowerCase()` changes length (`'İ'` folds to two code units) —
-  losing a highlight is acceptable, marking the wrong characters is not.
-  Matching uses `indexOf`, not `RegExp`, so metacharacters are literal with
-  no escaping step to get wrong.
-- **Creating a note clears the query.** A new note is empty and matches no
-  non-empty query, so it would be created invisible — the same defect
-  `acceptsNewNote` solves for scopes, with the same resolution. Switching
-  scope deliberately does NOT clear it, which is why the no-results empty
-  state has its own copy naming the query as the cause.
-- **A query never deselects the open note**, for the same reason a tag filter
-  never does: the filter runs outside `useNotes`, which still reconciles on
-  trash state alone.
-- **`NoteListItem` carries an explicit `aria-label`.** Its three sibling
-  spans concatenate with no separator and accessible-name computation ignores
-  the CSS gap, so the row announced as `"Groceries14:32milk"` from M3 until
-  M7. The label also keeps highlight markup out of the name. Same root cause
-  as the `SidebarRow` regression M5.5 caught and reverted — and, as there, a
-  role-based test that fails during a restyle is reporting a behaviour
-  change, not a stale expectation.
-- **The bullet-to-task input rule needs a STRUCTURAL assertion, and that is
-  why the M4-era version of this bug hid.** A promoted task item and a
-  hand-authored one serialize to byte-identical Markdown, so every round-trip
-  suite passes whether or not `TaskItemPromotion` fires — the same blind spot
-  that let a dead `==highlight==` tokenizer and a live-but-banned underline
-  mark both ship. `taskItemPromotion.test.ts` asserts on the parsed document
-  and `e2e/notes.spec.ts` drives the real keystrokes. Do not "fix" a future
-  regression here by loosening the Todo predicate to match literal
-  `[ ] text` bullets; that was ruled out in M6.
-- **Promoting a bullet lifts it out of an enclosing blockquote, while
-  `TaskItem`'s own rule keeps the blockquote in the analogous case.** Accepted,
-  not endorsed — nothing is lost and the parent survives, which beats the
-  defect. Pinned by a PAIR of tests, one for each rule, so the divergence is
-  checked on every run rather than asserted in prose.
-- **A nested bullet promoted with `[ ] ` is lifted to the top level, losing
-  its indentation.** Accepted for the same reason as the blockquote case:
-  nothing is lost and it beats the defect. Pinned by a test.
-- **`1. [ ] milk` inside an ordered list does not promote**, because a
-  `taskItem` cannot live in an `orderedList`. Fail-safe — the user keeps a
-  plain ordered-list item rather than losing anything — and pinned by a test.
-- **`toggleTaskList()` DOES split a bullet list correctly when promoting a
-  single middle item** — the neighbours survive as plain bullets. This was an
-  open question in the M7 spec; the answer is recorded here so nobody
-  re-derives it by trial and error.
-- **Registration order does not decide which input rule wins FOR THIS PAIR —
-  that is not a general law.** `@tiptap/core`'s input-rules runner
-  (`InputRule.ts`) is `let matched = false; rules.forEach(rule => { if
-(matched) return; ...; if (handler === null || !tr.steps.length) return; ...
-matched = true })`: once any rule commits steps, `matched` is set and every
-  later rule in the array is skipped for that keystroke — order is load-bearing
-  in general. `TaskItemPromotion` and `TaskItem`'s own rule are the one pair
-  where order is provably immaterial, because they decline in exactly
-  complementary cases (one fires only inside an existing `listItem` in a
-  `bulletList`, the other only outside one), so at most one of them ever
-  commits steps for a given keystroke regardless of which is checked first.
-  Verified by moving `TaskItemPromotion` above `TaskList`/`TaskItem` and
-  watching every test in `taskItemPromotion.test.ts` stay green — that result
-  does not generalize to any other pair of rules. A rule "declines" by
-  returning `null` from its handler (the `handler === null` half of the guard
-  above); `TaskItemPromotion` uses that half. The `!tr.steps.length` half is a
-  separate guard for a handler that returns non-null but happens not to have
-  queued any steps — not the mechanism this rule relies on.
-- **`NoteList` takes an explicit `emptyTrashDisabled` prop, supplied from the
-  UNFILTERED note list.** Gating "Empty trash" on the filtered list meant a
-  fruitless search while viewing Trash disabled emptying a full trash — the
-  button read "disabled" for a reason that had nothing to do with whether
-  Trash actually had anything in it.
+
 - **`lucide-react` is imported only by `src/ui/Icon.tsx`, and that is enforced
   by `scripts/sourceLint.test.ts`.** The primitive fixes one stroke width, two
   sizes, and `aria-hidden` on every icon in the app. A second importer would
   compile and look fine, which is why this is a test rather than a comment —
   unlike the `@tiptap/markdown` single-importer rule, which is convention
   enforced by nothing.
-- **Every icon is `aria-hidden` and every icon-only control carries an
-  `aria-label` from `useT`.** Replacing text with icons is the standard way to
-  silently destroy a screen-reader experience, and this project has shipped
-  that defect class twice — `SidebarRow` losing a space so a row announced as
-  `"work3"`, and `NoteListItem` concatenating three spans into
-  `"Groceries14:32milk"`.
-- **Destructive controls keep their words.** "New note" is an icon button;
-  "Move to trash", "Restore", "Delete forever" and "Empty trash" are text. An
-  icon-only control for an irreversible action against a database with no
-  server copy asks the user to recall a glyph before destroying data. This is a
-  deliberate divergence from Bear, which hides destructive actions in menus.
-- **`--bear-canvas` is the ground the three panes float on, and it is what
-  `body` paints.** A browser tab has no window chrome, so depth is what
-  separates the panes — the role Bear's rounded macOS window plays. Panes carry
-  `shadow-popover` and no border: hard borders would compete with the 1px
-  dividers used inside each pane, and separating panes by depth while
-  separating rows by line keeps the two jobs distinct. `bg-canvas` on `<main>`
-  is redundant with `body`'s own paint and is pixel-identical whether present
-  or not — measured twice, independently, during M7.5. It stays for a
-  self-contained shell, but a fault injection meant to prove "a pane is a
-  card" must target a PANE's own `bg-*` class or `rounded-lg`, never
-  `<main>`'s `bg-canvas`; that injection is a no-op.
-- **The gap between cards IS the resizer.** Before M7.5 it was a 1px hairline
-  whose hit box was widened with a negative margin that cancelled out in flex
-  layout. `e2e/smoke.spec.ts`'s hit-target test was rewritten in M7.5 because
-  the contract changed — that is the one licensed instance; a failing
-  geometry or role test during a restyle is otherwise a behaviour report, not a
-  stale expectation. The resizer carries no permanent hairline or highlight at
-  rest; the 16px of visible canvas between cards (4px pane inset + 8px
-  resizer + 4px pane inset, measured at 1440x900) is itself the resting cue,
-  ruled sufficient rather than adding a dedicated visual affordance.
-- **Headings keep `--bear-text`.** `--bear-accent` and `--bear-danger` hold the
-  same value in both shipped themes, so accent-coloured headings would make one
-  colour mean both "heading" and "delete forever", and a page of red headings
-  reads as a warning notice. The accent is for links, checkboxes, highlight,
-  selection and focus.
-- **`--bear-line-width` caps the prose column, not the pane.** The editor pane
-  still fills the window so the toolbars span it; only `.ProseMirror` is capped
-  and centred. It sat declared-and-unused from M5.5 to M7.5, which is why the
-  editor read as a web page rather than an app. `.ProseMirror` also needs an
-  explicit `width: 100%` alongside the `max-width` clamp — it is a flex item
-  inside `EditorContent`'s column-direction wrapper, and a flex item's auto
-  cross-axis margins (`margin-inline: auto`, needed to center the clamped
-  column) suppress default stretch alignment, so without the explicit width
-  the column shrinks to fit its content instead of filling the pane and then
-  clamping.
-- **The pin button reads by colour, not by glyph.** A `Pin`/`PinOff` glyph
-  table keyed on `note.pinned` was tried and reverted: a slashed pin in the
-  unpinned state reads as "pinning is unavailable" (the same grammar as a
-  muted-mic or no-wifi glyph), not "click to pin". The button is always the
-  `Pin` glyph, differentiated by colour; `aria-label` and `aria-pressed` carry
-  the state for assistive tech.
-- **`SearchField` suppresses the native `type="search"` cancel widget.**
-  Chromium renders its own X inside a search input, which sat beside our own
-  labelled clear button — two clear affordances in one freshly designed
-  field. `type="search"` stays (it is what makes the `searchbox` role and its
-  tests hold); only the native widget's rendering is suppressed.
+
 - **A CSS attribute selector like `[role="region"]` does not match a
   `<section aria-label>`.** The "region" role there is implicit ARIA
   semantics — the browser computes it for accessibility, but never writes a
@@ -760,6 +1192,7 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   would. A CSS attribute selector inside `page.evaluate` sees only what is
   literally written in the DOM. Reach for `getByRole` there; a `[role="..."]`
   selector inside `evaluate` is a trap for exactly this reason.
+
 - **A transparent background and "equal to the canvas colour" are not the same
   failure, and one assertion does not catch both.** A pane with no `bg-*`
   class computes a `backgroundColor` of `rgba(0, 0, 0, 0)`, a literal string
@@ -767,286 +1200,6 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   check alone passes on a fully transparent pane, the exact defect it was
   meant to catch. The card test in `e2e/appearance.spec.ts` asserts both:
   not-transparent, and not-equal-to-canvas.
-- **`parseTags` is the deduped name-only view of `findTagRanges`, and the tag
-  grammar exists in exactly one place.** The scanner always computed each
-  tag's start and end and threw them away; M7.6 stopped throwing them away
-  rather than writing a second parser for the editor, which would have been
-  two implementations of one grammar — this project's signature defect.
-  `parseTags` is now defined as
-  `[...new Set(findTagRanges(x).map(r => r.tag))]`, so the agreement describe
-  block in `parseTags.test.ts` is tautological while that one-line definition
-  holds — it asserts the exact same expression the implementation already is,
-  so it does not, by itself, prove the grammar's behaviour is preserved. What
-  it does do is act as a tripwire: the instant someone forks the two into
-  separate implementations, the tautology breaks and the test starts
-  asserting something real. Behaviour preservation of the grammar itself is
-  guarded separately, by every other describe block in `parseTags.test.ts` —
-  the corpus of cases that predates M7.6 and asserts `parseTags`' actual
-  output against expected tag lists.
-- **The tag pill is a ProseMirror DECORATION, never a mark.** The document is
-  untouched, so no schema, serializer or round-trip path is involved and a
-  pill can never survive into a note's Markdown. The cost is that **every
-  round-trip test in this project is blind to whether the plugin runs at
-  all** — the same blind spot that let a dead `==highlight==` tokenizer and a
-  live-but-banned underline mark ship in M4. `tagPill.test.ts` asserts on the
-  decoration set itself and is the only thing that can catch a dead plugin.
-- **`maskedBlockText` emits one character per document position, and the
-  plugin's position arithmetic depends on it.** `node.textContent` cannot be
-  used: a `hardBreak` contributes no characters but occupies a position, so
-  every offset after it would shift and pills would paint the wrong
-  characters. Non-text inline nodes contribute one mask character per
-  position, which is also correct — a line break must terminate a tag.
-  **A `hardBreak` itself contributes `'\n'`, not the mask character** — an
-  earlier draft of the plan masked it, and that was wrong: a hard break
-  genuinely is a line break, so serializing the paragraph makes `parseTags`
-  find the same tag `maskedBlockText` must also see. A newline is whitespace,
-  so it both terminates a tag and permits one to start — the opposite of what
-  the mask character is for — but it is still exactly one character, so the
-  one-character-per-position invariant survives. **A known limit, accepted,
-  not fixed:** a paragraph containing both a fence marker and a hard break
-  suppresses the pill while `parseTags` still yields the tag — the tag works,
-  only the pill is missing, the same shape as the mark-boundary limit below.
-- **`maskedBlockText` masks the FIRST character of every marked text run, and
-  `code` whole.** All six marks in this schema — `bold`, `italic`, `strike`,
-  `highlight`, `link`, `code` — serialize with an opening delimiter (`**`,
-  `*`, `~~`, `==`, `[`, `` ` ``), verified against the real serializer. So the
-  first character of a marked run is preceded by `*`, `~`, `=`, `[` or a
-  backtick in the Markdown, never by whitespace, and `parseTags` refuses to
-  start a tag there. The document contains no such character, so without this
-  the plugin accepted `**#bravo**` as the tag `bravo` while the index —
-  correctly — held nothing. **That is a pill asserting something false about
-  the user's data**: the user bolds a tag to emphasise it, the pill stays, and
-  the tag silently vanishes from the sidebar, its counts and tag filtering.
-  Strictly worse than a missing pill, and the inverse of the fail-safe
-  direction the spec's known limit assumed. Masking the run WHOLE was rejected:
-  `**see #work here**` puts the `#` after a space, a tag really is there, and
-  removing the pill trades one disagreement for another. One character also
-  keeps the one-character-per-position invariant, and an astral first character
-  is replaced code-unit-for-code-unit rather than by a single mask.
-- **The pill set and the tag index are asserted EQUAL, over a corpus, as one
-  property — `tagAgreement.test.ts`.** That the two agree is the milestone's
-  central claim, and until M7.6's Task 6 nothing anywhere compared them: each
-  side was tested against its own expectations, which is how the `**#bravo**`
-  defect survived five task reviews and a whole-branch review. Both halves come
-  from the real pipeline — decorations read back through
-  `doc.textBetween`, and `parseTags` over `serializeMarkdown(editor.getJSON())`,
-  exactly what `RichEditor.getMarkdown` produces. **Any new construct, mark or
-  masking rule belongs in that corpus**, the same way a new Markdown construct
-  needs entries in both the fidelity and stability suites.
-- **A known limit, accepted and NOT fully fail-safe: a mark delimiter landing
-  inside or immediately after a tag's own characters.** `*`, `~` and `=` are
-  not tag boundaries, so `parseTags` reading `**see #work**` yields the tag
-  `work**`, while the pill covers `#work` — **a pill of the wrong extent, not
-  merely a missing one.** The spec (design doc line 81) describes the residue
-  as fail-safe; after Task 6 that is only partly true, and this bullet is the
-  correction. Same shape for `*…*`, `~~…~~`, `==…==`, for `#work**bold**`
-  (indexes as `work**bold**`), and for a tag continuing into a mark —
-  `x #wo**rk** y` pills `#wo` and indexes `wo**rk**`. **The `link` case is
-  worse and is ONE of two surviving lying-pill classes** (the other is the
-  whitespace hoist in the next bullet): `[see #work](https://e.com)` indexes
-  NOTHING, because `](https://…)` puts an empty `/`-segment in the name and
-  `normalizeTag` rejects the whole candidate — so the pill is there and the
-  tag is not. No editor-side masking can close any of this: agreement would
-  need the pill to cover characters the document does not contain, and the
-  cause is a pre-existing parser/serializer interaction that predates pills and
-  is visible in the sidebar with or without them. Closing it means changing
-  `parseTags`' grammar, which reorganises every existing user's sidebar.
-  A code span is the control that proves the diagnosis: backticks ARE masked on
-  both sides, so a tag continuing into an inline code span agrees exactly. All
-  of it is pinned with its real values in `tagAgreement.test.ts`'s `RESIDUAL`
-  block.
-- **The second lying-pill class: a mark applied over a run's own LEADING
-  WHITESPACE, which the serializer hoists outside the delimiter.** This is why
-  `maskedBlockText`'s docblock says a marked run's first character is only
-  _usually_ delimiter-adjacent — as an absolute the claim is false. Measured:
-  bold over `'  #work'` between `pre` and `post` serializes to
-  `pre  **#work**post`, so the space moved OUT of the delimiter; the pill
-  covers `#workpost` and the index holds nothing. Identical for `italic`
-  (`pre  *#work*post`), `strike` (`pre  ~~#work~~post`), `highlight`
-  (`pre  ==#work==post`) and `link` (`pre  [#work](https://e.com)post`).
-  `'   #work '` gives `pre   **#work** post`, pill `work`, index none; a run of
-  `'  #work'` alone in a block gives `  **#work**`, same. **The precondition is
-  two or more leading whitespace characters** — with exactly one space, or one
-  tab, the first-character mask covers it and the two views agree, and `code`
-  is masked whole so it agrees too. Pre-existing (it lied before the
-  first-character masking as well) and unreachable from Markdown: only applying
-  a mark over leading whitespace in the UI produces it, which is why no
-  Markdown-sourced corpus entry could catch it and why its fixtures in
-  `tagAgreement.test.ts` are built node-wise.
-- **The spec's own account of its known limit is wrong, and the corpus pins the
-  truth instead.** Design doc line 81 says a tag split across a mark boundary
-  (`#wo` bold, `rk` plain) still indexes and only loses its pill. It does not:
-  `**#wo**rk` puts `**` before the `#`, so `parseTags` rejects it too and the
-  two views agree. Do not restore the spec's wording from prose.
-- **The pill lifts while the cursor is inside its tag.** Without it, typing
-  `#w`, `#wo`, `#wor` re-pills on every keystroke and character widths jump
-  under the cursor. Intersection, not containment: a caret at either edge
-  counts as inside.
-- **The `#` stays visible inside the pill.** This app does not hide Markdown
-  syntax, and the hash is the only thing distinguishing a tag from the heading
-  that `# ` — one space different — produces.
-- **`--bear-tag-fill` is a separate token from `--bear-selected`, and the two
-  deliberately diverge in Paper only.** Same hue, different alpha: Paper's
-  `selected` at 0.11 is right for a selected row — a whole band that only has
-  to read as present — and too weak for a pill, which is a few characters of
-  inline text and has to read as a discrete chip. At 0.11 the pill read as a
-  highlighted word. Paper is 0.16; Ink's 0.18 was already comfortable, so the
-  two tokens coincide there. Like every token it must appear in all three
-  blocks — `:root`, `:root[data-theme='dark']`, and the
-  `prefers-color-scheme` block — which `scripts/sourceLint.test.ts` asserts
-  value-for-value across the two dark ones.
-- **The pill's horizontal padding is asymmetric, and that is not a typo.**
-  `0.05em 0.15em 0.05em 0.25em`. Equal padding pushed a following comma or
-  full stop visibly away from the word it belongs to — `#friday ,` — because
-  a tag ends at punctuation far more often than it begins after it. The
-  leading side keeps its full inset so the `#` reads as part of the chip.
-  A negative inline margin was considered and rejected: it hides the gap by
-  letting the pill overlap its neighbouring characters.
-- **The NUL-byte hazard is worse than the mask-character rule above states,
-  and writing the escape sequence is not sufficient by itself.** Writing
-  `\u0000` through a file-writing tool's JSON string parameter silently
-  produces a REAL NUL byte on disk anyway, because the JSON layer interprets
-  the escape before the bytes reach the filesystem — this happened twice
-  during M7.6's Task 2 alone, four times across this project. The rule is not
-  "write the escape sequence", it is "write it, then verify the bytes". The
-  scan must be scoped to tracked files: `.rglob('*')` over the repo root also
-  walks `node_modules`, `dist` and Playwright artifacts, which are full of
-  binary NUL bytes and drown the one hit that matters under a thousand that
-  don't.
-  ```
-  git ls-files -z | python3 -c "import sys,pathlib; files=sys.stdin.buffer.read().split(b'\x00'); print([f.decode() for f in files if f and b'\x00' in pathlib.Path(f.decode()).read_bytes()] or 'none')"
-  ```
-  Run this before every commit that touches tag-grammar prose or code.
-- **Plain click on a tag pill edits; Mod-click activates.** Bear filters on a
-  plain click, and this is a deliberate divergence: Bear can afford it because
-  its tag autocomplete makes mistyped tags rare, while this app has none, so
-  editing a tag in place is the normal repair path and a pill that defended
-  itself against being edited would be worse than an inert one. **If
-  autocomplete ever ships, revisit this ruling** — it is the premise the
-  divergence rests on.
-- **Mod is Cmd on Apple platforms and Ctrl elsewhere, never `metaKey ||
-ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
-  means one gesture opens a menu AND changes scope. `isMacOS` from
-  `@tiptap/core` decides. Getting this wrong is invisible on Linux CI, so
-  `tagPill.test.ts` asserts both branches.
-- **Activation is handled in `handleDOMEvents.mousedown`, not `handleClick`.**
-  ProseMirror does not place the caret itself on a plain click — the browser
-  moves the DOM selection natively during `mousedown` and ProseMirror reads it
-  back. By `handleClick` (which runs on `mouseup`) the caret has already moved,
-  suppression has already lifted the pill, and the thing the user clicked has
-  vanished under the cursor. `event.preventDefault()` on mousedown is the only
-  point that stops it.
-- **`tagRangeAt` hit-tests the grammar, never the decoration set.** A tag the
-  caret sits inside has no pill; if activation followed the pills, the same
-  gesture would work or not work with nothing on screen to explain the
-  difference. Behaviour must not depend on invisible state. It shares
-  `tagHitsIn` with `tagDecorations`, so the `blockPos + 1 + offset` arithmetic
-  exists once — perturbing it fails both suites, which is the proof.
-- **`tagRangeAt` resolves the clicked position to its own textblock; it does
-  not walk the document.** `state.doc.resolve(pos)` already knows the
-  position's ancestry, so the containing block is reachable directly and the
-  gesture costs the same on a 900-block note as on a one-line one — the
-  whole-document `descendants` walk it replaced measured 1.5 ms median / 5.2 ms
-  worst on 100 KB, imperceptible but proportional to note size where the spec
-  said constant. The two are behaviourally identical (document positions are
-  unique, so no other block's ranges can contain `pos`), which means **this
-  change is pinned by no behavioural test and could be reverted silently.**
-  What IS pinned: `$pos.before()` must take the position of the _immediate_
-  textblock, not an outer one — a paragraph inside a blockquote starts one
-  position later than the blockquote does, and `before(1)` shifts every offset
-  by the difference (a `tagPill.test.ts` test fails on exactly that). And
-  `!$pos.parent.isTextblock` is load-bearing twice: it rejects what cannot hold
-  a tag, and it is what keeps `before()` from throwing at depth 0, where the
-  parent is the document itself. An explicit `$pos.depth === 0` clause was
-  written alongside it and then removed — `doc.isTextblock` is false, so no
-  injection could make that clause fail, and an unfalsifiable branch is a
-  defect here.
-- **Activating a tag the index does not hold does nothing.** M7.6 ships two
-  classes of lying pill. Setting a scope for one would trip the vanished-tag
-  effect and bounce the user to All Notes — a click that visibly throws them
-  somewhere they did not ask to go. The same handler returns early while
-  `tree.nodes` is `undefined`, because that means "loading", not "no tags".
-- **`onActivate` returns a boolean, and the app's answer — not the plugin — is
-  what consumes the event. A Mod-click either filters, or behaves exactly like
-  a plain click. Never nothing.** The plugin originally called
-  `preventDefault()` before asking, which made every case the app declines cost
-  the user the caret as well as the filter: the click simply vanished. That is
-  not only the two lying-pill classes and a trashed note's pills — **a tag
-  typed within the last ~350 ms is unactivatable too**, because the index is
-  written by autosave (`AUTOSAVE_DELAY_MS = 300`) and the guard correctly
-  declines a tag that is not in it yet. Measured before the fix: 50/150/300 ms
-  after typing → nothing at all; 400/500/700 ms → filtered. So the plugin now
-  asks first and consumes second, and `AppShell.handleActivateTag` returns
-  `false` on both refusals and `true` after setting the scope. **`RichEditor`'s
-  ref-backed wrapper must PROPAGATE that boolean** — the "simplification" to a
-  statement body returns `undefined`, which reads as declined and silently
-  disables the whole feature while every callback still fires; pinned by a
-  `RichEditor.test.tsx` test asserting both directions.
-- **The boolean gate made the `null`-`onActivate` contract look redundant, and
-  the test that guards it had to change shape to stay falsifiable.** With an
-  unconditional wrapper and no `onActivateTag` prop, `activateRef.current` is
-  `undefined`, `undefined === true` is `false`, and the app-declined path
-  produces a byte-identical `handled: false` / `defaultPrevented: false` — so
-  deleting the `null` guard left 1034/1034 green, one commit after the same
-  injection failed a test. The two exits are still genuinely different: `null`
-  declines **before** the hit test, a `false` answer **after** it. The test
-  therefore spies on `posAtCoords` and asserts the plugin never even asked
-  where the click landed; the decline-by-answer test asserts the mirror. **Any
-  future guard added in front of this handler needs the same treatment** —
-  outcome-only assertions cannot separate two exits that produce the same
-  outcome.
-- **The tooltip stays optimistic on pills that cannot work, and that is
-  inherent.** Both lying-pill classes and every pill in a trashed note light up
-  under the modifier and read "Cmd-click to filter by this tag", then decline.
-  The editor deliberately learns nothing about scopes or the tag index, and the
-  guard that knows lives downstream of the decoration, so making the copy
-  honest means pushing index knowledge into the editor — the boundary M7.6 and
-  M7.7 were both careful not to cross. After the boolean contract above the
-  _click_ is honest (it places the caret, exactly like a plain click); only the
-  copy still promises. Do not chase this further without a design that crosses
-  that boundary deliberately. One related latency with no live instance:
-  `RichEditor` passes `activateHint` unconditionally, so a `RichEditor`
-  rendered with no `onActivateTag` — where `onActivate` is `null` and the
-  gesture is genuinely off — would still paint promising tooltips. Every live
-  call site supplies the prop; if one ever does not, gate the hint on the same
-  condition.
-- **The modifier affordance is a DOM attribute set through a ref, never React
-  state.** `data-mod-held` on the editor's outer element; setting state on
-  every `keydown` would re-render the editor subtree on every keystroke the
-  user types. It is derived from each event's own modifier flags on both
-  `keydown` and `keyup`, and cleared on window `blur` — hold Cmd, press Tab to
-  leave the window, and the `keyup` never arrives, leaving pills claiming to
-  be clickable while a plain click edits. **This is convention enforced by
-  nothing** — there is no lint rule or test forbidding a future edit from
-  routing this through `useState` instead, the same gap the
-  `@tiptap/markdown` single-importer rule already names for itself.
-- **`editorExtensions` is `buildEditorExtensions()` with no options**, so
-  `getSchema(editorExtensions)` and `computeRecognizedHtmlTags()` are
-  unaffected by anything the app injects. An `Extension` registers nothing in
-  the schema, and the options must never be able to change that. **This too is
-  convention enforced by nothing**: no test asserts that a future option added
-  to `TagPillOptions` (or any sibling extension) leaves the schema untouched.
-- **The tooltip's locale is frozen at mount.** `RichEditor` builds its
-  extension array once, so switching locale leaves every pill's `title` in
-  the old language until the editor remounts — which a note switch does
-  anyway, since `NoteEditor` is keyed by note id. Fixing it properly means
-  either recreating the editor on locale change (throwing away undo history)
-  or turning `activateHint` into a getter, changing an option shape that is
-  now pinned by tests. Accepted, not a defect.
-- **`RichEditor` passes `null` for `onActivate` when no `onActivateTag` prop
-  is supplied, and that is load-bearing.** With a non-null callback the
-  plugin believes someone is listening, so a Mod-click calls
-  `preventDefault()` and swallows the event — the user gets neither filtering
-  nor the caret placement a plain click would have given. The decision is
-  made once, in the `useState` initializer, matching the plugin's read-once
-  semantics.
-- **Under jsdom `navigator.platform === ''`, so `isMacOS()` is false on every
-  machine, including a Mac.** Any test of a platform-dependent branch must
-  stub `navigator.platform` explicitly before the code under test runs — for
-  `RichEditor` that means before render, since `isMacOS()` runs inside a
-  `useState` initializer — and restore it in a `finally`. This milestone
-  shipped two tests named for platform branches that could never execute
-  them.
 
 ## Carried into M5b and M6
 
