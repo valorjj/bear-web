@@ -92,7 +92,7 @@ All seven builtins, rendered as data.
 
 | Property | Value |
 | --- | --- |
-| box | 240 x 212 |
+| box | 240 x 184 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -107,7 +107,7 @@ The workhorse row. Bear's equivalent is the density benchmark.
 
 | Property | Value |
 | --- | --- |
-| box | 204 x 28 |
+| box | 204 x 24 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `13px` |
 | font-weight | `500` |
@@ -124,7 +124,7 @@ A root tag.
 
 | Property | Value |
 | --- | --- |
-| box | 204 x 28 |
+| box | 204 x 24 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `13px` |
 | font-weight | `400` |
@@ -141,7 +141,7 @@ A nested tag. Compare padding-left against depth 0 for the indent step.
 
 | Property | Value |
 | --- | --- |
-| box | 204 x 28 |
+| box | 204 x 24 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `13px` |
 | font-weight | `400` |
@@ -176,14 +176,13 @@ Three stacked lines. Bear fits a two-line snippet in comparable height.
 
 | Property | Value |
 | --- | --- |
-| box | 320 x 87.4 |
+| box | 320 x 88 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgba(207, 59, 44, 0.11)` |
-| border-bottom-width | `1px` |
 
 ## note list: row (resting)
 
@@ -191,14 +190,13 @@ Unselected, for the divider and hover baseline.
 
 | Property | Value |
 | --- | --- |
-| box | 320 x 87.4 |
+| box | 320 x 88 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgba(0, 0, 0, 0)` |
-| border-bottom-width | `1px` |
 
 ## editor: top controls
 
@@ -206,16 +204,17 @@ Currently a full-width bar; Bear floats a pill group here.
 
 | Property | Value |
 | --- | --- |
-| box | 840 x 36 |
+| box | 112 x 36 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(28, 27, 25)` |
-| background-color | `rgba(0, 0, 0, 0)` |
-| padding | `0px 16px` |
-| border-bottom-width | `1px` |
-| gap | `4px` |
+| background-color | `rgb(250, 249, 248)` |
+| padding | `0px 6px` |
+| border-radius | `3.35544e+07px` |
+| gap | `2px` |
+| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px` |
 
 ## editor: bottom toolbar
 
@@ -223,16 +222,18 @@ Currently welded to the window edge; Bear floats a centred rounded bar.
 
 | Property | Value |
 | --- | --- |
-| box | 840 x 36 |
+| box | 384 x 36 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(28, 27, 25)` |
-| background-color | `rgb(255, 255, 255)` |
-| padding | `0px 16px` |
-| border-top-width | `1px` |
-| gap | `4px` |
+| background-color | `rgb(250, 249, 248)` |
+| padding | `0px 6px` |
+| border-radius | `3.35544e+07px` |
+| gap | `2px` |
+| max-width | `100%` |
+| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px` |
 
 ## editor: prose column
 
@@ -240,14 +241,14 @@ max-width is --bear-line-width. Compare box width against it: if they differ, th
 
 | Property | Value |
 | --- | --- |
-| box | 840 x 820 |
+| box | 840 x 892 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `25.6px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgb(255, 255, 255)` |
-| padding | `16px 24px` |
+| padding | `48px 24px 96px` |
 | max-width | `896px` |
 
 ## editor: h1

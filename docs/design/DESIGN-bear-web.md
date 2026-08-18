@@ -368,8 +368,8 @@ treatment.
 
 | Element             | Height / measure | Notes                                              |
 | --------------------- | ------------------ | ----------------------------------------------------- |
-| Sidebar row          | 28px (`h-7`)      | Each nesting depth indents 0.75rem                    |
-| Note list row        | auto, `py-2.5`    | Title / date / snippet stacked, `gap-0.5`             |
+| Sidebar row          | 24px (`h-6`)      | Each nesting depth indents 0.75rem. 24 not Bear's 22, to stay on the 4px grid |
+| Note list row        | 88px, `py-2`      | Title / date / two-line snippet, `gap-0.5`; the second snippet line is reserved, not collapsible |
 | Toolbar (top/bottom) | 36px (`h-9`)      | Bottom toolbar is a horizontally scrolling button row |
 | Button, `sm`         | 24px (`h-6`)      |                                                        |
 | Button, `md`         | 28px (`h-7`)      | The default size                                      |
@@ -595,16 +595,16 @@ shape**, which are the theme-independent parts.
 
 | Surface | Bear | bear-web | Delta |
 | --- | --- | --- | --- |
-| Sidebar row height | 22 | 28 | **+6, ours is 27% looser** |
+| Sidebar row height | 22 | 24 | +2, held on the 4px grid deliberately |
 | Sidebar nesting indent step | ~13 | 12 | close enough |
-| Sidebar group gap (lists → tags) | +13 | 0 | **ours has no group separation** |
-| Note list row height | 81 | 87.4 | **ours is taller AND shows less** |
-| Note list content per row | title + **2-line** snippet + date | title + date + **1-line** snippet | different order, less text |
-| Note list divider | inset ~9 from the left | full-bleed | |
+| Sidebar group gap (lists → tags) | +13 | +16 | ours is already separated, slightly wider |
+| Note list row height | 81 | 88 | +7, and now shows the same two snippet lines |
+| Note list content per row | title + 2-line snippet + date | title + date + 2-line snippet | **order still differs — see below** |
+| Note list divider | inset ~9 from the left | inset 12 | |
 | Prose measure (rendered) | 643 | **792** | **ours is 23% wider** |
 | Editor body size / line height | 16 / 1.6 | 16 / 1.6 | **identical** |
-| Bottom toolbar | floating, ~380 x 37, fully rounded, centred, ~13 above the edge | full-width bar, 840 x 36, square, flush to the edge | **the single biggest shape difference** |
-| Top controls | two floating pill groups | full-width bar, 840 x 36 | same |
+| Bottom toolbar | floating, ~380 x 37, fully rounded, centred, ~13 above the edge | floating, fully rounded, centred, 12 above the edge | closed in M8 |
+| Top controls | two floating pill groups | one floating pill group, top right | closed in M8; we have no back/forward to group |
 | Note-foot tag chip | 102 x 22, fully rounded, `#` glyph + name | (no equivalent) | |
 
 ### `--bear-line-width` is dead at 1440x900, and the token is the wrong value
@@ -668,3 +668,15 @@ of these is styling — each is a document-model feature:
   in both shipped themes and accent headings would make one colour mean both
   "heading" and "delete forever". Revisiting this needs the two tokens to
   diverge first.
+
+### Still open: the note list row's reading order
+
+Bear stacks **title, snippet, date**; ours stacks **title, date, snippet**. The
+density pass deliberately did not change this, because `NoteListItem`'s
+`aria-label` is `"{title}, {date}, {snippet}"` and two tests in
+`NoteListItem.test.tsx` pin the snippet as the last thing announced. Reordering
+the row visually without the label leaves a sighted user and a screen-reader
+user hearing the date at different points; reordering both means editing a
+pinned accessibility contract, which this project's own rules say is a
+deliberate act and not a side effect of a restyle. It is a real difference, worth
+closing, and worth closing on purpose.

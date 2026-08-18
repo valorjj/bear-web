@@ -129,7 +129,7 @@
     "note": "All seven builtins, rendered as data.",
     "box": {
       "width": 240,
-      "height": 212
+      "height": 184
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -154,7 +154,7 @@
     "note": "The workhorse row. Bear's equivalent is the density benchmark.",
     "box": {
       "width": 204,
-      "height": 28
+      "height": 24
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -179,7 +179,7 @@
     "note": "A root tag.",
     "box": {
       "width": 204,
-      "height": 28
+      "height": 24
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -204,7 +204,7 @@
     "note": "A nested tag. Compare padding-left against depth 0 for the indent step.",
     "box": {
       "width": 204,
-      "height": 28
+      "height": 24
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -254,7 +254,7 @@
     "note": "Three stacked lines. Bear fits a two-line snippet in comparable height.",
     "box": {
       "width": 320,
-      "height": 87.4
+      "height": 88
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -268,7 +268,7 @@
       "margin": "0px",
       "border-radius": "0px",
       "border-top-width": "0px",
-      "border-bottom-width": "1px",
+      "border-bottom-width": "0px",
       "gap": "normal",
       "max-width": "none",
       "box-shadow": "none"
@@ -279,7 +279,7 @@
     "note": "Unselected, for the divider and hover baseline.",
     "box": {
       "width": 320,
-      "height": 87.4
+      "height": 88
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -293,7 +293,7 @@
       "margin": "0px",
       "border-radius": "0px",
       "border-top-width": "0px",
-      "border-bottom-width": "1px",
+      "border-bottom-width": "0px",
       "gap": "normal",
       "max-width": "none",
       "box-shadow": "none"
@@ -303,7 +303,7 @@
     "surface": "editor: top controls",
     "note": "Currently a full-width bar; Bear floats a pill group here.",
     "box": {
-      "width": 840,
+      "width": 112,
       "height": 36
     },
     "style": {
@@ -313,22 +313,22 @@
       "line-height": "24px",
       "letter-spacing": "normal",
       "color": "rgb(28, 27, 25)",
-      "background-color": "rgba(0, 0, 0, 0)",
-      "padding": "0px 16px",
+      "background-color": "rgb(250, 249, 248)",
+      "padding": "0px 6px",
       "margin": "0px",
-      "border-radius": "0px",
+      "border-radius": "3.35544e+07px",
       "border-top-width": "0px",
-      "border-bottom-width": "1px",
-      "gap": "4px",
+      "border-bottom-width": "0px",
+      "gap": "2px",
       "max-width": "none",
-      "box-shadow": "none"
+      "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px"
     }
   },
   {
     "surface": "editor: bottom toolbar",
     "note": "Currently welded to the window edge; Bear floats a centred rounded bar.",
     "box": {
-      "width": 840,
+      "width": 384,
       "height": 36
     },
     "style": {
@@ -338,15 +338,15 @@
       "line-height": "24px",
       "letter-spacing": "normal",
       "color": "rgb(28, 27, 25)",
-      "background-color": "rgb(255, 255, 255)",
-      "padding": "0px 16px",
+      "background-color": "rgb(250, 249, 248)",
+      "padding": "0px 6px",
       "margin": "0px",
-      "border-radius": "0px",
-      "border-top-width": "1px",
+      "border-radius": "3.35544e+07px",
+      "border-top-width": "0px",
       "border-bottom-width": "0px",
-      "gap": "4px",
-      "max-width": "none",
-      "box-shadow": "none"
+      "gap": "2px",
+      "max-width": "100%",
+      "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px"
     }
   },
   {
@@ -354,7 +354,7 @@
     "note": "max-width is --bear-line-width. Compare box width against it: if they differ, the clamp is engaging.",
     "box": {
       "width": 840,
-      "height": 820
+      "height": 892
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -364,7 +364,7 @@
       "letter-spacing": "normal",
       "color": "rgb(28, 27, 25)",
       "background-color": "rgb(255, 255, 255)",
-      "padding": "16px 24px",
+      "padding": "48px 24px 96px",
       "margin": "0px",
       "border-radius": "0px",
       "border-top-width": "0px",

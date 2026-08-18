@@ -44,7 +44,7 @@ export function NoteListItem({
 
   return (
     <li
-      className={`relative flex items-stretch border-b border-border transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
+      className={`relative flex items-stretch transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
         selected ? 'bg-selected' : ''
       }`}
     >
@@ -53,7 +53,7 @@ export function NoteListItem({
         onClick={onSelect}
         aria-current={selected ? 'true' : undefined}
         aria-label={label}
-        className={`flex min-w-0 flex-1 flex-col gap-1 px-3 py-3 text-left transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
+        className={`flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2 text-left transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
           selected ? '' : 'hover:bg-hover'
         }`}
       >
@@ -69,11 +69,31 @@ export function NoteListItem({
               though the user had written it. */}
           <HighlightedText text={displayTitle} query={hasTitle ? query : undefined} />
         </span>
-        <span className="text-ui-sm text-faint">{date}</span>
-        <span className="truncate text-ui-sm text-muted">
+        <span className="text-ui-xs text-faint">{date}</span>
+        {/*
+          Two lines of preview, and the space for the second is RESERVED rather
+          than allowed to collapse: Bear's list rows are a uniform height whether
+          or not a note has a body (measured — a body-less note still occupies a
+          full row), and a list whose rows change height with their content reads
+          as ragged. `line-clamp-2` caps it; `min-h` holds it. `leading-snug`
+          rather than the inherited UI leading, so two lines fit in the height one
+          line used to occupy plus a little.
+        */}
+        <span className="line-clamp-2 min-h-[2.0625rem] text-ui-sm leading-snug text-muted">
           <HighlightedText text={displaySnippet} query={hasSnippet ? query : undefined} />
         </span>
       </button>
+
+      {/*
+        The divider is an inset absolute rule rather than a `border-b` on the
+        row, so it starts clear of the left edge the way Bear's does while the
+        hover and selected fills still span the full width. A `border-b` on this
+        element cannot be inset without insetting the fill with it.
+      */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 left-3 h-px bg-border"
+      />
 
       <button
         type="button"
