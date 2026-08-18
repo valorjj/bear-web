@@ -27,7 +27,7 @@ IndexedDB.
 | M7.7 tag pill activation         | complete       |
 | M8–M9                            | themes, polish |
 
-1039 unit tests, 40 end-to-end tests. `main` is always green and auto-deploys.
+1039 unit tests, 42 end-to-end tests. `main` is always green and auto-deploys.
 
 `npm run shots` is a sixth entry point, deliberately not in that count: it drives
 `e2e/shots.spec.ts` against the fixed corpus in `e2e/fixtures/corpus.ts` and
@@ -1090,6 +1090,37 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   colour mean both "heading" and "delete forever", and a page of red headings
   reads as a warning notice. The accent is for links, checkboxes, highlight,
   selection and focus.
+
+- **Both editor toolbars float; they are not bars in the flow, and their
+  placement lives in `RichEditor`, not in either toolbar.** From M4 to M7.5 they
+  were full-width strips welded to the pane's top and bottom edges, which
+  measurement against Bear identified as the single largest reason the editor
+  read as a web page rather than an app (see the measured comparison in
+  `docs/design/DESIGN-bear-web.md`). `TopControls`, `InfoPanel` and
+  `BottomToolbar` are now bare groups of controls with no layout of their own,
+  and `RichEditor` positions all three, so the pill offsets are stated once
+  together and cannot drift apart. Three consequences that are load-bearing
+  rather than stylistic:
+  - **The writing surface's `pt-12`/`pb-24` is a reserve, not spacing.** The
+    pills overlay the prose, so without the bottom reserve the last line of
+    every note sits permanently behind the formatting bar with no way to scroll
+    it clear — and the note still round-trips perfectly, so nothing but a
+    computed-style test can see it. `e2e/appearance.spec.ts` asserts the reserve
+    covers each pill's actual reach into the pane, so it stays correct when a
+    toolbar's height or inset changes.
+  - **The positioning wrappers are `pointer-events-none` with
+    `pointer-events-auto` on the pill.** Each wrapper spans the pane's full
+    width; without this the top wrapper would swallow every click on the first
+    line of prose beneath it.
+  - **`EditorContent` comes FIRST in the DOM**, so tab order and screen-reader
+    order reach the note before its formatting controls. Visual stacking is
+    `absolute` + `z-10` on the chrome, never source order.
+    `BottomToolbar` keeps `w-fit max-w-full` with `overflow-x-auto`: it shrinks to
+    its content at a comfortable width, so `scrollWidth === clientWidth` and no
+    scrollbar appears, and is capped rather than overflowing the pane when eleven
+    icon buttons no longer fit — at which point the toolbar's own `scrollLeft` is
+    the scrolling container, not the pane's. Both halves were already pinned by
+    `e2e/appearance.spec.ts` before the reshape and still are.
 
 - **`--bear-line-width` caps the prose column, not the pane.** The editor pane
   still fills the window so the toolbars span it; only `.ProseMirror` is capped

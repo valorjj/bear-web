@@ -104,7 +104,18 @@ export function RichEditor({
         // so its compiled specificity matches `Resizer`'s suppression — a bare
         // `.outline-none` ties in specificity with the global `:focus-visible`
         // ring and loses to it on source order alone.
-        class: 'min-h-0 flex-1 bg-bg px-6 py-4 text-text focus-visible:outline-none',
+        //
+        // The vertical padding reserves room for the two floating toolbars
+        // rather than merely spacing the prose: they overlay this surface, so
+        // `pt-12` starts the first line below the top pill and `pb-24` lets the
+        // last line scroll clear of the bottom one. Without the bottom reserve
+        // the final line of every note sits permanently behind the formatting
+        // bar with no way to scroll it into view, and the note still
+        // round-trips perfectly — so only a computed-style test can see it.
+        // `e2e/appearance.spec.ts` asserts the reserve covers each pill's
+        // actual reach into the pane, which is what keeps this correct if
+        // either toolbar's height or inset changes.
+        class: 'min-h-0 flex-1 bg-bg px-6 pt-12 pb-24 text-text focus-visible:outline-none',
       },
     },
   });
@@ -148,17 +159,43 @@ export function RichEditor({
   }, []);
 
   return (
-    <div ref={surfaceRef} data-mod-held="false" className="flex min-h-0 flex-1 flex-col">
-      <TopControls
-        editor={editor}
-        infoOpen={infoOpen}
-        onToggleInfo={() => setInfoOpen((v) => !v)}
-      />
-      {infoOpen && (
-        <InfoPanel text={editor?.getText() ?? ''} createdAt={createdAt} updatedAt={updatedAt} />
-      )}
+    // `relative` is what makes the three floating surfaces below position
+    // against the editor pane. Placement lives here rather than inside each
+    // component so the pill offsets are stated once, together, and cannot
+    // drift apart — and so `TopControls`, `InfoPanel` and `BottomToolbar` stay
+    // testable as plain groups of controls with no layout of their own.
+    <div ref={surfaceRef} data-mod-held="false" className="relative flex min-h-0 flex-1 flex-col">
+      {/*
+       * The writing surface comes FIRST in the DOM, so the natural tab order
+       * reaches the prose before the chrome and a screen reader meets the note
+       * before its formatting controls. The visual stacking is set by
+       * `absolute` + `z-10` on the chrome, not by source order.
+       */}
       <EditorContent editor={editor} className="flex min-h-0 flex-1 flex-col overflow-auto" />
-      <BottomToolbar editor={editor} />
+
+      <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-end">
+        {/*
+         * `pointer-events-none` on the positioning wrapper and `auto` on the
+         * pill: the wrapper spans the pane's full width, so without this it
+         * would swallow every click on the first line of prose beneath it.
+         */}
+        <div className="pointer-events-auto flex flex-col items-end gap-2">
+          <TopControls
+            editor={editor}
+            infoOpen={infoOpen}
+            onToggleInfo={() => setInfoOpen((v) => !v)}
+          />
+          {infoOpen && (
+            <InfoPanel text={editor?.getText() ?? ''} createdAt={createdAt} updatedAt={updatedAt} />
+          )}
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10 flex justify-center">
+        <div className="pointer-events-auto flex max-w-full">
+          <BottomToolbar editor={editor} />
+        </div>
+      </div>
     </div>
   );
 }

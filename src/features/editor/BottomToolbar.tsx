@@ -146,8 +146,17 @@ const ACTIONS: readonly Action[] = [
 ];
 
 /**
- * Bear's floating bottom toolbar. Underline is deliberately absent: it has no
- * Markdown representation, and `_underline_` collides with CommonMark italic.
+ * Bear's floating bottom toolbar — floating for real since M8, having spent
+ * M4 to M7.5 as a full-width bar welded to the bottom of the window.
+ *
+ * `w-fit` with a `max-w-full` cap is what keeps the narrow-viewport contract
+ * intact: the pill shrinks to its content at a comfortable width (so
+ * `overflow-x-auto` adds no scrollbar and `scrollWidth === clientWidth`), and
+ * is capped rather than allowed to overflow the pane when eleven icon buttons
+ * no longer fit — at which point its own `scrollLeft` is the scrolling
+ * container, not the pane's. `e2e/appearance.spec.ts` pins both halves.
+ *
+ * Placement is the parent's job; see `TopControls`.
  */
 export function BottomToolbar({ editor }: BottomToolbarProps): ReactElement {
   const t = useT();
@@ -156,7 +165,7 @@ export function BottomToolbar({ editor }: BottomToolbarProps): ReactElement {
     <div
       role="toolbar"
       aria-label={t('editor.toolbar.bottom')}
-      className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-border bg-bg px-4"
+      className="flex h-9 w-fit max-w-full shrink-0 items-center gap-0.5 overflow-x-auto rounded-full bg-surface px-1.5 shadow-popover"
     >
       {ACTIONS.map((action) => (
         <button

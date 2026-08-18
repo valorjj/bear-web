@@ -22,6 +22,13 @@ export interface TopControlsProps {
  *
  * Underline still does not appear here (or in `BottomToolbar`): it has no
  * Markdown representation, and `_underline_` collides with CommonMark italic.
+ *
+ * Shaped as a FLOATING PILL, positioned by its parent rather than by itself:
+ * `RichEditor` owns the `absolute` placement so this component stays a bare
+ * group of controls and the two toolbars cannot drift apart on where "floating"
+ * puts them. Measured against Bear, a full-width bar welded to the pane edge is
+ * the single largest reason this editor read as a web page rather than an app —
+ * see `docs/design/DESIGN-bear-web.md`.
  */
 export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps): ReactElement {
   const t = useT();
@@ -30,7 +37,7 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
     <div
       role="toolbar"
       aria-label={t('editor.toolbar.top')}
-      className="flex h-9 shrink-0 items-center justify-end gap-1 border-b border-border px-4"
+      className="flex h-9 shrink-0 items-center gap-0.5 rounded-full bg-surface px-1.5 shadow-popover"
     >
       <button
         type="button"

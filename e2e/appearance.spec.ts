@@ -574,3 +574,106 @@ test('a tag renders as a pill, distinct from the prose beside it', async ({ page
   expect(measured.background).not.toBe(measured.proseBackground);
   expect(measured.radius).toBeGreaterThan(0);
 });
+
+test('the editor chrome floats as pills clear of the pane edges', async ({ page }) => {
+  // M8's shape change: both toolbars were full-width bars welded to the pane
+  // edges from M4 to M7.5 — measured against Bear, the single largest reason
+  // this editor read as a web page rather than an app. Nothing in the unit
+  // suite can see the difference: the roles, labels, buttons and every
+  // `getByRole` lookup are byte-identical before and after.
+  await openNoteWithProse(page);
+
+  const pane = page.getByRole('region', { name: 'Editor' });
+  const paneBox = await pane.boundingBox();
+  expect(paneBox).not.toBeNull();
+
+  const surfaceBackground = await page
+    .getByRole('textbox', { name: 'Note text' })
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+
+  for (const name of ['Top controls', 'Formatting toolbar']) {
+    const toolbar = page.getByRole('toolbar', { name });
+    await expect(toolbar).toBeVisible();
+
+    const box = await toolbar.boundingBox();
+    expect(box, name).not.toBeNull();
+    if (box === null || paneBox === null) continue;
+
+    // Inset on all four sides. A bar welded to an edge touches it; a floating
+    // pill cannot. The 0.5 tolerance is for sub-pixel layout, not slack.
+    expect(box.x, `${name} left inset`).toBeGreaterThan(paneBox.x + 0.5);
+    expect(box.x + box.width, `${name} right inset`).toBeLessThan(paneBox.x + paneBox.width - 0.5);
+    expect(box.y, `${name} top inset`).toBeGreaterThan(paneBox.y + 0.5);
+    expect(box.y + box.height, `${name} bottom inset`).toBeLessThan(
+      paneBox.y + paneBox.height - 0.5,
+    );
+
+    const style = await toolbar.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        radius: Number.parseFloat(computed.borderTopLeftRadius),
+        background: computed.backgroundColor,
+        shadow: computed.boxShadow,
+        height: element.getBoundingClientRect().height,
+      };
+    });
+
+    // Fully rounded, not merely soft-cornered: a pill's radius is at least
+    // half its height. `rounded-sm` (4px on a 36px bar) would pass a
+    // `> 0` check and still read as a rectangle.
+    expect(style.radius, `${name} radius`).toBeGreaterThanOrEqual(style.height / 2 - 0.5);
+
+    // Not-transparent and not-equal-to-the-surface are two different failures,
+    // the same lesson as the pane-card test: a pill with no fill computes
+    // `rgba(0, 0, 0, 0)`, a literal string never equal to the surface's own
+    // colour, so an equality check alone passes on a pill that is invisible.
+    expect(style.background, `${name} fill`).not.toBe('rgba(0, 0, 0, 0)');
+    expect(style.background, `${name} fill vs surface`).not.toBe(surfaceBackground);
+
+    // Depth is the only thing separating a floating surface from the prose
+    // behind it, since the fill is deliberately one subtle step from it.
+    expect(style.shadow, `${name} shadow`).not.toBe('none');
+  }
+});
+
+test('the writing surface reserves room for the floating toolbars', async ({ page }) => {
+  // The toolbars overlay the prose rather than sitting in the flow, so the
+  // padding that keeps text out from under them is load-bearing, not
+  // decoration. Without the bottom reserve the last line of every note sits
+  // permanently behind the formatting bar with no way to scroll it clear —
+  // and the note still round-trips perfectly, so no other test in this project
+  // would notice.
+  await openNoteWithProse(page);
+
+  const pane = page.getByRole('region', { name: 'Editor' });
+  const paneBox = await pane.boundingBox();
+  const padding = await page.getByRole('textbox', { name: 'Note text' }).evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return {
+      top: Number.parseFloat(computed.paddingTop),
+      bottom: Number.parseFloat(computed.paddingBottom),
+    };
+  });
+
+  expect(paneBox).not.toBeNull();
+  if (paneBox === null) return;
+
+  for (const [name, side] of [
+    ['Top controls', 'top'],
+    ['Formatting toolbar', 'bottom'],
+  ] as const) {
+    const box = await page.getByRole('toolbar', { name }).boundingBox();
+    expect(box, name).not.toBeNull();
+    if (box === null) continue;
+
+    // How far the pill reaches into the pane from its own edge. The reserve
+    // has to cover that, or the pill overlaps text.
+    const reach =
+      side === 'top' ? box.y + box.height - paneBox.y : paneBox.y + paneBox.height - box.y;
+
+    expect(
+      padding[side],
+      `${name}: ${side} reserve ${padding[side]} vs reach ${reach}`,
+    ).toBeGreaterThanOrEqual(reach);
+  }
+});
