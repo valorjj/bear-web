@@ -27,7 +27,7 @@ IndexedDB.
 | M7.7 tag pill activation         | complete       |
 | M8–M9                            | themes, polish |
 
-1039 unit tests, 42 end-to-end tests. `main` is always green and auto-deploys.
+1039 unit tests, 43 end-to-end tests. `main` is always green and auto-deploys.
 
 `npm run shots` is a sixth entry point, deliberately not in that count: it drives
 `e2e/shots.spec.ts` against the fixed corpus in `e2e/fixtures/corpus.ts` and
@@ -1132,6 +1132,37 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   column) suppress default stretch alignment, so without the explicit width
   the column shrinks to fit its content instead of filling the pane and then
   clamping.
+  **It was wired in M7.5 and STILL inert in practice until M8**, because `56em`
+  resolves to 896px while the editor pane at 1440x900 is 840 wide — so the
+  rendered column was 792 and the clamp never engaged at the window size every
+  screenshot is taken at. The value is now the MEASURED one: Bear renders a
+  643pt column at 16pt, which is `40em`. Bear's own typography panel reports its
+  line width as `56 em` — the number this token carried for three milestones —
+  so **do not restore 56 on the strength of Bear's label**; Bear's `em` there is
+  not a CSS `em` and the missing 16em is unexplained. Match what Bear renders.
+
+- **`--bear-para-spacing` and `--bear-para-indent` are ADDITIVE, and all three
+  editor typography tokens are now guarded by a test that drives them from the
+  page.** Additive matches Bear's semantics: its 단락 간격 slider defaults to
+  `0 em` and adds to the app's own base rhythm rather than replacing it, so at
+  the shipped `0em` the render is byte-identical to before they were wired.
+  Spacing is stated TWICE in `editor.css` — once on `> * + *` and again on the
+  heading rule — because those two rules have equal specificity and the heading
+  one wins on source order, so a heading would otherwise ignore the token
+  entirely. The guard matters more than the wiring: a declared token no rule
+  consumes is indistinguishable from a token that does not exist, Tailwind and
+  CSS both emit nothing and say nothing, and this project has now shipped that
+  defect three times (`--color-hover`, `--bear-line-width`, and these two).
+  `e2e/appearance.spec.ts`'s "the editor typography tokens reach the rendered
+  prose" sets each token from the page and asserts the render moves; all three
+  halves were verified by fault injection, including restoring `56em`.
+
+- **The tag pill sets `box-decoration-break: clone`.** A pill that wraps mid-tag
+  otherwise gets ONE box sliced through the break — the fragment before it loses
+  its right edge and radius, the one after loses its left — which reads as a
+  rendering fault rather than a wrapped chip. Latent from M7.6 until M8 narrowed
+  the measure to 40em, at which point a mid-tag wrap became common rather than
+  rare.
 
 - **`SearchField` suppresses the native `type="search"` cancel widget.**
   Chromium renders its own X inside a search input, which sat beside our own

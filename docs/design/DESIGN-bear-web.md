@@ -344,7 +344,7 @@ milestone the whole app ran at a flat 14px.
 ### Editor typography is separate, and owned by M8
 
 The editor's own type — `--bear-font-size` (16px), `--bear-line-height`
-(1.6), `--bear-line-width` (56em), `--bear-para-spacing`, `--bear-para-indent`
+(1.6), `--bear-line-width` (40em), `--bear-para-spacing`, `--bear-para-indent`
 — is a distinct scale bound to M8's preference sliders (font size, line
 height, and measure will all become user-adjustable). Do not reuse the UI
 scale for note content, and do not treat the editor tokens as part of this
@@ -373,7 +373,7 @@ treatment.
 | Toolbar (top/bottom) | 36px (`h-9`)      | Bottom toolbar is a horizontally scrolling button row |
 | Button, `sm`         | 24px (`h-6`)      |                                                        |
 | Button, `md`         | 28px (`h-7`)      | The default size                                      |
-| Editor measure       | `56em` (`--bear-line-width`) | M8-adjustable, not part of this system     |
+| Editor measure       | `40em` (`--bear-line-width`) | Bear's rendered 643pt at 16pt. M8-adjustable |
 
 ### Panes
 
@@ -601,7 +601,7 @@ shape**, which are the theme-independent parts.
 | Note list row height | 81 | 88 | +7, and now shows the same two snippet lines |
 | Note list content per row | title + 2-line snippet + date | title + date + 2-line snippet | **order still differs — see below** |
 | Note list divider | inset ~9 from the left | inset 12 | |
-| Prose measure (rendered) | 643 | **792** | **ours is 23% wider** |
+| Prose measure (rendered) | 643 | 640 | closed in M8 |
 | Editor body size / line height | 16 / 1.6 | 16 / 1.6 | **identical** |
 | Bottom toolbar | floating, ~380 x 37, fully rounded, centred, ~13 above the edge | floating, fully rounded, centred, 12 above the edge | closed in M8 |
 | Top controls | two floating pill groups | one floating pill group, top right | closed in M8; we have no back/forward to group |

@@ -87,7 +87,18 @@
   /* Editor typography, bound to the M8 preference sliders. */
   --bear-font-size: 16px;
   --bear-line-height: 1.6;
-  --bear-line-width: 56em;
+  /*
+   * Measured off Bear, not copied off its slider. Bear's typography panel
+   * reports its line width as `56 em` — the number this token carried from
+   * M5.5 to M8 — while rendering a column of 643pt at 16pt, which is 40.2em.
+   * Bear's `em` here is therefore not a CSS `em` and the missing 16em is
+   * unexplained, so the rendered measure is what we match.
+   *
+   * At 56em the clamp never engaged at 1440x900 at all: the editor pane is 840
+   * wide, so the prose column was 792 and `max-width: 896px` did nothing. The
+   * token was wired up in M7.5 and still inert in practice.
+   */
+  --bear-line-width: 40em;
   --bear-para-spacing: 0em;
   --bear-para-indent: 0em;
 }

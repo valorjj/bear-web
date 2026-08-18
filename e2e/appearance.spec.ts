@@ -505,8 +505,9 @@ test('the prose column is measured on a wide window', async ({ page }) => {
     // the card test above: Pane.tsx's "region" role is implicit, not an
     // explicit attribute.
     const pane = prose.closest('section[aria-label]');
-    // `getComputedStyle` resolves `max-width: 56em` (`--bear-line-width`) to
-    // an absolute pixel length here, so no unit conversion is needed.
+    // `getComputedStyle` resolves the `em`-valued `max-width`
+    // (`--bear-line-width`) to an absolute pixel length here, so no unit
+    // conversion is needed and no test has to know the token's current value.
     const lineWidthPx = Number.parseFloat(getComputedStyle(prose).maxWidth);
     return {
       prose: prose.getBoundingClientRect().width,
@@ -676,4 +677,74 @@ test('the writing surface reserves room for the floating toolbars', async ({ pag
       `${name}: ${side} reserve ${padding[side]} vs reach ${reach}`,
     ).toBeGreaterThanOrEqual(reach);
   }
+});
+
+test('the editor typography tokens reach the rendered prose', async ({ page }) => {
+  // `--bear-line-width` was declared in M5.5, wired into `.ProseMirror` in
+  // M7.5, and STILL inert at 1440x900 through M7.7, because 56em resolved wider
+  // than the pane so the clamp never engaged. `--bear-para-spacing` and
+  // `--bear-para-indent` were worse: nothing read them at all. A declared token
+  // no rule consumes is indistinguishable from a token that does not exist, and
+  // no source-level check can tell the difference — Tailwind and CSS both emit
+  // nothing and say nothing.
+  //
+  // So this drives each token from the page and asserts the render moves. It is
+  // the guard those three tokens never had, and it is why M8's sliders can be
+  // built against them with confidence.
+  await openNoteWithProse(page);
+
+  const gapBetweenBlocks = async (): Promise<number> =>
+    page.getByRole('textbox', { name: 'Note text' }).evaluate((element) => {
+      const paragraph = [...element.children].find((child) => child.tagName === 'P');
+      const list = [...element.children].find((child) => child.tagName === 'UL');
+      if (paragraph === undefined || list === undefined) return Number.NaN;
+      return list.getBoundingClientRect().top - paragraph.getBoundingClientRect().bottom;
+    });
+
+  const setToken = async (name: string, value: string): Promise<void> => {
+    await page.evaluate(
+      ([property, next]) => document.documentElement.style.setProperty(property, next),
+      [name, value] as const,
+    );
+  };
+
+  // Both blocks must actually be there, or every comparison below is vacuous.
+  const restingGap = await gapBetweenBlocks();
+  expect(Number.isNaN(restingGap)).toBe(false);
+
+  // `--bear-para-spacing` is additional space on top of the base rhythm, which
+  // is Bear's own semantics for the slider. 2em at 16px is 32px.
+  await setToken('--bear-para-spacing', '2em');
+  const spacedGap = await gapBetweenBlocks();
+  expect(spacedGap - restingGap).toBeGreaterThan(30);
+  await setToken('--bear-para-spacing', '0em');
+
+  // `--bear-para-indent` reaches paragraphs. Read from computed style rather
+  // than measured, because a first-line indent moves glyphs inside a box whose
+  // own rect does not change.
+  await setToken('--bear-para-indent', '3em');
+  const indent = await page.getByRole('textbox', { name: 'Note text' }).evaluate((element) => {
+    const paragraph = element.querySelector('p');
+    return paragraph === null ? null : getComputedStyle(paragraph).textIndent;
+  });
+  expect(indent).toBe('48px');
+  await setToken('--bear-para-indent', '0em');
+
+  // `--bear-line-width` reaches the column, and — unlike before M8 — the clamp
+  // engages at the default viewport rather than only on an unusually wide one.
+  const clamped = await page.getByRole('textbox', { name: 'Note text' }).evaluate((element) => {
+    const prose = element.closest('.ProseMirror') ?? element;
+    const pane = prose.closest('section[aria-label]');
+    return {
+      prose: prose.getBoundingClientRect().width,
+      pane: pane === null ? 0 : pane.getBoundingClientRect().width,
+      max: Number.parseFloat(getComputedStyle(prose).maxWidth),
+    };
+  });
+  expect(clamped.pane).toBeGreaterThan(0);
+  // The whole point of the measured 40em: the token, not the pane, decides the
+  // column at the ordinary window size the shots are taken at.
+  expect(clamped.max).toBeLessThan(clamped.pane);
+  expect(clamped.prose).toBeLessThan(clamped.max + 2);
+  expect(clamped.prose).toBeGreaterThan(clamped.max - 2);
 });

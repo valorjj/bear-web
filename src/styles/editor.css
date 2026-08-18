@@ -35,8 +35,23 @@
   margin-inline: auto;
 }
 
+/*
+ * `--bear-para-spacing` is ADDITIONAL space, matching Bear's own semantics: its
+ * 단락 간격 slider defaults to `0 em` and adds to whatever base rhythm the app
+ * already has, rather than replacing it. So at the shipped `0em` this is exactly
+ * the 0.75em it has always been, and M8's slider has something to drive.
+ *
+ * Wired here for the same reason `--bear-line-width` had to be: a declared token
+ * nothing reads is indistinguishable from a token that does not exist, and this
+ * project has now shipped that twice.
+ */
 .ProseMirror > * + * {
-  margin-top: 0.75em;
+  margin-top: calc(0.75em + var(--bear-para-spacing));
+}
+
+/* Bear's 단락 들여쓰기, also 0 by default and also additive. */
+.ProseMirror p {
+  text-indent: var(--bear-para-indent);
 }
 
 .ProseMirror h1,
@@ -47,7 +62,12 @@
 .ProseMirror h6 {
   font-weight: 600;
   line-height: 1.25;
-  margin-top: 1.4em;
+  /*
+   * Additive on the same basis as the block rule above, and it has to be stated
+   * again here: this rule and `> * + *` have equal specificity, so this one wins
+   * on source order and a heading would otherwise ignore the token entirely.
+   */
+  margin-top: calc(1.4em + var(--bear-para-spacing));
 }
 
 /* The first heading in a note is its title line; it should not push off. */
@@ -213,6 +233,15 @@
   background-color: var(--bear-tag-fill);
   border-radius: var(--bear-radius-sm);
   padding: 0.05em 0.15em 0.05em 0.25em;
+  /*
+   * A pill that wraps gets a complete box on each line rather than one box
+   * sliced through the middle, which is the default (`slice`) and reads as a
+   * rendering fault — the fragment before the break loses its right edge and
+   * radius, the one after loses its left. Latent until M8 narrowed the measure
+   * to Bear's 40em, which made a mid-tag wrap common rather than rare.
+   */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 /*
