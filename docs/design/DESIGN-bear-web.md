@@ -562,3 +562,109 @@ M6 has a target rather than a blank page:
   ignores layout gaps; this milestone shipped, and then reverted, a
   regression where a sidebar row's label and count announced as "work3"
   instead of "work 3." Use an explicit space text node.
+
+---
+
+## Measured against the real Bear (2026-08-18)
+
+The first quantitative comparison between this app and its reference. Bear's
+numbers come from pixel measurement of five full-resolution screen captures of
+Bear 2 on macOS; ours come from `npm run measure`, which drives a real Chromium
+at 1440x900 and writes `docs/design/measurements.md`. Regenerate our column any
+time; Bear's column only changes if new captures are measured.
+
+### Calibration, and why these numbers are trustworthy
+
+The captures are 2000x1125 with a menu bar exactly 24px tall. The macOS menu bar
+is 24pt, so the capture is **1 px per point** and every figure below is in
+points, directly comparable to our CSS pixels. Two independent checks agree:
+Bear's body line pitch measures 25pt, and Bear's own typography panel reports
+16pt at line-height 1.6 (= 25.6pt); and Bear's surface colours match the
+Catppuccin Latte palette value-for-value.
+
+### The captures are themed, so their colours are NOT Bear's
+
+The Bear in these captures runs **Catppuccin Latte**, a third-party theme the
+user selected — base `#eff1f5`, mantle `#e6e9ef`, teal `#179299`, all exact
+palette matches. Every colour measured below therefore describes Catppuccin
+Latte, not Bear's own design language, and none of it is an argument for
+changing a token in `tokens.css`. What transfers is **structure, density and
+shape**, which are the theme-independent parts.
+
+### Geometry
+
+| Surface | Bear | bear-web | Delta |
+| --- | --- | --- | --- |
+| Sidebar row height | 22 | 28 | **+6, ours is 27% looser** |
+| Sidebar nesting indent step | ~13 | 12 | close enough |
+| Sidebar group gap (lists → tags) | +13 | 0 | **ours has no group separation** |
+| Note list row height | 81 | 87.4 | **ours is taller AND shows less** |
+| Note list content per row | title + **2-line** snippet + date | title + date + **1-line** snippet | different order, less text |
+| Note list divider | inset ~9 from the left | full-bleed | |
+| Prose measure (rendered) | 643 | **792** | **ours is 23% wider** |
+| Editor body size / line height | 16 / 1.6 | 16 / 1.6 | **identical** |
+| Bottom toolbar | floating, ~380 x 37, fully rounded, centred, ~13 above the edge | full-width bar, 840 x 36, square, flush to the edge | **the single biggest shape difference** |
+| Top controls | two floating pill groups | full-width bar, 840 x 36 | same |
+| Note-foot tag chip | 102 x 22, fully rounded, `#` glyph + name | (no equivalent) | |
+
+### `--bear-line-width` is dead at 1440x900, and the token is the wrong value
+
+Our editor pane is 840 wide; less its 24pt horizontal padding the prose column
+is **792**, and `max-width: 896px` (`56em` at 16px) therefore never engages.
+The token has been declared-and-inert since M5.5 in a second sense: M7.5 wired
+it into `.ProseMirror`, but at this window size the clamp still does nothing.
+
+Bear's rendered measure is **643pt = 40.2em at 16pt**. So the fix is not "wire
+the token up" — it is already wired — it is to change the value to about `40em`,
+at which point the clamp engages at 1440 wide and the column matches Bear's.
+
+**A discrepancy worth recording rather than resolving:** Bear's own typography
+panel reports its line width as `56 em`, the same number our token carries, while
+rendering 40em. Bear's `em` here is therefore not a CSS `em`; the remaining 16em
+is unexplained and may be container padding. Do not copy `56` into a CSS
+`max-width` on the strength of the panel's label — copy the measured 40em, which
+is what a user actually sees.
+
+### Bear's own typography defaults, from its preferences panel
+
+Read directly off Bear's 타이포그래피 pane, and the reason four of our five editor
+tokens need no change:
+
+| Bear preference | Bear default | Our token | Match |
+| --- | --- | --- | --- |
+| 글꼴 크기 (size) | 16 pt | `--bear-font-size: 16px` | yes |
+| 줄 높이 (line height) | 1.6 em | `--bear-line-height: 1.6` | yes |
+| 줄 너비 (line width) | 56 em (renders 40em) | `--bear-line-width: 56em` | **no — see above** |
+| 단락 간격 (paragraph spacing) | 0 em | `--bear-para-spacing: 0em` | yes |
+| 단락 들여쓰기 (paragraph indent) | 0 em | `--bear-para-indent: 0em` | yes |
+
+Bear exposes exactly these five as sliders, plus three font pickers (text,
+heading, code — it uses a separate heading family). That is the shape M8's
+typography panel should take; our token set was already designed for it.
+
+### Structural features Bear has and we do not
+
+Visible in every capture, and a large share of the perceived quality gap. None
+of these is styling — each is a document-model feature:
+
+- **Tables.** Ours fall back to `RawBlock` and render as a code block with the
+  pipes intact, which is the fallback working correctly and looking wrong.
+- **Callout / panel blocks.** Measured: full-measure width, ~94 tall, tinted
+  fill, a 6pt accent bar down the left edge, ~6 radius. Bear ships several
+  variants (memo, warning).
+- **Collapsible headings.** A chevron sits left of every heading, outside the
+  measure, and folds the section beneath it.
+- **Inline images and note thumbnails.** The first row of Bear's note list
+  carries an image preview, which is why that row is 149 tall against 81.
+
+### What Bear does that we deliberately do not, and should keep not doing
+
+- **Bear's panes are flush inside one window, separated by hairlines.** Ours
+  float as three rounded cards on `--bear-canvas`. That is the existing ruling
+  (a browser tab has no window chrome, so depth substitutes for it) and this
+  measurement is not an argument against it.
+- **Bear colours its headings with the theme accent.** Ours keep
+  `--bear-text`, because `--bear-accent` and `--bear-danger` hold the same value
+  in both shipped themes and accent headings would make one colour mean both
+  "heading" and "delete forever". Revisiting this needs the two tokens to
+  diverge first.

@@ -17,7 +17,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "shots": "PW_HARNESS=1 playwright test --grep @shots",
+    "measure": "PW_HARNESS=1 playwright test --grep @measure"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",

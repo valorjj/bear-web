@@ -27,7 +27,13 @@ IndexedDB.
 | M7.7 tag pill activation         | complete       |
 | M8–M9                            | themes, polish |
 
-1034 unit tests, 40 end-to-end tests. `main` is always green and auto-deploys.
+1039 unit tests, 40 end-to-end tests. `main` is always green and auto-deploys.
+
+`npm run shots` is a sixth entry point, deliberately not in that count: it drives
+`e2e/shots.spec.ts` against the fixed corpus in `e2e/fixtures/corpus.ts` and
+writes the design reference screenshots under `docs/design/shots/` (gitignored).
+It asserts nothing, and `grepInvert` in `playwright.config.ts` keeps it out of
+`npm run test:e2e`.
 
 ## Commands
 
@@ -90,6 +96,21 @@ These bit us once already. They are not mistakes.
   worktree behind silently runs several extra copies of the whole unit suite
   on every `npm test`, inflating pass counts with no test-writing mistake to
   find.
+- **Dexie's `version(1)` is IndexedDB version 10, not 1.** Dexie multiplies its
+  declared version by ten. Seeding the database directly from a Playwright init
+  script at IndexedDB version 1 therefore leaves Dexie wanting to upgrade 1 →
+  10, and the seeding connection — still open — blocks that upgrade forever.
+  `openDatabase()` never settles, so `main.tsx` never reaches `createRoot` and
+  the page renders as a bare `<div id="root">` with **no error at all**: the
+  only trace is a `console.warn` reading `Upgrade 'bear-web' blocked by other
+connection holding version 0.1`. `e2e/fixtures/seed.ts` opens at 10 and closes
+  its connection in `onsuccess` for exactly this reason.
+- **A seeded note must be in place BEFORE Dexie opens the database.**
+  `useLiveQuery` observes writes made through Dexie's own connection; raw
+  IndexedDB writes from a second connection in the same page are invisible to
+  it, so a note inserted after boot sits in the database and never appears in
+  the list. This is why `seedDatabase` uses `page.addInitScript` rather than
+  `page.evaluate` after `goto`.
 - **`playwright.config.ts` hardcodes port 4173 with `reuseExistingServer`.**
   Two parallel `npm run test:e2e` runs — e.g. two subagents, or a human and an
   agent — share that port, so the second run measures the first run's tree
