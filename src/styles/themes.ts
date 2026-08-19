@@ -24,7 +24,9 @@ export interface Theme {
  * JavaScript.
  */
 export const THEMES: readonly Theme[] = [
+  { id: 'indigo-light', labelKey: 'theme.indigoLight', group: 'light' },
   { id: 'paper', labelKey: 'theme.paper', group: 'light' },
+  { id: 'indigo-dark', labelKey: 'theme.indigoDark', group: 'dark' },
   { id: 'ink', labelKey: 'theme.ink', group: 'dark' },
 ];
 

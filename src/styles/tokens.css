@@ -163,6 +163,74 @@
   --bear-shadow-dialog: 0 12px 32px var(--bear-shadow);
 }
 
+/*
+ * Indigo Light — Soft Depth. Cool neutrals on a lilac ground, with the sidebar
+ * deliberately equal to the canvas: in this direction the sidebar dissolves
+ * into the ground and only the panes holding content float.
+ *
+ * `accent` and `danger` genuinely diverge here, for the first time in this
+ * project. Both shipped palettes hold the same value in both slots, which is
+ * why accent-coloured headings were ruled out; that constraint does not apply
+ * to this theme.
+ */
+:root[data-theme='indigo-light'] {
+  --bear-bg: #ffffff;
+  --bear-surface: #ffffff;
+  --bear-sidebar: #eceaf3;
+  --bear-canvas: #eceaf3;
+  --bear-text: #241f3d;
+  --bear-muted: #605b78;
+  /* Darkened from the mockup's #9d99b0, which the harness measured at 2.76:1
+     on white and 2.31:1 on the sidebar, against a 3.0 floor. */
+  --bear-faint: #837e99;
+  --bear-border: #e0dcec;
+  --bear-accent: #5b4ad6;
+  --bear-danger: #c62828;
+  --bear-focus: #5b4ad6;
+  --bear-hover: rgb(40 34 66 / 0.05);
+  --bear-selected: rgb(91 74 214 / 0.09);
+  --bear-shadow: rgb(40 34 66 / 0.07);
+  --bear-tag-fill: rgb(91 74 214 / 0.12);
+  --bear-tag-fill-strong: rgb(91 74 214 / 0.26);
+
+  --bear-radius-sm: 6px;
+  --bear-radius-md: 8px;
+  --bear-radius-lg: 12px;
+  --bear-border-width: 1px;
+  /* Two layers, which is what reads as depth rather than as a drop shadow:
+     a tight contact shadow plus a wide ambient one. */
+  --bear-shadow-popover: 0 1px 2px rgb(40 34 66 / 0.05), 0 8px 24px rgb(40 34 66 / 0.07);
+  --bear-shadow-dialog: 0 12px 40px rgb(40 34 66 / 0.18);
+}
+
+/* Indigo Dark — the violet carried into the ground, so switching themes reads
+   as a dimmer on one app rather than as a different product. */
+:root[data-theme='indigo-dark'] {
+  --bear-bg: #1e1b26;
+  --bear-surface: #1e1b26;
+  --bear-sidebar: #14121b;
+  --bear-canvas: #14121b;
+  --bear-text: #f0edf7;
+  --bear-muted: #a9a3bd;
+  --bear-faint: #837d99;
+  --bear-border: #322e40;
+  --bear-accent: #9b8cff;
+  --bear-danger: #ff6b6b;
+  --bear-focus: #9b8cff;
+  --bear-hover: rgb(255 255 255 / 0.06);
+  --bear-selected: rgb(155 140 255 / 0.2);
+  --bear-shadow: rgb(0 0 0 / 0.4);
+  --bear-tag-fill: rgb(155 140 255 / 0.22);
+  --bear-tag-fill-strong: rgb(155 140 255 / 0.38);
+
+  --bear-radius-sm: 6px;
+  --bear-radius-md: 8px;
+  --bear-radius-lg: 12px;
+  --bear-border-width: 1px;
+  --bear-shadow-popover: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
+  --bear-shadow-dialog: 0 12px 40px rgb(0 0 0 / 0.55);
+}
+
 /* Ink — the dark theme, chosen explicitly. */
 :root[data-theme='ink'] {
   --bear-bg: #1a1a19;

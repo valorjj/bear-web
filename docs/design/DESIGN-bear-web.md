@@ -241,11 +241,37 @@ rather than a highlight.
 
 ### Measured contrast ratios
 
-Computed by hand with a real WCAG 2.1 relative-luminance calculation
+**Superseded as a method, retained as a record.** These Paper and Ink figures
+were computed by hand with a real WCAG 2.1 relative-luminance calculation
 (sRGB channel linearisation, `(L1 + 0.05) / (L2 + 0.05)`), because the
-alpha-composited overlays across three surfaces in two themes cannot be
-computed by jsdom in the test suite. Script: throwaway Node script, not
-checked in.
+alpha-composited overlays across three surfaces cannot be computed by jsdom.
+Since M9a they are produced by `e2e/contrast.spec.ts`, which runs in Chromium
+and gates every theme in the roster on every `npm run test:e2e`.
+
+The hand-measured numbers are what CALIBRATE that harness: `scripts/contrast.test.ts`
+pins `faint on sidebar` at 3.21 (Paper) and 3.40 (Ink), and pins the 2.51 that
+got `--bear-faint` darkened in M7.5. Injecting that rejected value back into
+Paper makes the harness report 2.51 on sidebar — the same figure to two
+decimals. A harness nobody can check is worth nothing on themes nobody has
+measured, which is the whole reason the two are tied together.
+
+Two corrections the harness forced, both about which pairs are REAL:
+
+- **`canvas` is not a text ground.** `bg-canvas` occurs once, on `<main>`,
+  whose only children are the three panes and the resizers; every pane paints
+  its own background over it. No glyph is drawn on canvas, so no ratio is
+  required against it.
+- **`accent` is not text on `sidebar`.** A selected sidebar row is `text-text`
+  on `bg-selected`; the accent appears there only as the 2px edge marker, a
+  graphical object. The `accent`/`sidebar` row in the table below is therefore
+  a measurement of a pair the app does not render as text — kept because it
+  was recorded, not because it is required.
+
+`border` is held to 1.05, not 3.0. WCAG's non-text threshold covers what is
+required to identify a control; a row divider is not that, and both shipped
+palettes sit at 1.2–1.4 by design. The floor catches the one unambiguous
+defect — a divider equal to its own ground — and declines to adjudicate
+subtlety.
 
 | Foreground | Background | Target | Paper      | Ink        |
 | ----------- | ----------- | ------ | ---------- | ---------- |
@@ -260,6 +286,36 @@ checked in.
 | `faint`    | `surface`  | ≥ 3.0  | **3.50:1**  | **3.65:1**  |
 
 Every pair passes its target, with margin.
+
+#### M9a: the indigo pair
+
+Produced by `e2e/contrast.spec.ts`, not by hand. `sidebar` equals `canvas` in
+both, so a sidebar figure is also the canvas figure.
+
+| Foreground | Background | Target | Indigo Light | Indigo Dark |
+| ---------- | ---------- | ------ | ------------ | ----------- |
+| `text` | `bg` / `surface` | ≥ 4.5 | **15.69:1** | **14.65:1** |
+| `text` | `sidebar` | ≥ 4.5 | **13.17:1** | **16.04:1** |
+| `muted` | `bg` / `surface` | ≥ 4.5 | **6.43:1** | **6.98:1** |
+| `muted` | `sidebar` | ≥ 4.5 | **5.40:1** | **7.65:1** |
+| `faint` | `bg` / `surface` | ≥ 3.0 | **3.88:1** | **4.32:1** |
+| `faint` | `sidebar` | ≥ 3.0 | **3.26:1** | **4.73:1** |
+| `accent` | `bg` / `surface` | ≥ 4.5 | **6.18:1** | **6.12:1** |
+| `danger` | `bg` / `surface` | ≥ 4.5 | **5.62:1** | **6.10:1** |
+| `text` | `selected` over `surface` | ≥ 4.5 | **13.77:1** | **10.49:1** |
+| `text` | `hover` over `surface` | ≥ 4.5 | **14.28:1** | **12.39:1** |
+| `accent` | `tag-fill` over `bg` | ≥ 3.0 | **5.19:1** | **4.22:1** |
+| `border` | `bg` / `surface` / `sidebar` | ≥ 1.05 | 1.34 / 1.34 / 1.13 | 1.29 / 1.29 / 1.41 |
+
+The mockup's `faint` of `#9d99b0` measured **2.76:1** on white and **2.31:1**
+on the sidebar, and was darkened to `#837e99` on the harness's report. It is
+the first value in this project chosen by a test rather than by eye.
+
+`accent` and `danger` hold genuinely different values here for the first time
+in this project — `#5b4ad6` against `#c62828`. The standing ruling that
+headings keep `--bear-text` was justified by the two coinciding; that
+justification does not hold for these themes, and the ruling is re-decided on
+its own merits rather than reversed as a side effect.
 
 ### M7.5: contrast against the canvas
 
