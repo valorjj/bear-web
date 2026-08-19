@@ -78,16 +78,28 @@ describe('renderNoteHtml', () => {
     expect(renderNoteHtml(note, tokens)).not.toMatch(/https?:\/\//);
   });
 
-  it('keeps an unsupported construct verbatim rather than dropping it', () => {
-    // Tables have no node in this schema and fall back to `RawBlock`, which
-    // renders the source. Export must therefore show the pipes rather than
-    // silently losing the table — the fallback working, and the reason a real
-    // table node is still worth building.
+  it('renders a table as a real table', () => {
+    // Until M8b a table fell back to `RawBlock` and exported as a `<pre>` of its
+    // own pipes. Real table nodes mean the export finally shows a table, which
+    // was the single largest visible gap in an exported note.
     const table = '| a | b |\n| - | - |\n| 1 | 2 |\n';
     const html = renderNoteHtml({ ...note, text: table }, tokens);
 
-    expect(html).toContain('data-raw-block');
-    expect(html).toContain('| a | b |');
+    expect(html).toContain('<table');
+    expect(html).toContain('<td');
+    // `data-raw-block="` with the quote, not the bare name: the stylesheet
+    // contains the selector `pre[data-raw-block]`, so a looser check matches the
+    // CSS on every document and can never fail.
+    expect(html).not.toContain('data-raw-block="');
+  });
+
+  it('keeps a genuinely unsupported construct verbatim rather than dropping it', () => {
+    // A raw HTML block still has no node, and the fallback still has to hold:
+    // export must show it rather than silently losing it.
+    const html = renderNoteHtml({ ...note, text: '<aside>note</aside>\n' }, tokens);
+
+    expect(html).toContain('data-raw-block="');
+    expect(html).toContain('&lt;aside&gt;note&lt;/aside&gt;');
   });
 });
 

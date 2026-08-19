@@ -47,7 +47,25 @@ const NON_CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   { name: 'blockquote', markdown: '> A different quote.' },
   { name: 'link', markdown: 'Check [this site](https://another-example.org) out.' },
   { name: 'task list', markdown: '- [ ] walk the dog\n- [x] feed the cat' },
-  { name: 'raw table', markdown: '| name | age |\n| --- | --- |\n| Alice | 30 |' },
+  { name: 'unpadded table', markdown: '| name | age |\n| --- | --- |\n| Alice | 30 |' },
+  {
+    name: 'table with ragged cell widths',
+    markdown: '| a | bbbbbb |\n| --- | --- |\n| cccccc | d |',
+  },
+  {
+    name: 'table alignment markers, minimal',
+    markdown: '| l | c | r |\n| :- | :-: | -: |\n| 1 | 2 | 3 |',
+  },
+  // The reason `MarkdownTable` exists: `renderTableToMarkdown` wraps its output
+  // in newlines and the manager already joins blocks with a blank line, so a
+  // table in the middle of a note gained a blank line above and below itself.
+  // Stable, therefore invisible to an idempotence-only assertion — this entry
+  // pins the surrounding blocks, which is what actually moved.
+  {
+    name: 'table between two blocks',
+    markdown: '# Shopping\n\n| item | qty |\n| --- | --- |\n| bread | 2 |\n\nDone.',
+  },
+  { name: 'table with a pipe in a cell', markdown: '| a | b |\n| --- | --- |\n| x \\| y | z |' },
   { name: 'inline raw html', markdown: '<span>hello</span> world' },
   { name: 'highlight', markdown: 'This ==really matters== a lot.' },
   { name: 'strikethrough', markdown: 'This is ~~outdated~~ information.' },

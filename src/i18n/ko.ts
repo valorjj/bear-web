@@ -86,6 +86,7 @@ export const ko: Record<TranslationKey, string> = {
   'editor.toolbar.highlight': '형광펜',
   'editor.toolbar.link': '링크',
   'editor.toolbar.code': '코드 블록',
+  'editor.toolbar.table': '표',
   'editor.toolbar.quote': '인용',
   'export.open': '메모 내보내기',
   'export.label': '내보내기 형식',

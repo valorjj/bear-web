@@ -50,6 +50,23 @@ const CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   { name: 'fenced code block, no language', markdown: '```\nplain text\n```' },
   { name: 'fenced code block with language', markdown: '```ts\nconst x = 1;\n```' },
   { name: 'fenced code block, multi-line', markdown: '```js\nconst a = 1;\nconst b = 2;\n```' },
+  // The canonical form is the PADDED one, because that is what the serializer
+  // emits: cells are widened to the column's widest content and the separator
+  // row matches. A table typed unpadded is normalized to this, which is a
+  // stability case rather than a fidelity one.
+  {
+    name: 'table',
+    markdown: '| item  | qty |\n| ----- | --- |\n| bread | 2   |',
+  },
+  // The alignment row is WIDER than the columns it describes, and that is the
+  // serializer's real output rather than a mistake in this fixture: it writes
+  // `max(3, width)` dashes and then adds the alignment colon outside that count.
+  // Pinned as-is, because fidelity's job is to state exactly what the serializer
+  // produces — a prettier string here would simply be false.
+  {
+    name: 'table with alignment',
+    markdown: '| left | right |\n| :---- | -----: |\n| a    | b     |',
+  },
   { name: 'task list, unchecked', markdown: '- [ ] buy bread' },
   { name: 'task list, checked', markdown: '- [x] buy bread' },
   { name: 'task list, mixed', markdown: '- [x] done\n- [ ] not done' },

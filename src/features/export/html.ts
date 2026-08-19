@@ -295,6 +295,32 @@ ${declarations}
       font-size: inherit;
     }
 
+    /* Real tables since M8b; before that a table exported as a block of pipes. */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      /* A table split across pages loses its header; keep it whole when it fits. */
+      break-inside: avoid;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--bear-border);
+      padding: 0.35em 0.6em;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: var(--bear-surface);
+      font-weight: 600;
+    }
+
+    th > p,
+    td > p {
+      text-indent: 0;
+    }
+
     hr {
       border: none;
       border-top: 1px solid var(--bear-border);

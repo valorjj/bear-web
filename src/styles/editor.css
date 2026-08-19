@@ -183,6 +183,59 @@
   font-size: inherit;
 }
 
+/*
+ * Tables. Real nodes since M8b, so this styles structure rather than a preserved
+ * block of source. `table-layout: fixed` with `width: 100%` is what the official
+ * extension's colgroup expects: without it a column resize writes widths the
+ * layout then ignores.
+ */
+.ProseMirror table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  overflow: hidden;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid var(--bear-border);
+  padding: 0.35em 0.6em;
+  vertical-align: top;
+  /* A cell must be able to hold a caret even when empty. */
+  min-width: 3em;
+  position: relative;
+}
+
+.ProseMirror th {
+  background-color: var(--bear-surface);
+  font-weight: 600;
+  text-align: left;
+}
+
+.ProseMirror th > p,
+.ProseMirror td > p {
+  margin: 0;
+}
+
+/* The extension's own column-resize and cell-selection affordances. */
+.ProseMirror .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bear-selected);
+  pointer-events: none;
+}
+
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: var(--bear-accent);
+  pointer-events: none;
+}
+
 .ProseMirror hr {
   border: none;
   border-top: 1px solid var(--bear-border);

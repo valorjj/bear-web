@@ -16,6 +16,7 @@ import {
   ListTodo,
   Quote,
   Strikethrough,
+  TableGlyph,
 } from '@/ui/Icon';
 import type { LucideIcon } from '@/ui/Icon';
 
@@ -39,7 +40,8 @@ interface Action {
     | 'highlight'
     | 'link'
     | 'code'
-    | 'quote';
+    | 'quote'
+    | 'table';
   label: TranslationKey;
   glyph: LucideIcon;
   /**
@@ -135,6 +137,21 @@ const ACTIONS: readonly Action[] = [
     glyph: Code,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleCodeBlock().run(),
     active: (editor) => editor.isActive('codeBlock'),
+  },
+  {
+    key: 'table',
+    label: 'editor.toolbar.table',
+    glyph: TableGlyph,
+    // Three columns and two rows with a header, which is the shape a user almost
+    // always wants and the one Bear's own button inserts.
+    run: (editor) =>
+      editor
+        .chain()
+        .command(pinAllSelectionStep)
+        .focus()
+        .insertTable({ rows: 2, cols: 3, withHeaderRow: true })
+        .run(),
+    active: (editor) => editor.isActive('table'),
   },
   {
     key: 'quote',

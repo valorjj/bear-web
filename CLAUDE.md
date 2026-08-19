@@ -29,7 +29,7 @@ IndexedDB.
 | M8b export: Markdown, HTML, PDF         | complete       |
 | M9                                      | themes, polish |
 
-1069 unit tests, 45 end-to-end tests. `main` is always green and auto-deploys.
+1095 unit tests, 45 end-to-end tests. `main` is always green and auto-deploys.
 
 `npm run shots` is a sixth entry point, deliberately not in that count: it drives
 `e2e/shots.spec.ts` against the fixed corpus in `e2e/fixtures/corpus.ts` and
@@ -172,6 +172,7 @@ is exactly why they are written down.
 - [Notes: editing lifecycle, autosave, reconciliation](#notes-editing-lifecycle-autosave-reconciliation)
 - [Scopes, smart lists, and search](#scopes-smart-lists-and-search)
 - [Markdown round-trip and the editor schema](#markdown-round-trip-and-the-editor-schema)
+- [Tables](#tables)
 - [Tag pills and activation](#tag-pills-and-activation)
 - [Export](#export)
 - [Design tokens, theme, and layout](#design-tokens-theme-and-layout)
@@ -697,6 +698,57 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   above); `TaskItemPromotion` uses that half. The `!tr.steps.length` half is a
   separate guard for a handler that returns non-null but happens not to have
   queued any steps — not the mechanism this rule relies on.
+
+### Tables
+
+- **Tables are real nodes, and `RawTable` is gone.** M8c replaced the fallback
+  with `@tiptap/extension-table`, whose official node already ships a Markdown
+  tokenizer, parser and serializer — which is the only reason this was worth
+  doing rather than leaving tables as preserved text. Hand-writing a GFM
+  serializer would have been a second Markdown implementation, this project's
+  signature defect. `rawTable` must NOT be re-registered: it would claim the
+  `table` token an extension above already handles.
+
+- **`MarkdownTable` wraps the official node to fix two serializer defects, and
+  BOTH are invisible to an idempotence-only assertion.** This is the clearest
+  live instance of the round-trip suite's documented blind spot.
+  - **Pipes in cell text were not escaped.** `| x \| y | z |` parses to two
+    cells and serialized back to `| x | y | z |` — three cells in a two-column
+    table — and normalizing THAT dropped `z`. Real data loss, and a regression
+    against the old fallback, which preserved such a table byte-for-byte.
+    **Timing is the whole trick and the obvious fix is wrong:** escaping the
+    document's text nodes before rendering fails, because the text renderer runs
+    afterwards and escapes the backslash, producing `x \\| y` — the same lost
+    cell by a longer route. The escape wraps `renderChildren` so it applies to
+    already-rendered cell Markdown.
+  - **A table gained a blank line above and below itself.**
+    `renderTableToMarkdown` wraps its output in newlines and `MarkdownManager`
+    already joins blocks with one, so `# Shopping\n\n| item` became
+    `# Shopping\n\n\n| item`. Stable, so every idempotence check passed.
+    Trimming only the table's own edges is deliberately narrower than a general
+    "collapse blank runs" pass in `serializeMarkdown`, which would corrupt a
+    fenced code block containing blank lines.
+
+- **A table is NORMALIZED, not preserved.** Cells are padded to the column's
+  widest content and the separator row is rewritten, so a table typed unpadded
+  changes shape on the user's first edit. This does not violate "opening a note
+  produces no write" — that holds because `NoteEditor` seeds autosave from the
+  mounted editor's own reading — but it does mean the stored text changes once,
+  on the first real edit. Accepted: editable tables are worth it.
+
+- **The alignment row is WIDER than the columns it describes, and the fidelity
+  string pins that.** The serializer writes `max(3, width)` dashes and then adds
+  the alignment colon outside that count, so `| left | right |` gets
+  `| :---- | -----: |`. Do not "tidy" the pinned string; fidelity's job is to
+  state exactly what the serializer produces, and a prettier value would be
+  false.
+
+- **Tables need STRUCTURAL assertions, in `table.test.ts`.** A real table and a
+  preserved block of source produce identical Markdown, so no round-trip test
+  can tell them apart — the same blind spot that let a dead `==highlight==`
+  tokenizer and a live-but-banned underline mark ship in M4. That file asserts
+  the schema registers the four nodes, that `rawTable` is absent, and that
+  parsing yields header/body rows with paragraph-wrapped inline content.
 
 ### Tag pills and activation
 

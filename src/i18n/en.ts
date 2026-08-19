@@ -84,6 +84,7 @@ export const en = {
   'editor.toolbar.highlight': 'Highlight',
   'editor.toolbar.link': 'Link',
   'editor.toolbar.code': 'Code block',
+  'editor.toolbar.table': 'Table',
   'editor.toolbar.quote': 'Quote',
   'export.open': 'Export note',
   'export.label': 'Export as',

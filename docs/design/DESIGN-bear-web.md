@@ -647,8 +647,8 @@ typography panel should take; our token set was already designed for it.
 Visible in every capture, and a large share of the perceived quality gap. None
 of these is styling — each is a document-model feature:
 
-- **Tables.** Ours fall back to `RawBlock` and render as a code block with the
-  pipes intact, which is the fallback working correctly and looking wrong.
+- ~~**Tables.**~~ Closed in M8c: real nodes, rendered in the editor and in
+  every export.
 - **Callout / panel blocks.** Measured: full-measure width, ~94 tall, tinted
   fill, a 6pt accent bar down the left edge, ~6 radius. Bear ships several
   variants (memo, warning).

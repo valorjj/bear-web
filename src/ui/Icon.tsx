@@ -69,4 +69,5 @@ export {
   Download,
   FileCode,
   Printer,
+  Table as TableGlyph,
 } from 'lucide-react';
