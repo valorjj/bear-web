@@ -341,14 +341,17 @@ milestone the whole app ran at a flat 14px.
 | `{typography.ui-md}` | 14px    | 1.4          | Note titles                    |
 | `{typography.ui-lg}` | 16px    | 1.35         | Pane headers, empty states     |
 
-### Editor typography is separate, and owned by M8
+### Editor typography is separate, and its sliders are still to come
 
-The editor's own type — `--bear-font-size` (16px), `--bear-line-height`
-(1.6), `--bear-line-width` (40em), `--bear-para-spacing`, `--bear-para-indent`
-— is a distinct scale bound to M8's preference sliders (font size, line
-height, and measure will all become user-adjustable). Do not reuse the UI
-scale for note content, and do not treat the editor tokens as part of this
-document's scope: they are read but not designed here.
+The editor's own type — `--bear-font-size` (16px), `--bear-line-height` (1.6),
+`--bear-line-width` (40em), `--bear-para-spacing` (0em), `--bear-para-indent`
+(0em) — is a distinct scale. Do not reuse the UI scale for note content.
+
+All five are wired into `.ProseMirror` as of M8, and guarded by a test that drives
+each one from the page and asserts the render moves. Four match Bear's own
+defaults exactly; `--bear-line-width` is the measured 40em rather than the 56em
+Bear's slider reports. The remaining work is the UI: nothing yet lets a user move
+them.
 
 ## Layout
 
@@ -440,11 +443,17 @@ stacked with a hairline bottom border. Selected state mirrors `sidebar-row`:
 
 ### `toolbar`
 
-Two toolbars exist: `TopControls` (per-note controls: info panel toggle) and
-`BottomToolbar` (formatting actions: heading, lists, bold/italic/strike,
-highlight, link, code, quote). Both are `role="toolbar"` with a translated
-`aria-label`, 36px tall, a hairline border separating them from the editor
-canvas, background `{colors.bg}`.
+Two toolbars exist: `TopControls` (per-note controls: bold, italic, export, info
+panel toggle) and `BottomToolbar` (formatting actions: heading, lists,
+bold/italic/strike, highlight, link, code, quote, table). Both are
+`role="toolbar"` with a translated `aria-label` and 36px tall.
+
+**Since M8 both FLOAT as fully rounded pills** — `bg-surface` with
+`shadow-popover`, no border — positioned by `RichEditor` rather than by
+themselves: the top group at the pane's top right, the formatting bar centred
+above its bottom edge. Before M8 they were full-width strips welded to the pane
+edges with a hairline border, which measurement against Bear identified as the
+single largest reason the editor read as a web page rather than an app.
 
 ### `toolbar-button`
 
@@ -634,7 +643,7 @@ tokens need no change:
 | --- | --- | --- | --- |
 | 글꼴 크기 (size) | 16 pt | `--bear-font-size: 16px` | yes |
 | 줄 높이 (line height) | 1.6 em | `--bear-line-height: 1.6` | yes |
-| 줄 너비 (line width) | 56 em (renders 40em) | `--bear-line-width: 56em` | **no — see above** |
+| 줄 너비 (line width) | 56 em (renders 40em) | `--bear-line-width: 40em` | matches what Bear RENDERS, not what its slider says — see above |
 | 단락 간격 (paragraph spacing) | 0 em | `--bear-para-spacing: 0em` | yes |
 | 단락 들여쓰기 (paragraph indent) | 0 em | `--bear-para-indent: 0em` | yes |
 

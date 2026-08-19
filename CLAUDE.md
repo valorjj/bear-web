@@ -11,31 +11,43 @@ IndexedDB.
 
 ## Status
 
-| Milestone                               | State          |
-| --------------------------------------- | -------------- |
-| M0 scaffold, CI, Pages deploy           | complete       |
-| M1 data layer (Dexie)                   | complete       |
-| M2 application shell                    | complete       |
-| M3 notes CRUD, textarea editor          | complete       |
-| M4 editor                               | complete       |
-| M5 tags                                 | complete       |
-| M5.5 design language                    | complete       |
-| M6 smart lists, trash management        | complete       |
-| M7 search                               | complete       |
-| M7.5 visual design pass                 | complete       |
-| M7.6 tag pills                          | complete       |
-| M7.7 tag pill activation                | complete       |
-| M8 visual pass (chrome, density, prose) | complete       |
-| M8b export: Markdown, HTML, PDF         | complete       |
-| M9                                      | themes, polish |
+| Milestone                               | State    |
+| --------------------------------------- | -------- |
+| M0 scaffold, CI, Pages deploy           | complete |
+| M1 data layer (Dexie)                   | complete |
+| M2 application shell                    | complete |
+| M3 notes CRUD, textarea editor          | complete |
+| M4 editor                               | complete |
+| M5 tags                                 | complete |
+| M5.5 design language                    | complete |
+| M6 smart lists, trash management        | complete |
+| M7 search                               | complete |
+| M7.5 visual design pass                 | complete |
+| M7.6 tag pills                          | complete |
+| M7.7 tag pill activation                | complete |
+| M8 visual pass (chrome, density, prose) | complete |
+| M8b export: Markdown, HTML, PDF         | complete |
+| M8c tables as real nodes                | complete |
+| M9 themes, callouts, polish             | next     |
 
 1095 unit tests, 45 end-to-end tests. `main` is always green and auto-deploys.
 
-`npm run shots` is a sixth entry point, deliberately not in that count: it drives
-`e2e/shots.spec.ts` against the fixed corpus in `e2e/fixtures/corpus.ts` and
-writes the design reference screenshots under `docs/design/shots/` (gitignored).
-It asserts nothing, and `grepInvert` in `playwright.config.ts` keeps it out of
-`npm run test:e2e`.
+**Two further Playwright entry points exist and are deliberately not in that
+count, because they assert nothing.** Both drive the fixed corpus in
+`e2e/fixtures/corpus.ts`, and `grepInvert` on `@shots|@measure` in
+`playwright.config.ts` keeps both out of `npm run test:e2e`:
+
+- `npm run shots` → `e2e/shots.spec.ts` writes design reference screenshots to
+  `docs/design/shots/` (gitignored) — three panes, search, trash, the empty
+  state and the exported document, in both themes.
+- `npm run measure` → `e2e/measure.spec.ts` writes the app's real geometry and
+  typography for 23 surfaces to `docs/design/measurements.md` and `.json`.
+
+They exist because **nothing in the test suite can see "renders wrong"**: the unit
+suite has no layout engine and `e2e/appearance.spec.ts` is deliberately relative.
+A visual change is therefore checked against a measured number and a screenshot,
+not by eye. `docs/design/measurements.md` is one half of the comparison against
+Bear recorded in `docs/design/DESIGN-bear-web.md`.
 
 ## Commands
 
@@ -49,7 +61,8 @@ npm run format       # Prettier
 npm run build
 ```
 
-All six must pass before any commit.
+All six must pass before any commit. `npm run shots` and `npm run measure` are
+not part of the gate — see above.
 
 ## Toolchain surprises
 
@@ -161,11 +174,20 @@ connection holding version 0.1`. `e2e/fixtures/seed.ts` opens at 10 and closes
 
 ## Rules that must not be silently reversed
 
-Grouped by area. Every bullet below is a live constraint: an audit on
-2026-08-14 checked all 115 against the code and found none dead, false or
-duplicated. Roughly a third are enforced by no test at all — contrast
-ratios, "these tokens must stay independent", ordering guarantees — which
-is exactly why they are written down.
+Grouped by area, 131 bullets across 11 areas. Every one is a live constraint.
+
+**The provenance differs, and the difference matters.** 115 of them were checked
+against the code by a full audit on 2026-08-14, which found none dead, false or
+duplicated. The rest were added by M8 and were written FROM the code as it
+changed, each one alongside the test or fault injection that established it —
+sound, but not independently re-audited. **The whole set has not been audited
+since 2026-08-14.** A future audit should start with the M8 additions: the
+Tables and Export areas, the floating-toolbar bullet, the typography-token
+bullet, and the two Dexie seeding surprises under Toolchain.
+
+Roughly a third are enforced by no test at all — contrast ratios, "these tokens
+must stay independent", ordering guarantees — which is exactly why they are
+written down.
 
 - [Tag grammar](#tag-grammar)
 - [The tag index, persistence, and startup](#the-tag-index-persistence-and-startup)
@@ -601,12 +623,18 @@ is exactly why they are written down.
   whose tokenizer is ours need **structural** assertions on the parsed
   document, not just round-trip assertions.
 
-- **`RawBlock` is why deferring tables and images is safe.** A note containing a
-  table already exists in real databases, written in M3's textarea or restored
-  from a JSON import. Without the verbatim fallback, opening one and typing
-  destroys it with no error and no recovery. Do not remove it when M4b adds real
-  table and image nodes — it still covers every other construct `marked` can
-  tokenize.
+- **`RawBlock` is why deferring a construct is safe, and the MECHANISM must
+  stay even as individual fallbacks retire.** A note containing a table already
+  existed in real databases, written in M3's textarea or restored from a JSON
+  import; without the verbatim fallback, opening one and typing destroyed it
+  with no error and no recovery. M8c retired `RawTable` specifically, because a
+  real table node now claims that token and two nodes claiming one token is a
+  defect — but `RawDefinition`, `RawHtmlBlock`, `RawImage` and the inline-HTML
+  node all remain, and so does the factory. **Retiring a fallback is only safe
+  when the replacement round-trips at least as well as the fallback did**, which
+  for tables it did not at first: the vendor serializer dropped a cell whose
+  neighbour contained a pipe, a regression against verbatim preservation. See
+  the Tables section.
 
 - **Underline is switched off at the schema, in
   `StarterKit.configure({ underline: false })`, and must stay off.** It has no
@@ -1045,7 +1073,7 @@ ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
 
 ### Design tokens, theme, and layout
 
-- **M8 owns theme switching.** M2 only set the system default via a
+- **M9 owns theme switching (M8 deferred it).** M2 only set the system default via a
   `prefers-color-scheme` media query. An explicit `data-theme` on the root overrides
   it — that is the seam the picker will use. Do not simplify the
   `:root:not([data-theme='light'])` selector.
@@ -1404,7 +1432,12 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   meant to catch. The card test in `e2e/appearance.spec.ts` asserts both:
   not-transparent, and not-equal-to-canvas.
 
-## Carried into M5b and M6
+## Deferred, with a ruling
+
+Real, deliberately deferred rather than forgotten. Historically titled "Carried
+into M5b and M6"; the list has outlived those milestones and is now simply the
+standing set. Items resolved since are struck rather than deleted, so a reader
+can see the ruling was retired on purpose.
 
 Real, deliberately deferred with a ruling. Full M3 reasoning is in
 `.superpowers/sdd/2026-08-08-m3-notes/progress.md`; full M4 reasoning is in
@@ -1458,13 +1491,14 @@ rediscovering them.
   `seedText` and the editor to agree. Not reshaped at M5's end because the
   current failure mode is fail-safe (a stray note lingers, nothing is deleted),
   unlike the manager/schema divergence that motivated the general rule.
-- **Editor typography is wired but has no slider.** M7.5 wired
-  `--bear-font-size` and `--bear-line-height` into `.ProseMirror`
-  (`--bear-line-width` is wired too, but that half of this item is resolved —
-  see `--bear-line-width` above). What is still missing is the UI: nothing
-  lets a user move these tokens, so M8 owns the typography sliders
-  themselves, not the CSS wiring. M5.5's spec deferred editor typography
-  deliberately.
+- **All five editor typography tokens are wired and guarded, but none has a
+  slider.** M7.5 wired `--bear-font-size` and `--bear-line-height`; M8 set
+  `--bear-line-width` to its measured value and wired the last two
+  (`--bear-para-spacing`, `--bear-para-indent`) as additive, with a test that
+  drives each from the page. So the CSS half of this item is fully closed. What
+  remains is the UI: nothing lets a user move them. Bear exposes exactly these
+  five as sliders plus three font pickers, which is the shape the panel should
+  take — see the typography table in `docs/design/DESIGN-bear-web.md`.
 - **`confirmPending` in `AppShell` clears its state and then awaits with no
   `try`/`catch`.** A rejected `purge` or `emptyTrash` closes the dialog and
   leaves the user believing the deletion succeeded. This matches the four
@@ -1490,10 +1524,11 @@ rediscovering them.
   than the background. Ink's `0.18` alpha is comfortable. Raising Paper's alpha
   is a design call, and it ripples into `e2e/smoke.spec.ts`, which now pins the
   shipped palette deliberately.
-- **`rounded-md`, `rounded-lg`, `shadow-popover` and `shadow-dialog` are
-  provisioned but unused.** M5.5's spec names them for M6's `ConfirmDialog`.
-  They are not dead code awaiting deletion; deleting them means M6 re-adds
-  them.
+- ~~`rounded-md`, `rounded-lg`, `shadow-popover` and `shadow-dialog` are
+  provisioned but unused.~~ **Resolved.** `ConfirmDialog` took the dialog
+  shadow in M6, and M8 put `rounded-lg` + `shadow-popover` on the panes, both
+  floating toolbar pills, the info popover and the export menu. Every provisioned
+  radius and shadow now has at least one call site.
 - **`scripts/fonts.test.ts` ignores `font-weight` and `font-style`.** Its
   `declaredFamilies` collects every `font-family:` an `@font-face` block
   declares regardless of which face it belongs to, so a family declared _only_
@@ -1509,6 +1544,15 @@ with a review after every task and a whole-branch review at the end. Plans live 
 `docs/superpowers/plans/`; per-milestone execution ledgers live in
 `.superpowers/sdd/<plan-name>/progress.md` (gitignored, local only) and record every
 finding, ruling, and deferred item.
+
+**M8 deliberately did not follow that shape**, and the deviation is recorded
+rather than hidden: it ran as direct execution against a measurement-driven
+roadmap, with no spec, no written plan and no subagents. What replaced the plan
+was `npm run measure` and `npm run shots` — each change was justified by a number
+measured off Bear and verified by a screenshot afterwards. Its ledger is at
+`.superpowers/sdd/2026-08-18-m8-visual-and-export/progress.md` and carries the
+roadmap, the rulings the user made, and every open item. A milestone with a
+larger design space should go back to brainstorm → spec → plan.
 
 Reviews here are expected to verify by running code and injecting faults, not by
 reading. Several real bugs — an unfalsifiable persistence test, a tag index that

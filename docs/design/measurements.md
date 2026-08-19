@@ -204,7 +204,7 @@ Currently a full-width bar; Bear floats a pill group here.
 
 | Property | Value |
 | --- | --- |
-| box | 112 x 36 |
+| box | 146 x 36 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -222,7 +222,7 @@ Currently welded to the window edge; Bear floats a centred rounded bar.
 
 | Property | Value |
 | --- | --- |
-| box | 384 x 36 |
+| box | 418 x 36 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -241,7 +241,7 @@ max-width is --bear-line-width. Compare box width against it: if they differ, th
 
 | Property | Value |
 | --- | --- |
-| box | 840 x 892 |
+| box | 640 x 892 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -249,7 +249,8 @@ max-width is --bear-line-width. Compare box width against it: if they differ, th
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgb(255, 255, 255)` |
 | padding | `48px 24px 96px` |
-| max-width | `896px` |
+| margin | `0px 100px` |
+| max-width | `640px` |
 
 ## editor: h1
 
@@ -257,7 +258,7 @@ The note title line.
 
 | Property | Value |
 | --- | --- |
-| box | 792 x 32 |
+| box | 592 x 32 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `25.6px` |
 | font-weight | `600` |
@@ -271,7 +272,7 @@ The note title line.
 
 | Property | Value |
 | --- | --- |
-| box | 792 x 27 |
+| box | 592 x 27 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `21.6px` |
 | font-weight | `600` |
@@ -286,7 +287,7 @@ The note title line.
 
 | Property | Value |
 | --- | --- |
-| box | 792 x 23 |
+| box | 592 x 23 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `18.4px` |
 | font-weight | `600` |
@@ -301,7 +302,7 @@ The measure the whole page is set against.
 
 | Property | Value |
 | --- | --- |
-| box | 792 x 51.2 |
+| box | 592 x 51.2 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -316,7 +317,7 @@ The measure the whole page is set against.
 
 | Property | Value |
 | --- | --- |
-| box | 792 x 25.6 |
+| box | 592 x 25.6 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -332,12 +333,12 @@ Also what an unsupported construct — a table — currently renders as.
 
 | Property | Value |
 | --- | --- |
-| box | 792 x 81.2 |
+| box | 592 x 46.6 |
 | font-family | `"JetBrains Mono Variable", ui-monospace, monospace` |
 | font-size | `14.4px` |
 | font-weight | `400` |
-| line-height | `19.2px` |
-| color | `rgb(107, 104, 98)` |
+| line-height | `23.04px` |
+| color | `rgb(28, 27, 25)` |
 | background-color | `rgb(250, 249, 248)` |
 | padding | `10.8px 14.4px` |
 | margin | `10.8px 0px 0px` |
@@ -351,7 +352,7 @@ A decoration, not a mark.
 
 | Property | Value |
 | --- | --- |
-| box | 159.7 x 20.6 |
+| box | 573.6 x 46.2 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -367,7 +368,7 @@ A decoration, not a mark.
 
 | Property | Value |
 | --- | --- |
-| box | 792 x 29.6 |
+| box | 592 x 29.6 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
