@@ -14,12 +14,12 @@
       "letter-spacing": "normal",
       "color": "rgb(28, 27, 25)",
       "background-color": "rgb(232, 228, 222)",
-      "padding": "4px",
+      "padding": "8px",
       "margin": "0px",
       "border-radius": "0px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",
-      "gap": "4px",
+      "gap": "8px",
       "max-width": "none",
       "box-shadow": "none"
     }
@@ -29,7 +29,7 @@
     "note": "Width is durable, from the settings table.",
     "box": {
       "width": 240,
-      "height": 892
+      "height": 884
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -46,7 +46,7 @@
       "border-bottom-width": "0px",
       "gap": "normal",
       "max-width": "none",
-      "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px"
+      "box-shadow": "none"
     }
   },
   {
@@ -54,7 +54,7 @@
     "note": "Width is durable, from the settings table.",
     "box": {
       "width": 320,
-      "height": 892
+      "height": 884
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -78,8 +78,8 @@
     "surface": "pane: editor",
     "note": "Fills the remaining space so the toolbars span it.",
     "box": {
-      "width": 840,
-      "height": 892
+      "width": 816,
+      "height": 884
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -104,7 +104,7 @@
     "note": "The gap between cards IS the resizer.",
     "box": {
       "width": 8,
-      "height": 892
+      "height": 884
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -129,7 +129,7 @@
     "note": "All seven builtins, rendered as data.",
     "box": {
       "width": 240,
-      "height": 184
+      "height": 240
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -154,7 +154,7 @@
     "note": "The workhorse row. Bear's equivalent is the density benchmark.",
     "box": {
       "width": 204,
-      "height": 24
+      "height": 32
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -166,7 +166,7 @@
       "background-color": "rgba(207, 59, 44, 0.11)",
       "padding": "0px 8px",
       "margin": "0px",
-      "border-radius": "4px",
+      "border-radius": "6px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",
       "gap": "8px",
@@ -179,7 +179,7 @@
     "note": "A root tag.",
     "box": {
       "width": 204,
-      "height": 24
+      "height": 32
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -191,7 +191,7 @@
       "background-color": "rgba(0, 0, 0, 0)",
       "padding": "0px 8px",
       "margin": "0px",
-      "border-radius": "4px",
+      "border-radius": "6px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",
       "gap": "8px",
@@ -204,7 +204,7 @@
     "note": "A nested tag. Compare padding-left against depth 0 for the indent step.",
     "box": {
       "width": 204,
-      "height": 24
+      "height": 32
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -216,7 +216,7 @@
       "background-color": "rgba(0, 0, 0, 0)",
       "padding": "0px 8px 0px 20px",
       "margin": "0px",
-      "border-radius": "4px",
+      "border-radius": "6px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",
       "gap": "8px",
@@ -253,8 +253,8 @@
     "surface": "note list: row (selected)",
     "note": "Three stacked lines. Bear fits a two-line snippet in comparable height.",
     "box": {
-      "width": 320,
-      "height": 88
+      "width": 304,
+      "height": 96
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -265,8 +265,8 @@
       "color": "rgb(28, 27, 25)",
       "background-color": "rgba(207, 59, 44, 0.11)",
       "padding": "0px",
-      "margin": "0px",
-      "border-radius": "0px",
+      "margin": "4px 8px",
+      "border-radius": "6px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",
       "gap": "normal",
@@ -278,8 +278,8 @@
     "surface": "note list: row (resting)",
     "note": "Unselected, for the divider and hover baseline.",
     "box": {
-      "width": 320,
-      "height": 88
+      "width": 304,
+      "height": 96
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -290,8 +290,8 @@
       "color": "rgb(28, 27, 25)",
       "background-color": "rgba(0, 0, 0, 0)",
       "padding": "0px",
-      "margin": "0px",
-      "border-radius": "0px",
+      "margin": "4px 8px",
+      "border-radius": "6px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",
       "gap": "normal",
@@ -354,7 +354,7 @@
     "note": "max-width is --bear-line-width. Compare box width against it: if they differ, the clamp is engaging.",
     "box": {
       "width": 640,
-      "height": 892
+      "height": 884
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -365,7 +365,7 @@
       "color": "rgb(28, 27, 25)",
       "background-color": "rgb(255, 255, 255)",
       "padding": "48px 24px 96px",
-      "margin": "0px 100px",
+      "margin": "0px 88px",
       "border-radius": "0px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",
@@ -379,13 +379,13 @@
     "note": "The note title line.",
     "box": {
       "width": 592,
-      "height": 32
+      "height": 34.5
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
-      "font-size": "25.6px",
+      "font-size": "27.648px",
       "font-weight": "600",
-      "line-height": "32px",
+      "line-height": "34.56px",
       "letter-spacing": "normal",
       "color": "rgb(28, 27, 25)",
       "background-color": "rgba(0, 0, 0, 0)",
@@ -404,18 +404,18 @@
     "note": "",
     "box": {
       "width": 592,
-      "height": 27
+      "height": 28.8
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
-      "font-size": "21.6px",
+      "font-size": "23.04px",
       "font-weight": "600",
-      "line-height": "27px",
+      "line-height": "28.8px",
       "letter-spacing": "normal",
       "color": "rgb(28, 27, 25)",
       "background-color": "rgba(0, 0, 0, 0)",
       "padding": "0px",
-      "margin": "30.24px 0px 0px",
+      "margin": "32.256px 0px 0px",
       "border-radius": "0px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",
@@ -429,18 +429,18 @@
     "note": "",
     "box": {
       "width": 592,
-      "height": 23
+      "height": 24
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
-      "font-size": "18.4px",
+      "font-size": "19.2px",
       "font-weight": "600",
-      "line-height": "23px",
+      "line-height": "24px",
       "letter-spacing": "normal",
       "color": "rgb(28, 27, 25)",
       "background-color": "rgba(0, 0, 0, 0)",
       "padding": "0px",
-      "margin": "25.76px 0px 0px",
+      "margin": "26.88px 0px 0px",
       "border-radius": "0px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",

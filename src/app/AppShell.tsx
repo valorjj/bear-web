@@ -187,10 +187,14 @@ export function AppShell(): ReactElement {
   }, [pending]);
 
   return (
-    <main className="flex h-full w-full gap-1 overflow-hidden bg-canvas p-1 text-text">
+    <main className="bg-canvas text-text flex h-full w-full gap-2 overflow-hidden p-2">
       <Pane
         label={t('pane.sidebar')}
         width={widths.sidebarWidth}
+        // Not a card: in Soft Depth the sidebar dissolves into the ground and
+        // only the panes holding content float. Its `--bear-sidebar` equals
+        // `--bear-canvas` in the indigo themes for the same reason.
+        elevated={false}
         className="bg-sidebar flex flex-col overflow-hidden"
       >
         {/*

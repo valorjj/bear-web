@@ -348,6 +348,7 @@ test('each pane reads as a card against the canvas behind it', async ({ page }) 
     const panes = [...document.querySelectorAll('section[aria-label]')].map((pane) => {
       const style = getComputedStyle(pane);
       return {
+        label: pane.getAttribute('aria-label') ?? '',
         background: style.backgroundColor,
         radius: Number.parseFloat(style.borderTopLeftRadius),
         boxShadow: style.boxShadow,
@@ -358,6 +359,25 @@ test('each pane reads as a card against the canvas behind it', async ({ page }) 
 
   expect(measured.panes.length).toBe(3);
 
+  /*
+   * M9a narrowed this from "every pane is a card" to "every CONTENT pane is a
+   * card", and the narrowing is a changed contract rather than a relaxed test.
+   *
+   * Soft Depth dissolves the sidebar into the ground — its `--bear-sidebar`
+   * equals `--bear-canvas` in the indigo themes for exactly that reason — so
+   * the old assertions would now be demanding the opposite of the design. The
+   * sidebar is still asserted, in the negative and by name, so "the sidebar
+   * quietly becomes a card again" fails here just as loudly as a content pane
+   * losing its fill.
+   */
+  const sidebar = measured.panes.find((pane) => /sidebar|사이드/i.test(pane.label));
+  const content = measured.panes.filter((pane) => !/sidebar|사이드/i.test(pane.label));
+
+  expect(sidebar, 'no sidebar pane found').toBeDefined();
+  expect(content.length).toBe(2);
+
+  expect(sidebar!.boxShadow, 'the sidebar must not float').toBe('none');
+
   // A pane whose fill equals the ground is not a card. This is what fails if
   // a pane loses its own bg-* className (the editor pane's `bg-bg` was
   // missing until Task 2's fix round) or its radius. Transparent is checked
@@ -365,7 +385,7 @@ test('each pane reads as a card against the canvas behind it', async ({ page }) 
   // `backgroundColor` is the literal string `rgba(0, 0, 0, 0)`, never equal
   // to the canvas's own `rgb(...)` value, so the equality check alone would
   // pass even with no fill at all.
-  for (const pane of measured.panes) {
+  for (const pane of content) {
     expect(pane.background).not.toBe('rgba(0, 0, 0, 0)');
     expect(pane.background).not.toBe(measured.canvas);
     expect(pane.radius).toBeGreaterThan(0);
@@ -879,4 +899,49 @@ test('the editor heading ratio reaches every heading', async ({ page }) => {
   // Cubed, squared, itself: raising the ratio must move h1 by more than h3, or
   // the three are not actually derived from one number.
   expect(after[0]! - before[0]!).toBeGreaterThan(after[2]! - before[2]!);
+});
+
+/*
+ * In Soft Depth the sidebar dissolves into the ground and only the panes
+ * holding content float. That is a `Pane` prop rather than a `shadow-none` the
+ * caller appends, because two utilities in the same layer are resolved by
+ * STYLESHEET order and not by the order they appear in the class attribute — an
+ * appended `shadow-none` silently did nothing, and the sidebar kept an
+ * elevation nobody could see in the source.
+ */
+test('only the content panes are elevated, and their elevation is themed', async ({ page }) => {
+  await page.goto('/');
+
+  async function shadows(theme: string): Promise<Record<string, string>> {
+    return page.evaluate((value) => {
+      document.documentElement.setAttribute('data-theme', value);
+      return Object.fromEntries(
+        [...document.querySelectorAll('section[aria-label]')].map((pane) => [
+          pane.getAttribute('aria-label')!,
+          getComputedStyle(pane).boxShadow,
+        ]),
+      );
+    }, theme);
+  }
+
+  const indigo = await shadows('indigo-light');
+  // Guards the guard: a selector matching nothing would make every check below
+  // vacuously true.
+  expect(Object.keys(indigo).length).toBe(3);
+
+  const sidebar = Object.entries(indigo).find(([label]) => /sidebar|사이드/i.test(label))![1];
+  const content = Object.entries(indigo).filter(([label]) => !/sidebar|사이드/i.test(label));
+
+  expect(sidebar, 'the sidebar must not float').toBe('none');
+  for (const [label, value] of content) {
+    expect(value, `${label} lost its elevation`).not.toBe('none');
+  }
+
+  // And the elevation is a theme's to define, not a constant. High Contrast
+  // replaces it with a hard ring, because nothing can be elevated on black.
+  const high = await shadows('high-contrast');
+  for (const [label, value] of Object.entries(high)) {
+    if (/sidebar|사이드/i.test(label)) continue;
+    expect(value, `${label} kept indigo's shadow under High Contrast`).not.toBe(indigo[label]);
+  }
 });

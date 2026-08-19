@@ -44,7 +44,10 @@ export function NoteListItem({
 
   return (
     <li
-      className={`relative flex items-stretch transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
+      // A chip, not a band. Soft Depth insets the row and rounds it, so the
+      // 4px of list ground between rows is what separates them — which is why
+      // the hairline divider this row used to draw is gone.
+      className={`ease-bear relative mx-2 my-1 flex items-stretch overflow-hidden rounded-md transition-colors duration-[var(--bear-duration-fast)] ${
         selected ? 'bg-selected' : ''
       }`}
     >
@@ -53,7 +56,7 @@ export function NoteListItem({
         onClick={onSelect}
         aria-current={selected ? 'true' : undefined}
         aria-label={label}
-        className={`flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2 text-left transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
+        className={`ease-bear flex min-w-0 flex-1 flex-col gap-0.5 p-3 text-left transition-colors duration-[var(--bear-duration-fast)] ${
           selected ? '' : 'hover:bg-hover'
         }`}
       >
@@ -85,15 +88,11 @@ export function NoteListItem({
       </button>
 
       {/*
-        The divider is an inset absolute rule rather than a `border-b` on the
-        row, so it starts clear of the left edge the way Bear's does while the
-        hover and selected fills still span the full width. A `border-b` on this
-        element cannot be inset without insetting the fill with it.
+        No divider. Until M9a this row drew an inset hairline so it started
+        clear of the left edge the way Bear's does. Rows are chips now — inset,
+        rounded, with list ground between them — and a rule inside a chip reads
+        as the chip being cut in half rather than as a separator.
       */}
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 left-3 h-px bg-border"
-      />
 
       <button
         type="button"

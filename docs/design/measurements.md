@@ -21,8 +21,8 @@ The ground the panes float on. Its padding is the outer inset.
 | line-height | `24px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgb(232, 228, 222)` |
-| padding | `4px` |
-| gap | `4px` |
+| padding | `8px` |
+| gap | `8px` |
 
 ## pane: sidebar
 
@@ -30,7 +30,7 @@ Width is durable, from the settings table.
 
 | Property | Value |
 | --- | --- |
-| box | 240 x 892 |
+| box | 240 x 884 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -38,7 +38,6 @@ Width is durable, from the settings table.
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgb(241, 239, 236)` |
 | border-radius | `10px` |
-| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px` |
 
 ## pane: note list
 
@@ -46,7 +45,7 @@ Width is durable, from the settings table.
 
 | Property | Value |
 | --- | --- |
-| box | 320 x 892 |
+| box | 320 x 884 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -62,7 +61,7 @@ Fills the remaining space so the toolbars span it.
 
 | Property | Value |
 | --- | --- |
-| box | 840 x 892 |
+| box | 816 x 884 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -78,7 +77,7 @@ The gap between cards IS the resizer.
 
 | Property | Value |
 | --- | --- |
-| box | 8 x 892 |
+| box | 8 x 884 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -92,7 +91,7 @@ All seven builtins, rendered as data.
 
 | Property | Value |
 | --- | --- |
-| box | 240 x 184 |
+| box | 240 x 240 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -107,7 +106,7 @@ The workhorse row. Bear's equivalent is the density benchmark.
 
 | Property | Value |
 | --- | --- |
-| box | 204 x 24 |
+| box | 204 x 32 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `13px` |
 | font-weight | `500` |
@@ -115,7 +114,7 @@ The workhorse row. Bear's equivalent is the density benchmark.
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgba(207, 59, 44, 0.11)` |
 | padding | `0px 8px` |
-| border-radius | `4px` |
+| border-radius | `6px` |
 | gap | `8px` |
 
 ## sidebar: tag row (depth 0)
@@ -124,7 +123,7 @@ A root tag.
 
 | Property | Value |
 | --- | --- |
-| box | 204 x 24 |
+| box | 204 x 32 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `13px` |
 | font-weight | `400` |
@@ -132,7 +131,7 @@ A root tag.
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | padding | `0px 8px` |
-| border-radius | `4px` |
+| border-radius | `6px` |
 | gap | `8px` |
 
 ## sidebar: tag row (depth 1)
@@ -141,7 +140,7 @@ A nested tag. Compare padding-left against depth 0 for the indent step.
 
 | Property | Value |
 | --- | --- |
-| box | 204 x 24 |
+| box | 204 x 32 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `13px` |
 | font-weight | `400` |
@@ -149,7 +148,7 @@ A nested tag. Compare padding-left against depth 0 for the indent step.
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | padding | `0px 8px 0px 20px` |
-| border-radius | `4px` |
+| border-radius | `6px` |
 | gap | `8px` |
 
 ## note list: search field
@@ -176,13 +175,15 @@ Three stacked lines. Bear fits a two-line snippet in comparable height.
 
 | Property | Value |
 | --- | --- |
-| box | 320 x 88 |
+| box | 304 x 96 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgba(207, 59, 44, 0.11)` |
+| margin | `4px 8px` |
+| border-radius | `6px` |
 
 ## note list: row (resting)
 
@@ -190,13 +191,15 @@ Unselected, for the divider and hover baseline.
 
 | Property | Value |
 | --- | --- |
-| box | 320 x 88 |
+| box | 304 x 96 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgba(0, 0, 0, 0)` |
+| margin | `4px 8px` |
+| border-radius | `6px` |
 
 ## editor: top controls
 
@@ -241,7 +244,7 @@ max-width is --bear-line-width. Compare box width against it: if they differ, th
 
 | Property | Value |
 | --- | --- |
-| box | 640 x 892 |
+| box | 640 x 884 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -249,7 +252,7 @@ max-width is --bear-line-width. Compare box width against it: if they differ, th
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgb(255, 255, 255)` |
 | padding | `48px 24px 96px` |
-| margin | `0px 100px` |
+| margin | `0px 88px` |
 | max-width | `640px` |
 
 ## editor: h1
@@ -258,11 +261,11 @@ The note title line.
 
 | Property | Value |
 | --- | --- |
-| box | 592 x 32 |
+| box | 592 x 34.5 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
-| font-size | `25.6px` |
+| font-size | `27.648px` |
 | font-weight | `600` |
-| line-height | `32px` |
+| line-height | `34.56px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 
@@ -272,14 +275,14 @@ The note title line.
 
 | Property | Value |
 | --- | --- |
-| box | 592 x 27 |
+| box | 592 x 28.8 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
-| font-size | `21.6px` |
+| font-size | `23.04px` |
 | font-weight | `600` |
-| line-height | `27px` |
+| line-height | `28.8px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgba(0, 0, 0, 0)` |
-| margin | `30.24px 0px 0px` |
+| margin | `32.256px 0px 0px` |
 
 ## editor: h3
 
@@ -287,14 +290,14 @@ The note title line.
 
 | Property | Value |
 | --- | --- |
-| box | 592 x 23 |
+| box | 592 x 24 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
-| font-size | `18.4px` |
+| font-size | `19.2px` |
 | font-weight | `600` |
-| line-height | `23px` |
+| line-height | `24px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgba(0, 0, 0, 0)` |
-| margin | `25.76px 0px 0px` |
+| margin | `26.88px 0px 0px` |
 
 ## editor: paragraph
 
