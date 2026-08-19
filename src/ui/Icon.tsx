@@ -66,6 +66,7 @@ export {
   Code,
   Quote,
   Info,
+  Palette,
   Download,
   FileCode,
   Printer,

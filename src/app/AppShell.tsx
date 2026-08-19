@@ -18,6 +18,7 @@ import { hasTag, TagSidebar, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
+import { ThemePicker } from '@/features/appearance';
 import { Pane } from '@/ui/Pane';
 import { Resizer } from '@/ui/Resizer';
 
@@ -187,8 +188,16 @@ export function AppShell(): ReactElement {
 
   return (
     <main className="flex h-full w-full gap-1 overflow-hidden bg-canvas p-1 text-text">
-      <Pane label={t('pane.sidebar')} width={widths.sidebarWidth} className="bg-sidebar">
-        <div className="flex h-full flex-col overflow-y-auto">
+      <Pane
+        label={t('pane.sidebar')}
+        width={widths.sidebarWidth}
+        className="bg-sidebar flex flex-col overflow-hidden"
+      >
+        {/*
+          The scroller is inner, not the Pane itself, so the footer stays
+          pinned while the tag tree scrolls under it.
+        */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <SmartListSidebar scope={scope} onScopeChange={setScope} counts={counts} />
           <TagSidebar
             nodes={tree.nodes}
@@ -197,6 +206,10 @@ export function AppShell(): ReactElement {
             isCollapsed={tree.isCollapsed}
             onToggle={tree.toggle}
           />
+        </div>
+
+        <div className="border-border flex shrink-0 items-center border-t p-1">
+          <ThemePicker />
         </div>
       </Pane>
 

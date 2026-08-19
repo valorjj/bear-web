@@ -214,7 +214,7 @@ describe('theme tokens', () => {
 
   it('gives every theme in the roster a CSS block defining all 22 tokens', () => {
     for (const id of ids) {
-      const block = blockTokens(css, `:root[data-theme='${id}']`);
+      const block = blockTokens(css, `[data-theme='${id}']`);
       for (const token of REQUIRED) {
         expect(block.has(`--bear-${token}`), `--bear-${token} missing from ${id}`).toBe(true);
       }
@@ -240,7 +240,7 @@ describe('theme tokens', () => {
   it('keeps :root identical to the default theme block', () => {
     const fallback = blockTokens(css, ':root {');
     const defaultId = roster.match(/DEFAULT_THEME_ID: ThemeId = '([a-z-]+)'/)![1]!;
-    const explicit = blockTokens(css, `:root[data-theme='${defaultId}']`);
+    const explicit = blockTokens(css, `[data-theme='${defaultId}']`);
     for (const token of REQUIRED) {
       expect(fallback.get(`--bear-${token}`), `${token} drifted from ${defaultId}`).toBe(
         explicit.get(`--bear-${token}`),
@@ -253,7 +253,7 @@ describe('theme tokens', () => {
   it('keeps the system-dark block identical to its named theme', () => {
     const system = blockTokens(css, ':root:not([data-theme])');
     const darkId = roster.match(/SYSTEM_DARK_ID: ThemeId = '([a-z-]+)'/)![1]!;
-    const named = blockTokens(css, `:root[data-theme='${darkId}']`);
+    const named = blockTokens(css, `[data-theme='${darkId}']`);
     expect([...system.keys()].sort()).toEqual([...named.keys()].sort());
     for (const [token, value] of named) {
       expect(system.get(token), `${token} differs between the dark blocks`).toBe(value);

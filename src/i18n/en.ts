@@ -109,6 +109,12 @@ export const en = {
   'theme.paper': 'Paper',
   'theme.ink': 'Ink',
   'theme.highContrast': 'High Contrast',
+
+  'appearance.label': 'Appearance',
+  'appearance.open': 'Change theme',
+  'appearance.system': 'System',
+  'appearance.group.light': 'Light',
+  'appearance.group.dark': 'Dark',
 } as const;
 
 export type TranslationKey = keyof typeof en;

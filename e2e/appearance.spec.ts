@@ -793,3 +793,37 @@ test('every border consumes the theme width token', async ({ page }) => {
   expect(high.length).toBeGreaterThan(0);
   expect([...new Set(high)]).toEqual(['2px']);
 });
+
+/*
+ * Each row in the theme picker previews its own palette, by carrying its
+ * `data-theme` on the swatch and being rendered inside it. That is what keeps
+ * every colour out of TypeScript — a palette edit updates the picker for free.
+ *
+ * It only works because the theme blocks are keyed `[data-theme='…']` rather
+ * than `:root[data-theme='…']`: `:root` matches the document element alone, so
+ * the scoped form is load-bearing. Restoring `:root` would leave every swatch
+ * showing the ACTIVE theme's accent — six identical dots, and an app that
+ * still works perfectly. No structural test can see that.
+ */
+test('each theme swatch previews its own palette', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /theme|테마/i }).click();
+
+  async function accentOf(name: RegExp): Promise<string> {
+    return page
+      .getByRole('menuitemradio', { name })
+      .locator('span span')
+      .evaluate((element) => getComputedStyle(element).backgroundColor);
+  }
+
+  const indigo = await accentOf(/Indigo Light|인디고 라이트/);
+  const paper = await accentOf(/^(Paper|페이퍼)$/);
+  const high = await accentOf(/High Contrast|고대비/);
+
+  for (const value of [indigo, paper, high]) {
+    expect(value).not.toBe('rgba(0, 0, 0, 0)');
+  }
+  expect(indigo).not.toBe(paper);
+  expect(paper).not.toBe(high);
+  expect(indigo).not.toBe(high);
+});

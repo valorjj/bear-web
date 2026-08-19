@@ -111,4 +111,10 @@ export const ko: Record<TranslationKey, string> = {
   'theme.paper': '페이퍼',
   'theme.ink': '잉크',
   'theme.highContrast': '고대비',
+
+  'appearance.label': '모양',
+  'appearance.open': '테마 변경',
+  'appearance.system': '시스템',
+  'appearance.group.light': '밝은 테마',
+  'appearance.group.dark': '어두운 테마',
 };

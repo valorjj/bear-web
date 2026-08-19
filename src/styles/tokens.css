@@ -14,6 +14,15 @@
  * `scripts/sourceLint.test.ts` asserts that every theme in `themes.ts` has a
  * block here defining all 22 of tiers 1 and 2, and that no block here is
  * missing from the roster.
+ *
+ * Theme blocks are keyed `[data-theme='…']` and NOT `:root[data-theme='…']`,
+ * deliberately. `:root` matches only the document element, so a theme could
+ * never be scoped to a subtree — and the picker's swatches are exactly that:
+ * each one carries its own `data-theme` and previews its palette by being
+ * rendered inside it, which is what keeps every colour out of TypeScript.
+ * Specificity is unchanged in practice — `:root` and an attribute selector are
+ * both (0,1,0), and these blocks follow the `:root` block, so source order
+ * still resolves them in the theme's favour.
  */
 
 :root {
@@ -63,7 +72,7 @@
    * below so that a visitor with no stored choice and a visitor who picked the
    * default explicitly see one app. The repetition is deliberate and guarded:
    * `blockTokens` in the source lint finds a block by `indexOf` plus the next
-   * brace, so it cannot read a grouped `:root, :root[data-theme='…']` selector
+   * brace, so it cannot read a grouped `:root, [data-theme='…']` selector
    * — and a lookup for `:root {` would silently land on this block anyway.
    * Do not merge the two.
    */
@@ -137,7 +146,7 @@
 }
 
 /* Paper — the light theme. Warm neutrals, one red. */
-:root[data-theme='paper'] {
+[data-theme='paper'] {
   --bear-bg: #ffffff;
   --bear-surface: #faf9f8;
   --bear-sidebar: #f1efec;
@@ -173,7 +182,7 @@
  * why accent-coloured headings were ruled out; that constraint does not apply
  * to this theme.
  */
-:root[data-theme='indigo-light'] {
+[data-theme='indigo-light'] {
   --bear-bg: #ffffff;
   --bear-surface: #ffffff;
   --bear-sidebar: #eceaf3;
@@ -205,7 +214,7 @@
 
 /* Indigo Dark — the violet carried into the ground, so switching themes reads
    as a dimmer on one app rather than as a different product. */
-:root[data-theme='indigo-dark'] {
+[data-theme='indigo-dark'] {
   --bear-bg: #1e1b26;
   --bear-surface: #1e1b26;
   --bear-sidebar: #14121b;
@@ -232,7 +241,7 @@
 }
 
 /* Ink — the dark theme, chosen explicitly. */
-:root[data-theme='ink'] {
+[data-theme='ink'] {
   --bear-bg: #1a1a19;
   --bear-surface: #201f1e;
   --bear-sidebar: #262523;
@@ -274,7 +283,7 @@
  *     compete with the 1px dividers inside it) and means every future floating
  *     surface is separated here for free.
  */
-:root[data-theme='high-contrast'] {
+[data-theme='high-contrast'] {
   --bear-bg: #000000;
   --bear-surface: #000000;
   --bear-sidebar: #000000;
