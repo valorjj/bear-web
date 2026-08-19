@@ -69,11 +69,12 @@ test('the shell uses the token layer for its colours', async ({ page }) => {
   // prefers-color-scheme cascade actually reaches a rendered pixel.
   // M7.5: the body's ground moved from --bear-bg to --bear-canvas, the darker
   // surface the three panes float on as cards.
-  // M9a: the default theme became Indigo Light, so the ground is #eceaf3 and
-  // the text #241f3d. This is the licensed edit — the palette changed on
+  // M9a: the default theme became Indigo Light, so the ground is #e6e1f5 and
+  // the text #241f3d. The ground was tinted further toward lilac after review —
+  // at #eceaf3 it read as a default system grey panel rather than as a colour. This is the licensed edit — the palette changed on
   // purpose, and the conscious edit is the point of pinning it here.
   expect(bodyColors).toEqual({
-    backgroundColor: 'rgb(236, 234, 243)',
+    backgroundColor: 'rgb(230, 225, 245)',
     color: 'rgb(36, 31, 61)',
   });
 });

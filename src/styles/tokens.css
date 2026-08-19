@@ -90,6 +90,14 @@
    */
   --bear-heading-ratio: 1.2;
 
+  /*
+   * The invisible separator between a note's title line and its body — space,
+   * not a rule, which is how Bear separates the two. Generous on purpose: at
+   * the ordinary 0.75em block rhythm the title reads as the first paragraph of
+   * the note rather than as its name.
+   */
+  --bear-title-gap: 1.75em;
+
   /* ----------------------------------------------------------- tiers 1 + 2 */
 
   /*
@@ -105,8 +113,8 @@
   /* Indigo Light — see the named block below; the two must stay identical. */
   --bear-bg: #ffffff;
   --bear-surface: #f5f4fa;
-  --bear-sidebar: #eceaf3;
-  --bear-canvas: #eceaf3;
+  --bear-sidebar: #e6e1f5;
+  --bear-canvas: #e6e1f5;
   --bear-text: #241f3d;
   --bear-muted: #605b78;
   /* Darkened from the mockup's #9d99b0, which the harness measured at 2.76:1
@@ -180,8 +188,8 @@
    */
   --bear-bg: #ffffff;
   --bear-surface: #f5f4fa;
-  --bear-sidebar: #eceaf3;
-  --bear-canvas: #eceaf3;
+  --bear-sidebar: #e6e1f5;
+  --bear-canvas: #e6e1f5;
   --bear-text: #241f3d;
   --bear-muted: #605b78;
   /* Darkened from the mockup's #9d99b0, which the harness measured at 2.76:1

@@ -60,41 +60,52 @@ async function openNoteWithProse(page: import('@playwright/test').Page) {
   return editor;
 }
 
-test('a default button reads as a control at rest, not as text', async ({ page }) => {
+/*
+ * M9a REVERSED M6's ruling for this strip, and this test changed shape with it
+ * rather than being deleted.
+ *
+ * M6 gave the note-list header's buttons a border and a fill because without
+ * them "New note" and "Move to trash" were indistinguishable from static text
+ * until the pointer crossed them. That chrome made the header read as a row of
+ * form controls, which was the single thing that most dated the app, so the
+ * header now carries quiet controls in Bear's idiom.
+ *
+ * The affordance that replaces a resting fill is the HOVER fill, and that is
+ * precisely the affordance this project has already lost once without noticing:
+ * `--color-hover` was absent from the theme block for two milestones, so every
+ * `hover:bg-hover` compiled to nothing, in silence. A quiet control whose hover
+ * does not compile is invisible in every state, which is strictly worse than
+ * what M6 fixed. So this asserts the hover fill really renders — and, because a
+ * quiet control carries no text of its own, that its accessible name survives.
+ *
+ * `ConfirmDialog`'s Cancel still uses `default`, so the variant and M6's
+ * reasoning both remain live where a control genuinely must read at rest.
+ */
+test('a quiet header control still has a hover affordance and a name', async ({ page }) => {
   await page.goto('/');
 
   const created = page.getByRole('button', { name: 'New note' });
   await expect(created).toBeVisible();
 
-  const style = await created.evaluate((element) => {
-    const own = getComputedStyle(element);
-    // Not `[role="region"]`: Pane.tsx renders `<section aria-label>`, whose
-    // "region" role is implicit ARIA semantics, never reflected as a DOM
-    // attribute. That selector always returns null here, which silently
-    // turned the fill-vs-pane assertion below into "colour !== null" — always
-    // true, whatever the button's actual background was.
-    const pane = element.closest('section[aria-label]');
-    return {
-      borderWidth: own.borderTopWidth,
-      background: own.backgroundColor,
-      paneFound: pane !== null,
-      paneBackground: pane === null ? null : getComputedStyle(pane).backgroundColor,
-    };
+  const background = async (): Promise<string> =>
+    created.evaluate((element) => getComputedStyle(element).backgroundColor);
+
+  // Quiet at rest is the point, not an accident: if this ever gains a resting
+  // fill the reversal has been undone and someone should notice.
+  expect(await background()).toBe('rgba(0, 0, 0, 0)');
+
+  await created.hover();
+  const hovered = await background();
+  expect(hovered, 'the hover fill did not compile').not.toBe('rgba(0, 0, 0, 0)');
+
+  // And it must differ from the pane, or the "fill" is invisible anyway — the
+  // same trap the pane-card test documents.
+  const pane = await created.evaluate((element) => {
+    const section = element.closest('section[aria-label]');
+    return section === null ? null : getComputedStyle(section).backgroundColor;
   });
-
-  // The two independent affordances the M6 defect removed. Either alone would
-  // be enough to see the control; asserting both means restoring only one does
-  // not quietly re-pass.
-  expect(style.borderWidth).not.toBe('0px');
-  expect(style.background).not.toBe('rgba(0, 0, 0, 0)');
-
-  // A null pane must fail loudly, not make the next assertion vacuously true
-  // by comparing a colour string to `null`.
-  expect(style.paneFound).toBe(true);
-
-  // A fill identical to the pane behind it is not a fill. This is what makes
-  // the assertion above more than a tautology.
-  expect(style.background).not.toBe(style.paneBackground);
+  expect(pane, 'no pane found — a null here would make the check below vacuous').not.toBeNull();
+  expect(hovered).not.toBe(pane);
 });
 
 test('hover states are compiled, not silently dropped by a missing theme key', async ({ page }) => {
@@ -992,4 +1003,61 @@ test('the theme is stamped before first paint', async ({ page }) => {
   const atBody = await page.evaluate(() => (window as unknown as { __atBody: string[] }).__atBody);
   expect(atBody.length, 'the observer never saw body appear').toBe(1);
   expect(atBody[0], 'the theme was not applied until after the document was parsed').toBe('ink');
+});
+
+/*
+ * A note's first line reads as its title WITHOUT the user typing `#`, and is
+ * set off from the body by space rather than a rule — Bear's behaviour, done in
+ * CSS alone so the stored Markdown is untouched.
+ *
+ * The document is deliberately plain paragraphs. Typing `# ` would make the
+ * first block a real heading and the test would pass on the heading rule alone,
+ * proving nothing about the title treatment. `deriveTitle` already takes the
+ * first line, so this only makes visible a relationship the data layer has
+ * always had.
+ */
+test('the first line reads as a title, separated by space and not a rule', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await editor.pressSequentially('Plain first line');
+  await page.keyboard.press('Enter');
+  await editor.pressSequentially('Body one');
+  await page.keyboard.press('Enter');
+  await editor.pressSequentially('Body two');
+
+  const measured = await editor.evaluate((element) => {
+    const blocks = [...element.children].filter((child) => child.tagName === 'P');
+    if (blocks.length < 3) return null;
+    const read = (node: Element) => {
+      const style = getComputedStyle(node);
+      return {
+        size: Number.parseFloat(style.fontSize),
+        weight: Number.parseInt(style.fontWeight, 10),
+        top: node.getBoundingClientRect().top,
+        bottom: node.getBoundingClientRect().bottom,
+      };
+    };
+    const [title, first, second] = blocks.map(read);
+    return {
+      title,
+      titleGap: first!.top - title!.bottom,
+      bodyGap: second!.top - first!.bottom,
+      bodySize: first!.size,
+      bodyWeight: first!.weight,
+    };
+  });
+
+  expect(measured, 'expected three paragraphs').not.toBeNull();
+
+  // A title, not merely the first paragraph.
+  expect(measured!.title.size).toBeGreaterThan(measured!.bodySize);
+  expect(measured!.title.weight).toBeGreaterThan(measured!.bodyWeight);
+
+  // The separator is space, and it is bigger than the ordinary block rhythm —
+  // that difference is the whole point, and equal gaps would mean the rule
+  // silently stopped applying while every other assertion still passed.
+  expect(measured!.titleGap).toBeGreaterThan(measured!.bodyGap);
 });

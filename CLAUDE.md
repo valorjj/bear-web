@@ -41,7 +41,7 @@ feature and is not yet scheduled.
 | M9b callout blocks                       | next     |
 | M9c collapsible headings                 | next     |
 
-1143 unit tests, 57 end-to-end tests. `main` is always green and auto-deploys.
+1143 unit tests, 58 end-to-end tests. `main` is always green and auto-deploys.
 
 **Two further Playwright entry points exist and are deliberately not in that
 count, because they assert nothing.** Both drive the fixed corpus in
@@ -1220,6 +1220,22 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   `--bear-tracking-tight` are part of the `ui-md` and `ui-lg` steps, not
   applied at call sites.
 
+- **A note's first line renders as its title with NO `#` typed, and the
+  separator under it is space rather than a rule** — Bear's behaviour, done in
+  CSS alone. The document is untouched: no schema, no serializer, no
+  round-trip path is involved, and a note opened elsewhere is still the plain
+  text the user wrote. `deriveTitle` already treats the first line as the
+  title, so this only makes visible a relationship the data layer always had.
+  Restricted to `p` and headings — a note opening with a table, code block or
+  list has no title line, and styling one as a heading would assert something
+  false about the content. The gap sits on the SECOND block's `margin-top`, not
+  the first block's `margin-bottom`: adjacent margins collapse in a block
+  container, so a bottom margin would silently lose to whichever is larger.
+  **No round-trip test can see any of this** — it is presentation only — so
+  `e2e/appearance.spec.ts` drives plain paragraphs (never `# `, which would
+  pass on the heading rule and prove nothing) and asserts the title is larger
+  and heavier than the body AND that its gap exceeds the ordinary block rhythm.
+
 - **In Soft Depth the sidebar dissolves into the ground.** Its `--bear-sidebar`
   equals `--bear-canvas` in both indigo themes, and it is `Pane`'s one
   `elevated={false}` caller. Only the panes holding content float. The card
@@ -1490,11 +1506,26 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   `"work3"`, and `NoteListItem` concatenating three spans into
   `"Groceries14:32milk"`.
 
-- **Destructive controls keep their words.** "New note" is an icon button;
-  "Move to trash", "Restore", "Delete forever" and "Empty trash" are text. An
-  icon-only control for an irreversible action against a database with no
-  server copy asks the user to recall a glyph before destroying data. This is a
-  deliberate divergence from Bear, which hides destructive actions in menus.
+- **Destructive controls keep their WORDS — that rule stands. What M9a
+  reversed is their CHROME, and only in the note-list header.** "Move to
+  trash", "Restore", "Delete forever" and "Empty trash" are still text, never
+  glyphs: an icon-only control for an irreversible action against a database
+  with no server copy asks the user to recall a glyph before destroying data,
+  and Bear hides these in menus where we deliberately do not. But "New note",
+  "Move to trash" and "Restore" are now `ghost` rather than `default` — no
+  border, no resting fill — because the bordered row read as a set of form
+  controls and was the single thing that most dated the app. **"Delete forever"
+  and "Empty trash" keep `danger`'s solid fill**, and `ConfirmDialog`'s Cancel
+  keeps `default`, so M6's reasoning stays live exactly where a control must
+  read at rest.
+
+- **A quiet control's hover fill is now load-bearing, and it is the affordance
+  this project has already lost once in silence.** `--color-hover` was absent
+  from the theme block for two milestones, so every `hover:bg-hover` compiled to
+  nothing with no warning. A `ghost` control whose hover does not compile is
+  invisible in every state — strictly worse than the M6 defect. `e2e/appearance.spec.ts`
+  asserts the rendered hover background, that it differs from the pane, and that
+  the control is still quiet at rest so an undone reversal is noticed.
 
 - **The pin button reads by colour, not by glyph.** A `Pin`/`PinOff` glyph
   table keyed on `note.pinned` was tried and reverted: a slashed pin in the

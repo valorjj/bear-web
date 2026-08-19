@@ -76,6 +76,47 @@
 }
 
 /*
+ * The title line, and the invisible separator under it.
+ *
+ * Bear renders a note's FIRST line as its title without the user typing `#`,
+ * and sets it off from the body with space rather than a rule. This does the
+ * same, and does it in CSS ALONE: the document is untouched, so the stored
+ * Markdown is unchanged, nothing round-trips differently, no schema or
+ * serializer is involved, and a note opened in another editor is still the
+ * plain text the user wrote. `deriveTitle` already treats the first line as the
+ * title, so this only makes visible a relationship the data layer has always
+ * had.
+ *
+ * Restricted to `p` and the headings deliberately. A note whose first block is
+ * a table, a code block or a list has no title line to speak of, and styling
+ * one as a heading would be a claim about the content that is simply false.
+ *
+ * The size is stated rather than inherited from `h1`, so a note beginning with
+ * a plain paragraph and a note beginning with `# Heading` present the same
+ * title. Specificity carries it: `> :is(...):first-child` is (0,2,0) against
+ * the heading rule's (0,1,1).
+ */
+.ProseMirror > :is(p, h1, h2, h3, h4, h5, h6):first-child {
+  font-size: calc(
+    var(--bear-heading-ratio) * var(--bear-heading-ratio) * var(--bear-heading-ratio) * 1em
+  );
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+/*
+ * The separator itself: space on the SECOND block, never a bottom margin on the
+ * first. Adjacent margins collapse in a block container, so a bottom margin
+ * would silently lose to whichever of the two is larger; putting it on the
+ * sibling makes the gap exactly what it says. This rule is (0,2,0) against
+ * `> * + *`'s (0,1,0), so it wins on specificity rather than on source order.
+ */
+.ProseMirror > :is(p, h1, h2, h3, h4, h5, h6):first-child + * {
+  margin-top: calc(var(--bear-title-gap) + var(--bear-para-spacing));
+}
+
+/*
  * A modular scale at 1.2, CHOSEN rather than measured.
  *
  * DESIGN-bear-web.md records that the heading scale was never trustworthily
