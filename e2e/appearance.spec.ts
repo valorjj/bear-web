@@ -827,3 +827,56 @@ test('each theme swatch previews its own palette', async ({ page }) => {
   expect(paper).not.toBe(high);
   expect(indigo).not.toBe(high);
 });
+
+/*
+ * The heading scale is one token, not three sizes.
+ *
+ * h1/h2/h3 are `--bear-heading-ratio` cubed, squared and itself, so they cannot
+ * drift out of proportion with one another. This drives the ratio from the page
+ * and asserts every heading moves — the same guard `--bear-line-width` and the
+ * two paragraph tokens went without for three milestones, when a declared token
+ * that no rule consumed was indistinguishable from one that did not exist.
+ */
+test('the editor heading ratio reaches every heading', async ({ page }) => {
+  // Its own document rather than `openNoteWithProse`, which types only an h1.
+  // Widening that shared fixture would change what eight other tests measure.
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  // Typed, never filled: `# ` is an input rule, and `fill` bypasses input
+  // rules entirely, leaving literal text and no headings to measure.
+  await editor.pressSequentially('# One');
+  await page.keyboard.press('Enter');
+  await editor.pressSequentially('## Two');
+  await page.keyboard.press('Enter');
+  await editor.pressSequentially('### Three');
+
+  const sizes = async (): Promise<number[]> =>
+    page.getByRole('textbox', { name: 'Note text' }).evaluate((element) =>
+      ['h1', 'h2', 'h3'].map((tag) => {
+        const heading = element.querySelector(tag);
+        return heading === null ? Number.NaN : parseFloat(getComputedStyle(heading).fontSize);
+      }),
+    );
+
+  const before = await sizes();
+  for (const size of before) expect(Number.isNaN(size)).toBe(false);
+
+  // Ordered, and strictly: an h2 equal to its h3 is a scale that has collapsed.
+  expect(before[0]!).toBeGreaterThan(before[1]!);
+  expect(before[1]!).toBeGreaterThan(before[2]!);
+
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--bear-heading-ratio', '1.6');
+  });
+
+  const after = await sizes();
+  for (const [index, size] of after.entries()) {
+    expect(size, `heading ${index + 1} ignored the ratio`).toBeGreaterThan(before[index]!);
+  }
+
+  // Cubed, squared, itself: raising the ratio must move h1 by more than h3, or
+  // the three are not actually derived from one number.
+  expect(after[0]! - before[0]!).toBeGreaterThan(after[2]! - before[2]!);
+});

@@ -397,6 +397,35 @@ milestone the whole app ran at a flat 14px.
 | `{typography.ui-md}` | 14px    | 1.4          | Note titles                    |
 | `{typography.ui-lg}` | 16px    | 1.35         | Pane headers, empty states     |
 
+### The heading scale is one token
+
+`--bear-heading-ratio` is `1.2`, and `h1`/`h2`/`h3` are that ratio cubed,
+squared and itself — `1.73em` / `1.44em` / `1.2em`, against M8's assembled
+`1.6` / `1.35` / `1.15`. Deriving all three from one number means they cannot
+drift out of proportion, and a future change is one decision rather than three
+independent nudges.
+
+**Chosen, not measured.** The section below on Bear's heading scale records
+that the figures were never captured trustworthily and warns against acting on
+them. Since Bear is no longer the authority, the ratio is simply stated. If it
+is ever revisited, revisit the ratio.
+
+`e2e/appearance.spec.ts` drives the ratio from the page and asserts all three
+headings move, and that raising it moves `h1` by more than `h3` — which is what
+proves they are derived from one number rather than merely all changed. Both
+halves were verified by fault injection.
+
+### UI hierarchy comes from weight and tracking, not size alone
+
+The five UI steps span 11px to 16px. Five sizes across 5px is too little for
+size on its own to carry hierarchy, which is why the chrome read flat however
+the sizes were arranged. `--bear-weight-ui-strong` (600) and
+`--bear-tracking-tight` (`-0.011em`) are now part of the `ui-md` and `ui-lg`
+steps rather than being applied at call sites, so a title is a title because of
+its step and not because whoever wrote the component remembered `font-semibold`.
+Tracking tightens as size grows — the standard optical correction, since
+letterfit that looks right at 11px looks loose at 16px.
+
 ### Editor typography is separate, and its sliders are still to come
 
 The editor's own type — `--bear-font-size` (16px), `--bear-line-height` (1.6),

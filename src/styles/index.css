@@ -32,8 +32,12 @@
   --text-ui--line-height: var(--bear-leading-ui);
   --text-ui-md: var(--bear-text-ui-md);
   --text-ui-md--line-height: 1.4;
+  --text-ui-md--font-weight: var(--bear-weight-ui-strong);
+  --text-ui-md--letter-spacing: var(--bear-tracking-tight);
   --text-ui-lg: var(--bear-text-ui-lg);
   --text-ui-lg--line-height: 1.35;
+  --text-ui-lg--font-weight: var(--bear-weight-ui-strong);
+  --text-ui-lg--letter-spacing: var(--bear-tracking-tight);
 
   --radius-sm: var(--bear-radius-sm);
   --radius-md: var(--bear-radius-md);

@@ -75,14 +75,25 @@
   margin-top: 0;
 }
 
+/*
+ * A modular scale at 1.2, CHOSEN rather than measured.
+ *
+ * DESIGN-bear-web.md records that the heading scale was never trustworthily
+ * measured off Bear and warns against acting on the remembered figures. Bear
+ * is no longer the authority, so the ratio is stated here and the three sizes
+ * derive from it — which makes a future change one decision instead of three
+ * independent nudges.
+ */
 .ProseMirror h1 {
-  font-size: 1.6em;
+  font-size: calc(
+    var(--bear-heading-ratio) * var(--bear-heading-ratio) * var(--bear-heading-ratio) * 1em
+  );
 }
 .ProseMirror h2 {
-  font-size: 1.35em;
+  font-size: calc(var(--bear-heading-ratio) * var(--bear-heading-ratio) * 1em);
 }
 .ProseMirror h3 {
-  font-size: 1.15em;
+  font-size: calc(var(--bear-heading-ratio) * 1em);
 }
 .ProseMirror h4,
 .ProseMirror h5,

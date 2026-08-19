@@ -43,6 +43,23 @@
   --bear-text-ui-lg: 1rem; /* 16px — pane headers, empty states */
   --bear-leading-ui: 1.45;
 
+  /*
+   * Weight and tracking belong to a step, not to a call site.
+   *
+   * Between 11px and 16px there is too little size difference for size alone
+   * to carry hierarchy — five steps spanning 5px — which is why the chrome
+   * read flat however the sizes were arranged. Stating weight and tracking
+   * here means a heading is a heading because of its step, not because
+   * whoever wrote the component remembered to add `font-semibold`.
+   *
+   * Tracking tightens as size grows, which is the standard optical
+   * correction: letterfit that looks right at 11px looks loose at 16px.
+   */
+  --bear-weight-ui: 400;
+  --bear-weight-ui-strong: 600;
+  --bear-tracking-normal: 0em;
+  --bear-tracking-tight: -0.011em;
+
   --bear-duration-fast: 100ms;
   --bear-duration: 160ms;
   --bear-ease: cubic-bezier(0.2, 0, 0.2, 1);
@@ -64,6 +81,14 @@
   --bear-line-width: 40em;
   --bear-para-spacing: 0em;
   --bear-para-indent: 0em;
+
+  /*
+   * The editor's heading scale. h1/h2/h3 are this ratio cubed, squared and
+   * itself, so the three cannot drift out of proportion with one another.
+   * 1.2 gives 1.73 / 1.44 / 1.2 against the previous 1.6 / 1.35 / 1.15 —
+   * a stronger h1 and a scale that is stated rather than assembled.
+   */
+  --bear-heading-ratio: 1.2;
 
   /* ----------------------------------------------------------- tiers 1 + 2 */
 
