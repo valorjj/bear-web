@@ -228,7 +228,7 @@
     "surface": "note list: search field",
     "note": "Native cancel widget suppressed; our own clear button instead.",
     "box": {
-      "width": 304,
+      "width": 302,
       "height": 28
     },
     "style": {
@@ -239,7 +239,7 @@
       "letter-spacing": "normal",
       "color": "rgb(28, 27, 25)",
       "background-color": "rgb(255, 255, 255)",
-      "padding": "4px 24px 4px 28px",
+      "padding": "4px 24px 4px 32px",
       "margin": "0px",
       "border-radius": "4px",
       "border-top-width": "1px",
@@ -303,7 +303,7 @@
     "surface": "editor: top controls",
     "note": "Currently a full-width bar; Bear floats a pill group here.",
     "box": {
-      "width": 146,
+      "width": 150,
       "height": 36
     },
     "style": {
@@ -314,7 +314,7 @@
       "letter-spacing": "normal",
       "color": "rgb(28, 27, 25)",
       "background-color": "rgb(250, 249, 248)",
-      "padding": "0px 6px",
+      "padding": "0px 8px",
       "margin": "0px",
       "border-radius": "3.35544e+07px",
       "border-top-width": "0px",
@@ -328,7 +328,7 @@
     "surface": "editor: bottom toolbar",
     "note": "Currently welded to the window edge; Bear floats a centred rounded bar.",
     "box": {
-      "width": 418,
+      "width": 422,
       "height": 36
     },
     "style": {
@@ -339,7 +339,7 @@
       "letter-spacing": "normal",
       "color": "rgb(28, 27, 25)",
       "background-color": "rgb(250, 249, 248)",
-      "padding": "0px 6px",
+      "padding": "0px 8px",
       "margin": "0px",
       "border-radius": "3.35544e+07px",
       "border-top-width": "0px",

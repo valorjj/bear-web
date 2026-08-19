@@ -182,7 +182,7 @@ export function BottomToolbar({ editor }: BottomToolbarProps): ReactElement {
     <div
       role="toolbar"
       aria-label={t('editor.toolbar.bottom')}
-      className="flex h-9 w-fit max-w-full shrink-0 items-center gap-0.5 overflow-x-auto rounded-full bg-surface px-1.5 shadow-popover"
+      className="flex h-9 w-fit max-w-full shrink-0 items-center gap-0.5 overflow-x-auto rounded-full bg-surface px-2 shadow-popover"
     >
       {ACTIONS.map((action) => (
         <button

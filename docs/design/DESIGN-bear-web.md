@@ -411,17 +411,50 @@ them.
 
 ## Layout
 
-### Why there are no spacing tokens
+### The spacing scale
 
-There is deliberately no `spacing` scale in this system. Tailwind's default
-spacing scale is already a 4px grid (`p-1` = 4px, `p-2` = 8px, `p-3` = 12px,
-...), and it is used directly throughout the app (`px-3 py-2.5`, `gap-1`,
-`h-7`, `h-9`). A second, bear-web-specific spacing scale on top of Tailwind's
-would create a standing question at every call site — "reach for the design
-token or the Tailwind utility?" — for no benefit, since they'd resolve to the
-same pixel grid anyway. Radii and durations get tokens because their values
-are opinionated and small in number; spacing does not need the same
-treatment.
+**Superseded ruling (M5.5–M8), kept visible because it was wrong in a
+specific and instructive way.** This section previously read: *"There is
+deliberately no `spacing` scale in this system. Tailwind's default spacing
+scale is already a 4px grid, and it is used directly throughout the app. A
+second, bear-web-specific spacing scale on top of Tailwind's would create a
+standing question at every call site — reach for the design token or the
+Tailwind utility? — for no benefit, since they'd resolve to the same pixel
+grid anyway."*
+
+The reasoning about tokens was sound; the conclusion did not follow. Declining
+a second token system is not the same as declining a scale, and what shipped
+was neither. By M8 the app used ten distinct steps with no rule — `px-1.5`,
+`p-5`, `pl-7` sitting beside `px-2`, `p-4`, `gap-2` — because **a grid on which
+every step is permitted is not a scale.** That drift is what read as
+misalignment.
+
+**M9a states the subset and enforces it.** Ordinary Tailwind utilities are
+still what gets written; there is still no competing token system. What changed
+is that `scripts/sourceLint.test.ts` now fails on a step outside the permitted
+set, the same mechanism that already catches a stray hex literal.
+
+| Permitted (px) | 2 | 4 | 8 | 12 | 16 | 24 | 32 | 48 |
+| -------------- | - | - | - | -- | -- | -- | -- | -- |
+| Tailwind step  | `0.5` | `1` | `2` | `3` | `4` | `6` | `8` | `12` |
+
+Seven sites were snapped onto it when the rule was introduced. Each was a
+judgement, not a rounding:
+
+| Site | Was | Now | Why |
+| ---- | --- | --- | --- |
+| `TopControls`, `BottomToolbar` | `px-1.5` | `px-2` | The inset around a row of icon buttons |
+| `Button` size `sm` | `px-1.5` | `px-2` | Matches the `md` size's rhythm |
+| `ExportMenu` row | `py-1.5` | `py-1` | Down, not up: the row is already sized by its text, and 8px vertical would make a compact menu loose |
+| `NoteList` header strip | `py-1.5` | `py-1` | Down, so the strip keeps its height rather than growing 4px |
+| `SearchField` | `pl-7` | `pl-8` | 8px inset + 14px glyph needs 32, not 28 |
+| `ConfirmDialog` | `p-5` | `p-6` | Up, not down: it already uses `gap-4` internally, so `p-4` would make padding equal the internal gap and the content would read as touching the edge |
+
+An arbitrary value (`p-[13px]`) is an escape hatch rather than a forbidden
+thing, but it must be allowlisted with a stated reason, exactly like the
+focus-outline suppressors. One entry exists: `RichEditor`'s `pt-12`/`pb-24`,
+which reserve the space the floating toolbars overlay — a computed reach, not a
+rhythm.
 
 ### Density rules
 

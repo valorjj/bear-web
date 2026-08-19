@@ -128,7 +128,7 @@ export function NoteList({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center border-b border-border px-2 py-1.5">
+      <div className="flex shrink-0 items-center border-b border-border px-2 py-1">
         <SearchField query={query} onQueryChange={onQueryChange} inputRef={searchInputRef} />
       </div>
 

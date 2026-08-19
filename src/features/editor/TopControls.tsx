@@ -46,7 +46,7 @@ export function TopControls({
     <div
       role="toolbar"
       aria-label={t('editor.toolbar.top')}
-      className="flex h-9 shrink-0 items-center gap-0.5 rounded-full bg-surface px-1.5 shadow-popover"
+      className="flex h-9 shrink-0 items-center gap-0.5 rounded-full bg-surface px-2 shadow-popover"
     >
       <button
         type="button"

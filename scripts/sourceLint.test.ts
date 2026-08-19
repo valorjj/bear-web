@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -347,5 +347,65 @@ describe('the pre-paint theme script', () => {
   // It has to beat the module that renders the app, or it is decorative.
   it('runs before the app script', () => {
     expect(html.indexOf('bear-web:theme')).toBeLessThan(html.indexOf('/src/main.tsx'));
+  });
+});
+
+describe('the spacing scale', () => {
+  /*
+   * Tailwind's grid permits every step, which is not a scale. The shipped code
+   * used ten of them with no rule — `px-1.5`, `p-5`, `pl-7` beside `px-2` and
+   * `p-4` — and that drift is what reads as misalignment.
+   *
+   * This replaces the "why there are no spacing tokens" ruling in
+   * DESIGN-bear-web.md. The fix is not a second token system competing with
+   * Tailwind: it is a permitted subset of Tailwind's own scale, enforced the
+   * same way a stray hex literal already is.
+   *
+   * Permitted: 2 4 8 12 16 24 32 48 px.
+   */
+  const PERMITTED = new Set(['0', '0.5', '1', '2', '3', '4', '6', '8', '12', 'px', 'auto', 'full']);
+
+  const UTILITY =
+    /(?:^|[\s'"`{])(?:p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|gap|gap-x|gap-y|space-x|space-y)-(\[?[\w.%[\]()-]+)/g;
+
+  /**
+   * Off-scale values with a stated reason, in the shape of the focus-outline
+   * allowlist. An arbitrary value is an escape hatch, not a forbidden thing —
+   * but each one is named here, so it is a decision rather than a drift.
+   */
+  const ALLOWED: Record<string, string> = {
+    'src/features/editor/RichEditor.tsx':
+      'pt-12/pb-24 reserve the space the floating toolbars overlay, which is a computed reach rather than a rhythm; e2e/appearance.spec.ts asserts the reserve covers each pill',
+  };
+
+  it('scans a non-trivial number of components', () => {
+    // Guards the guard: a walk returning nothing would make the scan below
+    // vacuously green.
+    expect(walk('src', ['.tsx']).length).toBeGreaterThan(20);
+  });
+
+  it('uses only permitted spacing steps', () => {
+    const offenders: string[] = [];
+
+    for (const path of walk('src', ['.tsx'])) {
+      if (path in ALLOWED) continue;
+      if (/\.test\.tsx?$/.test(path)) continue;
+      const source = readFileSync(path, 'utf8');
+      for (const match of source.matchAll(UTILITY)) {
+        const step = match[1]!;
+        if (!PERMITTED.has(step)) offenders.push(`${path}  ${match[0]!.trim()}`);
+      }
+    }
+
+    expect(offenders, `off-scale spacing:\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  it('keeps every allowlisted file real, with its reason', () => {
+    // An allowlist entry for a file that no longer exists is a licence nobody
+    // is using and nobody will notice has gone stale.
+    for (const [path, reason] of Object.entries(ALLOWED)) {
+      expect(existsSync(path), `${path} is allowlisted but absent`).toBe(true);
+      expect(reason.length, `${path} needs a stated reason`).toBeGreaterThan(20);
+    }
   });
 });

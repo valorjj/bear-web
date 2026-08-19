@@ -108,7 +108,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={bodyId}
-        className="relative z-10 mx-4 flex w-full max-w-sm flex-col gap-4 rounded-lg bg-bg p-5 shadow-dialog"
+        className="relative z-10 mx-4 flex w-full max-w-sm flex-col gap-4 rounded-lg bg-bg p-6 shadow-dialog"
       >
         <h2 id={titleId} className="text-ui-lg font-semibold text-text">
           {title}

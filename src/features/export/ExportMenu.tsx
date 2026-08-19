@@ -69,7 +69,7 @@ export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactEleme
           type="button"
           role="menuitem"
           onClick={() => onChoose(choice.format)}
-          className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-ui text-text transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover"
+          className="flex items-center gap-2 rounded-sm px-2 py-1 text-left text-ui text-text transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover"
         >
           <span className="text-faint">
             <Icon glyph={choice.glyph} size="sm" />

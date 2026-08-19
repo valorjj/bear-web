@@ -158,14 +158,14 @@ Native cancel widget suppressed; our own clear button instead.
 
 | Property | Value |
 | --- | --- |
-| box | 304 x 28 |
+| box | 302 x 28 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `13px` |
 | font-weight | `400` |
 | line-height | `18.85px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgb(255, 255, 255)` |
-| padding | `4px 24px 4px 28px` |
+| padding | `4px 24px 4px 32px` |
 | border-radius | `4px` |
 | border-top-width | `1px` |
 | border-bottom-width | `1px` |
@@ -204,14 +204,14 @@ Currently a full-width bar; Bear floats a pill group here.
 
 | Property | Value |
 | --- | --- |
-| box | 146 x 36 |
+| box | 150 x 36 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgb(250, 249, 248)` |
-| padding | `0px 6px` |
+| padding | `0px 8px` |
 | border-radius | `3.35544e+07px` |
 | gap | `2px` |
 | box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px` |
@@ -222,14 +222,14 @@ Currently welded to the window edge; Bear floats a centred rounded bar.
 
 | Property | Value |
 | --- | --- |
-| box | 418 x 36 |
+| box | 422 x 36 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(28, 27, 25)` |
 | background-color | `rgb(250, 249, 248)` |
-| padding | `0px 6px` |
+| padding | `0px 8px` |
 | border-radius | `3.35544e+07px` |
 | gap | `2px` |
 | max-width | `100%` |
