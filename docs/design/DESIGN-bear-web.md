@@ -680,3 +680,16 @@ user hearing the date at different points; reordering both means editing a
 pinned accessibility contract, which this project's own rules say is a
 deliberate act and not a side effect of a restyle. It is a real difference, worth
 closing, and worth closing on purpose.
+
+### Still unverified: heading scale and paragraph rhythm
+
+The M8 comparison closed the measure, the chrome shape and the density. It did
+NOT settle the type scale. Bear's h2 measured roughly 1.5x its body text against
+our `1.35em`, and its inter-paragraph gap looked larger than our `0.75em` — but
+neither number was recorded here at the time, and the captures are gone, so
+neither is trustworthy enough to act on.
+
+**Do not change the heading scale or the block rhythm on the strength of those
+figures.** Both need a fresh set of Bear captures saved to a real path, measured
+the same way as the rest of this section: calibrate on the 24pt menu bar, then
+read line pitch and band heights out of the prose column.
