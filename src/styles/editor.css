@@ -152,7 +152,9 @@
 }
 
 .ProseMirror blockquote {
-  border-left: 2px solid var(--bear-border);
+  /* Twice the theme's border width, not a fixed 2px: the relationship to an
+     ordinary rule is what reads as "quote", and High Contrast doubles both. */
+  border-left: calc(var(--bear-border-width) * 2) solid var(--bear-border);
   padding-left: 1em;
   color: var(--bear-muted);
 }
@@ -169,7 +171,7 @@
   font-family: var(--bear-font-mono);
   font-size: 0.9em;
   background-color: var(--bear-surface);
-  border: 1px solid var(--bear-border);
+  border: var(--bear-border-width) solid var(--bear-border);
   border-radius: var(--bear-radius-md);
   padding: 0.75em 1em;
   overflow-x: auto;
@@ -198,7 +200,7 @@
 
 .ProseMirror th,
 .ProseMirror td {
-  border: 1px solid var(--bear-border);
+  border: var(--bear-border-width) solid var(--bear-border);
   padding: 0.35em 0.6em;
   vertical-align: top;
   /* A cell must be able to hold a caret even when empty. */

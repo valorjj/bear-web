@@ -748,3 +748,48 @@ test('the editor typography tokens reach the rendered prose', async ({ page }) =
   expect(clamped.prose).toBeLessThan(clamped.max + 2);
   expect(clamped.prose).toBeGreaterThan(clamped.max - 2);
 });
+
+/*
+ * The surface tier is what makes High Contrast an ordinary theme rather than a
+ * mode every component branches on: it raises `--bear-border-width` to 2px and
+ * drops both shadows to `none`, so its panes are separated by their borders
+ * alone.
+ *
+ * That only works if every border in the app consumes the token. Tailwind's
+ * `border` utilities hardcode 1px, so a theme could raise the token and change
+ * nothing at all — and the source would look correct either way, exactly like
+ * the `--color-hover` defect this file was written for. Only a rendered width
+ * can answer it.
+ */
+test('every border consumes the theme width token', async ({ page }) => {
+  await page.goto('/');
+
+  async function renderedWidths(theme: string): Promise<string[]> {
+    return page.evaluate((value) => {
+      document.documentElement.setAttribute('data-theme', value);
+      const widths: string[] = [];
+      for (const element of document.querySelectorAll('*')) {
+        const style = getComputedStyle(element);
+        for (const side of [
+          'borderTopWidth',
+          'borderBottomWidth',
+          'borderLeftWidth',
+          'borderRightWidth',
+        ] as const) {
+          if (style[side] !== '0px') widths.push(style[side]);
+        }
+      }
+      return widths;
+    }, theme);
+  }
+
+  const paper = await renderedWidths('paper');
+  // Guards the guard: with no border anywhere, the equality below would hold
+  // vacuously for every theme.
+  expect(paper.length, 'no borders rendered at all').toBeGreaterThan(0);
+  expect([...new Set(paper)]).toEqual(['1px']);
+
+  const high = await renderedWidths('high-contrast');
+  expect(high.length).toBeGreaterThan(0);
+  expect([...new Set(high)]).toEqual(['2px']);
+});

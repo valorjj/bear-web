@@ -259,6 +259,48 @@
 }
 
 /*
+ * High Contrast — the one theme that stresses the SURFACE tier rather than the
+ * palette tier, which is why it is in the roster at all.
+ *
+ * Two things here are not colour choices and must not be "tidied":
+ *
+ *   - The overlays are SOLID, not alpha. An overlay that composites against
+ *     its ground is exactly what this theme exists to avoid.
+ *   - Both shadows are HARD RINGS, not `none`. Elevation cannot separate
+ *     anything on a black ground, and `none` made the sidebar and editor panes
+ *     merge into the canvas entirely — verified by screenshot, not by eye over
+ *     source. Expressing the separation through the shadow token keeps the
+ *     standing ruling that a pane carries no border (a hard border would
+ *     compete with the 1px dividers inside it) and means every future floating
+ *     surface is separated here for free.
+ */
+:root[data-theme='high-contrast'] {
+  --bear-bg: #000000;
+  --bear-surface: #000000;
+  --bear-sidebar: #000000;
+  --bear-canvas: #000000;
+  --bear-text: #ffffff;
+  --bear-muted: #e6e6e6;
+  --bear-faint: #c9c9c9;
+  --bear-border: #ffffff;
+  --bear-accent: #ffd400;
+  --bear-danger: #ff8a80;
+  --bear-focus: #ffd400;
+  --bear-hover: #2a2a2a;
+  --bear-selected: #4a3d00;
+  --bear-shadow: transparent;
+  --bear-tag-fill: #4a3d00;
+  --bear-tag-fill-strong: #6b5800;
+
+  --bear-radius-sm: 2px;
+  --bear-radius-md: 4px;
+  --bear-radius-lg: 6px;
+  --bear-border-width: 2px;
+  --bear-shadow-popover: 0 0 0 var(--bear-border-width) var(--bear-border);
+  --bear-shadow-dialog: 0 0 0 var(--bear-border-width) var(--bear-border);
+}
+
+/*
  * The system preference is the default, applied with no JavaScript so there is
  * no flash of the wrong theme on first paint.
  *

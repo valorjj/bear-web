@@ -28,6 +28,7 @@ export const THEMES: readonly Theme[] = [
   { id: 'paper', labelKey: 'theme.paper', group: 'light' },
   { id: 'indigo-dark', labelKey: 'theme.indigoDark', group: 'dark' },
   { id: 'ink', labelKey: 'theme.ink', group: 'dark' },
+  { id: 'high-contrast', labelKey: 'theme.highContrast', group: 'dark' },
 ];
 
 /** Applied by `:root`, i.e. what a visitor with no stored choice sees. */
