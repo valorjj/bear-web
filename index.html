@@ -6,6 +6,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>bear-web</title>
+    <!--
+      Runs before first paint, and must stay inline for that reason.
+
+      The settings table is the durable source of truth for the theme, but
+      IndexedDB can only be read asynchronously and therefore cannot paint the
+      first frame: without this mirror every launch renders the default theme
+      and then corrects itself, which is a visible flash on every load and
+      worst in the dark themes.
+
+      This reads and writes an ID, never a colour, so the rule that every
+      colour comes from a custom property is intact. The roster is duplicated
+      here on purpose — a module import would be async and defeat the point —
+      and `scripts/sourceLint.test.ts` asserts this list and the key match
+      `src/styles/themes.ts` and `src/app/theme.ts`.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('bear-web:theme');
+          var known = ['indigo-light', 'indigo-dark', 'paper', 'ink', 'high-contrast'];
+          if (stored && known.indexOf(stored) !== -1) {
+            document.documentElement.setAttribute('data-theme', stored);
+          }
+        } catch (error) {
+          /* Storage unavailable; the media query decides. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

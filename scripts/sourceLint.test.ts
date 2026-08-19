@@ -320,3 +320,32 @@ describe('focus', () => {
     }
   });
 });
+
+describe('the pre-paint theme script', () => {
+  const html = readFileSync('index.html', 'utf8');
+  const roster = readFileSync('src/styles/themes.ts', 'utf8');
+  const ids = [...roster.matchAll(/id: '([a-z-]+)'/g)].map((match) => match[1]!);
+
+  // The script cannot import the roster — a module import is async, and the
+  // whole point is to run before first paint. So the list is duplicated, and
+  // this is what stops it drifting: a theme added to the roster but missing
+  // here silently loses its no-flash behaviour, and nothing else in the suite
+  // can see that.
+  it('lists exactly the roster ids', () => {
+    const listed = html.match(/var known = \[([^\]]+)\]/)![1]!;
+    for (const id of ids) {
+      expect(listed, `${id} missing from the pre-paint script`).toContain(`'${id}'`);
+    }
+    expect(listed.split(',')).toHaveLength(ids.length);
+  });
+
+  it('reads the same storage key the app writes', () => {
+    const key = readFileSync('src/app/theme.ts', 'utf8').match(/MIRROR_KEY = '([^']+)'/)![1]!;
+    expect(html).toContain(`localStorage.getItem('${key}')`);
+  });
+
+  // It has to beat the module that renders the app, or it is decorative.
+  it('runs before the app script', () => {
+    expect(html.indexOf('bear-web:theme')).toBeLessThan(html.indexOf('/src/main.tsx'));
+  });
+});
