@@ -32,7 +32,7 @@ export const THEMES: readonly Theme[] = [
 ];
 
 /** Applied by `:root`, i.e. what a visitor with no stored choice sees. */
-export const DEFAULT_THEME_ID: ThemeId = 'paper';
+export const DEFAULT_THEME_ID: ThemeId = 'indigo-light';
 
 /** Applied by the `prefers-color-scheme: dark` block when no theme is chosen. */
-export const SYSTEM_DARK_ID: ThemeId = 'ink';
+export const SYSTEM_DARK_ID: ThemeId = 'indigo-dark';

@@ -102,72 +102,34 @@
    * Do not merge the two.
    */
 
-  /* Paper — the light theme. Warm neutrals, one red. */
+  /* Indigo Light — see the named block below; the two must stay identical. */
   --bear-bg: #ffffff;
-  --bear-surface: #faf9f8;
-  --bear-sidebar: #f1efec;
-  --bear-text: #1c1b19;
-  --bear-muted: #6b6862;
-  --bear-faint: #88857d;
-  --bear-border: #e5e2dd;
-  --bear-accent: #cf3b2c;
+  --bear-surface: #f5f4fa;
+  --bear-sidebar: #eceaf3;
+  --bear-canvas: #eceaf3;
+  --bear-text: #241f3d;
+  --bear-muted: #605b78;
+  /* Darkened from the mockup's #9d99b0, which the harness measured at 2.76:1
+     on white and 2.31:1 on the sidebar, against a 3.0 floor. */
+  --bear-faint: #837e99;
+  --bear-border: #e0dcec;
+  --bear-accent: #5b4ad6;
+  --bear-danger: #c62828;
+  --bear-focus: #5b4ad6;
+  --bear-hover: rgb(40 34 66 / 0.05);
+  --bear-selected: rgb(91 74 214 / 0.09);
+  --bear-shadow: rgb(40 34 66 / 0.07);
+  --bear-tag-fill: rgb(91 74 214 / 0.12);
+  --bear-tag-fill-strong: rgb(91 74 214 / 0.26);
 
-  /*
-   * `danger` and `focus` resolve to the accent in both shipped themes, and are
-   * still separate tokens: an M8 theme with a green accent must not render its
-   * Delete Forever button green. Call sites express intent, not colour.
-   */
-  --bear-danger: #cf3b2c;
-  --bear-focus: #cf3b2c;
-
-  /*
-   * Translucent, deliberately. These sit over three different backgrounds —
-   * sidebar, note list, and editor canvas — so no solid fill could be one
-   * token. `selected` is accent-tinted rather than neutral, which is what
-   * makes a selected row read as MORE present than its surroundings. Before
-   * M5.5 selection was `bg-bg`, i.e. less contrast than unselected: a hole
-   * rather than a highlight.
-   */
-  --bear-hover: rgb(28 27 25 / 0.05);
-  --bear-selected: rgb(207 59 44 / 0.11);
-  --bear-shadow: rgb(28 27 25 / 0.14);
-
-  /*
-   * The tag pill's fill, deliberately a separate token from `selected` even
-   * though the two are the same colour at a different alpha. A pill is a few
-   * characters of inline text and must read as a discrete chip; a selected row
-   * is a whole band and only has to read as present. Paper needs the extra
-   * alpha for that — at `selected`'s 0.11 the pill read as a highlighted word
-   * rather than a chip. Ink does not: its 0.18 is already comfortable, so the
-   * two tokens coincide there and diverge only here.
-   */
-  --bear-tag-fill: rgb(207 59 44 / 0.16);
-
-  /*
-   * The pill's held-modifier state, while Mod is held over the editor: an
-   * alpha ABOVE `--bear-tag-fill`'s own, so the affordance reads as MORE
-   * present than a resting pill rather than less. `--bear-selected` was
-   * considered and rejected — at 0.11 here it is fainter than the resting
-   * pill's own 0.16, which would make holding the modifier look like the
-   * pill fading rather than lighting up.
-   */
-  --bear-tag-fill-strong: rgb(207 59 44 / 0.32);
-
-  /*
-   * The ground the three panes float on. A browser tab has no window chrome,
-   * so depth is what separates the panes from each other and from the page —
-   * the role Bear's rounded macOS window plays.
-   */
-  --bear-canvas: #e8e4de;
-
-  --bear-radius-sm: 4px;
-  --bear-radius-md: 6px;
-  --bear-radius-lg: 10px;
+  --bear-radius-sm: 6px;
+  --bear-radius-md: 8px;
+  --bear-radius-lg: 12px;
   --bear-border-width: 1px;
-
-  /* Two, because the app has exactly two floating surfaces. */
-  --bear-shadow-popover: 0 4px 12px var(--bear-shadow);
-  --bear-shadow-dialog: 0 12px 32px var(--bear-shadow);
+  /* Two layers, which is what reads as depth rather than as a drop shadow:
+     a tight contact shadow plus a wide ambient one. */
+  --bear-shadow-popover: 0 1px 2px rgb(40 34 66 / 0.05), 0 8px 24px rgb(40 34 66 / 0.07);
+  --bear-shadow-dialog: 0 12px 40px rgb(40 34 66 / 0.18);
 }
 
 /* Paper — the light theme. Warm neutrals, one red. */
@@ -208,8 +170,16 @@
  * to this theme.
  */
 [data-theme='indigo-light'] {
+  /*
+   * `bg` and `surface` must DIFFER, and the mockup had both at pure white.
+   * The app uses each as the other's contrast: a Button and the search field
+   * are `bg-bg` sitting on the note list's `bg-surface` pane, while both
+   * editor toolbar pills are `bg-surface` floating over the editor's `bg-bg`.
+   * Equal values make every one of them invisible at rest — the same class of
+   * defect as `Button`'s borderless, fill-less `default` variant in M5.5.
+   */
   --bear-bg: #ffffff;
-  --bear-surface: #ffffff;
+  --bear-surface: #f5f4fa;
   --bear-sidebar: #eceaf3;
   --bear-canvas: #eceaf3;
   --bear-text: #241f3d;
@@ -240,8 +210,10 @@
 /* Indigo Dark — the violet carried into the ground, so switching themes reads
    as a dimmer on one app rather than as a different product. */
 [data-theme='indigo-dark'] {
-  --bear-bg: #1e1b26;
-  --bear-surface: #1e1b26;
+  /* Same rule as Indigo Light: `surface` steps toward the light in a dark
+     theme, the way Ink's #201f1e steps off its #1a1a19. */
+  --bear-bg: #1b1825;
+  --bear-surface: #252131;
   --bear-sidebar: #14121b;
   --bear-canvas: #14121b;
   --bear-text: #f0edf7;
@@ -348,29 +320,29 @@
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bear-bg: #1a1a19;
-    --bear-surface: #201f1e;
-    --bear-sidebar: #262523;
-    --bear-text: #ebe9e5;
-    --bear-muted: #a09c94;
-    --bear-faint: #7b766e;
-    --bear-border: #35332f;
-    --bear-accent: #ff6f5e;
-    --bear-danger: #ff6f5e;
-    --bear-focus: #ff6f5e;
+    --bear-bg: #1b1825;
+    --bear-surface: #252131;
+    --bear-sidebar: #14121b;
+    --bear-canvas: #14121b;
+    --bear-text: #f0edf7;
+    --bear-muted: #a9a3bd;
+    --bear-faint: #837d99;
+    --bear-border: #322e40;
+    --bear-accent: #9b8cff;
+    --bear-danger: #ff6b6b;
+    --bear-focus: #9b8cff;
     --bear-hover: rgb(255 255 255 / 0.06);
-    --bear-selected: rgb(255 111 94 / 0.18);
-    --bear-shadow: rgb(0 0 0 / 0.5);
-    --bear-canvas: #121211;
-    --bear-tag-fill: rgb(255 111 94 / 0.18);
-    --bear-tag-fill-strong: rgb(255 111 94 / 0.32);
+    --bear-selected: rgb(155 140 255 / 0.2);
+    --bear-shadow: rgb(0 0 0 / 0.4);
+    --bear-tag-fill: rgb(155 140 255 / 0.22);
+    --bear-tag-fill-strong: rgb(155 140 255 / 0.38);
 
-    --bear-radius-sm: 4px;
-    --bear-radius-md: 6px;
-    --bear-radius-lg: 10px;
+    --bear-radius-sm: 6px;
+    --bear-radius-md: 8px;
+    --bear-radius-lg: 12px;
     --bear-border-width: 1px;
-    --bear-shadow-popover: 0 4px 12px var(--bear-shadow);
-    --bear-shadow-dialog: 0 12px 32px var(--bear-shadow);
+    --bear-shadow-popover: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
+    --bear-shadow-dialog: 0 12px 40px rgb(0 0 0 / 0.55);
   }
 }
 

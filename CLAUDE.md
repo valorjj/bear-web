@@ -1,9 +1,18 @@
 # bear-web
 
-A local-first, web-based notes app modeled on the Bear macOS app. Three panes
-(tag sidebar / note list / editor), Markdown notes, organized by inline hashtags
-rather than folders. No backend, no account — everything lives in the browser's
-IndexedDB.
+A local-first, web-based Markdown notes app: **lightweight, fast, beautiful,
+easy to use, with image storage.** Three panes (tag sidebar / note list /
+editor), notes organized by inline hashtags rather than folders. No backend, no
+account — everything lives in the browser's IndexedDB.
+
+**Bear is a reference, not a target.** The app was built as a Bear clone and M8
+treated Bear's measured geometry as the definition of correct. That ended at
+M9a. `npm run measure` and the "Measured against the real Bear" section of
+`docs/design/DESIGN-bear-web.md` remain the only tooling that can see "renders
+wrong", so keep using them for self-comparison and regression — but **a
+measurement that diverges from Bear is no longer a defect on its own**, and
+"Bear does it this way" is not by itself an argument. Image storage is a wanted
+feature and is not yet scheduled.
 
 **Live:** https://valorjj.github.io/bear-web/
 **Spec:** `docs/superpowers/specs/2026-08-06-bear-web-design.md`
@@ -11,26 +20,28 @@ IndexedDB.
 
 ## Status
 
-| Milestone                               | State    |
-| --------------------------------------- | -------- |
-| M0 scaffold, CI, Pages deploy           | complete |
-| M1 data layer (Dexie)                   | complete |
-| M2 application shell                    | complete |
-| M3 notes CRUD, textarea editor          | complete |
-| M4 editor                               | complete |
-| M5 tags                                 | complete |
-| M5.5 design language                    | complete |
-| M6 smart lists, trash management        | complete |
-| M7 search                               | complete |
-| M7.5 visual design pass                 | complete |
-| M7.6 tag pills                          | complete |
-| M7.7 tag pill activation                | complete |
-| M8 visual pass (chrome, density, prose) | complete |
-| M8b export: Markdown, HTML, PDF         | complete |
-| M8c tables as real nodes                | complete |
-| M9 themes, callouts, polish             | next     |
+| Milestone                                | State    |
+| ---------------------------------------- | -------- |
+| M0 scaffold, CI, Pages deploy            | complete |
+| M1 data layer (Dexie)                    | complete |
+| M2 application shell                     | complete |
+| M3 notes CRUD, textarea editor           | complete |
+| M4 editor                                | complete |
+| M5 tags                                  | complete |
+| M5.5 design language                     | complete |
+| M6 smart lists, trash management         | complete |
+| M7 search                                | complete |
+| M7.5 visual design pass                  | complete |
+| M7.6 tag pills                           | complete |
+| M7.7 tag pill activation                 | complete |
+| M8 visual pass (chrome, density, prose)  | complete |
+| M8b export: Markdown, HTML, PDF          | complete |
+| M8c tables as real nodes                 | complete |
+| M9a visual system: themes, scale, picker | complete |
+| M9b callout blocks                       | next     |
+| M9c collapsible headings                 | next     |
 
-1095 unit tests, 45 end-to-end tests. `main` is always green and auto-deploys.
+1143 unit tests, 57 end-to-end tests. `main` is always green and auto-deploys.
 
 **Two further Playwright entry points exist and are deliberately not in that
 count, because they assert nothing.** Both drive the fixed corpus in
@@ -39,7 +50,11 @@ count, because they assert nothing.** Both drive the fixed corpus in
 
 - `npm run shots` → `e2e/shots.spec.ts` writes design reference screenshots to
   `docs/design/shots/` (gitignored) — three panes, search, trash, the empty
-  state and the exported document, in both themes.
+  state and the exported document, **in every theme in the roster** (50 files).
+  Themes are selected through the paint-time mirror, the way a user selects
+  one. Until M9a it drove `colorScheme` instead, i.e. the media query, and the
+  shot labelled `paper` silently started rendering Indigo Light the moment the
+  default theme changed.
 - `npm run measure` → `e2e/measure.spec.ts` writes the app's real geometry and
   typography for 23 surfaces to `docs/design/measurements.md` and `.json`.
 
@@ -126,10 +141,32 @@ connection holding version 0.1`. `e2e/fixtures/seed.ts` opens at 10 and closes
   it, so a note inserted after boot sits in the database and never appears in
   the list. This is why `seedDatabase` uses `page.addInitScript` rather than
   `page.evaluate` after `goto`.
-- **`playwright.config.ts` hardcodes port 4173 with `reuseExistingServer`.**
-  Two parallel `npm run test:e2e` runs — e.g. two subagents, or a human and an
-  agent — share that port, so the second run measures the first run's tree
-  instead of its own.
+- **`playwright.config.ts` hardcodes port 4173 with `reuseExistingServer`, and
+  the failure is silent in BOTH directions.** Two parallel `npm run test:e2e`
+  runs — two subagents, or a human and an agent — share that port, so the second
+  measures the first's tree. Worse and more common: **any preview server left on
+  4173 is reused, so the suite silently tests a stale build.** M9a hit this
+  twice. A fault injection meant to prove a test could fail PASSED, because the
+  build never re-ran; and a genuine failure looked like a regression when it was
+  a typecheck error that had stopped `npm run build` (the webServer command is
+  `npm run build && npm run preview`, so a type error anywhere — including in
+  `e2e/`, which `tsc -b` also compiles — reports only `Exit code: 2`).
+  **Before trusting any e2e result that follows a source change, and always
+  before a fault injection:** `lsof -ti:4173 | xargs -r kill -9`.
+
+- **Class-attribute order does not decide the CSS cascade; stylesheet order
+  does.** `Pane` had `shadow-popover` in its base classes, and appending
+  `shadow-none` via `className` did nothing at all — both are utilities in the
+  same layer, so the one Tailwind happens to emit later wins regardless of
+  which the element lists last. There is no warning. Express "not this
+  utility" as a prop that omits the class (`Pane`'s `elevated`), never as an
+  overriding utility.
+
+- **`document.documentElement` is null at `document_start`.** A Playwright
+  `addInitScript` that touches it throws before recording anything, and an
+  empty result array looks exactly like "the thing never happened". This cost a
+  wrong diagnosis of the no-flash test. Observe `document` for `<body>`
+  appearing instead.
 
 ## Architecture boundaries
 
@@ -1073,10 +1110,69 @@ ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
 
 ### Design tokens, theme, and layout
 
-- **M9 owns theme switching (M8 deferred it).** M2 only set the system default via a
-  `prefers-color-scheme` media query. An explicit `data-theme` on the root overrides
-  it — that is the seam the picker will use. Do not simplify the
-  `:root:not([data-theme='light'])` selector.
+- **Tokens sit in THREE TIERS, and the split is what the theme system rests
+  on.** Tier 1, palette (16 tokens): `bg` `surface` `sidebar` `canvas` `text`
+  `muted` `faint` `border` `accent` `danger` `focus` `hover` `selected`
+  `shadow` `tag-fill` `tag-fill-strong`. Tier 2, surface treatment (6):
+  `radius-sm/md/lg` `shadow-popover` `shadow-dialog` `border-width`. Every
+  theme must define all 22. Tier 3 — spacing, type, motion, the editor measure
+  — is global and **not themeable**: density is a property of the app, and a
+  theme able to move it would multiply every screenshot and measurement by the
+  theme count. Tier 2 is what lets a theme be flat rather than only differently
+  coloured, and what lets High Contrast be an ordinary theme instead of a mode
+  every component branches on.
+
+- **`--bear-bg` and `--bear-surface` MUST differ**, in every theme. The app
+  uses each as the other's contrast: `Button`'s `default` variant and
+  `SearchField` are `bg-bg` sitting on the note list's `bg-surface` pane, while
+  both editor toolbar pills are `bg-surface` floating over the editor's
+  `bg-bg`. The indigo mockup had both at pure white and every one of those
+  controls was invisible at rest — the same defect class as `Button`'s
+  borderless, fill-less `default` variant in M5.5. Caught by
+  `e2e/appearance.spec.ts`, not by eye.
+
+- **The system-dark guard is `:root:not([data-theme])`, NOT
+  `:not([data-theme='light'])`.** With named themes, _any_ explicit choice must
+  beat the system preference; the old form let every named light theme silently
+  lose to a dark OS, a defect invisible to anyone testing on a light machine.
+  Asserted by `scripts/sourceLint.test.ts`.
+
+- **Theme blocks are keyed `[data-theme='…']`, never `:root[data-theme='…']`.**
+  `:root` matches only the document element, so a theme could not be scoped to
+  a subtree — and the picker's swatches are exactly that: each carries its own
+  `data-theme` and previews its palette by being rendered inside it, which is
+  what keeps every colour out of TypeScript. Restoring `:root` leaves six
+  identical swatches and an app that otherwise works perfectly; only
+  `e2e/appearance.spec.ts` can see it.
+
+- **`:root` carries the default theme's 22 tokens as well as the tier-3
+  globals, duplicating the default's named block.** Do not merge the two into a
+  grouped selector: `blockTokens` in the source lint finds a block by `indexOf`
+  plus the next brace and cannot read one. The duplication is guarded by an
+  assertion that `:root` and the default block agree, and a second that the
+  `prefers-color-scheme` block matches `SYSTEM_DARK_ID`'s.
+
+- **The theme is persisted in the settings table and MIRRORED to
+  `localStorage`, read by an inline script in `index.html` before first
+  paint.** IndexedDB is async and cannot paint the first frame; without the
+  mirror every launch flashes the default. **The mirror is a cache, not a
+  second source of truth** — on boot the stored value wins and the mirror is
+  rewritten from it. The roster is duplicated into that inline script because a
+  module import would be async and defeat the point; `sourceLint` compares the
+  two so it cannot drift. `system` means the ABSENCE of the attribute, never
+  `data-theme="system"`, which would match no block.
+
+- **Every border consumes `--bear-border-width`.** Tailwind's `border`
+  utilities hardcode 1px, so without the override in `index.css` the one theme
+  whose separation depends entirely on borders would be the theme where they
+  stayed hairlines.
+
+- **High Contrast's shadows are hard RINGS, not `none`.** Elevation separates
+  nothing on a black ground: with `none`, the sidebar and editor panes merged
+  into the canvas entirely. Expressing the separation through the shadow token
+  keeps the standing ruling that a pane carries no border, and means every
+  future floating surface is separated there for free rather than having to
+  remember the theme exists.
 
 - Pane widths are **durable** (settings table), not Zustand state. Zustand is
   reserved for genuinely ephemeral state and has not been added yet.
@@ -1100,6 +1196,37 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   `prefers-color-scheme` block is correct for a user who picked dark and wrong
   for a user whose OS is dark — invisible to every other test.
 
+- **There IS a spacing scale now, and it is enforced.** Permitted steps are
+  2 4 8 12 16 24 32 48 px (Tailwind `0.5 1 2 3 4 6 8 12`), checked by
+  `scripts/sourceLint.test.ts`. This REPLACES the M5.5–M8 ruling that no scale
+  was needed because Tailwind's grid is already 4px: the reasoning about tokens
+  was sound and the conclusion did not follow, because **a grid on which every
+  step is permitted is not a scale** — ten distinct steps had shipped, and that
+  drift is what read as misalignment. Still no competing token system; ordinary
+  Tailwind utilities, with a permitted subset. An arbitrary value is an escape
+  hatch that must be allowlisted with a stated reason, exactly like the
+  focus-outline suppressors.
+
+- **The editor heading scale is ONE token.** `--bear-heading-ratio` is 1.2 and
+  `h1`/`h2`/`h3` are it cubed, squared and itself, so they cannot drift out of
+  proportion. **Chosen, not measured** — the Bear figures it replaces were
+  never captured trustworthily, and Bear is no longer the authority. The test
+  asserts that raising the ratio moves `h1` by MORE than `h3`; an ordering
+  check alone would pass on three sizes that merely all changed.
+
+- **UI hierarchy comes from weight and tracking, not size alone.** Five steps
+  spanning 11–16px is too little size difference to carry hierarchy, which is
+  why the chrome read flat. `--bear-weight-ui-strong` and
+  `--bear-tracking-tight` are part of the `ui-md` and `ui-lg` steps, not
+  applied at call sites.
+
+- **In Soft Depth the sidebar dissolves into the ground.** Its `--bear-sidebar`
+  equals `--bear-canvas` in both indigo themes, and it is `Pane`'s one
+  `elevated={false}` caller. Only the panes holding content float. The card
+  test in `e2e/appearance.spec.ts` was narrowed from "every pane" to "every
+  content pane" for this, and still asserts the sidebar in the negative by
+  name, so it becoming a card again fails just as loudly.
+
 - **Motion lives in two duration tokens, never per-component**, so one
   `prefers-reduced-motion` block covers animations added later.
 
@@ -1115,9 +1242,26 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   aesthetics.** Paper `#88857d` measures 3.21:1 on `--bear-sidebar`; the
   original `#9c988f` measured 2.51:1 and failed. Ink is `#7b766e` at 3.40:1.
   `faint` carries counts and timestamps, so 3.0 is already the relaxed bar.
-  **No test can catch this** — contrast over alpha-composited overlays needs a
-  real cascade and jsdom has none, so the ratios are measured by hand and
-  recorded in `docs/design/DESIGN-bear-web.md`.
+  **"No test can catch this" was true until M9a and is now false.**
+  `e2e/contrast.spec.ts` runs in Chromium, which has the real cascade jsdom
+  lacks, and gates every theme in the roster on every `npm run test:e2e`. Five
+  themes made hand-measurement untenable. Indigo Light's `faint` is the first
+  value in this project chosen by a test rather than by eye: the mockup's
+  `#9d99b0` measured 2.76:1 on white and 2.31:1 on the sidebar.
+
+- **The contrast harness's grounds are AUDITED, not assumed, and its
+  calibration is the point.** `scripts/contrast.test.ts` pins the ratios M7.5
+  measured by hand, including the rejected 2.51 — injecting that value back
+  makes the harness report 2.51, the same figure to two decimals. Without that,
+  its verdicts on themes nobody has measured would be worth nothing. Two pairs
+  it does NOT check, because the app never renders them: **text on `canvas`**
+  (`bg-canvas` occurs once, on `<main>`, and every pane paints over it) and
+  **`accent` as text on `sidebar`** (a selected row is `text-text` on
+  `bg-selected`; the accent there is only the 2px edge marker). `border` is
+  held to 1.05, not 3.0 — WCAG's non-text bar covers what is required to
+  identify a control, a row divider is not that, and both shipped palettes sit
+  at 1.2–1.4 by design. The floor catches an invisible divider and declines to
+  adjudicate subtlety.
 
 - **Exactly two files may suppress the focus outline**, allowlisted in
   `scripts/sourceLint.test.ts`, each mapped to a marker string proving it

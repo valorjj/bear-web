@@ -19,8 +19,8 @@ The ground the panes float on. Its padding is the outer inset.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
-| background-color | `rgb(232, 228, 222)` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgb(236, 234, 243)` |
 | padding | `8px` |
 | gap | `8px` |
 
@@ -35,9 +35,9 @@ Width is durable, from the settings table.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
-| background-color | `rgb(241, 239, 236)` |
-| border-radius | `10px` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgb(236, 234, 243)` |
+| border-radius | `12px` |
 
 ## pane: note list
 
@@ -50,10 +50,10 @@ Width is durable, from the settings table.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
-| background-color | `rgb(250, 249, 248)` |
-| border-radius | `10px` |
-| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgb(245, 244, 250)` |
+| border-radius | `12px` |
+| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(40, 34, 66, 0.05) 0px 1px 2px 0px, rgba(40, 34, 66, 0.07) 0px 8px 24px 0px` |
 
 ## pane: editor
 
@@ -66,10 +66,10 @@ Fills the remaining space so the toolbars span it.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgb(255, 255, 255)` |
-| border-radius | `10px` |
-| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px` |
+| border-radius | `12px` |
+| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(40, 34, 66, 0.05) 0px 1px 2px 0px, rgba(40, 34, 66, 0.07) 0px 8px 24px 0px` |
 
 ## resizer
 
@@ -82,7 +82,7 @@ The gap between cards IS the resizer.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 
 ## sidebar: smart list group
@@ -96,7 +96,7 @@ All seven builtins, rendered as data.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | padding | `8px` |
 
@@ -111,10 +111,10 @@ The workhorse row. Bear's equivalent is the density benchmark.
 | font-size | `13px` |
 | font-weight | `500` |
 | line-height | `18.85px` |
-| color | `rgb(28, 27, 25)` |
-| background-color | `rgba(207, 59, 44, 0.11)` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgba(91, 74, 214, 0.09)` |
 | padding | `0px 8px` |
-| border-radius | `6px` |
+| border-radius | `8px` |
 | gap | `8px` |
 
 ## sidebar: tag row (depth 0)
@@ -128,10 +128,10 @@ A root tag.
 | font-size | `13px` |
 | font-weight | `400` |
 | line-height | `18.85px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | padding | `0px 8px` |
-| border-radius | `6px` |
+| border-radius | `8px` |
 | gap | `8px` |
 
 ## sidebar: tag row (depth 1)
@@ -145,10 +145,10 @@ A nested tag. Compare padding-left against depth 0 for the indent step.
 | font-size | `13px` |
 | font-weight | `400` |
 | line-height | `18.85px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | padding | `0px 8px 0px 20px` |
-| border-radius | `6px` |
+| border-radius | `8px` |
 | gap | `8px` |
 
 ## note list: search field
@@ -162,10 +162,10 @@ Native cancel widget suppressed; our own clear button instead.
 | font-size | `13px` |
 | font-weight | `400` |
 | line-height | `18.85px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgb(255, 255, 255)` |
 | padding | `4px 24px 4px 32px` |
-| border-radius | `4px` |
+| border-radius | `6px` |
 | border-top-width | `1px` |
 | border-bottom-width | `1px` |
 
@@ -180,10 +180,10 @@ Three stacked lines. Bear fits a two-line snippet in comparable height.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
-| background-color | `rgba(207, 59, 44, 0.11)` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgba(91, 74, 214, 0.09)` |
 | margin | `4px 8px` |
-| border-radius | `6px` |
+| border-radius | `8px` |
 
 ## note list: row (resting)
 
@@ -196,10 +196,10 @@ Unselected, for the divider and hover baseline.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | margin | `4px 8px` |
-| border-radius | `6px` |
+| border-radius | `8px` |
 
 ## editor: top controls
 
@@ -212,12 +212,12 @@ Currently a full-width bar; Bear floats a pill group here.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
-| background-color | `rgb(250, 249, 248)` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgb(245, 244, 250)` |
 | padding | `0px 8px` |
 | border-radius | `3.35544e+07px` |
 | gap | `2px` |
-| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px` |
+| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(40, 34, 66, 0.05) 0px 1px 2px 0px, rgba(40, 34, 66, 0.07) 0px 8px 24px 0px` |
 
 ## editor: bottom toolbar
 
@@ -230,13 +230,13 @@ Currently welded to the window edge; Bear floats a centred rounded bar.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
-| background-color | `rgb(250, 249, 248)` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgb(245, 244, 250)` |
 | padding | `0px 8px` |
 | border-radius | `3.35544e+07px` |
 | gap | `2px` |
 | max-width | `100%` |
-| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(28, 27, 25, 0.14) 0px 4px 12px 0px` |
+| box-shadow | `rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(40, 34, 66, 0.05) 0px 1px 2px 0px, rgba(40, 34, 66, 0.07) 0px 8px 24px 0px` |
 
 ## editor: prose column
 
@@ -249,7 +249,7 @@ max-width is --bear-line-width. Compare box width against it: if they differ, th
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `25.6px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgb(255, 255, 255)` |
 | padding | `48px 24px 96px` |
 | margin | `0px 88px` |
@@ -266,7 +266,7 @@ The note title line.
 | font-size | `27.648px` |
 | font-weight | `600` |
 | line-height | `34.56px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 
 ## editor: h2
@@ -280,7 +280,7 @@ The note title line.
 | font-size | `23.04px` |
 | font-weight | `600` |
 | line-height | `28.8px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | margin | `32.256px 0px 0px` |
 
@@ -295,7 +295,7 @@ The note title line.
 | font-size | `19.2px` |
 | font-weight | `600` |
 | line-height | `24px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | margin | `26.88px 0px 0px` |
 
@@ -310,7 +310,7 @@ The measure the whole page is set against.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `25.6px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | margin | `12px 0px 0px` |
 
@@ -325,7 +325,7 @@ The measure the whole page is set against.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `25.6px` |
-| color | `rgb(107, 104, 98)` |
+| color | `rgb(96, 91, 120)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | padding | `0px 0px 0px 16px` |
 | margin | `12px 0px 0px` |
@@ -341,11 +341,11 @@ Also what an unsupported construct — a table — currently renders as.
 | font-size | `14.4px` |
 | font-weight | `400` |
 | line-height | `23.04px` |
-| color | `rgb(28, 27, 25)` |
-| background-color | `rgb(250, 249, 248)` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgb(245, 244, 250)` |
 | padding | `10.8px 14.4px` |
 | margin | `10.8px 0px 0px` |
-| border-radius | `6px` |
+| border-radius | `8px` |
 | border-top-width | `1px` |
 | border-bottom-width | `1px` |
 
@@ -360,10 +360,10 @@ A decoration, not a mark.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `25.6px` |
-| color | `rgb(207, 59, 44)` |
-| background-color | `rgba(207, 59, 44, 0.16)` |
+| color | `rgb(91, 74, 214)` |
+| background-color | `rgba(91, 74, 214, 0.12)` |
 | padding | `0.8px 2.4px 0.8px 4px` |
-| border-radius | `4px` |
+| border-radius | `6px` |
 
 ## editor: task item
 
@@ -376,6 +376,6 @@ A decoration, not a mark.
 | font-size | `16px` |
 | font-weight | `400` |
 | line-height | `25.6px` |
-| color | `rgb(28, 27, 25)` |
+| color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | gap | `8px` |

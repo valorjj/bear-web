@@ -69,9 +69,12 @@ test('the shell uses the token layer for its colours', async ({ page }) => {
   // prefers-color-scheme cascade actually reaches a rendered pixel.
   // M7.5: the body's ground moved from --bear-bg to --bear-canvas, the darker
   // surface the three panes float on as cards.
+  // M9a: the default theme became Indigo Light, so the ground is #eceaf3 and
+  // the text #241f3d. This is the licensed edit — the palette changed on
+  // purpose, and the conscious edit is the point of pinning it here.
   expect(bodyColors).toEqual({
-    backgroundColor: 'rgb(232, 228, 222)',
-    color: 'rgb(28, 27, 25)',
+    backgroundColor: 'rgb(236, 234, 243)',
+    color: 'rgb(36, 31, 61)',
   });
 });
 
@@ -87,7 +90,12 @@ test('the system dark preference applies with no JavaScript toggle', async ({ pa
   // conscious edit here, because this is the only test that proves the
   // prefers-color-scheme cascade actually reaches a rendered pixel.
   // M7.5: the body's ground moved from --bear-bg to --bear-canvas.
-  expect(background).toBe('rgb(18, 18, 17)');
+  // M9a: the system dark default became Indigo Dark, so the ground is #14121b.
+  // The selector guarding this block also changed, from
+  // `:root:not([data-theme='light'])` to `:root:not([data-theme])`: with named
+  // themes ANY explicit choice must beat the system preference, and the old
+  // form would have let every named light theme lose to a dark OS.
+  expect(background).toBe('rgb(20, 18, 27)');
 });
 
 test('a resized pane keeps its width across a reload', async ({ page }) => {

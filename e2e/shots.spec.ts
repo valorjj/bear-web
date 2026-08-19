@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CORPUS, FIXED_NOW } from './fixtures/corpus.ts';
@@ -28,10 +29,21 @@ import { seedDatabase } from './fixtures/seed.ts';
 
 const SHOTS = 'docs/design/shots';
 
+/**
+ * Every theme in the roster, read from disk rather than imported: `tsconfig.e2e`
+ * declares no `@/` alias, and no e2e spec imports from `src/`.
+ *
+ * Until M9a this list was two hardcoded entries driven by `colorScheme`, i.e.
+ * by the `prefers-color-scheme` media query. That silently became wrong the
+ * moment the default theme changed: the shot labelled `paper` was rendering
+ * Indigo Light. Themes are now selected the way a user selects one — by the
+ * stored preference — so the label and the pixels cannot disagree again.
+ */
 const THEMES = [
-  { name: 'paper', colorScheme: 'light' as const },
-  { name: 'ink', colorScheme: 'dark' as const },
-];
+  ...readFileSync('src/styles/themes.ts', 'utf8').matchAll(
+    /id: '([a-z-]+)', labelKey: '[^']+', group: '(light|dark)'/g,
+  ),
+].map((match) => ({ name: match[1]!, colorScheme: match[2] as 'light' | 'dark' }));
 
 /**
  * Waits until every asynchronous thing that changes the picture has landed: the
@@ -87,6 +99,15 @@ for (const theme of THEMES) {
       colorScheme: theme.colorScheme,
       locale: 'en-US',
       timezoneId: 'Asia/Seoul',
+    });
+
+    // Selected the way a user selects one: through the paint-time mirror the
+    // app's own inline script reads. Setting `data-theme` after load would
+    // capture a theme the boot path never exercised.
+    test.beforeEach(async ({ page }) => {
+      await page.addInitScript((id) => {
+        localStorage.setItem('bear-web:theme', id);
+      }, theme.name);
     });
 
     test(`populated shell @shots`, async ({ page }) => {

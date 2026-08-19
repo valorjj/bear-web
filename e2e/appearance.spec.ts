@@ -945,3 +945,51 @@ test('only the content panes are elevated, and their elevation is themed', async
     expect(value, `${label} kept indigo's shadow under High Contrast`).not.toBe(indigo[label]);
   }
 });
+
+test('a chosen theme survives a reload', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /theme|테마/i }).click();
+  await page.getByRole('menuitemradio', { name: /^(Ink|잉크)$/ }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'ink');
+
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'ink');
+});
+
+/*
+ * The mirror exists solely to beat first paint, so asserting after load proves
+ * nothing: a late-stamping implementation still ends up correct, just with a
+ * visible flash of the wrong theme on every launch.
+ *
+ * The discriminator is `<body>`. The inline script sits in `<head>`, so it runs
+ * while the parser is still inside the head and BEFORE `<body>` exists. Any
+ * JavaScript-driven alternative — a React effect, a module script — necessarily
+ * runs after the document has been parsed. So "was the attribute already set
+ * when body first appeared" separates the two exactly.
+ *
+ * Note the init script cannot touch `document.documentElement` at
+ * `document_start`: it is still null there, and reading it throws before
+ * anything is recorded, which is silent and looks exactly like "never stamped".
+ */
+test('the theme is stamped before first paint', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /theme|테마/i }).click();
+  await page.getByRole('menuitemradio', { name: /^(Ink|잉크)$/ }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'ink');
+
+  await page.addInitScript(() => {
+    const record: string[] = [];
+    (window as unknown as { __atBody: string[] }).__atBody = record;
+    new MutationObserver((_records, observer) => {
+      if (document.body === null) return;
+      record.push(String(document.documentElement.getAttribute('data-theme')));
+      observer.disconnect();
+    }).observe(document, { childList: true, subtree: true });
+  });
+
+  await page.reload();
+
+  const atBody = await page.evaluate(() => (window as unknown as { __atBody: string[] }).__atBody);
+  expect(atBody.length, 'the observer never saw body appear').toBe(1);
+  expect(atBody[0], 'the theme was not applied until after the document was parsed').toBe('ink');
+});
