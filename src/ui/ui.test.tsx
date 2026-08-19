@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -6,6 +6,7 @@ import { Button } from './Button';
 import { ConfirmDialog } from './ConfirmDialog';
 import { EmptyState } from './EmptyState';
 import { Pane } from './Pane';
+import { Popover } from './Popover';
 import { Resizer } from './Resizer';
 import { SidebarRow } from './SidebarRow';
 import type { SidebarRowProps } from './SidebarRow';
@@ -371,5 +372,67 @@ describe('ConfirmDialog', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
     await userEvent.tab({ shift: true });
     expect(screen.getByRole('button', { name: 'Delete forever' })).toHaveFocus();
+  });
+});
+
+describe('Popover', () => {
+  it('renders nothing when closed', () => {
+    render(
+      <Popover open={false} onClose={() => {}} label="Appearance">
+        <button>x</button>
+      </Popover>,
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('names itself for assistive tech', () => {
+    render(
+      <Popover open onClose={() => {}} label="Appearance">
+        <button>x</button>
+      </Popover>,
+    );
+    expect(screen.getByRole('dialog', { name: 'Appearance' })).toBeTruthy();
+  });
+
+  it('closes on Escape', async () => {
+    const onClose = vi.fn();
+    render(
+      <Popover open onClose={onClose} label="Appearance">
+        <button>x</button>
+      </Popover>,
+    );
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('moves focus to the first focusable on open', async () => {
+    render(
+      <Popover open onClose={() => {}} label="Appearance">
+        <button>first</button>
+        <button>second</button>
+      </Popover>,
+    );
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText('first')));
+  });
+
+  // `ConfirmDialog`'s trap queries 'button' specifically — a documented gap
+  // that skips a link or an input rather than holding it at the edge. This
+  // surface holds grouped rows and headings and is meant to grow, so it uses a
+  // standard selector from the start rather than inheriting that gap.
+  it('traps Tab across every focusable kind, not only buttons', async () => {
+    render(
+      <Popover open onClose={() => {}} label="Appearance">
+        <button>first</button>
+        <a href="#x">link</a>
+        <input aria-label="field" />
+      </Popover>,
+    );
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText('first')));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByRole('link'));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByRole('textbox'));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByText('first'));
   });
 });
