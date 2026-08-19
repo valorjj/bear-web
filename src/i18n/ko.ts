@@ -87,6 +87,13 @@ export const ko: Record<TranslationKey, string> = {
   'editor.toolbar.link': '링크',
   'editor.toolbar.code': '코드 블록',
   'editor.toolbar.quote': '인용',
+  'export.open': '메모 내보내기',
+  'export.label': '내보내기 형식',
+  'export.markdown': '마크다운',
+  'export.html': 'HTML',
+  'export.pdf': 'PDF',
+  'export.failed': '이 메모를 내보낼 수 없습니다.',
+
   'editor.toolbar.top': '상단 컨트롤',
   'editor.toolbar.bottom': '서식 도구 모음',
   'editor.info.show': '노트 정보',

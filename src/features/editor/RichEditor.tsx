@@ -2,6 +2,7 @@ import { isMacOS } from '@tiptap/core';
 import { EditorContent, type Editor, useEditor } from '@tiptap/react';
 import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
 
+import { ExportMenu, type ExportFormat } from '@/features/export';
 import { useT } from '@/i18n';
 
 import { BottomToolbar } from './BottomToolbar';
@@ -31,6 +32,11 @@ export interface RichEditorProps {
    * click, caret placement and all.
    */
   onActivateTag?: (tag: string) => boolean;
+  /**
+   * Called with the chosen destination when the user picks one from the export
+   * menu. Omit it and no export control is rendered at all.
+   */
+  onExport?: (format: ExportFormat) => void;
 }
 
 /**
@@ -49,9 +55,11 @@ export function RichEditor({
   createdAt,
   updatedAt,
   onActivateTag,
+  onExport,
 }: RichEditorProps): ReactElement {
   const t = useT();
   const [infoOpen, setInfoOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
 
   // The plugin reads its callback once, at construction, and `useEditor` reads
@@ -184,9 +192,29 @@ export function RichEditor({
             editor={editor}
             infoOpen={infoOpen}
             onToggleInfo={() => setInfoOpen((v) => !v)}
+            // Passed only when the app supplied a handler, so the control is
+            // absent rather than inert when nobody is listening — the same rule
+            // `onActivateTag` follows for the tag pill, and for the same reason:
+            // an affordance that does nothing is worse than no affordance.
+            exportOpen={onExport === undefined ? undefined : exportOpen}
+            onToggleExport={
+              onExport === undefined ? undefined : () => setExportOpen((open) => !open)
+            }
           />
           {infoOpen && (
             <InfoPanel text={editor?.getText() ?? ''} createdAt={createdAt} updatedAt={updatedAt} />
+          )}
+          {exportOpen && onExport !== undefined && (
+            <ExportMenu
+              onChoose={(format) => {
+                // Closed before the handler runs: PDF opens a modal print
+                // dialog, and a menu still on screen behind it is left there
+                // for as long as the dialog is up.
+                setExportOpen(false);
+                onExport(format);
+              }}
+              onDismiss={() => setExportOpen(false)}
+            />
           )}
         </div>
       </div>

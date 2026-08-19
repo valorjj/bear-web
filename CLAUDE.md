@@ -11,23 +11,25 @@ IndexedDB.
 
 ## Status
 
-| Milestone                        | State          |
-| -------------------------------- | -------------- |
-| M0 scaffold, CI, Pages deploy    | complete       |
-| M1 data layer (Dexie)            | complete       |
-| M2 application shell             | complete       |
-| M3 notes CRUD, textarea editor   | complete       |
-| M4 editor                        | complete       |
-| M5 tags                          | complete       |
-| M5.5 design language             | complete       |
-| M6 smart lists, trash management | complete       |
-| M7 search                        | complete       |
-| M7.5 visual design pass          | complete       |
-| M7.6 tag pills                   | complete       |
-| M7.7 tag pill activation         | complete       |
-| M8–M9                            | themes, polish |
+| Milestone                               | State          |
+| --------------------------------------- | -------------- |
+| M0 scaffold, CI, Pages deploy           | complete       |
+| M1 data layer (Dexie)                   | complete       |
+| M2 application shell                    | complete       |
+| M3 notes CRUD, textarea editor          | complete       |
+| M4 editor                               | complete       |
+| M5 tags                                 | complete       |
+| M5.5 design language                    | complete       |
+| M6 smart lists, trash management        | complete       |
+| M7 search                               | complete       |
+| M7.5 visual design pass                 | complete       |
+| M7.6 tag pills                          | complete       |
+| M7.7 tag pill activation                | complete       |
+| M8 visual pass (chrome, density, prose) | complete       |
+| M8b export: Markdown, HTML, PDF         | complete       |
+| M9                                      | themes, polish |
 
-1039 unit tests, 43 end-to-end tests. `main` is always green and auto-deploys.
+1069 unit tests, 45 end-to-end tests. `main` is always green and auto-deploys.
 
 `npm run shots` is a sixth entry point, deliberately not in that count: it drives
 `e2e/shots.spec.ts` against the fixed corpus in `e2e/fixtures/corpus.ts` and
@@ -171,6 +173,7 @@ is exactly why they are written down.
 - [Scopes, smart lists, and search](#scopes-smart-lists-and-search)
 - [Markdown round-trip and the editor schema](#markdown-round-trip-and-the-editor-schema)
 - [Tag pills and activation](#tag-pills-and-activation)
+- [Export](#export)
 - [Design tokens, theme, and layout](#design-tokens-theme-and-layout)
 - [Accessibility](#accessibility)
 - [Testing and tooling conventions](#testing-and-tooling-conventions)
@@ -1169,6 +1172,71 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   labelled clear button — two clear affordances in one freshly designed
   field. `type="search"` stays (it is what makes the `searchbox` role and its
   tests hold); only the native widget's rendering is suppressed.
+
+### Export
+
+- **Export renders through the EDITOR'S OWN SCHEMA, never a second Markdown
+  pipeline.** `renderNoteBody` parses with `parseMarkdown` — the single importer
+  of `@tiptap/markdown` — and serializes with ProseMirror's `DOMSerializer`
+  against `getSchema(editorExtensions)`. So an export cannot disagree with what
+  the editor shows, and the two-implementations-of-one-grammar defect never
+  appears. Reaching for `marked` directly in export code would reintroduce it.
+
+- **A construct with no node in the schema exports as its own Markdown source,
+  and that is the fallback working.** A table becomes a `<pre data-raw-block>`
+  of pipes in the exported HTML and PDF, exactly as it appears in the editor.
+  Do not "fix" this in the export layer; it is the strongest argument for
+  giving tables a real node, and fixing it downstream would make the export
+  disagree with the editor.
+
+- **Markdown export is the note's text VERBATIM.** No normalization, no
+  re-serialization. The text is already canonical Markdown, so putting it back
+  through the serializer could only change it, and an export that rewrites a
+  byte of the user's own file is the one thing this must not do.
+
+- **Export uses the LIVE editor text, not `note.text`.** The stored record lags
+  the editor by the autosave debounce, so exporting it hands the user a file
+  missing their last few seconds of typing. `NoteEditor.handleExport` reads
+  `handleRef.current.getMarkdown()` and derives the title from that same text.
+
+- **PDF is the browser's print pipeline, into a hidden same-origin iframe.**
+  Printing the app's own window would need a print stylesheet that hides three
+  panes, two floating pills and a dialog, and every future piece of chrome would
+  silently need adding to it. Printing a separate document means the PDF is
+  exactly what `renderNoteHtml` produced. The frame uses `visibility: hidden`,
+  not `display: none` — a display-none frame has no layout in some engines and
+  prints blank — is focused before printing (Safari prints the parent
+  otherwise), waits on `fonts.ready` (a print started early lays out in the
+  fallback face), and is removed in a `finally` so a throwing print cannot leak
+  a whole second document per export.
+
+- **The export stylesheet carries its own reset, and it is load-bearing.** The
+  app gets one from Tailwind's preflight; a standalone file gets none, so the
+  browser's default paragraph margin applies INSIDE a flex task item and the
+  item stands three lines tall with its checkbox above its text. **The obvious
+  assertion cannot see this**: the checkbox and its label still overlap
+  vertically in the broken state, so the overlap check written first passed
+  under fault injection. The test that works measures the item's height against
+  its own computed `line-height`.
+
+- **Export colours are read from the live cascade, never hardcoded.**
+  `readExportTokens` resolves each token off `document.documentElement` at export
+  time, which keeps colour literals out of `src/` as the token rule requires and
+  makes an export carry whatever theme the user is looking at. The per-token
+  fallbacks are CSS SYSTEM COLOURS (`canvas`, `canvastext`, `linktext`) rather
+  than literals, so a renamed token degrades to the reader's platform palette
+  instead of to a blank value — which would render an invisible page.
+
+- **No backtick may appear inside `renderNoteHtml`'s template literal.** One
+  terminates it, and the failure surfaces as a TypeScript syntax error pointing
+  at a CSS comment. It happened once already, quoting a CSS declaration in a
+  comment.
+
+- **`export.html` and `export.pdf` are on the allowlist in `i18n.test.tsx` of
+  keys legitimately identical across bundles.** Korean uses both acronyms
+  verbatim. `export.markdown` is deliberately NOT on it — Korean does render
+  that as 마크다운 — so the list stays a set of specific exceptions rather than a
+  blanket exemption for the group.
 
 ### Accessibility
 

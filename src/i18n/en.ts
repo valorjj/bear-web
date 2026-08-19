@@ -85,6 +85,13 @@ export const en = {
   'editor.toolbar.link': 'Link',
   'editor.toolbar.code': 'Code block',
   'editor.toolbar.quote': 'Quote',
+  'export.open': 'Export note',
+  'export.label': 'Export as',
+  'export.markdown': 'Markdown',
+  'export.html': 'HTML',
+  'export.pdf': 'PDF',
+  'export.failed': 'This note could not be exported.',
+
   'editor.toolbar.top': 'Top controls',
   'editor.toolbar.bottom': 'Formatting toolbar',
   'editor.info.show': 'Note information',

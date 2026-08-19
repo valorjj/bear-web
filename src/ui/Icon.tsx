@@ -66,4 +66,7 @@ export {
   Code,
   Quote,
   Info,
+  Download,
+  FileCode,
+  Printer,
 } from 'lucide-react';

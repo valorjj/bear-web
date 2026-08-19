@@ -1,3 +1,7 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+
 import { expect, test } from '@playwright/test';
 
 // A literal, defined here and never read back from the page before the
@@ -610,4 +614,115 @@ test('typing "- [ ] " produces a real checkbox, not a literal bullet', async ({ 
   const lists = page.getByRole('navigation', { name: 'Lists' });
   await lists.getByRole('button', { name: /^Todo\b/ }).click();
   await expect(page.getByRole('region', { name: 'Note list' }).getByText('milk')).toBeVisible();
+});
+
+test('exporting a note downloads its Markdown verbatim, and its HTML as a real document', async ({
+  page,
+}) => {
+  // The only place the download path can be exercised: jsdom implements neither
+  // object URLs nor `<a download>`, so `downloadBlob`'s unit test can prove the
+  // anchor is built and clicked but not that a browser actually saves a file.
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await editor.pressSequentially('# Export me');
+  await page.keyboard.press('Enter');
+  await editor.pressSequentially('Body text with a #tag');
+  await page.keyboard.press('Enter');
+  // A task item, because the export's own rendering is checked below and a
+  // checkbox beside its label is the assertion that catches a missing reset.
+  await editor.pressSequentially('- [ ] a task');
+  await expect(editor.locator('ul[data-type="taskList"]')).toBeVisible();
+
+  const openMenu = async (): Promise<void> => {
+    await page.getByRole('button', { name: 'Export note' }).click();
+    await expect(page.getByRole('menu', { name: 'Export as' })).toBeVisible();
+  };
+
+  await openMenu();
+  const markdownDownload = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: 'Markdown' }).click();
+  const markdown = await markdownDownload;
+
+  // Named from the note's own title, and carrying exactly what is on screen —
+  // including the last keystrokes, which the stored record has not seen yet
+  // because the autosave debounce has not elapsed.
+  expect(markdown.suggestedFilename()).toBe('Export me.md');
+  const markdownPath = await markdown.path();
+  const markdownText = await readFile(markdownPath, 'utf8');
+  expect(markdownText).toContain('# Export me');
+  expect(markdownText).toContain('Body text with a #tag');
+  expect(markdownText).toContain('- [ ] a task');
+
+  await openMenu();
+  const htmlDownload = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: 'HTML' }).click();
+  const html = await htmlDownload;
+
+  expect(html.suggestedFilename()).toBe('Export me.html');
+  // Saved under a real `.html` name before it is loaded below: Playwright's own
+  // download path has no extension, and Chromium then serves it as plain text
+  // rather than rendering it, so every geometry assertion would find nothing.
+  const htmlPath = join(tmpdir(), 'bear-web-export-test.html');
+  await html.saveAs(htmlPath);
+  const htmlText = await readFile(htmlPath, 'utf8');
+  expect(htmlText.startsWith('<!doctype html>')).toBe(true);
+  expect(htmlText).toContain('<h1>Export me</h1>');
+  // Self-contained: the token values are resolved into the file, so it renders
+  // the same on a machine that has never seen this app.
+  expect(htmlText).toMatch(/--bear-text:\s*\S/);
+  expect(htmlText).not.toMatch(/https?:\/\//);
+
+  // And it has to RENDER, which is a different question from whether its markup
+  // is right. The exported document carries no Tailwind preflight, so the
+  // browser default `p { margin: 1em 0 }` applies inside a flex task item and
+  // stacks the checkbox above its text — markup-perfect, visibly broken, and
+  // invisible to every assertion above. Same shape as the task-item test in
+  // `appearance.spec.ts`, asked of the export instead of the editor.
+  await page.goto(`file://${htmlPath}`);
+  const item = await page.evaluate(() => {
+    const row = document.querySelector('ul[data-type="taskList"] li');
+    const box = row?.querySelector('input[type="checkbox"]');
+    const text = row?.querySelector('p');
+    if (row == null || box == null || text == null) return null;
+
+    return {
+      height: row.getBoundingClientRect().height,
+      lineHeight: Number.parseFloat(getComputedStyle(text).lineHeight),
+      boxRight: box.getBoundingClientRect().right,
+      textLeft: text.getBoundingClientRect().left,
+    };
+  });
+
+  expect(item).not.toBeNull();
+  if (item === null) return;
+
+  // A single-line task must occupy a single line. Measured against its own
+  // computed line-height rather than a pixel constant, since M8's typography
+  // tokens move it: without the reset the paragraph's default 1em margins
+  // survive inside the flex row and the item stands three lines tall, which
+  // reads as the document force-wrapping every todo. The boxes still overlap
+  // vertically in that state, which is why an overlap check — the obvious
+  // assertion, and the first one written here — could not see it.
+  expect(item.lineHeight).toBeGreaterThan(0);
+  expect(item.height, 'a one-line task must not stand taller than one line').toBeLessThan(
+    item.lineHeight * 1.8,
+  );
+  expect(item.textLeft).toBeGreaterThan(item.boxRight);
+});
+
+test('the export menu closes on Escape and returns nothing', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  await page.getByRole('button', { name: 'Export note' }).click();
+  const menu = page.getByRole('menu', { name: 'Export as' });
+  await expect(menu).toBeVisible();
+
+  // The opener is icon-only, so a keyboard user who cannot leave the menu has no
+  // way back to the note.
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
 });

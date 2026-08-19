@@ -1,5 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { CORPUS, FIXED_NOW } from './fixtures/corpus.ts';
 import { seedDatabase } from './fixtures/seed.ts';
 
@@ -121,6 +124,31 @@ for (const theme of THEMES) {
       await openNote(page, /Old meeting notes/, 'Superseded by');
       await blur(page);
       await shot(page, `08-trash-${theme.name}`);
+    });
+
+    test(`exported document @shots`, async ({ page }) => {
+      // The exported HTML is a rendered artifact in its own right, and nothing
+      // else in this project can see it: the unit tests assert its markup and
+      // its token substitution, never how it looks. It is also the document the
+      // PDF path prints, so a shot of it is a shot of the PDF.
+      await page.clock.setFixedTime(FIXED_NOW);
+      await seedDatabase(page, CORPUS);
+      await page.goto('/');
+      await settle(page);
+      await openNote(page, /US market daily/, 'One-line summary');
+
+      await page.getByRole('button', { name: 'Export note' }).click();
+      const download = page.waitForEvent('download');
+      await page.getByRole('menuitem', { name: 'HTML' }).click();
+
+      // `saveAs` rather than reading the stream: Playwright's own API, and it
+      // handles the temp-file lifetime the download otherwise owns.
+      const saved = join(tmpdir(), `bear-web-export-${theme.name}.html`);
+      await (await download).saveAs(saved);
+      await page.goto(`file://${saved}`);
+      await page.evaluate(() => document.fonts.ready);
+
+      await shot(page, `10-export-html-${theme.name}`);
     });
 
     test(`empty shell @shots`, async ({ page }) => {

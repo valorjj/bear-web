@@ -2,7 +2,7 @@ import type { Editor } from '@tiptap/react';
 import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
-import { Bold, Icon, Info, Italic } from '@/ui/Icon';
+import { Bold, Download, Icon, Info, Italic } from '@/ui/Icon';
 
 import { pinAllSelectionStep } from './toolbarSelection';
 
@@ -10,6 +10,9 @@ export interface TopControlsProps {
   editor: Editor | null;
   infoOpen: boolean;
   onToggleInfo: () => void;
+  /** Omit to render no export control at all — see `RichEditor`. */
+  exportOpen?: boolean;
+  onToggleExport?: () => void;
 }
 
 /**
@@ -30,7 +33,13 @@ export interface TopControlsProps {
  * the single largest reason this editor read as a web page rather than an app —
  * see `docs/design/DESIGN-bear-web.md`.
  */
-export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps): ReactElement {
+export function TopControls({
+  editor,
+  infoOpen,
+  onToggleInfo,
+  exportOpen,
+  onToggleExport,
+}: TopControlsProps): ReactElement {
   const t = useT();
 
   return (
@@ -59,6 +68,18 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
       >
         <Icon glyph={Italic} />
       </button>
+      {onToggleExport !== undefined && (
+        <button
+          type="button"
+          aria-label={t('export.open')}
+          aria-haspopup="menu"
+          aria-expanded={exportOpen ?? false}
+          onClick={onToggleExport}
+          className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-expanded:text-text"
+        >
+          <Icon glyph={Download} />
+        </button>
+      )}
       <button
         type="button"
         aria-label={t('editor.info.show')}
