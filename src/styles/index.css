@@ -18,6 +18,8 @@
   --color-hover: var(--bear-hover);
   --color-selected: var(--bear-selected);
   --color-canvas: var(--bear-canvas);
+  --color-tag-fill: var(--bear-tag-fill);
+  --color-tag-fill-strong: var(--bear-tag-fill-strong);
 
   --font-sans: var(--bear-font-sans);
   --font-mono: var(--bear-font-mono);

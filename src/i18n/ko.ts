@@ -105,4 +105,10 @@ export const ko: Record<TranslationKey, string> = {
   'editor.link.prompt': '링크 주소',
   'editor.tagPill.hint.mac': 'Cmd-클릭하면 이 태그로 필터링됩니다',
   'editor.tagPill.hint.other': 'Ctrl-클릭하면 이 태그로 필터링됩니다',
+
+  'theme.indigoLight': '인디고 라이트',
+  'theme.indigoDark': '인디고 다크',
+  'theme.paper': '페이퍼',
+  'theme.ink': '잉크',
+  'theme.highContrast': '고대비',
 };

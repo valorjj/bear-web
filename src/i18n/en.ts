@@ -103,6 +103,12 @@ export const en = {
   'editor.link.prompt': 'Link address',
   'editor.tagPill.hint.mac': 'Cmd-click to filter by this tag',
   'editor.tagPill.hint.other': 'Ctrl-click to filter by this tag',
+
+  'theme.indigoLight': 'Indigo Light',
+  'theme.indigoDark': 'Indigo Dark',
+  'theme.paper': 'Paper',
+  'theme.ink': 'Ink',
+  'theme.highContrast': 'High Contrast',
 } as const;
 
 export type TranslationKey = keyof typeof en;

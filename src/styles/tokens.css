@@ -1,4 +1,73 @@
+/*
+ * Tokens sit in three tiers, and the split is what the whole theme system
+ * rests on:
+ *
+ *   1. Palette (16) — every theme redefines all of them.
+ *   2. Surface treatment (6) — radii, the two shadows, and the border width.
+ *      Every theme redefines these too, which is what lets a theme be flat
+ *      rather than only differently coloured, and what lets High Contrast be
+ *      an ordinary theme instead of a mode components have to branch on.
+ *   3. Global — spacing, type, motion, and the editor measure. NOT themeable.
+ *      Density is a property of the app: a theme able to move it would
+ *      multiply every screenshot and every measurement by the theme count.
+ *
+ * `scripts/sourceLint.test.ts` asserts that every theme in `themes.ts` has a
+ * block here defining all 22 of tiers 1 and 2, and that no block here is
+ * missing from the roster.
+ */
+
 :root {
+  /* ---------------------------------------------------------------- tier 3 */
+
+  --bear-font-sans: 'Pretendard Variable', system-ui, sans-serif;
+  --bear-font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  /*
+   * UI type, separate from editor type below. 13px is the workhorse: a
+   * macOS-idiom application sets its chrome one notch smaller than the web
+   * default, and before M5.5 this app used 14px throughout.
+   */
+  --bear-text-ui-xs: 0.6875rem; /* 11px — counts, badges */
+  --bear-text-ui-sm: 0.75rem; /* 12px — timestamps, snippets */
+  --bear-text-ui: 0.8125rem; /* 13px — rows, buttons */
+  --bear-text-ui-md: 0.875rem; /* 14px — note titles */
+  --bear-text-ui-lg: 1rem; /* 16px — pane headers, empty states */
+  --bear-leading-ui: 1.45;
+
+  --bear-duration-fast: 100ms;
+  --bear-duration: 160ms;
+  --bear-ease: cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* Editor typography, bound to the M8 preference sliders. */
+  --bear-font-size: 16px;
+  --bear-line-height: 1.6;
+  /*
+   * Measured off Bear, not copied off its slider. Bear's typography panel
+   * reports its line width as `56 em` — the number this token carried from
+   * M5.5 to M8 — while rendering a column of 643pt at 16pt, which is 40.2em.
+   * Bear's `em` here is therefore not a CSS `em` and the missing 16em is
+   * unexplained, so the rendered measure is what we match.
+   *
+   * At 56em the clamp never engaged at 1440x900 at all: the editor pane is 840
+   * wide, so the prose column was 792 and `max-width: 896px` did nothing. The
+   * token was wired up in M7.5 and still inert in practice.
+   */
+  --bear-line-width: 40em;
+  --bear-para-spacing: 0em;
+  --bear-para-indent: 0em;
+
+  /* ----------------------------------------------------------- tiers 1 + 2 */
+
+  /*
+   * The default theme's own values, repeated verbatim from the named block
+   * below so that a visitor with no stored choice and a visitor who picked the
+   * default explicitly see one app. The repetition is deliberate and guarded:
+   * `blockTokens` in the source lint finds a block by `indexOf` plus the next
+   * brace, so it cannot read a grouped `:root, :root[data-theme='…']` selector
+   * — and a lookup for `:root {` would silently land on this block anyway.
+   * Do not merge the two.
+   */
+
   /* Paper — the light theme. Warm neutrals, one red. */
   --bear-bg: #ffffff;
   --bear-surface: #faf9f8;
@@ -57,54 +126,45 @@
    */
   --bear-canvas: #e8e4de;
 
-  --bear-font-sans: 'Pretendard Variable', system-ui, sans-serif;
-  --bear-font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
-
-  /*
-   * UI type, separate from editor type below. 13px is the workhorse: a
-   * macOS-idiom application sets its chrome one notch smaller than the web
-   * default, and before M5.5 this app used 14px throughout.
-   */
-  --bear-text-ui-xs: 0.6875rem; /* 11px — counts, badges */
-  --bear-text-ui-sm: 0.75rem; /* 12px — timestamps, snippets */
-  --bear-text-ui: 0.8125rem; /* 13px — rows, buttons */
-  --bear-text-ui-md: 0.875rem; /* 14px — note titles */
-  --bear-text-ui-lg: 1rem; /* 16px — pane headers, empty states */
-  --bear-leading-ui: 1.45;
-
   --bear-radius-sm: 4px;
   --bear-radius-md: 6px;
   --bear-radius-lg: 10px;
+  --bear-border-width: 1px;
 
   /* Two, because the app has exactly two floating surfaces. */
   --bear-shadow-popover: 0 4px 12px var(--bear-shadow);
   --bear-shadow-dialog: 0 12px 32px var(--bear-shadow);
+}
 
-  --bear-duration-fast: 100ms;
-  --bear-duration: 160ms;
-  --bear-ease: cubic-bezier(0.2, 0, 0.2, 1);
+/* Paper — the light theme. Warm neutrals, one red. */
+:root[data-theme='paper'] {
+  --bear-bg: #ffffff;
+  --bear-surface: #faf9f8;
+  --bear-sidebar: #f1efec;
+  --bear-text: #1c1b19;
+  --bear-muted: #6b6862;
+  --bear-faint: #88857d;
+  --bear-border: #e5e2dd;
+  --bear-accent: #cf3b2c;
+  --bear-danger: #cf3b2c;
+  --bear-focus: #cf3b2c;
+  --bear-hover: rgb(28 27 25 / 0.05);
+  --bear-selected: rgb(207 59 44 / 0.11);
+  --bear-shadow: rgb(28 27 25 / 0.14);
+  --bear-canvas: #e8e4de;
+  --bear-tag-fill: rgb(207 59 44 / 0.16);
+  --bear-tag-fill-strong: rgb(207 59 44 / 0.32);
 
-  /* Editor typography, bound to the M8 preference sliders. */
-  --bear-font-size: 16px;
-  --bear-line-height: 1.6;
-  /*
-   * Measured off Bear, not copied off its slider. Bear's typography panel
-   * reports its line width as `56 em` — the number this token carried from
-   * M5.5 to M8 — while rendering a column of 643pt at 16pt, which is 40.2em.
-   * Bear's `em` here is therefore not a CSS `em` and the missing 16em is
-   * unexplained, so the rendered measure is what we match.
-   *
-   * At 56em the clamp never engaged at 1440x900 at all: the editor pane is 840
-   * wide, so the prose column was 792 and `max-width: 896px` did nothing. The
-   * token was wired up in M7.5 and still inert in practice.
-   */
-  --bear-line-width: 40em;
-  --bear-para-spacing: 0em;
-  --bear-para-indent: 0em;
+  --bear-radius-sm: 4px;
+  --bear-radius-md: 6px;
+  --bear-radius-lg: 10px;
+  --bear-border-width: 1px;
+  --bear-shadow-popover: 0 4px 12px var(--bear-shadow);
+  --bear-shadow-dialog: 0 12px 32px var(--bear-shadow);
 }
 
 /* Ink — the dark theme, chosen explicitly. */
-:root[data-theme='dark'] {
+:root[data-theme='ink'] {
   --bear-bg: #1a1a19;
   --bear-surface: #201f1e;
   --bear-sidebar: #262523;
@@ -121,19 +181,29 @@
   --bear-canvas: #121211;
   --bear-tag-fill: rgb(255 111 94 / 0.18);
   --bear-tag-fill-strong: rgb(255 111 94 / 0.32);
+
+  --bear-radius-sm: 4px;
+  --bear-radius-md: 6px;
+  --bear-radius-lg: 10px;
+  --bear-border-width: 1px;
+  --bear-shadow-popover: 0 4px 12px var(--bear-shadow);
+  --bear-shadow-dialog: 0 12px 32px var(--bear-shadow);
 }
 
 /*
  * The system preference is the default, applied with no JavaScript so there is
- * no flash of the wrong theme on first paint. An explicit `data-theme` on the
- * root overrides it — that is the seam the M8 theme picker will drive, and the
- * `:not([data-theme='light'])` must not be simplified away.
+ * no flash of the wrong theme on first paint.
  *
- * This block must stay token-for-token identical to the one above;
- * `scripts/sourceLint.test.ts` asserts it.
+ * The guard is `:not([data-theme])`, not `:not([data-theme='light'])`. With
+ * named themes ANY explicit choice must beat the system preference: the older
+ * selector would have let every named light theme silently lose to a dark OS,
+ * a defect invisible to anyone testing on a light machine.
+ *
+ * This block must stay token-for-token identical to the theme named by
+ * `SYSTEM_DARK_ID`; `scripts/sourceLint.test.ts` asserts it.
  */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
+  :root:not([data-theme]) {
     --bear-bg: #1a1a19;
     --bear-surface: #201f1e;
     --bear-sidebar: #262523;
@@ -150,6 +220,13 @@
     --bear-canvas: #121211;
     --bear-tag-fill: rgb(255 111 94 / 0.18);
     --bear-tag-fill-strong: rgb(255 111 94 / 0.32);
+
+    --bear-radius-sm: 4px;
+    --bear-radius-md: 6px;
+    --bear-radius-lg: 10px;
+    --bear-border-width: 1px;
+    --bear-shadow-popover: 0 4px 12px var(--bear-shadow);
+    --bear-shadow-dialog: 0 12px 32px var(--bear-shadow);
   }
 }
 

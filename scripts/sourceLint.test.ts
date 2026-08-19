@@ -171,52 +171,100 @@ describe('architecture boundaries', () => {
 describe('theme tokens', () => {
   const css = readFileSync(TOKENS, 'utf8');
 
-  const light = blockTokens(css, ':root {');
-  const darkExplicit = blockTokens(css, ":root[data-theme='dark']");
-  const darkSystem = blockTokens(css, ":root:not([data-theme='light'])");
+  const PALETTE = [
+    'bg',
+    'surface',
+    'sidebar',
+    'canvas',
+    'text',
+    'muted',
+    'faint',
+    'border',
+    'accent',
+    'danger',
+    'focus',
+    'hover',
+    'selected',
+    'shadow',
+    'tag-fill',
+    'tag-fill-strong',
+  ];
+  const SURFACE = [
+    'radius-sm',
+    'radius-md',
+    'radius-lg',
+    'shadow-popover',
+    'shadow-dialog',
+    'border-width',
+  ];
+  const REQUIRED = [...PALETTE, ...SURFACE];
 
-  it('defines a non-trivial number of tokens in each theme block', () => {
-    expect(light.size).toBeGreaterThan(20);
-    expect(darkExplicit.size).toBeGreaterThan(10);
+  // Read from the roster rather than restated here: two lists that must agree
+  // is the defect this whole describe block exists to prevent.
+  const roster = readFileSync('src/styles/themes.ts', 'utf8');
+  const ids = [...roster.matchAll(/id: '([a-z-]+)'/g)].map((match) => match[1]!);
+
+  // A floor, not a count: the roster grows a row at a time, each alongside the
+  // CSS block it names, and the two-way agreement below is what actually
+  // guards it. The floor exists only so a roster regex that silently matched
+  // nothing cannot make every assertion here vacuously true.
+  it('finds themes in the roster at all', () => {
+    expect(ids.length).toBeGreaterThanOrEqual(2);
   });
 
-  // The defect this closes: a token added to :root and to the explicit dark
-  // block but forgotten in the media block is correct for a user who picked
-  // dark and wrong for a user whose OS is dark. Nothing else in the suite
-  // can see that.
-  it('keeps both dark blocks token-for-token identical', () => {
-    expect([...darkSystem.keys()].sort()).toEqual([...darkExplicit.keys()].sort());
-    for (const [token, value] of darkExplicit) {
-      expect(darkSystem.get(token), `${token} differs between the dark blocks`).toBe(value);
+  it('gives every theme in the roster a CSS block defining all 22 tokens', () => {
+    for (const id of ids) {
+      const block = blockTokens(css, `:root[data-theme='${id}']`);
+      for (const token of REQUIRED) {
+        expect(block.has(`--bear-${token}`), `--bear-${token} missing from ${id}`).toBe(true);
+      }
     }
   });
 
-  it('overrides only tokens the light theme already defines', () => {
-    for (const token of darkExplicit.keys()) {
-      expect(light.has(token), `${token} is dark-only; add it to :root`).toBe(true);
+  it('has no CSS theme block that is absent from the roster', () => {
+    const declared = [...css.matchAll(/:root\[data-theme='([a-z-]+)'\]/g)].map(
+      (match) => match[1]!,
+    );
+    for (const id of new Set(declared)) {
+      expect(ids, `${id} has a CSS block but no roster entry`).toContain(id);
     }
   });
 
-  it('themes every colour role', () => {
-    const ROLES = [
-      'bg',
-      'surface',
-      'sidebar',
-      'text',
-      'muted',
-      'faint',
-      'border',
-      'accent',
-      'danger',
-      'focus',
-      'hover',
-      'selected',
-      'shadow',
-    ];
-    for (const role of ROLES) {
-      expect(light.has(`--bear-${role}`), `--bear-${role} missing from :root`).toBe(true);
-      expect(darkExplicit.has(`--bear-${role}`), `--bear-${role} missing from Ink`).toBe(true);
+  // `:root` and the default theme's own block must not drift apart: a user on
+  // System and a user who explicitly picked the default must see one app.
+  //
+  // `:root` deliberately carries the tier-3 globals AND the default palette, so
+  // only the 22 required tokens are compared. Do not "tidy" the two into one
+  // grouped selector — `blockTokens` finds a block by `indexOf` plus the next
+  // brace, so it cannot read a grouped selector at all.
+  it('keeps :root identical to the default theme block', () => {
+    const fallback = blockTokens(css, ':root {');
+    const defaultId = roster.match(/DEFAULT_THEME_ID: ThemeId = '([a-z-]+)'/)![1]!;
+    const explicit = blockTokens(css, `:root[data-theme='${defaultId}']`);
+    for (const token of REQUIRED) {
+      expect(fallback.get(`--bear-${token}`), `${token} drifted from ${defaultId}`).toBe(
+        explicit.get(`--bear-${token}`),
+      );
     }
+  });
+
+  // The M2-era hazard, generalised: a token right for someone who picked dark
+  // and wrong for someone whose OS is dark. Nothing else in the suite sees it.
+  it('keeps the system-dark block identical to its named theme', () => {
+    const system = blockTokens(css, ':root:not([data-theme])');
+    const darkId = roster.match(/SYSTEM_DARK_ID: ThemeId = '([a-z-]+)'/)![1]!;
+    const named = blockTokens(css, `:root[data-theme='${darkId}']`);
+    expect([...system.keys()].sort()).toEqual([...named.keys()].sort());
+    for (const [token, value] of named) {
+      expect(system.get(token), `${token} differs between the dark blocks`).toBe(value);
+    }
+  });
+
+  // The guard must reject ANY explicit theme, not only one named 'light'. With
+  // named themes the old selector let every light theme lose to a dark OS.
+  it('guards the system-dark block on the attribute, not on a theme name', () => {
+    expect(css).toContain(':root:not([data-theme])');
+    expect(css).not.toContain(":root:not([data-theme='light'])");
   });
 
   it('zeroes both duration tokens under prefers-reduced-motion', () => {
