@@ -117,4 +117,11 @@ export const ko: Record<TranslationKey, string> = {
   'appearance.system': '시스템',
   'appearance.group.light': '밝은 테마',
   'appearance.group.dark': '어두운 테마',
+
+  'editor.fold.toggle': '이 섹션 접기 또는 펼치기',
+  'editor.fold.level': '머리말 수준',
+  'editor.fold.foldAll': '모든 머리글 접기',
+  'editor.fold.unfoldAll': '모든 머리글 펼치기',
+  'editor.fold.folded': '섹션 접힘',
+  'editor.fold.headingLevel': '머리말',
 };

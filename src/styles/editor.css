@@ -374,3 +374,67 @@
 .ProseMirror .bear-fold-hidden {
   display: none;
 }
+
+/*
+ * The gutter affordance.
+ *
+ * Absolutely positioned so it costs no layout: at 1440x900 the prose column
+ * clamps to 640px inside an 816px pane, leaving 88px of gutter, but panes are
+ * user-resizable and below roughly 688px of pane width there is no gutter at
+ * all. Rather than reserve a lane — which would narrow a deliberately measured
+ * `--bear-line-width` at every width — the controls sit in negative inline
+ * space and simply overlay the text's left edge when there is none.
+ *
+ * Hover-only, so at rest nothing overlaps prose. The persistent "this is
+ * folded" cue is `.bear-fold-marker` below, which is inline and inside the
+ * measure for exactly that reason.
+ */
+.ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+  position: relative;
+}
+
+.bear-fold-toggle,
+.bear-fold-badge {
+  position: absolute;
+  top: 0.25em;
+  opacity: 0;
+  color: var(--bear-faint);
+  transition:
+    opacity var(--bear-duration-fast),
+    color var(--bear-duration-fast);
+}
+
+.bear-fold-toggle {
+  inset-inline-start: -3rem;
+}
+
+.bear-fold-badge {
+  inset-inline-start: -1.5rem;
+}
+
+.ProseMirror :is(h1, h2, h3, h4, h5, h6):hover .bear-fold-toggle,
+.ProseMirror :is(h1, h2, h3, h4, h5, h6):hover .bear-fold-badge,
+.bear-fold-toggle:focus-visible,
+.bear-fold-badge:focus-visible,
+.bear-fold-badge[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.bear-fold-toggle:hover,
+.bear-fold-badge:hover {
+  color: var(--bear-muted);
+}
+
+/* Inline, in flow, inside the measure: covers nothing at any pane width. */
+.bear-fold-marker {
+  color: var(--bear-faint);
+  margin-inline-start: 0.5ch;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bear-fold-toggle,
+  .bear-fold-badge {
+    transition: none;
+  }
+}

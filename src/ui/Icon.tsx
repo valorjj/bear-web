@@ -52,6 +52,7 @@ export {
   Trash2,
   Hash,
   ChevronRight,
+  ChevronDown,
   SquarePen,
   Search,
   X,

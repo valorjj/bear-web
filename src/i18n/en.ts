@@ -115,6 +115,13 @@ export const en = {
   'appearance.system': 'System',
   'appearance.group.light': 'Light',
   'appearance.group.dark': 'Dark',
+
+  'editor.fold.toggle': 'Fold or unfold this section',
+  'editor.fold.level': 'Heading level',
+  'editor.fold.foldAll': 'Fold all headings',
+  'editor.fold.unfoldAll': 'Unfold all headings',
+  'editor.fold.folded': 'Section folded',
+  'editor.fold.headingLevel': 'Heading',
 } as const;
 
 export type TranslationKey = keyof typeof en;

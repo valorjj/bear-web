@@ -46,6 +46,62 @@ function setKeys(tr: Transaction, keys: string[]): Transaction {
   return tr.setMeta(headingFoldKey, { keys } satisfies FoldMeta);
 }
 
+// `aria-hidden="true"` on all three widgets below is load-bearing, not
+// decorative polish. Each widget is placed at `section.pos + 1` — INSIDE the
+// heading element, which `pos + 1` requires (see the comment at the call
+// site) — and accessible-name computation for a heading concatenates the
+// text/name of every descendant, including a nested `<button>`'s own
+// `aria-label` or text content (the "embedded control" rule). Without
+// `aria-hidden`, a folded `<h1>` containing the level-1 badge and the fold
+// toggle announces as "1 Fold or unfold this section Hello" instead of
+// "Hello" — exactly the class of defect `SidebarRow` and `NoteListItem` both
+// shipped and had to fix (see CLAUDE.md's Accessibility section). Verified
+// live: `RichEditor.test.tsx`'s `findByRole('heading', { name: 'Hello' })`
+// fails without this line and passes with it.
+//
+// This makes the affordance mouse-only, with no keyboard or screen-reader
+// path — the same ruling already made for tag pills ("no keyboard
+// activation, deliberately"): the sidebar/tree already gives keyboard users a
+// route to the same content, and fighting the editor's own focus/selection
+// handling for a hover-reveal control is not worth it.
+function button(className: string, label: string | null): HTMLButtonElement {
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = className;
+  el.contentEditable = 'false';
+  el.setAttribute('aria-hidden', 'true');
+  if (label !== null) el.setAttribute('aria-label', label);
+  return el;
+}
+
+function toggleElement(folded: boolean, hint: string | null): HTMLElement {
+  const el = button('bear-fold-toggle', hint);
+  el.setAttribute('data-fold-toggle', '');
+  el.setAttribute('aria-expanded', folded ? 'false' : 'true');
+  return el;
+}
+
+function badgeElement(level: number): HTMLElement {
+  const el = button('bear-fold-badge', null);
+  el.setAttribute('data-fold-badge', '');
+  el.setAttribute('data-level', String(level));
+  el.textContent = String(level);
+  return el;
+}
+
+function markerElement(): HTMLElement {
+  const el = document.createElement('span');
+  el.className = 'bear-fold-marker';
+  el.setAttribute('data-fold-marker', '');
+  el.setAttribute('contenteditable', 'false');
+  // Same reason as the buttons above: this widget also sits inside the
+  // heading element (at `section.contentStart - 1`), and its "…" text would
+  // otherwise be concatenated into the heading's accessible name.
+  el.setAttribute('aria-hidden', 'true');
+  el.textContent = '…';
+  return el;
+}
+
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     headingFold: {
@@ -119,6 +175,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
   },
 
   addProseMirrorPlugins() {
+    const { foldHint } = this.options;
     return [
       new Plugin<FoldState>({
         key: headingFoldKey,
@@ -139,7 +196,6 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
         props: {
           decorations(state) {
             const keys = new Set(headingFoldKey.getState(state)?.keys ?? []);
-            if (keys.size === 0) return DecorationSet.empty;
 
             const decorations: Decoration[] = [];
             for (const range of hiddenRangesFor(state.doc, keys)) {
@@ -159,6 +215,55 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
                 return false;
               });
             }
+
+            for (const section of headingSections(state.doc)) {
+              const folded = keys.has(serializeFoldKey(foldKeyOf(section)));
+
+              // `section.pos + 1`, NOT `section.pos`. A widget at `section.pos`
+              // sits at the document position BEFORE the heading node, so
+              // ProseMirror renders it as the heading's SIBLING — every
+              // `.ProseMirror h2:hover .bear-fold-toggle` rule below would
+              // never match, and `position: absolute` would resolve against
+              // the wrong box. `pos + 1` is the start of the heading's inline
+              // content, which makes the widget a CHILD of the heading
+              // element, which is what the CSS and the hit test both assume.
+              decorations.push(
+                Decoration.widget(section.pos + 1, () => toggleElement(folded, foldHint), {
+                  side: -1,
+                  // Widgets are not document content, but say so explicitly:
+                  // a widget that ProseMirror thinks is text would be included
+                  // in `textBetween` and could reach the serializer.
+                  ignoreSelection: true,
+                  foldWidget: 'toggle',
+                }),
+              );
+
+              decorations.push(
+                Decoration.widget(section.pos + 1, () => badgeElement(section.level), {
+                  side: -1,
+                  ignoreSelection: true,
+                  foldWidget: 'badge',
+                  // Mirrored into the spec so a test can assert the level
+                  // without reaching into ProseMirror's widget internals.
+                  level: section.level,
+                }),
+              );
+
+              if (folded) {
+                decorations.push(
+                  // At the END of the heading's own line, inside the measure.
+                  // A persistent GUTTER mark would overlay text at rest on a
+                  // narrow pane, which is exactly what the hover-only gutter
+                  // rule exists to prevent.
+                  Decoration.widget(section.contentStart - 1, () => markerElement(), {
+                    side: 1,
+                    ignoreSelection: true,
+                    foldWidget: 'marker',
+                  }),
+                );
+              }
+            }
+
             return DecorationSet.create(state.doc, decorations);
           },
         },

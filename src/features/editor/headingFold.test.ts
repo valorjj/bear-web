@@ -130,3 +130,87 @@ describe('fold decorations', () => {
     editor.destroy();
   });
 });
+
+/**
+ * Widget decorations the plugin currently renders, by their marker attribute.
+ *
+ * Aggregates every plugin's `decorations` prop and concatenates the results,
+ * the way ProseMirror's own `viewDecorations` does — not
+ * `editor.view.someProp('decorations', (f) => f(editor.state))`'s
+ * short-circuit-on-first-truthy-result form. See `hiddenCount` above for why
+ * that form is a trap: it would report zero widgets for the wrong reason if
+ * this file ever gained another plugin ahead of `headingFold$` in
+ * `state.plugins`, and the assertions below would pass vacuously.
+ */
+function widgetKinds(editor: Editor): string[] {
+  const kinds: string[] = [];
+  for (const plugin of editor.state.plugins) {
+    const prop = plugin.props.decorations;
+    if (!prop) continue;
+    const result = prop.call(plugin, editor.state) as DecorationSet | null | undefined;
+    for (const d of result?.find() ?? []) {
+      const kind = (d.spec as { foldWidget?: string }).foldWidget;
+      if (kind) kinds.push(kind);
+    }
+  }
+  return kinds;
+}
+
+describe('the gutter affordance', () => {
+  it('renders a toggle and a badge for every top-level heading', () => {
+    const editor = docFor('<h1>A</h1><p>x</p><h2>B</h2>');
+
+    expect(widgetKinds(editor).filter((k) => k === 'toggle')).toHaveLength(2);
+    expect(widgetKinds(editor).filter((k) => k === 'badge')).toHaveLength(2);
+    editor.destroy();
+  });
+
+  it('renders no affordance for a heading that is not top level', () => {
+    const editor = docFor('<blockquote><h2>Quoted</h2></blockquote>');
+
+    expect(widgetKinds(editor)).toEqual([]);
+    editor.destroy();
+  });
+
+  it('adds an inline marker only to a folded heading', () => {
+    const editor = docFor('<h2>A</h2><p>x</p><h2>B</h2>');
+    expect(widgetKinds(editor).filter((k) => k === 'marker')).toHaveLength(0);
+
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+
+    expect(widgetKinds(editor).filter((k) => k === 'marker')).toHaveLength(1);
+    editor.destroy();
+  });
+
+  it('carries the heading level on the badge', () => {
+    const editor = docFor('<h3>C</h3>');
+    const levels: number[] = [];
+    for (const plugin of editor.state.plugins) {
+      const prop = plugin.props.decorations;
+      if (!prop) continue;
+      const result = prop.call(plugin, editor.state) as DecorationSet | null | undefined;
+      for (const d of result?.find() ?? []) {
+        const spec = d.spec as { foldWidget?: string; level?: number };
+        if (spec.foldWidget === 'badge' && spec.level !== undefined) levels.push(spec.level);
+      }
+    }
+
+    // Asserted through the decoration SPEC, not through ProseMirror's widget
+    // internals: `Decoration.widget(pos, fn)` stores the builder function, so
+    // reading `.type.toDOM.textContent` returns undefined and the assertion
+    // could never pass.
+    expect(levels).toEqual([3]);
+    editor.destroy();
+  });
+
+  it('places the affordance inside the heading element, not beside it', () => {
+    const editor = docFor('<h2>A</h2>');
+
+    // The whole hover-reveal design depends on this: the CSS selector is
+    // `.ProseMirror h2:hover .bear-fold-toggle`, and `position: absolute`
+    // resolves against the heading's own box.
+    expect(editor.view.dom.querySelector('h2 [data-fold-toggle]')).not.toBeNull();
+    editor.destroy();
+  });
+});
