@@ -1,10 +1,14 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, type RenderResult } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createRef, type RefObject } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { db, notes } from '@/data';
+import '@/styles/editor.css';
+
+import { db, folds, notes } from '@/data';
 import type { Note } from '@/data';
 import * as editor from '@/features/editor';
+import { headingSections, type RichEditorHandle } from '@/features/editor';
 import { renderWithI18n } from '@/i18n/testing';
 
 import { NoteEditor } from './NoteEditor';
@@ -54,6 +58,19 @@ async function createNote(text: string): Promise<Note> {
   const stored = await notes.get(created.id);
   if (stored === undefined) throw new Error('note vanished');
   return stored;
+}
+
+/**
+ * Renders `NoteEditor` with an externally-owned `handleRef`, so a test can
+ * reach the mounted Tiptap instance (`handle.current.editor`) the same way
+ * `RichEditor.test.tsx` does. Nothing in the app passes this ref itself —
+ * `AppShell` never needs the editor instance — it exists purely so tests
+ * don't each grow their own parallel ref plumbing.
+ */
+function renderEditor(note: Note): RenderResult & { handle: RefObject<RichEditorHandle | null> } {
+  const handle = createRef<RichEditorHandle>();
+  const result = renderWithI18n(<NoteEditor note={note} handleRef={handle} />);
+  return { ...result, handle };
 }
 
 /**
@@ -554,5 +571,46 @@ describe('serialization failure', () => {
 
     expect(save).not.toHaveBeenCalled();
     expect(await screen.findByRole('status')).toBeInTheDocument();
+  });
+});
+
+describe('fold persistence', () => {
+  it('applies the stored fold set when the note opens', async () => {
+    const note = await notes.create('## A\n\nbody');
+    await folds.set(note.id, ['2:0:A']);
+
+    renderEditor(note);
+
+    await waitFor(() => {
+      expect(screen.getByText('body')).not.toBeVisible();
+    });
+  });
+
+  it('writes the new fold set when a section is folded', async () => {
+    const note = await notes.create('## A\n\nbody');
+    const set = vi.spyOn(folds, 'set');
+
+    const { handle } = renderEditor(note);
+    await waitFor(() => expect(handle.current?.editor).not.toBeNull());
+    const [section] = headingSections(handle.current!.editor!.state.doc);
+    handle.current!.editor!.commands.toggleHeadingFold(section!.pos);
+
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledWith(note.id, ['2:0:A']);
+    });
+  });
+
+  it('opening a note produces no fold write', async () => {
+    const note = await notes.create('## A\n\nbody');
+    await folds.set(note.id, ['2:0:A']);
+    const set = vi.spyOn(folds, 'set');
+
+    renderEditor(note);
+    await waitFor(() => expect(screen.getByText('A')).toBeInTheDocument());
+
+    // Mirrors the standing rule that opening a note produces no write. A
+    // persistence layer that rewrites on mount churns a row on every note
+    // switch, and this app switches notes constantly.
+    expect(set).not.toHaveBeenCalled();
   });
 });

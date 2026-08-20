@@ -1,10 +1,11 @@
-import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactElement, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 
-import { deriveTitle, notes } from '@/data';
+import { deriveTitle, folds, notes } from '@/data';
 import type { Note } from '@/data';
 import { exportNote, type ExportFormat } from '@/features/export';
 import {
   EMPTY_DOCUMENT_MARKDOWN,
+  foldedKeys,
   normalizeMarkdown,
   RichEditor,
   type RichEditorHandle,
@@ -12,6 +13,9 @@ import {
 import { useLocale, useT } from '@/i18n';
 
 import { useAutosave } from './useAutosave';
+
+/** Matches `AUTOSAVE_DELAY_MS`; folds are persisted on the same rhythm. */
+const FOLD_PERSIST_DELAY_MS = 300;
 
 export interface NoteEditorProps {
   note: Note;
@@ -32,6 +36,14 @@ export interface NoteEditorProps {
    * the app acted on it; `false` makes the gesture behave like a plain click.
    */
   onActivateTag?: (tag: string) => boolean;
+  /**
+   * Exposes the mounted `RichEditor`'s imperative handle to the caller.
+   * Nothing in the app passes this — `AppShell` never needs to reach the
+   * editor instance directly — it exists so tests can reach
+   * `handle.current.editor` the same way `RichEditor.test.tsx` does, without
+   * a second, parallel ref living only in test code.
+   */
+  handleRef?: RefObject<RichEditorHandle | null>;
 }
 
 /**
@@ -52,11 +64,17 @@ export interface NoteEditorProps {
  */
 const pendingDiscards = new Map<string, ReturnType<typeof setTimeout>>();
 
-export function NoteEditor({ note, seedText, onActivateTag }: NoteEditorProps): ReactElement {
+export function NoteEditor({
+  note,
+  seedText,
+  onActivateTag,
+  handleRef: externalHandleRef,
+}: NoteEditorProps): ReactElement {
   const t = useT();
   const { locale } = useLocale();
 
-  const handleRef = useRef<RichEditorHandle | null>(null);
+  const internalHandleRef = useRef<RichEditorHandle | null>(null);
+  const handleRef = externalHandleRef ?? internalHandleRef;
 
   // Seeded from the SERIALIZED document, not from `note.text`. Opening a note
   // must never produce a write: a non-canonical note would otherwise differ
@@ -211,6 +229,52 @@ export function NoteEditor({ note, seedText, onActivateTag }: NoteEditorProps): 
     }
     seed(atMount);
   }, [seed]);
+
+  // Folds are loaded once per mount. `NoteEditor` is keyed by `note.id`, so
+  // one mounted editor serves exactly one note for its lifetime — the same
+  // property that makes its autosave flush-on-unmount correct — and no
+  // cross-note reconciliation is needed here.
+  useEffect(() => {
+    let cancelled = false;
+    void folds.get(note.id).then((keys) => {
+      if (cancelled || keys.length === 0) return;
+      handleRef.current?.editor?.commands.setHeadingFolds(keys);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [note.id]);
+
+  // Persisted on change, debounced, fire-and-forget. The fold has ALREADY
+  // applied in plugin state by the time this runs, so a failed write costs a
+  // fold and never content — which is why it is deliberately not awaited and
+  // deliberately does not surface an error.
+  useEffect(() => {
+    const editorInstance = handleRef.current?.editor;
+    if (!editorInstance) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let last = '';
+
+    const onTransaction = (): void => {
+      const keys = foldedKeys(editorInstance.state);
+      const serialized = keys.join('|');
+      if (serialized === last) return;
+      last = serialized;
+      clearTimeout(timer);
+      timer = setTimeout(() => void folds.set(note.id, keys), FOLD_PERSIST_DELAY_MS);
+    };
+
+    // Seeded from the mounted editor's own reading, so restoring a stored set
+    // in the effect above does not immediately write it back.
+    last = foldedKeys(editorInstance.state).join('|');
+
+    editorInstance.on('transaction', onTransaction);
+    return () => {
+      editorInstance.off('transaction', onTransaction);
+      clearTimeout(timer);
+    };
+  }, [note.id]);
 
   const onChange = useCallback(() => {
     editedRef.current = true;
