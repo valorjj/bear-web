@@ -965,17 +965,30 @@ describe('the gutter affordance', () => {
     editor.destroy();
   });
 
-  it('shows the badge level, so the number is the heading level', () => {
+  it('carries the heading level on the badge', () => {
     const editor = docFor('<h3>C</h3>');
     const decorations = editor.view.someProp('decorations', (f) => f(editor.state));
-    let text = '';
+    const levels: number[] = [];
     decorations?.find().forEach((d) => {
-      if ((d.spec as { foldWidget?: string }).foldWidget === 'badge') {
-        text = (d as unknown as { type: { toDOM: HTMLElement } }).type.toDOM.textContent ?? '';
-      }
+      const spec = d.spec as { foldWidget?: string; level?: number };
+      if (spec.foldWidget === 'badge' && spec.level !== undefined) levels.push(spec.level);
     });
 
-    expect(text).toBe('3');
+    // Asserted through the decoration SPEC, not through ProseMirror's widget
+    // internals: `Decoration.widget(pos, fn)` stores the builder function, so
+    // reading `.type.toDOM.textContent` returns undefined and the assertion
+    // could never pass.
+    expect(levels).toEqual([3]);
+    editor.destroy();
+  });
+
+  it('places the affordance inside the heading element, not beside it', () => {
+    const editor = docFor('<h2>A</h2>');
+
+    // The whole hover-reveal design depends on this: the CSS selector is
+    // `.ProseMirror h2:hover .bear-fold-toggle`, and `position: absolute`
+    // resolves against the heading's own box.
+    expect(editor.view.dom.querySelector('h2 [data-fold-toggle]')).not.toBeNull();
     editor.destroy();
   });
 });
@@ -1022,8 +1035,16 @@ In `HeadingFold.ts`, extend the `decorations` prop. After the hidden-block loop,
             for (const section of headingSections(state.doc)) {
               const folded = keys.has(serializeFoldKey(foldKeyOf(section)));
 
+              // `section.pos + 1`, NOT `section.pos`. A widget at `section.pos`
+              // sits at the document position BEFORE the heading node, so
+              // ProseMirror renders it as the heading's SIBLING — every
+              // `.ProseMirror h2:hover .bear-fold-toggle` rule below would
+              // never match, and `position: absolute` would resolve against
+              // the wrong box. `pos + 1` is the start of the heading's inline
+              // content, which makes the widget a CHILD of the heading
+              // element, which is what the CSS and the hit test both assume.
               decorations.push(
-                Decoration.widget(section.pos, () => toggleElement(folded, foldHint), {
+                Decoration.widget(section.pos + 1, () => toggleElement(folded, foldHint), {
                   side: -1,
                   // Widgets are not document content, but say so explicitly:
                   // a widget that ProseMirror thinks is text would be included
@@ -1034,10 +1055,13 @@ In `HeadingFold.ts`, extend the `decorations` prop. After the hidden-block loop,
               );
 
               decorations.push(
-                Decoration.widget(section.pos, () => badgeElement(section.level), {
+                Decoration.widget(section.pos + 1, () => badgeElement(section.level), {
                   side: -1,
                   ignoreSelection: true,
                   foldWidget: 'badge',
+                  // Mirrored into the spec so a test can assert the level
+                  // without reaching into ProseMirror's widget internals.
+                  level: section.level,
                 }),
               );
 
@@ -1433,9 +1457,12 @@ export function HeadingMenu({
 }
 ```
 
-Note `min-w-48` is on the permitted spacing scale (Tailwind `12` = 48px); if any
-value you add is not, allowlist it in `scripts/sourceLint.test.ts` with a stated
-reason rather than silently widening the scale.
+`scripts/sourceLint.test.ts`'s spacing scan covers `p*`, `m*`, `gap*` and
+`space-*` only, so width utilities like `min-w-48` are outside its scope — the
+`p-1`, `px-2`, `py-1`, `gap-4` and `my-1` above are all on the permitted scale
+and are what the scan actually reads. If you add a padding, margin or gap value
+that is not, allowlist it in that file with a stated reason rather than
+silently widening the scale.
 
 - [ ] **Step 4: Open it from the badge**
 
@@ -1594,7 +1621,11 @@ describe('fold persistence', () => {
 });
 ```
 
-Reuse whatever `renderEditor` helper that file already defines; if it does not expose the handle ref, extend it rather than writing a second helper.
+`src/features/notes/NoteEditor.test.tsx` currently defines NO `renderEditor`
+helper — write one, following that file's existing render calls, and have it
+return the `handleRef` so these tests can reach `handle.current.editor`. Put it
+beside the existing helpers at the top of the file, not inside the new
+`describe`, so later tests can use it too.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
