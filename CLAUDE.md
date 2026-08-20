@@ -44,7 +44,7 @@ feature and is not yet scheduled.
 | C code block language + highlighting      | queued   |
 | M9b callout blocks                        | deferred |
 
-1214 unit tests, 62 end-to-end tests. `main` is always green and auto-deploys.
+1221 unit tests, 64 end-to-end tests. `main` is always green and auto-deploys.
 
 **The last five rows are not numbered milestones yet**, and the lettering is
 `docs/superpowers/NEXT.md`'s, which holds the order and the reasoning for it.

@@ -186,8 +186,19 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   above the folded one silently refolds the wrong section — while a stable id
   written into the document would be view state leaking into the user's own
   Markdown, which this project treats as worse than an occasional stale fold.
-  Content-derived keys fail *open*: at worst a fold that no longer matches any
-  heading is simply dropped, never applied to the wrong section.
+  Content-derived keys fail *open* in the sense that matters most: a fold
+  that no longer matches any heading is simply dropped, never applied to
+  content the user never folded. **This is not an absolute guarantee against
+  ever applying to the "wrong" section, and a prior version of this bullet
+  overclaimed that it was.** Measured: fold `## A`, then insert a NEW `<h2>A</h2>`
+  above it — the new section is `nth=0` and inherits the fold, while the
+  section the user actually folded is now `nth=1` and reopens. Nothing is
+  hidden that the user never folded (the fail-open property holds), but the
+  *visible* section is not the one they folded, either — the fold followed
+  the occurrence, not the user's original heading. Accepted, recoverable (the
+  inline "…" marker on the now-folded section cues that something is folded
+  there), and covered in the B1 spec's "Known limits" alongside the
+  already-documented reordering case.
 
 - **`Mod-Alt-1`–`6` come from `@tiptap/extension-heading` itself, not from any
   code in this repo, and Bear's own `⌘1`–`⌘6` for the same job is unavailable
