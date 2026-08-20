@@ -1,5 +1,5 @@
 import { isMacOS } from '@tiptap/core';
-import { type ReactElement, useEffect, useRef } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n';
 
@@ -51,9 +51,40 @@ export function HeadingMenu({
   const ref = useRef<HTMLDivElement | null>(null);
   const modifier = isMacOS() ? '⌘⌥' : 'Ctrl+Alt+';
 
+  // Anchored below the badge until proven otherwise. `request.rect` is the
+  // only geometry known before mount, so this is what the FIRST paint uses —
+  // the flip/clamp effect below corrects it once the menu's own size exists,
+  // the same "measure after mount" approach the focus effect already uses.
+  const [position, setPosition] = useState(() => ({
+    top: request.rect.bottom + 4,
+    left: request.rect.left,
+  }));
+
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
   }, []);
+
+  // Flips above the badge when there is no room below, and clamps
+  // horizontally into the viewport. `fixed` positioning means scrolling can
+  // never bring an off-screen menu back — a heading in the bottom quarter of
+  // a long note is exactly where the level menu gets used, so opening
+  // unreachable there is the common case, not an edge case. Measured after
+  // mount, in an effect: the menu's real height/width don't exist before the
+  // first render, only `request.rect` (the badge's own rect) does.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const menuRect = el.getBoundingClientRect();
+
+    const fitsBelow = request.rect.bottom + 4 + menuRect.height <= window.innerHeight;
+    const top = fitsBelow
+      ? request.rect.bottom + 4
+      : Math.max(4, request.rect.top - 4 - menuRect.height);
+
+    const left = Math.min(request.rect.left, window.innerWidth - menuRect.width - 4);
+
+    setPosition({ top, left: Math.max(4, left) });
+  }, [request]);
 
   // Neither listener can live on the menu's own React `onKeyDown`/`onClick`:
   // both must keep working after focus (or the click itself) has already
@@ -111,7 +142,7 @@ export function HeadingMenu({
       role="menu"
       aria-label={t('editor.fold.level')}
       onKeyDown={onKeyDown}
-      style={{ top: request.rect.bottom + 4, left: request.rect.left }}
+      style={{ top: position.top, left: position.left }}
       className="bg-surface border-border shadow-popover fixed z-20 min-w-48 rounded-md border p-1"
     >
       {LEVELS.map((level) => (

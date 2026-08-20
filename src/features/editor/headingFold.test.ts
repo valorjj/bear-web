@@ -641,6 +641,63 @@ describe('editing at a fold boundary', () => {
     editor.destroy();
   });
 
+  // Enter at the end of a folded heading runs `splitBlock`, which inserts the
+  // new empty paragraph INSIDE the section's hidden range (`contentStart -
+  // 1` is exactly where the split lands), leaving the user typing into
+  // `display: none` content with no visual feedback. Unlike Backspace/Delete,
+  // nothing is destroyed here, so the fix is not "block the keystroke" but
+  // "unfold first, then let the keystroke do its normal job" — asserted by
+  // `handled === false` (the guard does NOT consume Enter) together with the
+  // fold actually having cleared.
+  // `someProp('handleKeyDown', …)` here exercises the WHOLE keydown chain,
+  // not just this plugin's own handler: ProseMirror calls every plugin's
+  // `handleKeyDown` in order and stops at the first truthy result, and
+  // `@tiptap/core`'s built-in `Keymap` extension is one of those plugins,
+  // binding Enter to `splitBlock`. That is exactly what this test needs —
+  // it proves the guard's `return false` really does hand off to that
+  // built-in handler, which then runs `splitBlock` against the
+  // ALREADY-unfolded state this guard just dispatched, landing the new
+  // paragraph somewhere `.bear-fold-hidden` no longer reaches. A guard that
+  // instead consumed Enter (`return true`, doing nothing but unfolding)
+  // would fail this: `splitBlock` would never run and the document would be
+  // unchanged aside from the fold clearing.
+  it('Enter at the end of a folded heading unfolds and lets the split land in visible content', () => {
+    const editor = docFor('<h2>A</h2><p>hidden</p>');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+    editor.commands.setTextSelection(a!.contentStart - 1);
+
+    expect(foldedKeys(editor.state)).toEqual([serializeFoldKey(foldKeyOf(a!))]);
+
+    const handled = editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'Enter' })),
+    );
+
+    expect(handled).toBe(true);
+    expect(foldedKeys(editor.state)).toEqual([]);
+    expect(editor.view.dom.querySelector('.bear-fold-hidden')).toBeNull();
+    editor.destroy();
+  });
+
+  // Mirrors the equivalent Delete/Backspace tests above: with nothing
+  // folded, this guard's own `keys.size === 0` check returns `false`
+  // immediately, and the built-in Enter keymap runs unaffected — asserted by
+  // the document actually changing (the split happened), not by `handled`,
+  // which the built-in handler alone already makes `true`.
+  it('leaves Enter alone when the section is not folded', () => {
+    const editor = docFor('<h2>A</h2><p>visible</p>');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.setTextSelection(a!.contentStart - 1);
+
+    const before = editor.getHTML();
+    editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'Enter' })),
+    );
+
+    expect(editor.getHTML()).not.toBe(before);
+    editor.destroy();
+  });
+
   // The macOS delete-variant chords: `@tiptap/core`'s own `Keymap` extension
   // binds `Ctrl-h` to the same handler as plain `Backspace`, and `Ctrl-d`/
   // `Alt-d` to the same handler as plain `Delete` — but `event.key` for those

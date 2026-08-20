@@ -122,6 +122,5 @@ export const ko: Record<TranslationKey, string> = {
   'editor.fold.level': '머리말 수준',
   'editor.fold.foldAll': '모든 머리글 접기',
   'editor.fold.unfoldAll': '모든 머리글 펼치기',
-  'editor.fold.folded': '섹션 접힘',
   'editor.fold.headingLevel': '머리말',
 };

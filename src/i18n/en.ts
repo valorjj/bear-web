@@ -120,7 +120,6 @@ export const en = {
   'editor.fold.level': 'Heading level',
   'editor.fold.foldAll': 'Fold all headings',
   'editor.fold.unfoldAll': 'Unfold all headings',
-  'editor.fold.folded': 'Section folded',
   'editor.fold.headingLevel': 'Heading',
 } as const;
 

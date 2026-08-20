@@ -41,11 +41,13 @@ export interface RichEditorProps {
   onExport?: (format: ExportFormat) => void;
   /**
    * Called with the live `editor` every time IT changes identity — in
-   * particular the transition from `null` to a ready instance, and back to
-   * `null` on unmount. `handleRef` is a plain ref: reading it once from a
-   * caller's own effect races Tiptap's own construction, which is exactly
-   * why `NoteEditor`'s fold persistence needs a reactive signal instead of a
-   * ref read at a single moment.
+   * particular the transition from `null` to a ready instance. The mount
+   * effect's cleanup only clears `handleRef.current`, never calls this again
+   * with `null` — so on unmount the caller's last-known `editor` value goes
+   * stale rather than being told. `handleRef` is a plain ref: reading it once
+   * from a caller's own effect races Tiptap's own construction, which is
+   * exactly why `NoteEditor`'s fold persistence needs a reactive signal
+   * instead of a ref read at a single moment.
    */
   onEditorReady?: (editor: Editor | null) => void;
 }

@@ -509,6 +509,46 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
           // check on top keeps a PLAIN "h" or "d" keystroke (ordinary typing)
           // from ever matching, on any platform.
           handleKeyDown(view, event) {
+            // Enter at the end of a folded heading's own line runs
+            // `splitBlock`, which inserts the new empty paragraph at that
+            // position — INSIDE the section's hidden range (`hiddenRangesFor`
+            // hides `[contentStart, end)`, and this caret sits at
+            // `contentStart - 1`, i.e. right where the split lands). Nothing is
+            // destroyed, unlike the Backspace/Delete hazards below, but the
+            // user is left typing into a `display: none` node with no visual
+            // feedback that anything happened — the most natural thing to do
+            // right after clicking a heading line.
+            //
+            // Unfold-and-LET-THE-SPLIT-PROCEED, not unfold-and-consume: Enter
+            // is not a destructive keystroke the way Backspace/Delete are, so
+            // swallowing it (returning `true`, doing nothing but unfold) would
+            // make the key silently stop doing its normal job. Dispatching the
+            // unfold here updates `view.state` synchronously, and returning
+            // `false` lets the keymap-bound `splitBlock` run next against that
+            // ALREADY-unfolded state — the same document position is still
+            // valid because the unfold transaction carries no steps, only
+            // meta. The net effect is: the section reveals itself and THEN the
+            // new paragraph is created in it, visibly, exactly what a user
+            // pressing Enter there expects.
+            if (event.key === 'Enter') {
+              const { selection } = view.state;
+              if (!selection.empty) return false;
+
+              const keys = new Set(foldedKeys(view.state));
+              if (keys.size === 0) return false;
+
+              const at = selection.from;
+              const section = headingSections(view.state.doc).find((s) => {
+                if (!keys.has(serializeFoldKey(foldKeyOf(s)))) return false;
+                if (s.end <= s.contentStart) return false;
+                return at === s.contentStart - 1;
+              });
+              if (!section) return false;
+
+              view.dispatch(setKeys(view.state.tr, nextKeysToggling(view.state, section)));
+              return false;
+            }
+
             const macChord = isMacOS();
             const isBackspace =
               event.key === 'Backspace' || (macChord && event.key === 'h' && event.ctrlKey);

@@ -634,6 +634,32 @@ describe('fold persistence', () => {
     expect(set).not.toHaveBeenCalled();
   }, 10000);
 
+  // The entire justification for a separate `noteFolds` table, rather than a
+  // field on the note record, is that folding must not move `updatedAt` and
+  // reorder the note list. That is true today only because Tiptap gates its
+  // `onUpdate` callback on `tr.docChanged` and a fold transaction carries no
+  // steps (only meta) — an upstream detail nothing in THIS codebase asserts.
+  // This pins it: toggling a fold, waited well past the autosave debounce,
+  // must never call `notes.save`.
+  it('folding a section never calls notes.save — folding must not touch the note', async () => {
+    const note = await notes.create('## A\n\nbody');
+    const save = vi.spyOn(notes, 'save');
+
+    const { handle } = renderEditor(note);
+    await waitFor(() => expect(handle.current?.editor).not.toBeNull());
+    const [section] = headingSections(handle.current!.editor!.state.doc);
+    handle.current!.editor!.commands.toggleHeadingFold(section!.pos);
+
+    expect(foldedKeys(handle.current!.editor!.state)).toEqual(['2:0:A']);
+
+    // Real timers, well past AUTOSAVE_DELAY_MS (300ms) — long enough for an
+    // autosave that SHOULD NOT have been scheduled to have fired if it had
+    // been.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(save).not.toHaveBeenCalled();
+  }, 10000);
+
   it('flushes a pending fold to storage when the note is closed', async () => {
     const note = await notes.create('## A\n\nbody');
     const set = vi.spyOn(folds, 'set');

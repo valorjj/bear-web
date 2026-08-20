@@ -798,13 +798,13 @@ test('folding a heading hides its section, and the fold survives a reload', asyn
   // Deliberately the suite's DEFAULT viewport (1280x720, `playwright.config.ts`),
   // not a widened one. A real click on the toggle at this width is exactly
   // the regression this test exists to catch: at 1280x720 the editor pane
-  // lands at 656px, under the ~688px-wide-pane threshold `editor.css`
+  // lands at 656px, under the 688px-wide-pane threshold `editor.css`
   // documents, and `EditorContent`'s own `overflow-auto` used to clip most
   // of the toggle's `-3rem` box there, so a real `.click()` at its visual
   // center missed the button entirely and landed on the app shell instead.
-  // `.ProseMirror`'s `max-width: min(--bear-line-width, 100% - 6rem)` fixes
-  // this (see `editor.css`) by guaranteeing 3rem of margin on each side
-  // whenever the pane is narrower than the measure PLUS 6rem (736px, not
+  // `.ProseMirror`'s `max-width: min(--bear-line-width, 100% - 3rem)` fixes
+  // this (see `editor.css`) by guaranteeing 1.5rem of margin on each side
+  // whenever the pane is narrower than the measure PLUS 3rem (688px, not
   // 640px) — this test's own 656px pane sits inside exactly that band, which
   // is exactly the toggle's own reach — so this test must run at the width
   // where the bug lived, not one wide enough to avoid it.
@@ -863,6 +863,120 @@ test('folding a heading hides its section, and the fold survives a reload', asyn
   await expect(page.locator('.ProseMirror p', { hasText: 'hidden body' })).toBeHidden();
 });
 
+// Measured against the ProseMirror MODEL first (`headingFold.test.ts`), not
+// Chromium: a caret in a `display: none` node can behave differently in a
+// real browser than jsdom's DOM-only stubs would suggest, and this project
+// has been caught by exactly that gap before (see CLAUDE.md's
+// "jsdom drives the editor's surface too" entry). This test presses a real
+// `Enter` key in real Chromium, at the exact position the unit test only
+// simulates through `someProp`.
+test('Enter at the end of a folded heading reveals the section instead of hiding new text in it', async ({
+  page,
+}) => {
+  await seedDatabase(page, {
+    notes: [
+      {
+        id: 'n-fold-enter',
+        title: 'Alpha',
+        text: '## Alpha\n\nhidden body\n\n## Beta\n\nkept',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pinned: false,
+        trashedAt: null,
+        archivedAt: null,
+      },
+    ],
+    settings: [],
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /Alpha/ }).first().click();
+
+  const heading = page.locator('.ProseMirror h2', { hasText: 'Alpha' });
+  await heading.hover();
+  // Fold it — the note opens unfolded, so this one click IS the fold, not an
+  // unfold. Testing the Enter guard means testing it WHILE FOLDED; an extra
+  // toggle here would unfold first and exercise nothing.
+  await heading.locator('[data-fold-toggle]').click();
+
+  await expect(page.locator('.ProseMirror p', { hasText: 'hidden body' })).toBeHidden();
+  await expect(heading.locator('[data-fold-marker]')).toBeVisible();
+
+  // Caret at the end of the heading's own line — the exact boundary
+  // `headingFold.test.ts` targets via `contentStart - 1`. Still folded at
+  // this point: nothing above has unfolded it yet.
+  //
+  // Three measured quirks made this harder to get right than it looks:
+  //
+  // 1. `<h2>` is a block element whose bounding box spans the full editor
+  //    width, far past the short word "Alpha" — a plain `heading.click()`
+  //    targets the CENTER of that full-width box, landing well past the
+  //    text. Computing the exact coordinate of the text's own last
+  //    character (via a `Range` over the heading's own direct text-node
+  //    child — deliberately not `el.textContent`, which would also catch
+  //    the marker widget's own "…" text and the badge's digit) is what
+  //    actually lands the caret inside "Alpha".
+  // 2. The immediately preceding action was a real `<button>` click (the
+  //    fold toggle). Measured: the FIRST click into the contenteditable
+  //    right after a real button held focus does not reliably place the
+  //    caret at the click point in Chromium. An explicit `blur()` on the
+  //    focused button before the positioning click avoids depending on
+  //    that quirk.
+  // 3. Neither a native `End` keypress nor a plain mouse click updates
+  //    Tiptap's OWN `view.state.selection` synchronously — both go through
+  //    ProseMirror's `DOMObserver`, which reacts to the browser's own
+  //    `selectionchange` event, itself dispatched asynchronously relative
+  //    to the input that caused it. Sending `Enter` immediately after
+  //    positioning the caret — via `End` OR via a raw coordinate click —
+  //    measurably raced that event: this guard's `handleKeyDown` still read
+  //    the STALE pre-click selection when it ran, landing the split at
+  //    the wrong position. A fixed sleep would only guess at how long that
+  //    takes; polling the actual signal ProseMirror itself waits on —
+  //    `selectionchange` firing — waits for the real condition instead of a
+  //    duration, and resolves as soon as it fires rather than after a fixed
+  //    interval, however comfortable.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  const point = await heading.evaluate((el) => {
+    let textNode: Text | null = null;
+    for (const child of Array.from(el.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE && (child.textContent ?? '').length > 0) {
+        textNode = child as Text;
+      }
+    }
+    if (!textNode) throw new Error('heading has no direct text content');
+    const length = textNode.textContent!.length;
+    const range = document.createRange();
+    range.setStart(textNode, Math.max(0, length - 1));
+    range.setEnd(textNode, length);
+    const rect = range.getBoundingClientRect();
+    return { x: rect.right - 1, y: rect.top + rect.height / 2 };
+  });
+  const selectionSynced = page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const onChange = (): void => {
+          document.removeEventListener('selectionchange', onChange);
+          resolve();
+        };
+        document.addEventListener('selectionchange', onChange);
+      }),
+  );
+  await page.mouse.click(point.x, point.y);
+  await selectionSynced;
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('freshly typed');
+
+  // The fold cleared (no more persistent marker) and the previously hidden
+  // body is visible again — proving Enter unfolded rather than merely
+  // splitting inside a still-hidden section.
+  await expect(heading.locator('[data-fold-marker]')).toHaveCount(0);
+  await expect(page.locator('.ProseMirror p', { hasText: 'hidden body' })).toBeVisible();
+
+  // The text just typed must actually be on screen, not sitting inside a
+  // `display: none` node the way it did before this fix.
+  await expect(page.locator('.ProseMirror p', { hasText: 'freshly typed' })).toBeVisible();
+});
+
 test('the badge menu changes a heading level, and the change reaches the Markdown', async ({
   page,
 }) => {
@@ -890,4 +1004,32 @@ test('the badge menu changes a heading level, and the change reaches the Markdow
   await page.getByRole('menuitemradio', { name: /Heading 3/ }).click();
 
   await expect(page.locator('.ProseMirror h3', { hasText: 'Alpha' })).toBeVisible();
+
+  // "Reaches the Markdown" means the SERIALIZED text changed, not merely
+  // that an `<h3>` renders — an `<h3>` in the DOM proves the schema
+  // attribute changed, nothing about what autosave persists. Poll IndexedDB
+  // directly, the same technique the fold-persistence test above uses,
+  // rather than trusting the debounced write already landed.
+  await expect
+    .poll(async () =>
+      page.evaluate(async (id: string) => {
+        const request = indexedDB.open('bear-web');
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        try {
+          const store = db.transaction('notes', 'readonly').objectStore('notes');
+          const note = await new Promise<{ text: string } | undefined>((resolve, reject) => {
+            const req = store.get(id);
+            req.onsuccess = () => resolve(req.result as { text: string } | undefined);
+            req.onerror = () => reject(req.error);
+          });
+          return note?.text ?? '';
+        } finally {
+          db.close();
+        }
+      }, 'n-fold-level'),
+    )
+    .toBe('### Alpha\n\nbody');
 });

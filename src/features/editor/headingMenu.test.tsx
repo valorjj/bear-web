@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '@/i18n';
 
@@ -101,6 +101,60 @@ describe('the heading menu', () => {
     fireEvent.mouseDown(screen.getByRole('menuitemradio', { name: /Heading 2/ }));
 
     expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  // jsdom lays out nothing, so `getBoundingClientRect` returns an all-zero
+  // rect by default — the menu's own effect would see a 0-height/0-width box
+  // and never think it needs to flip or clamp anything. Stubbing the SAME
+  // API real Chromium fills in after paint is the standard way this project
+  // simulates layout in jsdom (see the `Range.prototype.getBoundingClientRect`
+  // stub in `NoteEditor.test.tsx`'s header for the same technique).
+  describe('positioning against the viewport', () => {
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    const MENU_WIDTH = 192; // matches `min-w-48` (12rem) in HeadingMenu.tsx
+    const MENU_HEIGHT = 240;
+
+    beforeEach(() => {
+      HTMLElement.prototype.getBoundingClientRect = () =>
+        new DOMRect(0, 0, MENU_WIDTH, MENU_HEIGHT);
+    });
+
+    afterEach(() => {
+      HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+    });
+
+    it('flips above the badge when the menu would run past the bottom of the viewport', () => {
+      // A badge near the very bottom: `rect.bottom + 4 + MENU_HEIGHT` is
+      // guaranteed to exceed `window.innerHeight`.
+      const rect = new DOMRect(10, window.innerHeight - 10, 16, 16);
+      renderMenu({ request: { pos: 0, level: 2, folded: false, rect } });
+
+      const top = Number(screen.getByRole('menu').style.top.replace('px', ''));
+
+      // Below the badge would be `rect.bottom + 4`; flipped, it must land
+      // strictly above the badge's own top edge instead.
+      expect(top).toBeLessThan(rect.top);
+      expect(top).toBeCloseTo(rect.top - 4 - MENU_HEIGHT);
+    });
+
+    it('does not flip when there is room below', () => {
+      const rect = new DOMRect(10, 10, 16, 16);
+      renderMenu({ request: { pos: 0, level: 2, folded: false, rect } });
+
+      const top = Number(screen.getByRole('menu').style.top.replace('px', ''));
+
+      expect(top).toBe(rect.bottom + 4);
+    });
+
+    it('clamps the left edge into the viewport when the badge sits near the right edge', () => {
+      const rect = new DOMRect(window.innerWidth - 5, 10, 16, 16);
+      renderMenu({ request: { pos: 0, level: 2, folded: false, rect } });
+
+      const left = Number(screen.getByRole('menu').style.left.replace('px', ''));
+
+      expect(left).toBeLessThanOrEqual(window.innerWidth - MENU_WIDTH);
+      expect(left).toBeGreaterThanOrEqual(0);
+    });
   });
 
   it('names the platform-correct shortcut for each level', () => {

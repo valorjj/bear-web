@@ -288,7 +288,11 @@ export function NoteEditor({
       clearTimeout(timer);
       timer = setTimeout(() => {
         pending = null;
-        void folds.set(note.id, keys);
+        // A rejected write (IndexedDB refusing it, say) must cost only a
+        // fold, never surface as an unhandled promise rejection — the same
+        // "a failed write costs a fold, never content" rule as everywhere
+        // else fold persistence is fire-and-forget in this file.
+        void folds.set(note.id, keys).catch(() => {});
       }, FOLD_PERSIST_DELAY_MS);
     };
 
@@ -306,7 +310,9 @@ export function NoteEditor({
       // routinely, not just on a genuine teardown, and a fold made moments
       // before switching notes must not be silently lost.
       if (pending !== null) {
-        void folds.set(note.id, pending);
+        // Same reasoning as the debounced write above: a rejected flush must
+        // not become an unhandled rejection during teardown.
+        void folds.set(note.id, pending).catch(() => {});
       }
     };
   }, [note.id, foldEditor]);
