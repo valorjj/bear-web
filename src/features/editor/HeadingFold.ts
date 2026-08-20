@@ -4,7 +4,13 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 import { ChevronDown, ChevronRight, renderIconMarkup } from '@/ui/Icon';
 
-import { foldKeyOf, headingSections, hiddenRangesFor, serializeFoldKey } from './headingSections';
+import {
+  foldKeyOf,
+  headingSections,
+  hiddenRangesFor,
+  serializeFoldKey,
+  type HeadingSection,
+} from './headingSections';
 
 export interface HeadingFoldOptions {
   /**
@@ -46,6 +52,18 @@ export function foldedKeys(state: EditorState): string[] {
 
 function setKeys(tr: Transaction, keys: string[]): Transaction {
   return tr.setMeta(headingFoldKey, { keys } satisfies FoldMeta);
+}
+
+/**
+ * The fold set that toggling `section` produces. Shared by the command and
+ * the plugin's `mousedown` handler — a raw plugin cannot reach
+ * `editor.commands`, so this is the one place the calculation lives rather
+ * than being duplicated between the two call sites.
+ */
+function nextKeysToggling(state: EditorState, section: HeadingSection): string[] {
+  const key = serializeFoldKey(foldKeyOf(section));
+  const current = foldedKeys(state);
+  return current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
 }
 
 // Computed ONCE at module init, not per render. `Decoration.widget`'s builder
@@ -186,12 +204,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
         ({ state, dispatch }) => {
           const section = headingSections(state.doc).find((s) => s.pos === pos);
           if (!section) return false;
-
-          const key = serializeFoldKey(foldKeyOf(section));
-          const current = foldedKeys(state);
-          const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
-
-          if (dispatch) dispatch(setKeys(state.tr, next));
+          if (dispatch) dispatch(setKeys(state.tr, nextKeysToggling(state, section)));
           return true;
         },
 
@@ -275,7 +288,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
   },
 
   addProseMirrorPlugins() {
-    const { foldHint } = this.options;
+    const { foldHint, onOpenMenu } = this.options;
     return [
       new Plugin<FoldState>({
         key: headingFoldKey,
@@ -457,6 +470,52 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
           // structural change out of scope here. Reachability is instead
           // provided by `addKeyboardShortcuts` above (`Mod-Alt-f`), which
           // needs no focusable element at all.
+
+          handleDOMEvents: {
+            mousedown(view, event) {
+              const target = event.target as HTMLElement | null;
+              const badge = target?.closest('[data-fold-badge]');
+              const toggle = target?.closest('[data-fold-toggle]');
+              if (!badge && !toggle) return false;
+              if (event.button !== 0) return false;
+
+              // Widgets are rendered as CHILDREN of the heading (`section.pos
+              // + 1`, not `section.pos` — see the widget decoration above), so
+              // the badge/toggle element's own `parentElement` is the heading
+              // DOM node itself, and `posAtDOM(el, 0)` resolves to the position
+              // right before the heading's first child — which is inside the
+              // heading, i.e. `section.pos < pos < section.contentStart`. The
+              // section lookup below matches on exactly that range rather than
+              // on `pos === section.pos`, which a widget click could never
+              // satisfy.
+              const pos = view.posAtDOM((badge ?? toggle)!.parentElement as globalThis.Node, 0);
+              const section = headingSections(view.state.doc).find(
+                (s) => s.pos <= pos && pos < s.contentStart,
+              );
+              if (!section) return false;
+
+              // `preventDefault` before dispatching, not after asking: unlike a
+              // tag pill, this element is chrome the user cannot type into, so
+              // there is no "behave like a plain click" fallback worth
+              // preserving. What must not happen is the caret jumping to the
+              // widget's position.
+              event.preventDefault();
+
+              if (toggle) {
+                view.dispatch(setKeys(view.state.tr, nextKeysToggling(view.state, section)));
+                return true;
+              }
+
+              if (onOpenMenu === null) return false;
+              onOpenMenu({
+                pos: section.pos,
+                level: section.level,
+                folded: foldedKeys(view.state).includes(serializeFoldKey(foldKeyOf(section))),
+                rect: (badge as HTMLElement).getBoundingClientRect(),
+              });
+              return true;
+            },
+          },
         },
       }),
     ];
