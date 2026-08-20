@@ -1,6 +1,6 @@
 import { isMacOS, type Editor } from '@tiptap/core';
 import type { DecorationSet } from '@tiptap/pm/view';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRef, type RefObject } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,36 @@ import { renderWithI18n } from '@/i18n/testing';
 import { headingSections } from './headingSections';
 import { RichEditor, type RichEditorHandle, type RichEditorProps } from './RichEditor';
 import { tagRangeAt } from './TagPill';
+
+// jsdom has no layout engine, so ProseMirror's caret/scroll math
+// (`coordsAtPos`, used by `scrollToSelection`) throws on APIs jsdom never
+// implements. The heading-menu tests below drive `.focus()` and
+// `.setTextSelection()` through a real, mounted `RichEditor` (not a fake
+// view), which is exactly the path that reaches this — see the identical
+// stubs and comment in `NoteEditor.test.tsx`'s header and
+// `toolbars.test.tsx`'s `scrollToSelection` spy for the same documented gap.
+// Without these, an uncaught exception here can make `vitest run` exit 1
+// even when every assertion in the file passes — see CLAUDE.md's
+// "jsdom drives the editor's surface too" entry.
+const emptyRect: DOMRect = {
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  toJSON: () => ({}),
+};
+Range.prototype.getBoundingClientRect = () => emptyRect;
+Range.prototype.getClientRects = () =>
+  ({
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: function* () {},
+  }) as unknown as DOMRectList;
+document.elementFromPoint = () => null;
 
 describe('RichEditor', () => {
   it('renders the initial markdown as rich content', async () => {
@@ -104,6 +134,70 @@ describe('RichEditor', () => {
     // touched at all — it must still be a plain paragraph, not a heading.
     const bodyA = screen.getByText('body a');
     expect(bodyA.tagName).toBe('P');
+  });
+
+  /**
+   * Opens the menu on heading A's badge and returns the editor + the menu
+   * element, so each focus-return test starts from the same known state:
+   * menu open, its first item focused (by `HeadingMenu`'s own mount effect).
+   */
+  async function openMenuOnFirstHeading(): Promise<{ editor: Editor; menu: HTMLElement }> {
+    const handleRef = createRef<RichEditorHandle>();
+    renderWithI18n(
+      <RichEditor
+        initialMarkdown="# Heading A"
+        onChange={vi.fn()}
+        onBlur={vi.fn()}
+        ariaLabel="Note text"
+        handleRef={handleRef}
+        createdAt={0}
+        updatedAt={0}
+      />,
+    );
+
+    await screen.findByRole('heading', { name: 'Heading A' });
+    const editor = handleRef.current!.editor!;
+    const badge = editor.view.dom.querySelector('[data-fold-badge]')!;
+    fireEvent.mouseDown(badge, { button: 0 });
+
+    const menu = await screen.findByRole('menu');
+    return { editor, menu };
+  }
+
+  // Task 4 measured that Chromium refuses `.focus()` to any descendant of a
+  // heading containing a widget, so the badge/toggle that opened the menu is
+  // never a valid destination — the editor itself is the only place focus
+  // can sensibly land, and `RichEditor`'s `onClose` calls
+  // `editor.commands.focus()` for exactly that reason. Without it, focus is
+  // left on the menu button React is about to unmount and falls to `<body>`.
+  // `editor.commands.focus()` defers the ACTUAL `view.focus()` call to the
+  // next animation frame (`@tiptap/core`'s `focus` command wraps it in
+  // `requestAnimationFrame`, deliberately — the same delayed-focus pattern
+  // every other chained `.focus()` call in this app already relies on), so
+  // `document.activeElement` does not update synchronously after `onClose`
+  // returns. `waitFor` polls past that frame instead of asserting on a stale
+  // snapshot the instant the microtask queue drains.
+  it('returns focus to the editor when Escape closes the menu', async () => {
+    const { editor } = await openMenuOnFirstHeading();
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    await waitFor(() => expect(editor.view.dom.contains(document.activeElement)).toBe(true));
+  });
+
+  // `onSetLevel` already focuses as part of its own chain (needed to target
+  // `menu.pos` — see the test above), but `onToggleFold`/`onFoldAll`/
+  // `onUnfoldAll` do not call `.focus()` themselves at all; they rely
+  // entirely on `RichEditor`'s `onClose` to return focus. "Fold all" is
+  // exercised here as the representative of that group.
+  it('returns focus to the editor when an action item (Fold all) closes the menu', async () => {
+    const { editor, menu } = await openMenuOnFirstHeading();
+
+    await userEvent.click(within(menu).getByRole('menuitem', { name: /Fold all/ }));
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    await waitFor(() => expect(editor.view.dom.contains(document.activeElement)).toBe(true));
   });
 
   it('exposes the current markdown through its handle', async () => {

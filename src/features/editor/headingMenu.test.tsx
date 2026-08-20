@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -59,12 +59,48 @@ describe('the heading menu', () => {
     expect(props.onUnfoldAll).toHaveBeenCalled();
   });
 
+  // Exercises the DOCUMENT-level `keydown` listener `HeadingMenu` installs in
+  // its own `useEffect`, not a React `onKeyDown` scoped to the menu subtree —
+  // that scoped handler was removed in favour of this listener specifically
+  // because it must keep working once focus has already left the menu (see
+  // `HeadingMenu.tsx`). `userEvent.keyboard` dispatches on
+  // `document.activeElement`, which for this test IS still inside the menu
+  // (the mount effect focuses the first item), so this alone would pass
+  // whether Escape were wired at the document level or scoped to the
+  // subtree — the coverage that actually distinguishes the two is
+  // "closes on an outside mousedown" below, which a subtree-scoped handler
+  // could never see at all.
   it('closes on Escape', async () => {
     const props = renderMenu();
 
     await userEvent.keyboard('{Escape}');
 
     expect(props.onClose).toHaveBeenCalled();
+  });
+
+  // The menu has no other way to dismiss itself: no `onBlur`, no click
+  // handler on a backdrop. This is the document-level `mousedown` (capture
+  // phase) listener from `HeadingMenu.tsx`'s `useEffect` — `document.body` is
+  // an ANCESTOR of the rendered menu (Testing Library mounts into it), never
+  // a descendant, so `ref.current.contains(event.target)` is false and the
+  // click counts as "outside".
+  it('closes when a mousedown lands outside the menu', () => {
+    const props = renderMenu();
+
+    fireEvent.mouseDown(document.body);
+
+    expect(props.onClose).toHaveBeenCalled();
+  });
+
+  // The inverse of the above: a mousedown ON one of the menu's own items must
+  // NOT be treated as "outside" by the same listener — only the item's own
+  // `onClick` should decide whether the menu closes.
+  it('does not close on a mousedown inside the menu', () => {
+    const props = renderMenu();
+
+    fireEvent.mouseDown(screen.getByRole('menuitemradio', { name: /Heading 2/ }));
+
+    expect(props.onClose).not.toHaveBeenCalled();
   });
 
   it('names the platform-correct shortcut for each level', () => {
