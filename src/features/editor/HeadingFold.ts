@@ -471,6 +471,50 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
           // provided by `addKeyboardShortcuts` above (`Mod-Alt-f`), which
           // needs no focusable element at all.
 
+          // A folded section's blocks are hidden with `display: none` but
+          // still occupy document positions, so a caret sitting at the fold
+          // boundary can Backspace/Delete content the user cannot see, with
+          // no visual feedback that anything happened. This intercepts
+          // exactly that: a single keypress unfolds instead of deleting.
+          //
+          // Deliberately asymmetric with a real selection: select-all then
+          // Delete still deletes folded content, because that is the user
+          // pointing at a range whose bounds they CAN see (the selection
+          // highlight), and it is undoable. Only a collapsed caret is guarded
+          // here — `!selection.empty` returns false unconditionally, letting
+          // any non-empty selection fall through to normal deletion.
+          handleKeyDown(view, event) {
+            if (event.key !== 'Delete' && event.key !== 'Backspace') return false;
+
+            const { selection } = view.state;
+            if (!selection.empty) return false;
+
+            const keys = new Set(foldedKeys(view.state));
+            if (keys.size === 0) return false;
+
+            const at = selection.from;
+            const section = headingSections(view.state.doc).find((s) => {
+              if (!keys.has(serializeFoldKey(foldKeyOf(s)))) return false;
+              if (s.end <= s.contentStart) return false;
+              // Delete forward from the caret at the end of the heading's own
+              // line, or Backspace from the start of the first hidden block.
+              return event.key === 'Delete' ? at === s.contentStart - 1 : at === s.contentStart + 1;
+            });
+            if (!section) return false;
+
+            // Unfold instead of deleting. A single keypress must never destroy
+            // content the user cannot see. Select-all-then-delete DOES still
+            // delete folded content — that is the user asking for the whole
+            // document, and it is undoable.
+            view.dispatch(
+              setKeys(
+                view.state.tr,
+                foldedKeys(view.state).filter((k) => k !== serializeFoldKey(foldKeyOf(section))),
+              ),
+            );
+            return true;
+          },
+
           handleDOMEvents: {
             mousedown(view, event) {
               const target = event.target as HTMLElement | null;

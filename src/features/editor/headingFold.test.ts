@@ -553,3 +553,68 @@ describe('the mousedown handler on the badge and toggle', () => {
     editor.destroy();
   });
 });
+
+describe('editing at a fold boundary', () => {
+  it('Delete at the end of a folded heading unfolds instead of deleting hidden content', () => {
+    const editor = docFor('<h2>A</h2><p>hidden</p>');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+    editor.commands.setTextSelection(a!.contentStart - 1);
+
+    const before = editor.getHTML();
+    const handled = editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'Delete' })),
+    );
+
+    expect(handled).toBe(true);
+    expect(foldedKeys(editor.state)).toEqual([]);
+    expect(editor.getHTML()).toBe(before);
+    editor.destroy();
+  });
+
+  // `handled` itself cannot be the assertion here: with nothing folded, the
+  // guard's own `handleKeyDown` returns `false` and the keystroke falls
+  // through to ProseMirror's own default keymap, whose "Delete" binding joins
+  // the following paragraph into the heading — a real, correct edit that
+  // returns `true` on its own, unrelated to this plugin. So this asserts the
+  // thing the guard is actually responsible for: that the edit was NOT
+  // blocked, by checking the document actually changed (the merge happened)
+  // rather than staying byte-identical the way the folded case above does.
+  it('leaves Delete alone when the section is not folded', () => {
+    const editor = docFor('<h2>A</h2><p>visible</p>');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.setTextSelection(a!.contentStart - 1);
+
+    const before = editor.getHTML();
+    editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'Delete' })),
+    );
+
+    expect(editor.getHTML()).not.toBe(before);
+    editor.destroy();
+  });
+});
+
+describe('the fold-boundary guard only intercepts a collapsed caret', () => {
+  it('leaves a non-empty selection spanning the boundary alone, even when folded', () => {
+    const editor = docFor('<h2>A</h2><p>hidden</p>');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+    // A real selection spanning the fold boundary — from just before it to
+    // just after — rather than the collapsed caret the guard is meant to
+    // intercept.
+    editor.commands.setTextSelection({ from: a!.contentStart - 1, to: a!.contentStart + 1 });
+
+    const handled = editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'Delete' })),
+    );
+
+    // The guard must not fire for this selection: it stays folded (the guard
+    // didn't unfold it), because a real selection whose bounds the user can
+    // see is left to normal deletion, not intercepted the way a collapsed
+    // caret is.
+    expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
+    void handled;
+    editor.destroy();
+  });
+});
