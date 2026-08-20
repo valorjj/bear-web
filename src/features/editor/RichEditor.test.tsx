@@ -27,6 +27,32 @@ describe('RichEditor', () => {
     expect(await screen.findByRole('heading', { name: 'Hello' })).toBeInTheDocument();
   });
 
+  // `extensions.ts` registers `HeadingFold` bare (`HeadingFold` with no
+  // options) until `RichEditor` threads a translated `foldHint` through
+  // `buildEditorExtensions` — see Task 5's decision 1. Nothing else in the
+  // suite would notice a regression here: `headingFold.test.ts` only proves
+  // the plugin CAN carry an `aria-label` when handed one directly via
+  // `HeadingFold.configure({ foldHint: '...' })`, never that the real
+  // component actually supplies one.
+  it('gives the fold toggle a translated accessible name', async () => {
+    const handleRef = createRef<RichEditorHandle>();
+    renderWithI18n(
+      <RichEditor
+        initialMarkdown="# Hello"
+        onChange={vi.fn()}
+        onBlur={vi.fn()}
+        ariaLabel="Note text"
+        handleRef={handleRef}
+        createdAt={0}
+        updatedAt={0}
+      />,
+    );
+
+    await screen.findByRole('heading', { name: 'Hello' });
+    const toggle = handleRef.current?.editor?.view.dom.querySelector('[data-fold-toggle]');
+    expect(toggle).toHaveAttribute('aria-label', 'Fold or unfold this section');
+  });
+
   it('exposes the current markdown through its handle', async () => {
     const handleRef = createRef<RichEditorHandle>();
     renderWithI18n(
