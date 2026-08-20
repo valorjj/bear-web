@@ -1,9 +1,18 @@
 # bear-web
 
-A local-first, web-based notes app modeled on the Bear macOS app. Three panes
-(tag sidebar / note list / editor), Markdown notes, organized by inline hashtags
-rather than folders. No backend, no account — everything lives in the browser's
-IndexedDB.
+A local-first, web-based Markdown notes app: **lightweight, fast, beautiful,
+easy to use, with image storage.** Three panes (tag sidebar / note list /
+editor), notes organized by inline hashtags rather than folders. No backend, no
+account — everything lives in the browser's IndexedDB.
+
+**Bear is a reference, not a target.** The app was built as a Bear clone and M8
+treated Bear's measured geometry as the definition of correct. That ended at
+M9a. `npm run measure` and the "Measured against the real Bear" section of
+`docs/design/DESIGN-bear-web.md` remain the only tooling that can see "renders
+wrong", so keep using them for self-comparison and regression — but **a
+measurement that diverges from Bear is no longer a defect on its own**, and
+"Bear does it this way" is not by itself an argument. Image storage is a wanted
+feature and is not yet scheduled.
 
 **Live:** https://valorjj.github.io/bear-web/
 **Spec:** `docs/superpowers/specs/2026-08-06-bear-web-design.md`
@@ -11,23 +20,49 @@ IndexedDB.
 
 ## Status
 
-| Milestone                        | State          |
-| -------------------------------- | -------------- |
-| M0 scaffold, CI, Pages deploy    | complete       |
-| M1 data layer (Dexie)            | complete       |
-| M2 application shell             | complete       |
-| M3 notes CRUD, textarea editor   | complete       |
-| M4 editor                        | complete       |
-| M5 tags                          | complete       |
-| M5.5 design language             | complete       |
-| M6 smart lists, trash management | complete       |
-| M7 search                        | complete       |
-| M7.5 visual design pass          | complete       |
-| M7.6 tag pills                   | complete       |
-| M7.7 tag pill activation         | complete       |
-| M8–M9                            | themes, polish |
+| Milestone                                | State    |
+| ---------------------------------------- | -------- |
+| M0 scaffold, CI, Pages deploy            | complete |
+| M1 data layer (Dexie)                    | complete |
+| M2 application shell                     | complete |
+| M3 notes CRUD, textarea editor           | complete |
+| M4 editor                                | complete |
+| M5 tags                                  | complete |
+| M5.5 design language                     | complete |
+| M6 smart lists, trash management         | complete |
+| M7 search                                | complete |
+| M7.5 visual design pass                  | complete |
+| M7.6 tag pills                           | complete |
+| M7.7 tag pill activation                 | complete |
+| M8 visual pass (chrome, density, prose)  | complete |
+| M8b export: Markdown, HTML, PDF          | complete |
+| M8c tables as real nodes                 | complete |
+| M9a visual system: themes, scale, picker | complete |
+| M9b callout blocks                       | next     |
+| M9c collapsible headings                 | next     |
 
-1034 unit tests, 40 end-to-end tests. `main` is always green and auto-deploys.
+1143 unit tests, 58 end-to-end tests. `main` is always green and auto-deploys.
+
+**Two further Playwright entry points exist and are deliberately not in that
+count, because they assert nothing.** Both drive the fixed corpus in
+`e2e/fixtures/corpus.ts`, and `grepInvert` on `@shots|@measure` in
+`playwright.config.ts` keeps both out of `npm run test:e2e`:
+
+- `npm run shots` → `e2e/shots.spec.ts` writes design reference screenshots to
+  `docs/design/shots/` (gitignored) — three panes, search, trash, the empty
+  state and the exported document, **in every theme in the roster** (50 files).
+  Themes are selected through the paint-time mirror, the way a user selects
+  one. Until M9a it drove `colorScheme` instead, i.e. the media query, and the
+  shot labelled `paper` silently started rendering Indigo Light the moment the
+  default theme changed.
+- `npm run measure` → `e2e/measure.spec.ts` writes the app's real geometry and
+  typography for 23 surfaces to `docs/design/measurements.md` and `.json`.
+
+They exist because **nothing in the test suite can see "renders wrong"**: the unit
+suite has no layout engine and `e2e/appearance.spec.ts` is deliberately relative.
+A visual change is therefore checked against a measured number and a screenshot,
+not by eye. `docs/design/measurements.md` is one half of the comparison against
+Bear recorded in `docs/design/DESIGN-bear-web.md`.
 
 ## Commands
 
@@ -41,7 +76,8 @@ npm run format       # Prettier
 npm run build
 ```
 
-All six must pass before any commit.
+All six must pass before any commit. `npm run shots` and `npm run measure` are
+not part of the gate — see above.
 
 ## Toolchain surprises
 
@@ -90,10 +126,47 @@ These bit us once already. They are not mistakes.
   worktree behind silently runs several extra copies of the whole unit suite
   on every `npm test`, inflating pass counts with no test-writing mistake to
   find.
-- **`playwright.config.ts` hardcodes port 4173 with `reuseExistingServer`.**
-  Two parallel `npm run test:e2e` runs — e.g. two subagents, or a human and an
-  agent — share that port, so the second run measures the first run's tree
-  instead of its own.
+- **Dexie's `version(1)` is IndexedDB version 10, not 1.** Dexie multiplies its
+  declared version by ten. Seeding the database directly from a Playwright init
+  script at IndexedDB version 1 therefore leaves Dexie wanting to upgrade 1 →
+  10, and the seeding connection — still open — blocks that upgrade forever.
+  `openDatabase()` never settles, so `main.tsx` never reaches `createRoot` and
+  the page renders as a bare `<div id="root">` with **no error at all**: the
+  only trace is a `console.warn` reading `Upgrade 'bear-web' blocked by other
+connection holding version 0.1`. `e2e/fixtures/seed.ts` opens at 10 and closes
+  its connection in `onsuccess` for exactly this reason.
+- **A seeded note must be in place BEFORE Dexie opens the database.**
+  `useLiveQuery` observes writes made through Dexie's own connection; raw
+  IndexedDB writes from a second connection in the same page are invisible to
+  it, so a note inserted after boot sits in the database and never appears in
+  the list. This is why `seedDatabase` uses `page.addInitScript` rather than
+  `page.evaluate` after `goto`.
+- **`playwright.config.ts` hardcodes port 4173 with `reuseExistingServer`, and
+  the failure is silent in BOTH directions.** Two parallel `npm run test:e2e`
+  runs — two subagents, or a human and an agent — share that port, so the second
+  measures the first's tree. Worse and more common: **any preview server left on
+  4173 is reused, so the suite silently tests a stale build.** M9a hit this
+  twice. A fault injection meant to prove a test could fail PASSED, because the
+  build never re-ran; and a genuine failure looked like a regression when it was
+  a typecheck error that had stopped `npm run build` (the webServer command is
+  `npm run build && npm run preview`, so a type error anywhere — including in
+  `e2e/`, which `tsc -b` also compiles — reports only `Exit code: 2`).
+  **Before trusting any e2e result that follows a source change, and always
+  before a fault injection:** `lsof -ti:4173 | xargs -r kill -9`.
+
+- **Class-attribute order does not decide the CSS cascade; stylesheet order
+  does.** `Pane` had `shadow-popover` in its base classes, and appending
+  `shadow-none` via `className` did nothing at all — both are utilities in the
+  same layer, so the one Tailwind happens to emit later wins regardless of
+  which the element lists last. There is no warning. Express "not this
+  utility" as a prop that omits the class (`Pane`'s `elevated`), never as an
+  overriding utility.
+
+- **`document.documentElement` is null at `document_start`.** A Playwright
+  `addInitScript` that touches it throws before recording anything, and an
+  empty result array looks exactly like "the thing never happened". This cost a
+  wrong diagnosis of the no-flash test. Observe `document` for `<body>`
+  appearing instead.
 
 ## Architecture boundaries
 
@@ -138,18 +211,29 @@ These bit us once already. They are not mistakes.
 
 ## Rules that must not be silently reversed
 
-Grouped by area. Every bullet below is a live constraint: an audit on
-2026-08-14 checked all 115 against the code and found none dead, false or
-duplicated. Roughly a third are enforced by no test at all — contrast
-ratios, "these tokens must stay independent", ordering guarantees — which
-is exactly why they are written down.
+Grouped by area, 131 bullets across 11 areas. Every one is a live constraint.
+
+**The provenance differs, and the difference matters.** 115 of them were checked
+against the code by a full audit on 2026-08-14, which found none dead, false or
+duplicated. The rest were added by M8 and were written FROM the code as it
+changed, each one alongside the test or fault injection that established it —
+sound, but not independently re-audited. **The whole set has not been audited
+since 2026-08-14.** A future audit should start with the M8 additions: the
+Tables and Export areas, the floating-toolbar bullet, the typography-token
+bullet, and the two Dexie seeding surprises under Toolchain.
+
+Roughly a third are enforced by no test at all — contrast ratios, "these tokens
+must stay independent", ordering guarantees — which is exactly why they are
+written down.
 
 - [Tag grammar](#tag-grammar)
 - [The tag index, persistence, and startup](#the-tag-index-persistence-and-startup)
 - [Notes: editing lifecycle, autosave, reconciliation](#notes-editing-lifecycle-autosave-reconciliation)
 - [Scopes, smart lists, and search](#scopes-smart-lists-and-search)
 - [Markdown round-trip and the editor schema](#markdown-round-trip-and-the-editor-schema)
+- [Tables](#tables)
 - [Tag pills and activation](#tag-pills-and-activation)
+- [Export](#export)
 - [Design tokens, theme, and layout](#design-tokens-theme-and-layout)
 - [Accessibility](#accessibility)
 - [Testing and tooling conventions](#testing-and-tooling-conventions)
@@ -576,12 +660,18 @@ is exactly why they are written down.
   whose tokenizer is ours need **structural** assertions on the parsed
   document, not just round-trip assertions.
 
-- **`RawBlock` is why deferring tables and images is safe.** A note containing a
-  table already exists in real databases, written in M3's textarea or restored
-  from a JSON import. Without the verbatim fallback, opening one and typing
-  destroys it with no error and no recovery. Do not remove it when M4b adds real
-  table and image nodes — it still covers every other construct `marked` can
-  tokenize.
+- **`RawBlock` is why deferring a construct is safe, and the MECHANISM must
+  stay even as individual fallbacks retire.** A note containing a table already
+  existed in real databases, written in M3's textarea or restored from a JSON
+  import; without the verbatim fallback, opening one and typing destroyed it
+  with no error and no recovery. M8c retired `RawTable` specifically, because a
+  real table node now claims that token and two nodes claiming one token is a
+  defect — but `RawDefinition`, `RawHtmlBlock`, `RawImage` and the inline-HTML
+  node all remain, and so does the factory. **Retiring a fallback is only safe
+  when the replacement round-trips at least as well as the fallback did**, which
+  for tables it did not at first: the vendor serializer dropped a cell whose
+  neighbour contained a pipe, a regression against verbatim preservation. See
+  the Tables section.
 
 - **Underline is switched off at the schema, in
   `StarterKit.configure({ underline: false })`, and must stay off.** It has no
@@ -673,6 +763,57 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   above); `TaskItemPromotion` uses that half. The `!tr.steps.length` half is a
   separate guard for a handler that returns non-null but happens not to have
   queued any steps — not the mechanism this rule relies on.
+
+### Tables
+
+- **Tables are real nodes, and `RawTable` is gone.** M8c replaced the fallback
+  with `@tiptap/extension-table`, whose official node already ships a Markdown
+  tokenizer, parser and serializer — which is the only reason this was worth
+  doing rather than leaving tables as preserved text. Hand-writing a GFM
+  serializer would have been a second Markdown implementation, this project's
+  signature defect. `rawTable` must NOT be re-registered: it would claim the
+  `table` token an extension above already handles.
+
+- **`MarkdownTable` wraps the official node to fix two serializer defects, and
+  BOTH are invisible to an idempotence-only assertion.** This is the clearest
+  live instance of the round-trip suite's documented blind spot.
+  - **Pipes in cell text were not escaped.** `| x \| y | z |` parses to two
+    cells and serialized back to `| x | y | z |` — three cells in a two-column
+    table — and normalizing THAT dropped `z`. Real data loss, and a regression
+    against the old fallback, which preserved such a table byte-for-byte.
+    **Timing is the whole trick and the obvious fix is wrong:** escaping the
+    document's text nodes before rendering fails, because the text renderer runs
+    afterwards and escapes the backslash, producing `x \\| y` — the same lost
+    cell by a longer route. The escape wraps `renderChildren` so it applies to
+    already-rendered cell Markdown.
+  - **A table gained a blank line above and below itself.**
+    `renderTableToMarkdown` wraps its output in newlines and `MarkdownManager`
+    already joins blocks with one, so `# Shopping\n\n| item` became
+    `# Shopping\n\n\n| item`. Stable, so every idempotence check passed.
+    Trimming only the table's own edges is deliberately narrower than a general
+    "collapse blank runs" pass in `serializeMarkdown`, which would corrupt a
+    fenced code block containing blank lines.
+
+- **A table is NORMALIZED, not preserved.** Cells are padded to the column's
+  widest content and the separator row is rewritten, so a table typed unpadded
+  changes shape on the user's first edit. This does not violate "opening a note
+  produces no write" — that holds because `NoteEditor` seeds autosave from the
+  mounted editor's own reading — but it does mean the stored text changes once,
+  on the first real edit. Accepted: editable tables are worth it.
+
+- **The alignment row is WIDER than the columns it describes, and the fidelity
+  string pins that.** The serializer writes `max(3, width)` dashes and then adds
+  the alignment colon outside that count, so `| left | right |` gets
+  `| :---- | -----: |`. Do not "tidy" the pinned string; fidelity's job is to
+  state exactly what the serializer produces, and a prettier value would be
+  false.
+
+- **Tables need STRUCTURAL assertions, in `table.test.ts`.** A real table and a
+  preserved block of source produce identical Markdown, so no round-trip test
+  can tell them apart — the same blind spot that let a dead `==highlight==`
+  tokenizer and a live-but-banned underline mark ship in M4. That file asserts
+  the schema registers the four nodes, that `rawTable` is absent, and that
+  parsing yields header/body rows with paragraph-wrapped inline content.
 
 ### Tag pills and activation
 
@@ -969,10 +1110,69 @@ ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
 
 ### Design tokens, theme, and layout
 
-- **M8 owns theme switching.** M2 only set the system default via a
-  `prefers-color-scheme` media query. An explicit `data-theme` on the root overrides
-  it — that is the seam the picker will use. Do not simplify the
-  `:root:not([data-theme='light'])` selector.
+- **Tokens sit in THREE TIERS, and the split is what the theme system rests
+  on.** Tier 1, palette (16 tokens): `bg` `surface` `sidebar` `canvas` `text`
+  `muted` `faint` `border` `accent` `danger` `focus` `hover` `selected`
+  `shadow` `tag-fill` `tag-fill-strong`. Tier 2, surface treatment (6):
+  `radius-sm/md/lg` `shadow-popover` `shadow-dialog` `border-width`. Every
+  theme must define all 22. Tier 3 — spacing, type, motion, the editor measure
+  — is global and **not themeable**: density is a property of the app, and a
+  theme able to move it would multiply every screenshot and measurement by the
+  theme count. Tier 2 is what lets a theme be flat rather than only differently
+  coloured, and what lets High Contrast be an ordinary theme instead of a mode
+  every component branches on.
+
+- **`--bear-bg` and `--bear-surface` MUST differ**, in every theme. The app
+  uses each as the other's contrast: `Button`'s `default` variant and
+  `SearchField` are `bg-bg` sitting on the note list's `bg-surface` pane, while
+  both editor toolbar pills are `bg-surface` floating over the editor's
+  `bg-bg`. The indigo mockup had both at pure white and every one of those
+  controls was invisible at rest — the same defect class as `Button`'s
+  borderless, fill-less `default` variant in M5.5. Caught by
+  `e2e/appearance.spec.ts`, not by eye.
+
+- **The system-dark guard is `:root:not([data-theme])`, NOT
+  `:not([data-theme='light'])`.** With named themes, _any_ explicit choice must
+  beat the system preference; the old form let every named light theme silently
+  lose to a dark OS, a defect invisible to anyone testing on a light machine.
+  Asserted by `scripts/sourceLint.test.ts`.
+
+- **Theme blocks are keyed `[data-theme='…']`, never `:root[data-theme='…']`.**
+  `:root` matches only the document element, so a theme could not be scoped to
+  a subtree — and the picker's swatches are exactly that: each carries its own
+  `data-theme` and previews its palette by being rendered inside it, which is
+  what keeps every colour out of TypeScript. Restoring `:root` leaves six
+  identical swatches and an app that otherwise works perfectly; only
+  `e2e/appearance.spec.ts` can see it.
+
+- **`:root` carries the default theme's 22 tokens as well as the tier-3
+  globals, duplicating the default's named block.** Do not merge the two into a
+  grouped selector: `blockTokens` in the source lint finds a block by `indexOf`
+  plus the next brace and cannot read one. The duplication is guarded by an
+  assertion that `:root` and the default block agree, and a second that the
+  `prefers-color-scheme` block matches `SYSTEM_DARK_ID`'s.
+
+- **The theme is persisted in the settings table and MIRRORED to
+  `localStorage`, read by an inline script in `index.html` before first
+  paint.** IndexedDB is async and cannot paint the first frame; without the
+  mirror every launch flashes the default. **The mirror is a cache, not a
+  second source of truth** — on boot the stored value wins and the mirror is
+  rewritten from it. The roster is duplicated into that inline script because a
+  module import would be async and defeat the point; `sourceLint` compares the
+  two so it cannot drift. `system` means the ABSENCE of the attribute, never
+  `data-theme="system"`, which would match no block.
+
+- **Every border consumes `--bear-border-width`.** Tailwind's `border`
+  utilities hardcode 1px, so without the override in `index.css` the one theme
+  whose separation depends entirely on borders would be the theme where they
+  stayed hairlines.
+
+- **High Contrast's shadows are hard RINGS, not `none`.** Elevation separates
+  nothing on a black ground: with `none`, the sidebar and editor panes merged
+  into the canvas entirely. Expressing the separation through the shadow token
+  keeps the standing ruling that a pane carries no border, and means every
+  future floating surface is separated there for free rather than having to
+  remember the theme exists.
 
 - Pane widths are **durable** (settings table), not Zustand state. Zustand is
   reserved for genuinely ephemeral state and has not been added yet.
@@ -996,6 +1196,53 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   `prefers-color-scheme` block is correct for a user who picked dark and wrong
   for a user whose OS is dark — invisible to every other test.
 
+- **There IS a spacing scale now, and it is enforced.** Permitted steps are
+  2 4 8 12 16 24 32 48 px (Tailwind `0.5 1 2 3 4 6 8 12`), checked by
+  `scripts/sourceLint.test.ts`. This REPLACES the M5.5–M8 ruling that no scale
+  was needed because Tailwind's grid is already 4px: the reasoning about tokens
+  was sound and the conclusion did not follow, because **a grid on which every
+  step is permitted is not a scale** — ten distinct steps had shipped, and that
+  drift is what read as misalignment. Still no competing token system; ordinary
+  Tailwind utilities, with a permitted subset. An arbitrary value is an escape
+  hatch that must be allowlisted with a stated reason, exactly like the
+  focus-outline suppressors.
+
+- **The editor heading scale is ONE token.** `--bear-heading-ratio` is 1.2 and
+  `h1`/`h2`/`h3` are it cubed, squared and itself, so they cannot drift out of
+  proportion. **Chosen, not measured** — the Bear figures it replaces were
+  never captured trustworthily, and Bear is no longer the authority. The test
+  asserts that raising the ratio moves `h1` by MORE than `h3`; an ordering
+  check alone would pass on three sizes that merely all changed.
+
+- **UI hierarchy comes from weight and tracking, not size alone.** Five steps
+  spanning 11–16px is too little size difference to carry hierarchy, which is
+  why the chrome read flat. `--bear-weight-ui-strong` and
+  `--bear-tracking-tight` are part of the `ui-md` and `ui-lg` steps, not
+  applied at call sites.
+
+- **A note's first line renders as its title with NO `#` typed, and the
+  separator under it is space rather than a rule** — Bear's behaviour, done in
+  CSS alone. The document is untouched: no schema, no serializer, no
+  round-trip path is involved, and a note opened elsewhere is still the plain
+  text the user wrote. `deriveTitle` already treats the first line as the
+  title, so this only makes visible a relationship the data layer always had.
+  Restricted to `p` and headings — a note opening with a table, code block or
+  list has no title line, and styling one as a heading would assert something
+  false about the content. The gap sits on the SECOND block's `margin-top`, not
+  the first block's `margin-bottom`: adjacent margins collapse in a block
+  container, so a bottom margin would silently lose to whichever is larger.
+  **No round-trip test can see any of this** — it is presentation only — so
+  `e2e/appearance.spec.ts` drives plain paragraphs (never `# `, which would
+  pass on the heading rule and prove nothing) and asserts the title is larger
+  and heavier than the body AND that its gap exceeds the ordinary block rhythm.
+
+- **In Soft Depth the sidebar dissolves into the ground.** Its `--bear-sidebar`
+  equals `--bear-canvas` in both indigo themes, and it is `Pane`'s one
+  `elevated={false}` caller. Only the panes holding content float. The card
+  test in `e2e/appearance.spec.ts` was narrowed from "every pane" to "every
+  content pane" for this, and still asserts the sidebar in the negative by
+  name, so it becoming a card again fails just as loudly.
+
 - **Motion lives in two duration tokens, never per-component**, so one
   `prefers-reduced-motion` block covers animations added later.
 
@@ -1011,9 +1258,26 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   aesthetics.** Paper `#88857d` measures 3.21:1 on `--bear-sidebar`; the
   original `#9c988f` measured 2.51:1 and failed. Ink is `#7b766e` at 3.40:1.
   `faint` carries counts and timestamps, so 3.0 is already the relaxed bar.
-  **No test can catch this** — contrast over alpha-composited overlays needs a
-  real cascade and jsdom has none, so the ratios are measured by hand and
-  recorded in `docs/design/DESIGN-bear-web.md`.
+  **"No test can catch this" was true until M9a and is now false.**
+  `e2e/contrast.spec.ts` runs in Chromium, which has the real cascade jsdom
+  lacks, and gates every theme in the roster on every `npm run test:e2e`. Five
+  themes made hand-measurement untenable. Indigo Light's `faint` is the first
+  value in this project chosen by a test rather than by eye: the mockup's
+  `#9d99b0` measured 2.76:1 on white and 2.31:1 on the sidebar.
+
+- **The contrast harness's grounds are AUDITED, not assumed, and its
+  calibration is the point.** `scripts/contrast.test.ts` pins the ratios M7.5
+  measured by hand, including the rejected 2.51 — injecting that value back
+  makes the harness report 2.51, the same figure to two decimals. Without that,
+  its verdicts on themes nobody has measured would be worth nothing. Two pairs
+  it does NOT check, because the app never renders them: **text on `canvas`**
+  (`bg-canvas` occurs once, on `<main>`, and every pane paints over it) and
+  **`accent` as text on `sidebar`** (a selected row is `text-text` on
+  `bg-selected`; the accent there is only the 2px edge marker). `border` is
+  held to 1.05, not 3.0 — WCAG's non-text bar covers what is required to
+  identify a control, a row divider is not that, and both shipped palettes sit
+  at 1.2–1.4 by design. The floor catches an invisible divider and declines to
+  adjudicate subtlety.
 
 - **Exactly two files may suppress the focus outline**, allowlisted in
   `scripts/sourceLint.test.ts`, each mapped to a marker string proving it
@@ -1070,6 +1334,37 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   reads as a warning notice. The accent is for links, checkboxes, highlight,
   selection and focus.
 
+- **Both editor toolbars float; they are not bars in the flow, and their
+  placement lives in `RichEditor`, not in either toolbar.** From M4 to M7.5 they
+  were full-width strips welded to the pane's top and bottom edges, which
+  measurement against Bear identified as the single largest reason the editor
+  read as a web page rather than an app (see the measured comparison in
+  `docs/design/DESIGN-bear-web.md`). `TopControls`, `InfoPanel` and
+  `BottomToolbar` are now bare groups of controls with no layout of their own,
+  and `RichEditor` positions all three, so the pill offsets are stated once
+  together and cannot drift apart. Three consequences that are load-bearing
+  rather than stylistic:
+  - **The writing surface's `pt-12`/`pb-24` is a reserve, not spacing.** The
+    pills overlay the prose, so without the bottom reserve the last line of
+    every note sits permanently behind the formatting bar with no way to scroll
+    it clear — and the note still round-trips perfectly, so nothing but a
+    computed-style test can see it. `e2e/appearance.spec.ts` asserts the reserve
+    covers each pill's actual reach into the pane, so it stays correct when a
+    toolbar's height or inset changes.
+  - **The positioning wrappers are `pointer-events-none` with
+    `pointer-events-auto` on the pill.** Each wrapper spans the pane's full
+    width; without this the top wrapper would swallow every click on the first
+    line of prose beneath it.
+  - **`EditorContent` comes FIRST in the DOM**, so tab order and screen-reader
+    order reach the note before its formatting controls. Visual stacking is
+    `absolute` + `z-10` on the chrome, never source order.
+    `BottomToolbar` keeps `w-fit max-w-full` with `overflow-x-auto`: it shrinks to
+    its content at a comfortable width, so `scrollWidth === clientWidth` and no
+    scrollbar appears, and is capped rather than overflowing the pane when eleven
+    icon buttons no longer fit — at which point the toolbar's own `scrollLeft` is
+    the scrolling container, not the pane's. Both halves were already pinned by
+    `e2e/appearance.spec.ts` before the reshape and still are.
+
 - **`--bear-line-width` caps the prose column, not the pane.** The editor pane
   still fills the window so the toolbars span it; only `.ProseMirror` is capped
   and centred. It sat declared-and-unused from M5.5 to M7.5, which is why the
@@ -1080,12 +1375,108 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   column) suppress default stretch alignment, so without the explicit width
   the column shrinks to fit its content instead of filling the pane and then
   clamping.
+  **It was wired in M7.5 and STILL inert in practice until M8**, because `56em`
+  resolves to 896px while the editor pane at 1440x900 is 840 wide — so the
+  rendered column was 792 and the clamp never engaged at the window size every
+  screenshot is taken at. The value is now the MEASURED one: Bear renders a
+  643pt column at 16pt, which is `40em`. Bear's own typography panel reports its
+  line width as `56 em` — the number this token carried for three milestones —
+  so **do not restore 56 on the strength of Bear's label**; Bear's `em` there is
+  not a CSS `em` and the missing 16em is unexplained. Match what Bear renders.
+
+- **`--bear-para-spacing` and `--bear-para-indent` are ADDITIVE, and all three
+  editor typography tokens are now guarded by a test that drives them from the
+  page.** Additive matches Bear's semantics: its 단락 간격 slider defaults to
+  `0 em` and adds to the app's own base rhythm rather than replacing it, so at
+  the shipped `0em` the render is byte-identical to before they were wired.
+  Spacing is stated TWICE in `editor.css` — once on `> * + *` and again on the
+  heading rule — because those two rules have equal specificity and the heading
+  one wins on source order, so a heading would otherwise ignore the token
+  entirely. The guard matters more than the wiring: a declared token no rule
+  consumes is indistinguishable from a token that does not exist, Tailwind and
+  CSS both emit nothing and say nothing, and this project has now shipped that
+  defect three times (`--color-hover`, `--bear-line-width`, and these two).
+  `e2e/appearance.spec.ts`'s "the editor typography tokens reach the rendered
+  prose" sets each token from the page and asserts the render moves; all three
+  halves were verified by fault injection, including restoring `56em`.
+
+- **The tag pill sets `box-decoration-break: clone`.** A pill that wraps mid-tag
+  otherwise gets ONE box sliced through the break — the fragment before it loses
+  its right edge and radius, the one after loses its left — which reads as a
+  rendering fault rather than a wrapped chip. Latent from M7.6 until M8 narrowed
+  the measure to 40em, at which point a mid-tag wrap became common rather than
+  rare.
 
 - **`SearchField` suppresses the native `type="search"` cancel widget.**
   Chromium renders its own X inside a search input, which sat beside our own
   labelled clear button — two clear affordances in one freshly designed
   field. `type="search"` stays (it is what makes the `searchbox` role and its
   tests hold); only the native widget's rendering is suppressed.
+
+### Export
+
+- **Export renders through the EDITOR'S OWN SCHEMA, never a second Markdown
+  pipeline.** `renderNoteBody` parses with `parseMarkdown` — the single importer
+  of `@tiptap/markdown` — and serializes with ProseMirror's `DOMSerializer`
+  against `getSchema(editorExtensions)`. So an export cannot disagree with what
+  the editor shows, and the two-implementations-of-one-grammar defect never
+  appears. Reaching for `marked` directly in export code would reintroduce it.
+
+- **A construct with no node in the schema exports as its own Markdown source,
+  and that is the fallback working.** A table becomes a `<pre data-raw-block>`
+  of pipes in the exported HTML and PDF, exactly as it appears in the editor.
+  Do not "fix" this in the export layer; it is the strongest argument for
+  giving tables a real node, and fixing it downstream would make the export
+  disagree with the editor.
+
+- **Markdown export is the note's text VERBATIM.** No normalization, no
+  re-serialization. The text is already canonical Markdown, so putting it back
+  through the serializer could only change it, and an export that rewrites a
+  byte of the user's own file is the one thing this must not do.
+
+- **Export uses the LIVE editor text, not `note.text`.** The stored record lags
+  the editor by the autosave debounce, so exporting it hands the user a file
+  missing their last few seconds of typing. `NoteEditor.handleExport` reads
+  `handleRef.current.getMarkdown()` and derives the title from that same text.
+
+- **PDF is the browser's print pipeline, into a hidden same-origin iframe.**
+  Printing the app's own window would need a print stylesheet that hides three
+  panes, two floating pills and a dialog, and every future piece of chrome would
+  silently need adding to it. Printing a separate document means the PDF is
+  exactly what `renderNoteHtml` produced. The frame uses `visibility: hidden`,
+  not `display: none` — a display-none frame has no layout in some engines and
+  prints blank — is focused before printing (Safari prints the parent
+  otherwise), waits on `fonts.ready` (a print started early lays out in the
+  fallback face), and is removed in a `finally` so a throwing print cannot leak
+  a whole second document per export.
+
+- **The export stylesheet carries its own reset, and it is load-bearing.** The
+  app gets one from Tailwind's preflight; a standalone file gets none, so the
+  browser's default paragraph margin applies INSIDE a flex task item and the
+  item stands three lines tall with its checkbox above its text. **The obvious
+  assertion cannot see this**: the checkbox and its label still overlap
+  vertically in the broken state, so the overlap check written first passed
+  under fault injection. The test that works measures the item's height against
+  its own computed `line-height`.
+
+- **Export colours are read from the live cascade, never hardcoded.**
+  `readExportTokens` resolves each token off `document.documentElement` at export
+  time, which keeps colour literals out of `src/` as the token rule requires and
+  makes an export carry whatever theme the user is looking at. The per-token
+  fallbacks are CSS SYSTEM COLOURS (`canvas`, `canvastext`, `linktext`) rather
+  than literals, so a renamed token degrades to the reader's platform palette
+  instead of to a blank value — which would render an invisible page.
+
+- **No backtick may appear inside `renderNoteHtml`'s template literal.** One
+  terminates it, and the failure surfaces as a TypeScript syntax error pointing
+  at a CSS comment. It happened once already, quoting a CSS declaration in a
+  comment.
+
+- **`export.html` and `export.pdf` are on the allowlist in `i18n.test.tsx` of
+  keys legitimately identical across bundles.** Korean uses both acronyms
+  verbatim. `export.markdown` is deliberately NOT on it — Korean does render
+  that as 마크다운 — so the list stays a set of specific exceptions rather than a
+  blanket exemption for the group.
 
 ### Accessibility
 
@@ -1115,11 +1506,26 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   `"work3"`, and `NoteListItem` concatenating three spans into
   `"Groceries14:32milk"`.
 
-- **Destructive controls keep their words.** "New note" is an icon button;
-  "Move to trash", "Restore", "Delete forever" and "Empty trash" are text. An
-  icon-only control for an irreversible action against a database with no
-  server copy asks the user to recall a glyph before destroying data. This is a
-  deliberate divergence from Bear, which hides destructive actions in menus.
+- **Destructive controls keep their WORDS — that rule stands. What M9a
+  reversed is their CHROME, and only in the note-list header.** "Move to
+  trash", "Restore", "Delete forever" and "Empty trash" are still text, never
+  glyphs: an icon-only control for an irreversible action against a database
+  with no server copy asks the user to recall a glyph before destroying data,
+  and Bear hides these in menus where we deliberately do not. But "New note",
+  "Move to trash" and "Restore" are now `ghost` rather than `default` — no
+  border, no resting fill — because the bordered row read as a set of form
+  controls and was the single thing that most dated the app. **"Delete forever"
+  and "Empty trash" keep `danger`'s solid fill**, and `ConfirmDialog`'s Cancel
+  keeps `default`, so M6's reasoning stays live exactly where a control must
+  read at rest.
+
+- **A quiet control's hover fill is now load-bearing, and it is the affordance
+  this project has already lost once in silence.** `--color-hover` was absent
+  from the theme block for two milestones, so every `hover:bg-hover` compiled to
+  nothing with no warning. A `ghost` control whose hover does not compile is
+  invisible in every state — strictly worse than the M6 defect. `e2e/appearance.spec.ts`
+  asserts the rendered hover background, that it differs from the pane, and that
+  the control is still quiet at rest so an undone reversal is noticed.
 
 - **The pin button reads by colour, not by glyph.** A `Pin`/`PinOff` glyph
   table keyed on `note.pinned` was tried and reverted: a slashed pin in the
@@ -1201,7 +1607,12 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   meant to catch. The card test in `e2e/appearance.spec.ts` asserts both:
   not-transparent, and not-equal-to-canvas.
 
-## Carried into M5b and M6
+## Deferred, with a ruling
+
+Real, deliberately deferred rather than forgotten. Historically titled "Carried
+into M5b and M6"; the list has outlived those milestones and is now simply the
+standing set. Items resolved since are struck rather than deleted, so a reader
+can see the ruling was retired on purpose.
 
 Real, deliberately deferred with a ruling. Full M3 reasoning is in
 `.superpowers/sdd/2026-08-08-m3-notes/progress.md`; full M4 reasoning is in
@@ -1255,13 +1666,14 @@ rediscovering them.
   `seedText` and the editor to agree. Not reshaped at M5's end because the
   current failure mode is fail-safe (a stray note lingers, nothing is deleted),
   unlike the manager/schema divergence that motivated the general rule.
-- **Editor typography is wired but has no slider.** M7.5 wired
-  `--bear-font-size` and `--bear-line-height` into `.ProseMirror`
-  (`--bear-line-width` is wired too, but that half of this item is resolved —
-  see `--bear-line-width` above). What is still missing is the UI: nothing
-  lets a user move these tokens, so M8 owns the typography sliders
-  themselves, not the CSS wiring. M5.5's spec deferred editor typography
-  deliberately.
+- **All five editor typography tokens are wired and guarded, but none has a
+  slider.** M7.5 wired `--bear-font-size` and `--bear-line-height`; M8 set
+  `--bear-line-width` to its measured value and wired the last two
+  (`--bear-para-spacing`, `--bear-para-indent`) as additive, with a test that
+  drives each from the page. So the CSS half of this item is fully closed. What
+  remains is the UI: nothing lets a user move them. Bear exposes exactly these
+  five as sliders plus three font pickers, which is the shape the panel should
+  take — see the typography table in `docs/design/DESIGN-bear-web.md`.
 - **`confirmPending` in `AppShell` clears its state and then awaits with no
   `try`/`catch`.** A rejected `purge` or `emptyTrash` closes the dialog and
   leaves the user believing the deletion succeeded. This matches the four
@@ -1287,10 +1699,11 @@ rediscovering them.
   than the background. Ink's `0.18` alpha is comfortable. Raising Paper's alpha
   is a design call, and it ripples into `e2e/smoke.spec.ts`, which now pins the
   shipped palette deliberately.
-- **`rounded-md`, `rounded-lg`, `shadow-popover` and `shadow-dialog` are
-  provisioned but unused.** M5.5's spec names them for M6's `ConfirmDialog`.
-  They are not dead code awaiting deletion; deleting them means M6 re-adds
-  them.
+- ~~`rounded-md`, `rounded-lg`, `shadow-popover` and `shadow-dialog` are
+  provisioned but unused.~~ **Resolved.** `ConfirmDialog` took the dialog
+  shadow in M6, and M8 put `rounded-lg` + `shadow-popover` on the panes, both
+  floating toolbar pills, the info popover and the export menu. Every provisioned
+  radius and shadow now has at least one call site.
 - **`scripts/fonts.test.ts` ignores `font-weight` and `font-style`.** Its
   `declaredFamilies` collects every `font-family:` an `@font-face` block
   declares regardless of which face it belongs to, so a family declared _only_
@@ -1306,6 +1719,15 @@ with a review after every task and a whole-branch review at the end. Plans live 
 `docs/superpowers/plans/`; per-milestone execution ledgers live in
 `.superpowers/sdd/<plan-name>/progress.md` (gitignored, local only) and record every
 finding, ruling, and deferred item.
+
+**M8 deliberately did not follow that shape**, and the deviation is recorded
+rather than hidden: it ran as direct execution against a measurement-driven
+roadmap, with no spec, no written plan and no subagents. What replaced the plan
+was `npm run measure` and `npm run shots` — each change was justified by a number
+measured off Bear and verified by a screenshot afterwards. Its ledger is at
+`.superpowers/sdd/2026-08-18-m8-visual-and-export/progress.md` and carries the
+roadmap, the rulings the user made, and every open item. A milestone with a
+larger design space should go back to brainstorm → spec → plan.
 
 Reviews here are expected to verify by running code and injecting faults, not by
 reading. Several real bugs — an unfalsifiable persistence test, a tag index that

@@ -1,0 +1,577 @@
+[
+  {
+    "surface": "shell",
+    "note": "The ground the panes float on. Its padding is the outer inset.",
+    "box": {
+      "width": 1440,
+      "height": 900
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgb(236, 234, 243)",
+      "padding": "8px",
+      "margin": "0px",
+      "border-radius": "0px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "8px",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "pane: sidebar",
+    "note": "Width is durable, from the settings table.",
+    "box": {
+      "width": 240,
+      "height": 884
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgb(236, 234, 243)",
+      "padding": "0px",
+      "margin": "0px",
+      "border-radius": "12px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "pane: note list",
+    "note": "Width is durable, from the settings table.",
+    "box": {
+      "width": 320,
+      "height": 884
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgb(245, 244, 250)",
+      "padding": "0px",
+      "margin": "0px",
+      "border-radius": "12px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(40, 34, 66, 0.05) 0px 1px 2px 0px, rgba(40, 34, 66, 0.07) 0px 8px 24px 0px"
+    }
+  },
+  {
+    "surface": "pane: editor",
+    "note": "Fills the remaining space so the toolbars span it.",
+    "box": {
+      "width": 816,
+      "height": 884
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgb(255, 255, 255)",
+      "padding": "0px",
+      "margin": "0px",
+      "border-radius": "12px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(40, 34, 66, 0.05) 0px 1px 2px 0px, rgba(40, 34, 66, 0.07) 0px 8px 24px 0px"
+    }
+  },
+  {
+    "surface": "resizer",
+    "note": "The gap between cards IS the resizer.",
+    "box": {
+      "width": 8,
+      "height": 884
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px",
+      "margin": "0px",
+      "border-radius": "0px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "sidebar: smart list group",
+    "note": "All seven builtins, rendered as data.",
+    "box": {
+      "width": 240,
+      "height": 240
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "8px",
+      "margin": "0px",
+      "border-radius": "0px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "sidebar: smart list row",
+    "note": "The workhorse row. Bear's equivalent is the density benchmark.",
+    "box": {
+      "width": 204,
+      "height": 32
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "13px",
+      "font-weight": "500",
+      "line-height": "18.85px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(91, 74, 214, 0.09)",
+      "padding": "0px 8px",
+      "margin": "0px",
+      "border-radius": "8px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "8px",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "sidebar: tag row (depth 0)",
+    "note": "A root tag.",
+    "box": {
+      "width": 204,
+      "height": 32
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "13px",
+      "font-weight": "400",
+      "line-height": "18.85px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px 8px",
+      "margin": "0px",
+      "border-radius": "8px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "8px",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "sidebar: tag row (depth 1)",
+    "note": "A nested tag. Compare padding-left against depth 0 for the indent step.",
+    "box": {
+      "width": 204,
+      "height": 32
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "13px",
+      "font-weight": "400",
+      "line-height": "18.85px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px 8px 0px 20px",
+      "margin": "0px",
+      "border-radius": "8px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "8px",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "note list: search field",
+    "note": "Native cancel widget suppressed; our own clear button instead.",
+    "box": {
+      "width": 302,
+      "height": 28
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "13px",
+      "font-weight": "400",
+      "line-height": "18.85px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgb(255, 255, 255)",
+      "padding": "4px 24px 4px 32px",
+      "margin": "0px",
+      "border-radius": "6px",
+      "border-top-width": "1px",
+      "border-bottom-width": "1px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "note list: row (selected)",
+    "note": "Three stacked lines. Bear fits a two-line snippet in comparable height.",
+    "box": {
+      "width": 304,
+      "height": 96
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(91, 74, 214, 0.09)",
+      "padding": "0px",
+      "margin": "4px 8px",
+      "border-radius": "8px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "note list: row (resting)",
+    "note": "Unselected, for the divider and hover baseline.",
+    "box": {
+      "width": 304,
+      "height": 96
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px",
+      "margin": "4px 8px",
+      "border-radius": "8px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "editor: top controls",
+    "note": "Currently a full-width bar; Bear floats a pill group here.",
+    "box": {
+      "width": 150,
+      "height": 36
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgb(245, 244, 250)",
+      "padding": "0px 8px",
+      "margin": "0px",
+      "border-radius": "3.35544e+07px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "2px",
+      "max-width": "none",
+      "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(40, 34, 66, 0.05) 0px 1px 2px 0px, rgba(40, 34, 66, 0.07) 0px 8px 24px 0px"
+    }
+  },
+  {
+    "surface": "editor: bottom toolbar",
+    "note": "Currently welded to the window edge; Bear floats a centred rounded bar.",
+    "box": {
+      "width": 422,
+      "height": 36
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgb(245, 244, 250)",
+      "padding": "0px 8px",
+      "margin": "0px",
+      "border-radius": "3.35544e+07px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "2px",
+      "max-width": "100%",
+      "box-shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(40, 34, 66, 0.05) 0px 1px 2px 0px, rgba(40, 34, 66, 0.07) 0px 8px 24px 0px"
+    }
+  },
+  {
+    "surface": "editor: prose column",
+    "note": "max-width is --bear-line-width. Compare box width against it: if they differ, the clamp is engaging.",
+    "box": {
+      "width": 640,
+      "height": 884
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "25.6px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgb(255, 255, 255)",
+      "padding": "48px 24px 96px",
+      "margin": "0px 88px",
+      "border-radius": "0px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "640px",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "editor: h1",
+    "note": "The note title line.",
+    "box": {
+      "width": 592,
+      "height": 34.5
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "27.648px",
+      "font-weight": "600",
+      "line-height": "34.56px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px",
+      "margin": "0px",
+      "border-radius": "0px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "editor: h2",
+    "note": "",
+    "box": {
+      "width": 592,
+      "height": 28.8
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "23.04px",
+      "font-weight": "600",
+      "line-height": "28.8px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px",
+      "margin": "32.256px 0px 0px",
+      "border-radius": "0px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "editor: h3",
+    "note": "",
+    "box": {
+      "width": 592,
+      "height": 24
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "19.2px",
+      "font-weight": "600",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px",
+      "margin": "26.88px 0px 0px",
+      "border-radius": "0px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "editor: paragraph",
+    "note": "The measure the whole page is set against.",
+    "box": {
+      "width": 592,
+      "height": 51.2
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "25.6px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px",
+      "margin": "12px 0px 0px",
+      "border-radius": "0px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "editor: blockquote",
+    "note": "",
+    "box": {
+      "width": 592,
+      "height": 25.6
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "25.6px",
+      "letter-spacing": "normal",
+      "color": "rgb(96, 91, 120)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px 0px 0px 16px",
+      "margin": "12px 0px 0px",
+      "border-radius": "0px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "editor: code block",
+    "note": "Also what an unsupported construct — a table — currently renders as.",
+    "box": {
+      "width": 592,
+      "height": 46.6
+    },
+    "style": {
+      "font-family": "\"JetBrains Mono Variable\", ui-monospace, monospace",
+      "font-size": "14.4px",
+      "font-weight": "400",
+      "line-height": "23.04px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgb(245, 244, 250)",
+      "padding": "10.8px 14.4px",
+      "margin": "10.8px 0px 0px",
+      "border-radius": "8px",
+      "border-top-width": "1px",
+      "border-bottom-width": "1px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "editor: tag pill",
+    "note": "A decoration, not a mark.",
+    "box": {
+      "width": 573.6,
+      "height": 46.2
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "25.6px",
+      "letter-spacing": "normal",
+      "color": "rgb(91, 74, 214)",
+      "background-color": "rgba(91, 74, 214, 0.12)",
+      "padding": "0.8px 2.4px 0.8px 4px",
+      "margin": "0px",
+      "border-radius": "6px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "editor: task item",
+    "note": "",
+    "box": {
+      "width": 592,
+      "height": 29.6
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "25.6px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px",
+      "margin": "0px",
+      "border-radius": "0px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "8px",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  }
+]

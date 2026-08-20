@@ -66,4 +66,9 @@ export {
   Code,
   Quote,
   Info,
+  Palette,
+  Download,
+  FileCode,
+  Printer,
+  Table as TableGlyph,
 } from 'lucide-react';

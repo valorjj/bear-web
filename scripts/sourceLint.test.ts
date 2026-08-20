@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -171,52 +171,100 @@ describe('architecture boundaries', () => {
 describe('theme tokens', () => {
   const css = readFileSync(TOKENS, 'utf8');
 
-  const light = blockTokens(css, ':root {');
-  const darkExplicit = blockTokens(css, ":root[data-theme='dark']");
-  const darkSystem = blockTokens(css, ":root:not([data-theme='light'])");
+  const PALETTE = [
+    'bg',
+    'surface',
+    'sidebar',
+    'canvas',
+    'text',
+    'muted',
+    'faint',
+    'border',
+    'accent',
+    'danger',
+    'focus',
+    'hover',
+    'selected',
+    'shadow',
+    'tag-fill',
+    'tag-fill-strong',
+  ];
+  const SURFACE = [
+    'radius-sm',
+    'radius-md',
+    'radius-lg',
+    'shadow-popover',
+    'shadow-dialog',
+    'border-width',
+  ];
+  const REQUIRED = [...PALETTE, ...SURFACE];
 
-  it('defines a non-trivial number of tokens in each theme block', () => {
-    expect(light.size).toBeGreaterThan(20);
-    expect(darkExplicit.size).toBeGreaterThan(10);
+  // Read from the roster rather than restated here: two lists that must agree
+  // is the defect this whole describe block exists to prevent.
+  const roster = readFileSync('src/styles/themes.ts', 'utf8');
+  const ids = [...roster.matchAll(/id: '([a-z-]+)'/g)].map((match) => match[1]!);
+
+  // A floor, not a count: the roster grows a row at a time, each alongside the
+  // CSS block it names, and the two-way agreement below is what actually
+  // guards it. The floor exists only so a roster regex that silently matched
+  // nothing cannot make every assertion here vacuously true.
+  it('finds themes in the roster at all', () => {
+    expect(ids.length).toBeGreaterThanOrEqual(2);
   });
 
-  // The defect this closes: a token added to :root and to the explicit dark
-  // block but forgotten in the media block is correct for a user who picked
-  // dark and wrong for a user whose OS is dark. Nothing else in the suite
-  // can see that.
-  it('keeps both dark blocks token-for-token identical', () => {
-    expect([...darkSystem.keys()].sort()).toEqual([...darkExplicit.keys()].sort());
-    for (const [token, value] of darkExplicit) {
-      expect(darkSystem.get(token), `${token} differs between the dark blocks`).toBe(value);
+  it('gives every theme in the roster a CSS block defining all 22 tokens', () => {
+    for (const id of ids) {
+      const block = blockTokens(css, `[data-theme='${id}']`);
+      for (const token of REQUIRED) {
+        expect(block.has(`--bear-${token}`), `--bear-${token} missing from ${id}`).toBe(true);
+      }
     }
   });
 
-  it('overrides only tokens the light theme already defines', () => {
-    for (const token of darkExplicit.keys()) {
-      expect(light.has(token), `${token} is dark-only; add it to :root`).toBe(true);
+  it('has no CSS theme block that is absent from the roster', () => {
+    const declared = [...css.matchAll(/:root\[data-theme='([a-z-]+)'\]/g)].map(
+      (match) => match[1]!,
+    );
+    for (const id of new Set(declared)) {
+      expect(ids, `${id} has a CSS block but no roster entry`).toContain(id);
     }
   });
 
-  it('themes every colour role', () => {
-    const ROLES = [
-      'bg',
-      'surface',
-      'sidebar',
-      'text',
-      'muted',
-      'faint',
-      'border',
-      'accent',
-      'danger',
-      'focus',
-      'hover',
-      'selected',
-      'shadow',
-    ];
-    for (const role of ROLES) {
-      expect(light.has(`--bear-${role}`), `--bear-${role} missing from :root`).toBe(true);
-      expect(darkExplicit.has(`--bear-${role}`), `--bear-${role} missing from Ink`).toBe(true);
+  // `:root` and the default theme's own block must not drift apart: a user on
+  // System and a user who explicitly picked the default must see one app.
+  //
+  // `:root` deliberately carries the tier-3 globals AND the default palette, so
+  // only the 22 required tokens are compared. Do not "tidy" the two into one
+  // grouped selector — `blockTokens` finds a block by `indexOf` plus the next
+  // brace, so it cannot read a grouped selector at all.
+  it('keeps :root identical to the default theme block', () => {
+    const fallback = blockTokens(css, ':root {');
+    const defaultId = roster.match(/DEFAULT_THEME_ID: ThemeId = '([a-z-]+)'/)![1]!;
+    const explicit = blockTokens(css, `[data-theme='${defaultId}']`);
+    for (const token of REQUIRED) {
+      expect(fallback.get(`--bear-${token}`), `${token} drifted from ${defaultId}`).toBe(
+        explicit.get(`--bear-${token}`),
+      );
     }
+  });
+
+  // The M2-era hazard, generalised: a token right for someone who picked dark
+  // and wrong for someone whose OS is dark. Nothing else in the suite sees it.
+  it('keeps the system-dark block identical to its named theme', () => {
+    const system = blockTokens(css, ':root:not([data-theme])');
+    const darkId = roster.match(/SYSTEM_DARK_ID: ThemeId = '([a-z-]+)'/)![1]!;
+    const named = blockTokens(css, `[data-theme='${darkId}']`);
+    expect([...system.keys()].sort()).toEqual([...named.keys()].sort());
+    for (const [token, value] of named) {
+      expect(system.get(token), `${token} differs between the dark blocks`).toBe(value);
+    }
+  });
+
+  // The guard must reject ANY explicit theme, not only one named 'light'. With
+  // named themes the old selector let every light theme lose to a dark OS.
+  it('guards the system-dark block on the attribute, not on a theme name', () => {
+    expect(css).toContain(':root:not([data-theme])');
+    expect(css).not.toContain(":root:not([data-theme='light'])");
   });
 
   it('zeroes both duration tokens under prefers-reduced-motion', () => {
@@ -269,6 +317,95 @@ describe('focus', () => {
         readFileSync(path, 'utf8'),
         `${path} suppresses the outline without documenting its replacement`,
       ).toContain(marker);
+    }
+  });
+});
+
+describe('the pre-paint theme script', () => {
+  const html = readFileSync('index.html', 'utf8');
+  const roster = readFileSync('src/styles/themes.ts', 'utf8');
+  const ids = [...roster.matchAll(/id: '([a-z-]+)'/g)].map((match) => match[1]!);
+
+  // The script cannot import the roster — a module import is async, and the
+  // whole point is to run before first paint. So the list is duplicated, and
+  // this is what stops it drifting: a theme added to the roster but missing
+  // here silently loses its no-flash behaviour, and nothing else in the suite
+  // can see that.
+  it('lists exactly the roster ids', () => {
+    const listed = html.match(/var known = \[([^\]]+)\]/)![1]!;
+    for (const id of ids) {
+      expect(listed, `${id} missing from the pre-paint script`).toContain(`'${id}'`);
+    }
+    expect(listed.split(',')).toHaveLength(ids.length);
+  });
+
+  it('reads the same storage key the app writes', () => {
+    const key = readFileSync('src/app/theme.ts', 'utf8').match(/MIRROR_KEY = '([^']+)'/)![1]!;
+    expect(html).toContain(`localStorage.getItem('${key}')`);
+  });
+
+  // It has to beat the module that renders the app, or it is decorative.
+  it('runs before the app script', () => {
+    expect(html.indexOf('bear-web:theme')).toBeLessThan(html.indexOf('/src/main.tsx'));
+  });
+});
+
+describe('the spacing scale', () => {
+  /*
+   * Tailwind's grid permits every step, which is not a scale. The shipped code
+   * used ten of them with no rule — `px-1.5`, `p-5`, `pl-7` beside `px-2` and
+   * `p-4` — and that drift is what reads as misalignment.
+   *
+   * This replaces the "why there are no spacing tokens" ruling in
+   * DESIGN-bear-web.md. The fix is not a second token system competing with
+   * Tailwind: it is a permitted subset of Tailwind's own scale, enforced the
+   * same way a stray hex literal already is.
+   *
+   * Permitted: 2 4 8 12 16 24 32 48 px.
+   */
+  const PERMITTED = new Set(['0', '0.5', '1', '2', '3', '4', '6', '8', '12', 'px', 'auto', 'full']);
+
+  const UTILITY =
+    /(?:^|[\s'"`{])(?:p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|gap|gap-x|gap-y|space-x|space-y)-(\[?[\w.%[\]()-]+)/g;
+
+  /**
+   * Off-scale values with a stated reason, in the shape of the focus-outline
+   * allowlist. An arbitrary value is an escape hatch, not a forbidden thing —
+   * but each one is named here, so it is a decision rather than a drift.
+   */
+  const ALLOWED: Record<string, string> = {
+    'src/features/editor/RichEditor.tsx':
+      'pt-12/pb-24 reserve the space the floating toolbars overlay, which is a computed reach rather than a rhythm; e2e/appearance.spec.ts asserts the reserve covers each pill',
+  };
+
+  it('scans a non-trivial number of components', () => {
+    // Guards the guard: a walk returning nothing would make the scan below
+    // vacuously green.
+    expect(walk('src', ['.tsx']).length).toBeGreaterThan(20);
+  });
+
+  it('uses only permitted spacing steps', () => {
+    const offenders: string[] = [];
+
+    for (const path of walk('src', ['.tsx'])) {
+      if (path in ALLOWED) continue;
+      if (/\.test\.tsx?$/.test(path)) continue;
+      const source = readFileSync(path, 'utf8');
+      for (const match of source.matchAll(UTILITY)) {
+        const step = match[1]!;
+        if (!PERMITTED.has(step)) offenders.push(`${path}  ${match[0]!.trim()}`);
+      }
+    }
+
+    expect(offenders, `off-scale spacing:\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  it('keeps every allowlisted file real, with its reason', () => {
+    // An allowlist entry for a file that no longer exists is a licence nobody
+    // is using and nobody will notice has gone stale.
+    for (const [path, reason] of Object.entries(ALLOWED)) {
+      expect(existsSync(path), `${path} is allowlisted but absent`).toBe(true);
+      expect(reason.length, `${path} needs a stated reason`).toBeGreaterThan(20);
     }
   });
 });

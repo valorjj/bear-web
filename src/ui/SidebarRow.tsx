@@ -77,7 +77,11 @@ export function SidebarRow({
           aria-current={selected ? current : undefined}
           aria-expanded={disclosure === undefined ? undefined : disclosure.expanded}
           style={{ paddingLeft: `${0.5 + depth * INDENT_REM}rem` }}
-          className={`relative flex h-7 min-w-0 flex-1 items-center gap-2 rounded-sm pr-2 text-left text-ui transition-colors duration-[var(--bear-duration-fast)] ease-bear ${
+          // `h-8`, not M8's `h-6`. That 24 was measured against Bear's 22, and
+          // Bear is no longer the authority: Soft Depth reads a row as a chip
+          // rather than a line, and a chip needs room around its label. 32 is
+          // on the permitted scale; 24 and 32 are both there, 28 is not.
+          className={`ease-bear relative flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md pr-2 text-left text-ui transition-colors duration-[var(--bear-duration-fast)] ${
             selected ? 'bg-selected font-medium text-text' : 'text-text hover:bg-hover'
           }`}
         >

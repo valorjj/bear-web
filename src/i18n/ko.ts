@@ -86,7 +86,15 @@ export const ko: Record<TranslationKey, string> = {
   'editor.toolbar.highlight': '형광펜',
   'editor.toolbar.link': '링크',
   'editor.toolbar.code': '코드 블록',
+  'editor.toolbar.table': '표',
   'editor.toolbar.quote': '인용',
+  'export.open': '메모 내보내기',
+  'export.label': '내보내기 형식',
+  'export.markdown': '마크다운',
+  'export.html': 'HTML',
+  'export.pdf': 'PDF',
+  'export.failed': '이 메모를 내보낼 수 없습니다.',
+
   'editor.toolbar.top': '상단 컨트롤',
   'editor.toolbar.bottom': '서식 도구 모음',
   'editor.info.show': '노트 정보',
@@ -97,4 +105,16 @@ export const ko: Record<TranslationKey, string> = {
   'editor.link.prompt': '링크 주소',
   'editor.tagPill.hint.mac': 'Cmd-클릭하면 이 태그로 필터링됩니다',
   'editor.tagPill.hint.other': 'Ctrl-클릭하면 이 태그로 필터링됩니다',
+
+  'theme.indigoLight': '인디고 라이트',
+  'theme.indigoDark': '인디고 다크',
+  'theme.paper': '페이퍼',
+  'theme.ink': '잉크',
+  'theme.highContrast': '고대비',
+
+  'appearance.label': '모양',
+  'appearance.open': '테마 변경',
+  'appearance.system': '시스템',
+  'appearance.group.light': '밝은 테마',
+  'appearance.group.dark': '어두운 테마',
 };

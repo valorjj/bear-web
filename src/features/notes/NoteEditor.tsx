@@ -1,14 +1,15 @@
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 
-import { notes } from '@/data';
+import { deriveTitle, notes } from '@/data';
 import type { Note } from '@/data';
+import { exportNote, type ExportFormat } from '@/features/export';
 import {
   EMPTY_DOCUMENT_MARKDOWN,
   normalizeMarkdown,
   RichEditor,
   type RichEditorHandle,
 } from '@/features/editor';
-import { useT } from '@/i18n';
+import { useLocale, useT } from '@/i18n';
 
 import { useAutosave } from './useAutosave';
 
@@ -53,6 +54,7 @@ const pendingDiscards = new Map<string, ReturnType<typeof setTimeout>>();
 
 export function NoteEditor({ note, seedText, onActivateTag }: NoteEditorProps): ReactElement {
   const t = useT();
+  const { locale } = useLocale();
 
   const handleRef = useRef<RichEditorHandle | null>(null);
 
@@ -92,6 +94,10 @@ export function NoteEditor({ note, seedText, onActivateTag }: NoteEditorProps): 
     }
   });
   const [serializeFailed, setSerializeFailed] = useState(initialSerializeFailed);
+  // Its own flag rather than reusing `serializeFailed`: an export failing says
+  // nothing about whether the note can be saved, and the two messages must not
+  // be able to stand in for each other.
+  const [exportFailed, setExportFailed] = useState(false);
 
   const read = useCallback((): string => {
     try {
@@ -220,6 +226,25 @@ export function NoteEditor({ note, seedText, onActivateTag }: NoteEditorProps): 
     }
   }, [schedule]);
 
+  // Exports what is ON SCREEN, not `note.text`. The stored text lags the editor
+  // by the autosave debounce, so exporting the record would silently hand the
+  // user a file missing their last few seconds of typing. The title is derived
+  // from the same live text for the same reason.
+  const handleExport = useCallback(
+    (format: ExportFormat): void => {
+      const text = handleRef.current?.getMarkdown() ?? note.text;
+
+      void exportNote(
+        { title: deriveTitle(text), text, updatedAt: note.updatedAt },
+        format,
+        locale,
+      ).catch(() => {
+        setExportFailed(true);
+      });
+    },
+    [locale, note.text, note.updatedAt],
+  );
+
   return (
     <div className="flex h-full flex-col">
       <RichEditor
@@ -231,13 +256,18 @@ export function NoteEditor({ note, seedText, onActivateTag }: NoteEditorProps): 
         createdAt={note.createdAt}
         updatedAt={note.updatedAt}
         onActivateTag={onActivateTag}
+        onExport={handleExport}
       />
 
-      {(failed || serializeFailed) && (
+      {(failed || serializeFailed || exportFailed) && (
         // `status`, not `alert`: `alert` is the degraded-storage banner's role
         // and the e2e suite asserts there is exactly one of those.
         <p role="status" className="shrink-0 border-t border-border px-6 py-2 text-xs text-muted">
-          {serializeFailed ? t('editor.serializeFailed') : t('editor.saveFailed')}
+          {exportFailed
+            ? t('export.failed')
+            : serializeFailed
+              ? t('editor.serializeFailed')
+              : t('editor.saveFailed')}
         </p>
       )}
     </div>

@@ -45,7 +45,10 @@ describe('RichEditor', () => {
   });
 
   it('preserves an unsupported construct through the handle', async () => {
-    const source = '| a |\n| --- |\n| b |';
+    // A raw HTML block rather than the table this used to use: tables became a
+    // real node in M8b, so they are normalized rather than preserved verbatim
+    // and can no longer stand in for an unsupported construct here.
+    const source = '<aside>note</aside>';
     const handleRef = createRef<RichEditorHandle>();
     renderWithI18n(
       <RichEditor

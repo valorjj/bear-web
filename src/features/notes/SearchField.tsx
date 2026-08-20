@@ -28,7 +28,7 @@ export function SearchField({ query, onQueryChange, inputRef }: SearchFieldProps
         onKeyDown={(event) => {
           if (event.key === 'Escape') onQueryChange('');
         }}
-        className="h-7 w-full min-w-0 appearance-none rounded-sm border border-border bg-bg py-1 pr-6 pl-7 text-ui text-text placeholder:text-faint [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
+        className="h-7 w-full min-w-0 appearance-none rounded-sm border border-border bg-bg py-1 pr-6 pl-8 text-ui text-text placeholder:text-faint [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
       />
       {query !== '' && (
         <button

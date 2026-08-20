@@ -2,7 +2,7 @@ import type { Editor } from '@tiptap/react';
 import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
-import { Bold, Icon, Info, Italic } from '@/ui/Icon';
+import { Bold, Download, Icon, Info, Italic } from '@/ui/Icon';
 
 import { pinAllSelectionStep } from './toolbarSelection';
 
@@ -10,6 +10,9 @@ export interface TopControlsProps {
   editor: Editor | null;
   infoOpen: boolean;
   onToggleInfo: () => void;
+  /** Omit to render no export control at all — see `RichEditor`. */
+  exportOpen?: boolean;
+  onToggleExport?: () => void;
 }
 
 /**
@@ -22,15 +25,28 @@ export interface TopControlsProps {
  *
  * Underline still does not appear here (or in `BottomToolbar`): it has no
  * Markdown representation, and `_underline_` collides with CommonMark italic.
+ *
+ * Shaped as a FLOATING PILL, positioned by its parent rather than by itself:
+ * `RichEditor` owns the `absolute` placement so this component stays a bare
+ * group of controls and the two toolbars cannot drift apart on where "floating"
+ * puts them. Measured against Bear, a full-width bar welded to the pane edge is
+ * the single largest reason this editor read as a web page rather than an app —
+ * see `docs/design/DESIGN-bear-web.md`.
  */
-export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps): ReactElement {
+export function TopControls({
+  editor,
+  infoOpen,
+  onToggleInfo,
+  exportOpen,
+  onToggleExport,
+}: TopControlsProps): ReactElement {
   const t = useT();
 
   return (
     <div
       role="toolbar"
       aria-label={t('editor.toolbar.top')}
-      className="flex h-9 shrink-0 items-center justify-end gap-1 border-b border-border px-4"
+      className="flex h-9 shrink-0 items-center gap-0.5 rounded-full bg-surface px-2 shadow-popover"
     >
       <button
         type="button"
@@ -52,6 +68,18 @@ export function TopControls({ editor, infoOpen, onToggleInfo }: TopControlsProps
       >
         <Icon glyph={Italic} />
       </button>
+      {onToggleExport !== undefined && (
+        <button
+          type="button"
+          aria-label={t('export.open')}
+          aria-haspopup="menu"
+          aria-expanded={exportOpen ?? false}
+          onClick={onToggleExport}
+          className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-expanded:text-text"
+        >
+          <Icon glyph={Download} />
+        </button>
+      )}
       <button
         type="button"
         aria-label={t('editor.info.show')}

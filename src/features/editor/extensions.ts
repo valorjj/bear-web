@@ -1,19 +1,15 @@
 import type { Extensions } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
+import { TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
 import StarterKit from '@tiptap/starter-kit';
 
 import { Highlight } from './Highlight';
-import {
-  RawDefinition,
-  RawHtmlBlock,
-  RawImage,
-  RawTable,
-  createRawInlineHtmlNode,
-} from './RawBlock';
+import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
 import type { TagPillOptions } from './TagPill';
 import { TagPill } from './TagPill';
+import { MarkdownTable } from './tableMarkdown';
 import { TaskItemPromotion } from './taskItemPromotion';
 
 /**
@@ -41,6 +37,14 @@ function buildSupportedExtensions(options: Partial<TagPillOptions>): Extensions 
     StarterKit.configure({ underline: false }),
     TaskList,
     TaskItem.configure({ nested: true }),
+    // Real table nodes, replacing the `RawTable` fallback. The official
+    // extension already carries a Markdown tokenizer, parser and serializer, so
+    // no second Markdown implementation enters the project — which is the only
+    // reason this was worth doing rather than leaving tables as preserved text.
+    MarkdownTable,
+    TableRow,
+    TableHeader,
+    TableCell,
     // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
     // schema: `computeRecognizedHtmlTags()` below and every round-trip suite are
     // unaffected by it. It contributes exactly one input rule.
@@ -120,7 +124,6 @@ function computeRecognizedHtmlTags(): Set<string> {
 export function buildEditorExtensions(options: Partial<TagPillOptions> = {}): Extensions {
   return [
     ...buildSupportedExtensions(options),
-    RawTable,
     RawDefinition,
     RawHtmlBlock,
     RawImage,

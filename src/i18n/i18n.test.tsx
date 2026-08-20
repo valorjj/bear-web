@@ -36,13 +36,21 @@ describe('translation bundles', () => {
   });
 
   it('are actually translated rather than copied from English', () => {
-    // 'app.name' is a proper noun and legitimately identical; everything else
-    // being identical would mean someone pasted the English bundle.
+    // Keys whose two bundles are legitimately identical. Everything else being
+    // identical would mean someone pasted the English bundle.
+    //
+    // - `app.name` is a proper noun.
+    // - `export.html` and `export.pdf` are acronyms that Korean uses verbatim;
+    //   `HTML` is not written `에이치티엠엘`. `export.markdown` is NOT here,
+    //   because Korean does render that as 마크다운 — so the list stays a list of
+    //   deliberate exceptions rather than a blanket exemption for the group.
+    const ALLOWED_IDENTICAL = ['app.name', 'export.html', 'export.pdf'];
+
     const identical = Object.keys(en).filter(
       (key) => ko[key as keyof typeof ko] === en[key as keyof typeof en],
     );
 
-    expect(identical).toEqual(['app.name']);
+    expect(identical.sort()).toEqual([...ALLOWED_IDENTICAL].sort());
   });
 });
 

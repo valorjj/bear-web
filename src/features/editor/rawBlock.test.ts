@@ -12,10 +12,6 @@ import { normalizeMarkdown, parseMarkdown } from './markdown';
  */
 const UNSUPPORTED: ReadonlyArray<{ name: string; markdown: string }> = [
   {
-    name: 'table',
-    markdown: '| item | qty |\n| --- | --- |\n| bread | 2 |',
-  },
-  {
     name: 'image',
     markdown: '![alt text](https://example.com/cat.png)',
   },
@@ -60,14 +56,18 @@ describe.each(UNSUPPORTED)('preservation: $name', ({ markdown }) => {
 });
 
 describe('preservation in context', () => {
-  it('keeps a table intact when it is surrounded by editable content', () => {
-    const source = '# Shopping\n\n| item | qty |\n| --- | --- |\n| bread | 2 |\n\nDone.';
+  // The table case that used to live here moved to the table suites when M8b
+  // gave tables a real node: a supported construct is normalized, not preserved
+  // byte-for-byte, so it can no longer prove anything about the raw fallback.
+  // A raw HTML block takes its place, keeping the property under test.
+  it('keeps a raw HTML block intact when it is surrounded by editable content', () => {
+    const source = '# Shopping\n\n<aside>note</aside>\n\nDone.';
     expect(normalizeMarkdown(source)).toBe(source);
   });
 
   it('does not swallow the content following an unsupported block', () => {
-    const source = '| a |\n| --- |\n| b |\n\nAfter the table.';
-    expect(normalizeMarkdown(source)).toContain('After the table.');
+    const source = '<aside>note</aside>\n\nAfter the block.';
+    expect(normalizeMarkdown(source)).toContain('After the block.');
   });
 
   it('preserves an image inline with surrounding text byte-for-byte', () => {
@@ -77,8 +77,8 @@ describe('preservation in context', () => {
 });
 
 describe('structural check: the raw node actually does the work', () => {
-  it('parses a table into a rawTable node carrying the source, not an empty document', () => {
-    const markdown = '| item | qty |\n| --- | --- |\n| bread | 2 |';
+  it('parses a raw HTML block into a rawHtmlBlock node carrying the source, not an empty document', () => {
+    const markdown = '<aside>note</aside>';
     const doc = parseMarkdown(markdown);
 
     expect(doc.type).toBe('doc');
@@ -86,7 +86,7 @@ describe('structural check: the raw node actually does the work', () => {
     expect(doc.content).toHaveLength(1);
 
     const [node] = doc.content ?? [];
-    expect(node?.type).toBe('rawTable');
+    expect(node?.type).toBe('rawHtmlBlock');
     expect(node?.attrs?.source).toBe(markdown);
   });
 
@@ -298,7 +298,9 @@ describe('token set derivation', () => {
     const names = editorExtensions.map((extension) => extension.name);
     expect(names).toEqual(
       expect.arrayContaining([
-        'rawTable',
+        // `rawTable` is deliberately absent since M8b: tables have a real node,
+        // and a fallback for them would now be dead code claiming a token an
+        // extension above already handles.
         'rawDefinition',
         'rawHtmlBlock',
         'rawImage',

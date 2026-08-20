@@ -105,16 +105,38 @@ export function NoteList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-2">
-        <Button onClick={onCreate} label={t('noteList.create')}>
+      {/*
+        `ghost`, not `default`, and that is a DELIBERATE REVERSAL of M6's ruling
+        for this strip alone.
+
+        M6 gave these buttons a border and a fill because without them "New
+        note" and "Move to trash" were indistinguishable from static text until
+        the pointer happened to cross them. The chrome fixed that and made the
+        header read as a row of form controls, which is the single thing that
+        most dated the app. Bear's own header carries quiet, borderless icons in
+        a fixed strip, and that is what was asked for here.
+
+        What replaces the resting affordance is position and familiarity: a
+        dedicated header strip, a standard glyph, an `aria-label`, and a hover
+        fill. `Delete forever` and `Empty trash` below deliberately do NOT
+        follow — they are irreversible against a database with no server copy,
+        so they keep a resting fill. `ConfirmDialog`'s Cancel still uses
+        `default`, so the variant and its ruling both stay live.
+      */}
+      <div className="border-border flex h-9 shrink-0 items-center gap-1 border-b px-2">
+        <Button variant="ghost" onClick={onCreate} label={t('noteList.create')}>
           <Icon glyph={SquarePen} />
         </Button>
 
         {selectedIsVisible && allowsTrash(scope) && (
-          <Button onClick={() => onTrash(selectedNoteId!)}>{t('noteList.trash')}</Button>
+          <Button variant="ghost" onClick={() => onTrash(selectedNoteId!)}>
+            {t('noteList.trash')}
+          </Button>
         )}
         {selectedIsVisible && isTrash(scope) && (
-          <Button onClick={() => onRestore(selectedNoteId!)}>{t('noteList.restore')}</Button>
+          <Button variant="ghost" onClick={() => onRestore(selectedNoteId!)}>
+            {t('noteList.restore')}
+          </Button>
         )}
         {selectedIsVisible && isTrash(scope) && (
           <Button variant="danger" onClick={() => onPurge(selectedNoteId!)}>
@@ -128,7 +150,7 @@ export function NoteList({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center border-b border-border px-2 py-1.5">
+      <div className="flex shrink-0 items-center border-b border-border px-2 py-1">
         <SearchField query={query} onQueryChange={onQueryChange} inputRef={searchInputRef} />
       </div>
 

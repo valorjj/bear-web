@@ -241,11 +241,37 @@ rather than a highlight.
 
 ### Measured contrast ratios
 
-Computed by hand with a real WCAG 2.1 relative-luminance calculation
+**Superseded as a method, retained as a record.** These Paper and Ink figures
+were computed by hand with a real WCAG 2.1 relative-luminance calculation
 (sRGB channel linearisation, `(L1 + 0.05) / (L2 + 0.05)`), because the
-alpha-composited overlays across three surfaces in two themes cannot be
-computed by jsdom in the test suite. Script: throwaway Node script, not
-checked in.
+alpha-composited overlays across three surfaces cannot be computed by jsdom.
+Since M9a they are produced by `e2e/contrast.spec.ts`, which runs in Chromium
+and gates every theme in the roster on every `npm run test:e2e`.
+
+The hand-measured numbers are what CALIBRATE that harness: `scripts/contrast.test.ts`
+pins `faint on sidebar` at 3.21 (Paper) and 3.40 (Ink), and pins the 2.51 that
+got `--bear-faint` darkened in M7.5. Injecting that rejected value back into
+Paper makes the harness report 2.51 on sidebar — the same figure to two
+decimals. A harness nobody can check is worth nothing on themes nobody has
+measured, which is the whole reason the two are tied together.
+
+Two corrections the harness forced, both about which pairs are REAL:
+
+- **`canvas` is not a text ground.** `bg-canvas` occurs once, on `<main>`,
+  whose only children are the three panes and the resizers; every pane paints
+  its own background over it. No glyph is drawn on canvas, so no ratio is
+  required against it.
+- **`accent` is not text on `sidebar`.** A selected sidebar row is `text-text`
+  on `bg-selected`; the accent appears there only as the 2px edge marker, a
+  graphical object. The `accent`/`sidebar` row in the table below is therefore
+  a measurement of a pair the app does not render as text — kept because it
+  was recorded, not because it is required.
+
+`border` is held to 1.05, not 3.0. WCAG's non-text threshold covers what is
+required to identify a control; a row divider is not that, and both shipped
+palettes sit at 1.2–1.4 by design. The floor catches the one unambiguous
+defect — a divider equal to its own ground — and declines to adjudicate
+subtlety.
 
 | Foreground | Background | Target | Paper      | Ink        |
 | ----------- | ----------- | ------ | ---------- | ---------- |
@@ -260,6 +286,36 @@ checked in.
 | `faint`    | `surface`  | ≥ 3.0  | **3.50:1**  | **3.65:1**  |
 
 Every pair passes its target, with margin.
+
+#### M9a: the indigo pair
+
+Produced by `e2e/contrast.spec.ts`, not by hand. `sidebar` equals `canvas` in
+both, so a sidebar figure is also the canvas figure.
+
+| Foreground | Background | Target | Indigo Light | Indigo Dark |
+| ---------- | ---------- | ------ | ------------ | ----------- |
+| `text` | `bg` / `surface` | ≥ 4.5 | **15.69:1** | **14.65:1** |
+| `text` | `sidebar` | ≥ 4.5 | **13.17:1** | **16.04:1** |
+| `muted` | `bg` / `surface` | ≥ 4.5 | **6.43:1** | **6.98:1** |
+| `muted` | `sidebar` | ≥ 4.5 | **5.40:1** | **7.65:1** |
+| `faint` | `bg` / `surface` | ≥ 3.0 | **3.88:1** | **4.32:1** |
+| `faint` | `sidebar` | ≥ 3.0 | **3.26:1** | **4.73:1** |
+| `accent` | `bg` / `surface` | ≥ 4.5 | **6.18:1** | **6.12:1** |
+| `danger` | `bg` / `surface` | ≥ 4.5 | **5.62:1** | **6.10:1** |
+| `text` | `selected` over `surface` | ≥ 4.5 | **13.77:1** | **10.49:1** |
+| `text` | `hover` over `surface` | ≥ 4.5 | **14.28:1** | **12.39:1** |
+| `accent` | `tag-fill` over `bg` | ≥ 3.0 | **5.19:1** | **4.22:1** |
+| `border` | `bg` / `surface` / `sidebar` | ≥ 1.05 | 1.34 / 1.34 / 1.13 | 1.29 / 1.29 / 1.41 |
+
+The mockup's `faint` of `#9d99b0` measured **2.76:1** on white and **2.31:1**
+on the sidebar, and was darkened to `#837e99` on the harness's report. It is
+the first value in this project chosen by a test rather than by eye.
+
+`accent` and `danger` hold genuinely different values here for the first time
+in this project — `#5b4ad6` against `#c62828`. The standing ruling that
+headings keep `--bear-text` was justified by the two coinciding; that
+justification does not hold for these themes, and the ruling is re-decided on
+its own merits rather than reversed as a side effect.
 
 ### M7.5: contrast against the canvas
 
@@ -341,39 +397,104 @@ milestone the whole app ran at a flat 14px.
 | `{typography.ui-md}` | 14px    | 1.4          | Note titles                    |
 | `{typography.ui-lg}` | 16px    | 1.35         | Pane headers, empty states     |
 
-### Editor typography is separate, and owned by M8
+### The heading scale is one token
 
-The editor's own type — `--bear-font-size` (16px), `--bear-line-height`
-(1.6), `--bear-line-width` (56em), `--bear-para-spacing`, `--bear-para-indent`
-— is a distinct scale bound to M8's preference sliders (font size, line
-height, and measure will all become user-adjustable). Do not reuse the UI
-scale for note content, and do not treat the editor tokens as part of this
-document's scope: they are read but not designed here.
+`--bear-heading-ratio` is `1.2`, and `h1`/`h2`/`h3` are that ratio cubed,
+squared and itself — `1.73em` / `1.44em` / `1.2em`, against M8's assembled
+`1.6` / `1.35` / `1.15`. Deriving all three from one number means they cannot
+drift out of proportion, and a future change is one decision rather than three
+independent nudges.
+
+**Chosen, not measured.** The section below on Bear's heading scale records
+that the figures were never captured trustworthily and warns against acting on
+them. Since Bear is no longer the authority, the ratio is simply stated. If it
+is ever revisited, revisit the ratio.
+
+`e2e/appearance.spec.ts` drives the ratio from the page and asserts all three
+headings move, and that raising it moves `h1` by more than `h3` — which is what
+proves they are derived from one number rather than merely all changed. Both
+halves were verified by fault injection.
+
+### UI hierarchy comes from weight and tracking, not size alone
+
+The five UI steps span 11px to 16px. Five sizes across 5px is too little for
+size on its own to carry hierarchy, which is why the chrome read flat however
+the sizes were arranged. `--bear-weight-ui-strong` (600) and
+`--bear-tracking-tight` (`-0.011em`) are now part of the `ui-md` and `ui-lg`
+steps rather than being applied at call sites, so a title is a title because of
+its step and not because whoever wrote the component remembered `font-semibold`.
+Tracking tightens as size grows — the standard optical correction, since
+letterfit that looks right at 11px looks loose at 16px.
+
+### Editor typography is separate, and its sliders are still to come
+
+The editor's own type — `--bear-font-size` (16px), `--bear-line-height` (1.6),
+`--bear-line-width` (40em), `--bear-para-spacing` (0em), `--bear-para-indent`
+(0em) — is a distinct scale. Do not reuse the UI scale for note content.
+
+All five are wired into `.ProseMirror` as of M8, and guarded by a test that drives
+each one from the page and asserts the render moves. Four match Bear's own
+defaults exactly; `--bear-line-width` is the measured 40em rather than the 56em
+Bear's slider reports. The remaining work is the UI: nothing yet lets a user move
+them.
 
 ## Layout
 
-### Why there are no spacing tokens
+### The spacing scale
 
-There is deliberately no `spacing` scale in this system. Tailwind's default
-spacing scale is already a 4px grid (`p-1` = 4px, `p-2` = 8px, `p-3` = 12px,
-...), and it is used directly throughout the app (`px-3 py-2.5`, `gap-1`,
-`h-7`, `h-9`). A second, bear-web-specific spacing scale on top of Tailwind's
-would create a standing question at every call site — "reach for the design
-token or the Tailwind utility?" — for no benefit, since they'd resolve to the
-same pixel grid anyway. Radii and durations get tokens because their values
-are opinionated and small in number; spacing does not need the same
-treatment.
+**Superseded ruling (M5.5–M8), kept visible because it was wrong in a
+specific and instructive way.** This section previously read: *"There is
+deliberately no `spacing` scale in this system. Tailwind's default spacing
+scale is already a 4px grid, and it is used directly throughout the app. A
+second, bear-web-specific spacing scale on top of Tailwind's would create a
+standing question at every call site — reach for the design token or the
+Tailwind utility? — for no benefit, since they'd resolve to the same pixel
+grid anyway."*
+
+The reasoning about tokens was sound; the conclusion did not follow. Declining
+a second token system is not the same as declining a scale, and what shipped
+was neither. By M8 the app used ten distinct steps with no rule — `px-1.5`,
+`p-5`, `pl-7` sitting beside `px-2`, `p-4`, `gap-2` — because **a grid on which
+every step is permitted is not a scale.** That drift is what read as
+misalignment.
+
+**M9a states the subset and enforces it.** Ordinary Tailwind utilities are
+still what gets written; there is still no competing token system. What changed
+is that `scripts/sourceLint.test.ts` now fails on a step outside the permitted
+set, the same mechanism that already catches a stray hex literal.
+
+| Permitted (px) | 2 | 4 | 8 | 12 | 16 | 24 | 32 | 48 |
+| -------------- | - | - | - | -- | -- | -- | -- | -- |
+| Tailwind step  | `0.5` | `1` | `2` | `3` | `4` | `6` | `8` | `12` |
+
+Seven sites were snapped onto it when the rule was introduced. Each was a
+judgement, not a rounding:
+
+| Site | Was | Now | Why |
+| ---- | --- | --- | --- |
+| `TopControls`, `BottomToolbar` | `px-1.5` | `px-2` | The inset around a row of icon buttons |
+| `Button` size `sm` | `px-1.5` | `px-2` | Matches the `md` size's rhythm |
+| `ExportMenu` row | `py-1.5` | `py-1` | Down, not up: the row is already sized by its text, and 8px vertical would make a compact menu loose |
+| `NoteList` header strip | `py-1.5` | `py-1` | Down, so the strip keeps its height rather than growing 4px |
+| `SearchField` | `pl-7` | `pl-8` | 8px inset + 14px glyph needs 32, not 28 |
+| `ConfirmDialog` | `p-5` | `p-6` | Up, not down: it already uses `gap-4` internally, so `p-4` would make padding equal the internal gap and the content would read as touching the edge |
+
+An arbitrary value (`p-[13px]`) is an escape hatch rather than a forbidden
+thing, but it must be allowlisted with a stated reason, exactly like the
+focus-outline suppressors. One entry exists: `RichEditor`'s `pt-12`/`pb-24`,
+which reserve the space the floating toolbars overlay — a computed reach, not a
+rhythm.
 
 ### Density rules
 
 | Element             | Height / measure | Notes                                              |
 | --------------------- | ------------------ | ----------------------------------------------------- |
-| Sidebar row          | 28px (`h-7`)      | Each nesting depth indents 0.75rem                    |
-| Note list row        | auto, `py-2.5`    | Title / date / snippet stacked, `gap-0.5`             |
+| Sidebar row          | 24px (`h-6`)      | Each nesting depth indents 0.75rem. 24 not Bear's 22, to stay on the 4px grid |
+| Note list row        | 88px, `py-2`      | Title / date / two-line snippet, `gap-0.5`; the second snippet line is reserved, not collapsible |
 | Toolbar (top/bottom) | 36px (`h-9`)      | Bottom toolbar is a horizontally scrolling button row |
 | Button, `sm`         | 24px (`h-6`)      |                                                        |
 | Button, `md`         | 28px (`h-7`)      | The default size                                      |
-| Editor measure       | `56em` (`--bear-line-width`) | M8-adjustable, not part of this system     |
+| Editor measure       | `40em` (`--bear-line-width`) | Bear's rendered 643pt at 16pt. M8-adjustable |
 
 ### Panes
 
@@ -440,11 +561,17 @@ stacked with a hairline bottom border. Selected state mirrors `sidebar-row`:
 
 ### `toolbar`
 
-Two toolbars exist: `TopControls` (per-note controls: info panel toggle) and
-`BottomToolbar` (formatting actions: heading, lists, bold/italic/strike,
-highlight, link, code, quote). Both are `role="toolbar"` with a translated
-`aria-label`, 36px tall, a hairline border separating them from the editor
-canvas, background `{colors.bg}`.
+Two toolbars exist: `TopControls` (per-note controls: bold, italic, export, info
+panel toggle) and `BottomToolbar` (formatting actions: heading, lists,
+bold/italic/strike, highlight, link, code, quote, table). Both are
+`role="toolbar"` with a translated `aria-label` and 36px tall.
+
+**Since M8 both FLOAT as fully rounded pills** — `bg-surface` with
+`shadow-popover`, no border — positioned by `RichEditor` rather than by
+themselves: the top group at the pane's top right, the formatting bar centred
+above its bottom edge. Before M8 they were full-width strips welded to the pane
+edges with a hairline border, which measurement against Bear identified as the
+single largest reason the editor read as a web page rather than an app.
 
 ### `toolbar-button`
 
@@ -562,3 +689,134 @@ M6 has a target rather than a blank page:
   ignores layout gaps; this milestone shipped, and then reverted, a
   regression where a sidebar row's label and count announced as "work3"
   instead of "work 3." Use an explicit space text node.
+
+---
+
+## Measured against the real Bear (2026-08-18)
+
+The first quantitative comparison between this app and its reference. Bear's
+numbers come from pixel measurement of five full-resolution screen captures of
+Bear 2 on macOS; ours come from `npm run measure`, which drives a real Chromium
+at 1440x900 and writes `docs/design/measurements.md`. Regenerate our column any
+time; Bear's column only changes if new captures are measured.
+
+### Calibration, and why these numbers are trustworthy
+
+The captures are 2000x1125 with a menu bar exactly 24px tall. The macOS menu bar
+is 24pt, so the capture is **1 px per point** and every figure below is in
+points, directly comparable to our CSS pixels. Two independent checks agree:
+Bear's body line pitch measures 25pt, and Bear's own typography panel reports
+16pt at line-height 1.6 (= 25.6pt); and Bear's surface colours match the
+Catppuccin Latte palette value-for-value.
+
+### The captures are themed, so their colours are NOT Bear's
+
+The Bear in these captures runs **Catppuccin Latte**, a third-party theme the
+user selected — base `#eff1f5`, mantle `#e6e9ef`, teal `#179299`, all exact
+palette matches. Every colour measured below therefore describes Catppuccin
+Latte, not Bear's own design language, and none of it is an argument for
+changing a token in `tokens.css`. What transfers is **structure, density and
+shape**, which are the theme-independent parts.
+
+### Geometry
+
+| Surface | Bear | bear-web | Delta |
+| --- | --- | --- | --- |
+| Sidebar row height | 22 | 24 | +2, held on the 4px grid deliberately |
+| Sidebar nesting indent step | ~13 | 12 | close enough |
+| Sidebar group gap (lists → tags) | +13 | +16 | ours is already separated, slightly wider |
+| Note list row height | 81 | 88 | +7, and now shows the same two snippet lines |
+| Note list content per row | title + 2-line snippet + date | title + date + 2-line snippet | **order still differs — see below** |
+| Note list divider | inset ~9 from the left | inset 12 | |
+| Prose measure (rendered) | 643 | 640 | closed in M8 |
+| Editor body size / line height | 16 / 1.6 | 16 / 1.6 | **identical** |
+| Bottom toolbar | floating, ~380 x 37, fully rounded, centred, ~13 above the edge | floating, fully rounded, centred, 12 above the edge | closed in M8 |
+| Top controls | two floating pill groups | one floating pill group, top right | closed in M8; we have no back/forward to group |
+| Note-foot tag chip | 102 x 22, fully rounded, `#` glyph + name | (no equivalent) | |
+
+### `--bear-line-width` is dead at 1440x900, and the token is the wrong value
+
+Our editor pane is 840 wide; less its 24pt horizontal padding the prose column
+is **792**, and `max-width: 896px` (`56em` at 16px) therefore never engages.
+The token has been declared-and-inert since M5.5 in a second sense: M7.5 wired
+it into `.ProseMirror`, but at this window size the clamp still does nothing.
+
+Bear's rendered measure is **643pt = 40.2em at 16pt**. So the fix is not "wire
+the token up" — it is already wired — it is to change the value to about `40em`,
+at which point the clamp engages at 1440 wide and the column matches Bear's.
+
+**A discrepancy worth recording rather than resolving:** Bear's own typography
+panel reports its line width as `56 em`, the same number our token carries, while
+rendering 40em. Bear's `em` here is therefore not a CSS `em`; the remaining 16em
+is unexplained and may be container padding. Do not copy `56` into a CSS
+`max-width` on the strength of the panel's label — copy the measured 40em, which
+is what a user actually sees.
+
+### Bear's own typography defaults, from its preferences panel
+
+Read directly off Bear's 타이포그래피 pane, and the reason four of our five editor
+tokens need no change:
+
+| Bear preference | Bear default | Our token | Match |
+| --- | --- | --- | --- |
+| 글꼴 크기 (size) | 16 pt | `--bear-font-size: 16px` | yes |
+| 줄 높이 (line height) | 1.6 em | `--bear-line-height: 1.6` | yes |
+| 줄 너비 (line width) | 56 em (renders 40em) | `--bear-line-width: 40em` | matches what Bear RENDERS, not what its slider says — see above |
+| 단락 간격 (paragraph spacing) | 0 em | `--bear-para-spacing: 0em` | yes |
+| 단락 들여쓰기 (paragraph indent) | 0 em | `--bear-para-indent: 0em` | yes |
+
+Bear exposes exactly these five as sliders, plus three font pickers (text,
+heading, code — it uses a separate heading family). That is the shape M8's
+typography panel should take; our token set was already designed for it.
+
+### Structural features Bear has and we do not
+
+Visible in every capture, and a large share of the perceived quality gap. None
+of these is styling — each is a document-model feature:
+
+- ~~**Tables.**~~ Closed in M8c: real nodes, rendered in the editor and in
+  every export.
+- **Callout / panel blocks.** Measured: full-measure width, ~94 tall, tinted
+  fill, a 6pt accent bar down the left edge, ~6 radius. Bear ships several
+  variants (memo, warning).
+- **Collapsible headings.** A chevron sits left of every heading, outside the
+  measure, and folds the section beneath it.
+- **Inline images and note thumbnails.** The first row of Bear's note list
+  carries an image preview, which is why that row is 149 tall against 81.
+
+### What Bear does that we deliberately do not, and should keep not doing
+
+- **Bear's panes are flush inside one window, separated by hairlines.** Ours
+  float as three rounded cards on `--bear-canvas`. That is the existing ruling
+  (a browser tab has no window chrome, so depth substitutes for it) and this
+  measurement is not an argument against it.
+- **Bear colours its headings with the theme accent.** Ours keep
+  `--bear-text`, because `--bear-accent` and `--bear-danger` hold the same value
+  in both shipped themes and accent headings would make one colour mean both
+  "heading" and "delete forever". Revisiting this needs the two tokens to
+  diverge first.
+
+### Still open: the note list row's reading order
+
+Bear stacks **title, snippet, date**; ours stacks **title, date, snippet**. The
+density pass deliberately did not change this, because `NoteListItem`'s
+`aria-label` is `"{title}, {date}, {snippet}"` and two tests in
+`NoteListItem.test.tsx` pin the snippet as the last thing announced. Reordering
+the row visually without the label leaves a sighted user and a screen-reader
+user hearing the date at different points; reordering both means editing a
+pinned accessibility contract, which this project's own rules say is a
+deliberate act and not a side effect of a restyle. It is a real difference, worth
+closing, and worth closing on purpose.
+
+### Still unverified: heading scale and paragraph rhythm
+
+The M8 comparison closed the measure, the chrome shape and the density. It did
+NOT settle the type scale. Bear's h2 measured roughly 1.5x its body text against
+our `1.35em`, and its inter-paragraph gap looked larger than our `0.75em` — but
+neither number was recorded here at the time, and the captures are gone, so
+neither is trustworthy enough to act on.
+
+**Do not change the heading scale or the block rhythm on the strength of those
+figures.** Both need a fresh set of Bear captures saved to a real path, measured
+the same way as the rest of this section: calibrate on the 24pt menu bar, then
+read line pitch and band heights out of the prose column.

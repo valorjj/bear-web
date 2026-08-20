@@ -18,6 +18,8 @@
   --color-hover: var(--bear-hover);
   --color-selected: var(--bear-selected);
   --color-canvas: var(--bear-canvas);
+  --color-tag-fill: var(--bear-tag-fill);
+  --color-tag-fill-strong: var(--bear-tag-fill-strong);
 
   --font-sans: var(--bear-font-sans);
   --font-mono: var(--bear-font-mono);
@@ -30,8 +32,12 @@
   --text-ui--line-height: var(--bear-leading-ui);
   --text-ui-md: var(--bear-text-ui-md);
   --text-ui-md--line-height: 1.4;
+  --text-ui-md--font-weight: var(--bear-weight-ui-strong);
+  --text-ui-md--letter-spacing: var(--bear-tracking-tight);
   --text-ui-lg: var(--bear-text-ui-lg);
   --text-ui-lg--line-height: 1.35;
+  --text-ui-lg--font-weight: var(--bear-weight-ui-strong);
+  --text-ui-lg--letter-spacing: var(--bear-tracking-tight);
 
   --radius-sm: var(--bear-radius-sm);
   --radius-md: var(--bear-radius-md);
@@ -71,6 +77,48 @@ body {
  * this makes it a normal cascade citizen again: still the default everywhere,
  * now genuinely overridable by a utility.
  */
+/*
+ * Every border in the app consumes the theme's width token.
+ *
+ * Tailwind's `border` utilities hardcode 1px, so without this High Contrast
+ * would be a palette swap that fails to thicken a single line — and the one
+ * theme whose separation depends entirely on borders (its shadows are `none`)
+ * would be the theme where borders stayed hairlines.
+ *
+ * Layered in `utilities`, the same layer Tailwind's own utilities occupy, and
+ * declared after the import so equal specificity is resolved by source order in
+ * our favour. `e2e/appearance.spec.ts` asserts the rendered width, because the
+ * source cannot show whether a utility was actually emitted — the defect that
+ * left `--color-hover` dead for two milestones.
+ */
+@layer utilities {
+  .border,
+  .border-t,
+  .border-b,
+  .border-l,
+  .border-r,
+  .border-x,
+  .border-y {
+    border-width: var(--bear-border-width);
+  }
+
+  .border-t {
+    border-block-width: var(--bear-border-width) 0;
+  }
+
+  .border-b {
+    border-block-width: 0 var(--bear-border-width);
+  }
+
+  .border-l {
+    border-inline-width: var(--bear-border-width) 0;
+  }
+
+  .border-r {
+    border-inline-width: 0 var(--bear-border-width);
+  }
+}
+
 @layer utilities {
   :focus-visible {
     outline: 2px solid var(--bear-focus);

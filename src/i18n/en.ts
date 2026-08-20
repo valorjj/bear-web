@@ -84,7 +84,15 @@ export const en = {
   'editor.toolbar.highlight': 'Highlight',
   'editor.toolbar.link': 'Link',
   'editor.toolbar.code': 'Code block',
+  'editor.toolbar.table': 'Table',
   'editor.toolbar.quote': 'Quote',
+  'export.open': 'Export note',
+  'export.label': 'Export as',
+  'export.markdown': 'Markdown',
+  'export.html': 'HTML',
+  'export.pdf': 'PDF',
+  'export.failed': 'This note could not be exported.',
+
   'editor.toolbar.top': 'Top controls',
   'editor.toolbar.bottom': 'Formatting toolbar',
   'editor.info.show': 'Note information',
@@ -95,6 +103,18 @@ export const en = {
   'editor.link.prompt': 'Link address',
   'editor.tagPill.hint.mac': 'Cmd-click to filter by this tag',
   'editor.tagPill.hint.other': 'Ctrl-click to filter by this tag',
+
+  'theme.indigoLight': 'Indigo Light',
+  'theme.indigoDark': 'Indigo Dark',
+  'theme.paper': 'Paper',
+  'theme.ink': 'Ink',
+  'theme.highContrast': 'High Contrast',
+
+  'appearance.label': 'Appearance',
+  'appearance.open': 'Change theme',
+  'appearance.system': 'System',
+  'appearance.group.light': 'Light',
+  'appearance.group.dark': 'Dark',
 } as const;
 
 export type TranslationKey = keyof typeof en;
