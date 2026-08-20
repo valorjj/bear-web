@@ -1,4 +1,5 @@
 import { isMacOS, type Editor } from '@tiptap/core';
+import type { DecorationSet } from '@tiptap/pm/view';
 import { fireEvent, screen } from '@testing-library/react';
 import { createRef, type RefObject } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -248,12 +249,34 @@ describe('RichEditor tag pill tooltip', () => {
    * uses for "puts the injected hint on every pill". Reading the extension's
    * OPTIONS back would only prove the value was passed in, not that the
    * plugin used it; this proves the string reached a live decoration.
+   *
+   * Gathers every plugin's `decorations` prop, the way ProseMirror's own
+   * `viewDecorations` does, rather than `someProp`'s short-circuit on the
+   * first truthy result: with `HeadingFold` now also registering a
+   * `decorations` prop, `someProp` can return that plugin's (empty, but
+   * still a truthy object) `DecorationSet` before ever reaching `TagPill`'s.
+   * Filtering on `title` — only a tag pill's decoration carries one — keeps
+   * this about the pill regardless of which plugin's decorations come first.
    */
   function firstPillTitle(editor: Editor): string | undefined {
-    const decorationSet = editor.view.someProp('decorations', (f) => f(editor.state));
-    const [decoration] = (decorationSet as unknown as { find(): Array<{ type: unknown }> }).find();
-    return (decoration as { type: { attrs: Record<string, string> } } | undefined)?.type.attrs
-      .title;
+    const decoration = editor.state.plugins
+      .flatMap((plugin) => {
+        const prop = plugin.props.decorations;
+        if (!prop) return [];
+        // `decorations`'s declared `this` is the owning `Plugin`, and its
+        // declared return type is the general `DecorationSource`, which has
+        // no `.find()` — only the concrete `DecorationSet` every plugin in
+        // this app actually returns does (see `HeadingFold.ts`, `TagPill.ts`).
+        const result = prop.call(plugin, editor.state) as DecorationSet | null | undefined;
+        return result?.find() ?? [];
+      })
+      .find(
+        (d) =>
+          (d as unknown as { type: { attrs: Record<string, string> } }).type.attrs.title !==
+          undefined,
+      );
+    return (decoration as unknown as { type: { attrs: Record<string, string> } } | undefined)?.type
+      .attrs.title;
   }
 
   // `isMacOS()` runs inside `RichEditor`'s `useState` initializer, which runs

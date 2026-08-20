@@ -5,6 +5,7 @@ import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
 import StarterKit from '@tiptap/starter-kit';
 
+import { HeadingFold } from './HeadingFold';
 import { Highlight } from './Highlight';
 import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
 import type { TagPillOptions } from './TagPill';
@@ -73,6 +74,12 @@ function buildSupportedExtensions(options: Partial<TagPillOptions>): Extensions 
     // decorates `#tag` text as a pill; the document and its Markdown are
     // untouched. See `TagPill.ts` and `tagPill.test.ts`.
     TagPill.configure(options),
+    // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
+    // schema — `computeRecognizedHtmlTags()` and every round-trip suite are
+    // unaffected. It contributes one plugin that decorates folded sections;
+    // the document and its Markdown are untouched. See `HeadingFold.ts` and
+    // `headingFold.test.ts`.
+    HeadingFold,
   ];
 }
 

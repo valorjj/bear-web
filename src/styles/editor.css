@@ -365,3 +365,12 @@
   cursor: pointer;
   background-color: var(--bear-tag-fill-strong);
 }
+
+/*
+ * A folded section's blocks. `display: none` rather than `visibility` or a
+ * height clamp: the block must take no space at all, and ProseMirror keeps the
+ * positions regardless, since the document is untouched.
+ */
+.ProseMirror .bear-fold-hidden {
+  display: none;
+}
