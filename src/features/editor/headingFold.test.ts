@@ -649,34 +649,63 @@ describe('editing at a fold boundary', () => {
   // exactly this route. One of each is covered here; `Alt-Backspace`,
   // `Ctrl-Alt-Backspace` and `Alt-Delete` still report `event.key` as
   // `'Backspace'`/`'Delete'` and are already covered by the tests above.
-  it('Ctrl-h at the Backspace boundary unfolds, like plain Backspace', () => {
-    const editor = docFor('<h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
-    const [a] = headingSections(editor.state.doc);
-    editor.commands.toggleHeadingFold(a!.pos);
-    editor.commands.setTextSelection(a!.end + 1);
+  //
+  // `@tiptap/core`'s own `Keymap` extension only binds these chords inside
+  // an `isMacOS() || isiOS()` branch, so the guard's own key check must be
+  // gated the same way — otherwise a Windows/Linux user's unrelated `Ctrl-h`/
+  // `Ctrl-d` browser or OS shortcut would be swallowed. jsdom's default
+  // `navigator.platform` is `''`, which is not any recognized Apple platform
+  // string, so `isMacOS()` is false in every test run unless a test stubs it
+  // — exactly the pattern `tagPill.test.ts` uses for the same reason. These
+  // two tests stub `navigator.platform` to `'MacIntel'` so the Mac branch is
+  // actually driven rather than dead code guarded by nothing; the platform
+  // gate itself (both directions) is pinned separately below.
+  it('Ctrl-h at the Backspace boundary unfolds, like plain Backspace, on macOS', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    try {
+      const editor = docFor('<h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
+      const [a] = headingSections(editor.state.doc);
+      editor.commands.toggleHeadingFold(a!.pos);
+      editor.commands.setTextSelection(a!.end + 1);
 
-    const handled = editor.view.someProp('handleKeyDown', (f) =>
-      f(editor.view, new KeyboardEvent('keydown', { key: 'h', ctrlKey: true })),
-    );
+      const handled = editor.view.someProp('handleKeyDown', (f) =>
+        f(editor.view, new KeyboardEvent('keydown', { key: 'h', ctrlKey: true })),
+      );
 
-    expect(handled).toBe(true);
-    expect(foldedKeys(editor.state)).toEqual([]);
-    editor.destroy();
+      expect(handled).toBe(true);
+      expect(foldedKeys(editor.state)).toEqual([]);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
   });
 
-  it('Ctrl-d at the Delete boundary unfolds, like plain Delete', () => {
-    const editor = docFor('<h2>A</h2><p>hidden</p>');
-    const [a] = headingSections(editor.state.doc);
-    editor.commands.toggleHeadingFold(a!.pos);
-    editor.commands.setTextSelection(a!.contentStart - 1);
+  it('Ctrl-d at the Delete boundary unfolds, like plain Delete, on macOS', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    try {
+      const editor = docFor('<h2>A</h2><p>hidden</p>');
+      const [a] = headingSections(editor.state.doc);
+      editor.commands.toggleHeadingFold(a!.pos);
+      editor.commands.setTextSelection(a!.contentStart - 1);
 
-    const handled = editor.view.someProp('handleKeyDown', (f) =>
-      f(editor.view, new KeyboardEvent('keydown', { key: 'd', ctrlKey: true })),
-    );
+      const handled = editor.view.someProp('handleKeyDown', (f) =>
+        f(editor.view, new KeyboardEvent('keydown', { key: 'd', ctrlKey: true })),
+      );
 
-    expect(handled).toBe(true);
-    expect(foldedKeys(editor.state)).toEqual([]);
-    editor.destroy();
+      expect(handled).toBe(true);
+      expect(foldedKeys(editor.state)).toEqual([]);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
   });
 
   it('does not intercept a plain "h" or "d" keystroke (ordinary typing)', () => {
@@ -697,6 +726,64 @@ describe('editing at a fold boundary', () => {
     // Still folded: neither plain letter unfolded the section.
     expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
     editor.destroy();
+  });
+});
+
+describe('the macOS delete-variant chords are platform-gated', () => {
+  it('Ctrl-d unfolds when isMacOS() is true', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    try {
+      const editor = docFor('<h2>A</h2><p>hidden</p>');
+      const [a] = headingSections(editor.state.doc);
+      editor.commands.toggleHeadingFold(a!.pos);
+      editor.commands.setTextSelection(a!.contentStart - 1);
+
+      const handled = editor.view.someProp('handleKeyDown', (f) =>
+        f(editor.view, new KeyboardEvent('keydown', { key: 'd', ctrlKey: true })),
+      );
+
+      expect(handled).toBe(true);
+      expect(foldedKeys(editor.state)).toEqual([]);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  // Off Apple platforms, `@tiptap/core` never binds `Ctrl-d` to a delete
+  // handler at all — it is a real, unrelated OS/browser shortcut there — so
+  // this guard must not intercept it either. Without the `isMacOS()` gate on
+  // the implementation side, this is exactly the case that regresses: the
+  // section would unfold for a keystroke that carries no delete meaning on
+  // this platform.
+  it('Ctrl-d falls through untouched when isMacOS() is false', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+    try {
+      const editor = docFor('<h2>A</h2><p>hidden</p>');
+      const [a] = headingSections(editor.state.doc);
+      editor.commands.toggleHeadingFold(a!.pos);
+      editor.commands.setTextSelection(a!.contentStart - 1);
+
+      const handled = editor.view.someProp('handleKeyDown', (f) =>
+        f(editor.view, new KeyboardEvent('keydown', { key: 'd', ctrlKey: true })),
+      );
+
+      expect(handled).toBeFalsy();
+      // Still folded: the non-Mac platform never triggers the guard's
+      // Ctrl-d/Ctrl-h branch, so nothing here unfolds the section.
+      expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
   });
 });
 

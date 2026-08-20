@@ -1,4 +1,4 @@
-import { Extension } from '@tiptap/core';
+import { Extension, isMacOS } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
@@ -496,12 +496,25 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
           // `Ctrl-d`/`Alt-d` report `event.key` as the literal letter, so
           // without checking for them explicitly a Mac user pressing the
           // Emacs-style chord would destroy hidden content right past this
-          // guard. The modifier check is what keeps a PLAIN "h" or "d"
-          // keystroke (ordinary typing) from ever matching.
+          // guard.
+          //
+          // `isMacOS()`-gated, NOT unconditional: `@tiptap/core`'s own
+          // `Keymap` extension only merges `macKeymap` — the object binding
+          // `Ctrl-h`/`Ctrl-d`/`Alt-d` at all — inside an `isMacOS() ||
+          // isiOS()` branch (see `dist/index.js` around its `pcKeymap` /
+          // `macKeymap` split). On Windows or Linux those chords carry no
+          // delete meaning in this app; `Ctrl-h` and `Ctrl-d` are real,
+          // unrelated OS/browser shortcuts there, and intercepting them would
+          // unfold a section the user never asked to touch. The modifier
+          // check on top keeps a PLAIN "h" or "d" keystroke (ordinary typing)
+          // from ever matching, on any platform.
           handleKeyDown(view, event) {
-            const isBackspace = event.key === 'Backspace' || (event.key === 'h' && event.ctrlKey);
+            const macChord = isMacOS();
+            const isBackspace =
+              event.key === 'Backspace' || (macChord && event.key === 'h' && event.ctrlKey);
             const isDelete =
-              event.key === 'Delete' || (event.key === 'd' && (event.ctrlKey || event.altKey));
+              event.key === 'Delete' ||
+              (macChord && event.key === 'd' && (event.ctrlKey || event.altKey));
             if (!isBackspace && !isDelete) return false;
 
             const { selection } = view.state;
