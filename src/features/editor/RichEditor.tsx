@@ -253,11 +253,36 @@ export function RichEditor({
       {menu !== null && (
         <HeadingMenu
           request={menu}
-          onSetLevel={(level) => editor?.chain().focus().setNode('heading', { level }).run()}
+          // `.setTextSelection(menu.pos + 1)` before `setNode`, not left to
+          // whatever the caret already sat at: the badge's own `mousedown`
+          // calls `preventDefault()` and never moves ProseMirror's selection
+          // to the clicked heading, so `setNode` without this targeted the
+          // WRONG node — whatever the caret was already in, heading or not.
+          // `menu.pos + 1` matches the widget's own offset (`section.pos +
+          // 1`, the start of the heading's own content), so this always
+          // lands inside the heading the user actually clicked.
+          onSetLevel={(level) =>
+            editor
+              ?.chain()
+              .focus()
+              .setTextSelection(menu.pos + 1)
+              .setNode('heading', { level })
+              .run()
+          }
           onToggleFold={() => editor?.commands.toggleHeadingFold(menu.pos)}
           onFoldAll={() => editor?.commands.foldAllHeadings()}
           onUnfoldAll={() => editor?.commands.unfoldAllHeadings()}
-          onClose={() => setMenu(null)}
+          onClose={() => {
+            setMenu(null);
+            // The only sensible destination: Task 4 measured that Chromium
+            // refuses `.focus()` to any descendant of a heading containing a
+            // widget, so returning focus to the badge/toggle that opened this
+            // menu is not an option. Without this, Escape and every action
+            // except `onSetLevel` (which already focuses as part of its own
+            // chain) leave focus on the menu button React is about to unmount,
+            // and it falls to `<body>` — the user's next keystroke goes nowhere.
+            editor?.commands.focus();
+          }}
         />
       )}
     </div>

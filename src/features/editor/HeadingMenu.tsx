@@ -55,12 +55,44 @@ export function HeadingMenu({
     ref.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
   }, []);
 
-  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
-    if (event.key === 'Escape') {
-      event.stopPropagation();
-      onClose();
-      return;
+  // Neither listener can live on the menu's own React `onKeyDown`/`onClick`:
+  // both must keep working after focus (or the click itself) has already
+  // left this subtree, which is exactly the case a React handler scoped to
+  // this element can never see.
+  useEffect(() => {
+    function handleOutsideMouseDown(event: MouseEvent): void {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        onClose();
+      }
     }
+    function handleDocumentKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') onClose();
+    }
+    // Capture, not bubble. A click on a heading's badge/toggle is itself
+    // what opens (or re-opens) a menu, and `HeadingFold`'s own mousedown
+    // handler runs during the BUBBLE phase (ProseMirror attaches it with no
+    // `capture` option). Closing during CAPTURE guarantees this listener
+    // runs first, so clicking heading B's badge while heading A's menu is
+    // still open closes A's menu and only THEN lets the click's own bubble
+    // handler open B's — not the reverse, which would otherwise queue two
+    // `setMenu` calls in the same tick and leave the new menu closed instead
+    // of open.
+    document.addEventListener('mousedown', handleOutsideMouseDown, true);
+    // A document-level listener, not the React `onKeyDown` below, because
+    // Escape must close the menu even after focus has already left it — e.g.
+    // a click inside the editor moves focus without the menu ever receiving
+    // a keydown at all, and `onKeyDown` scoped to this subtree only fires
+    // while something inside it is focused.
+    document.addEventListener('keydown', handleDocumentKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideMouseDown, true);
+      document.removeEventListener('keydown', handleDocumentKeyDown);
+    };
+  }, [onClose]);
+
+  // Tab-trapping only, now — Escape is handled at the document level above so
+  // it keeps working once focus has left this subtree.
+  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
     if (event.key !== 'Tab') return;
 
     const items = [...(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];

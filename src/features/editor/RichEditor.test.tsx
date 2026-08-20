@@ -1,11 +1,13 @@
 import { isMacOS, type Editor } from '@tiptap/core';
 import type { DecorationSet } from '@tiptap/pm/view';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { createRef, type RefObject } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithI18n } from '@/i18n/testing';
 
+import { headingSections } from './headingSections';
 import { RichEditor, type RichEditorHandle, type RichEditorProps } from './RichEditor';
 import { tagRangeAt } from './TagPill';
 
@@ -51,6 +53,57 @@ describe('RichEditor', () => {
     await screen.findByRole('heading', { name: 'Hello' });
     const toggle = handleRef.current?.editor?.view.dom.querySelector('[data-fold-toggle]');
     expect(toggle).toHaveAttribute('aria-label', 'Fold or unfold this section');
+  });
+
+  // `headingMenu.test.tsx` mounts `HeadingMenu` in isolation with `vi.fn()`
+  // props, so nothing there could ever catch a wiring bug at the seam between
+  // the badge click and the actual editor command `RichEditor` builds from
+  // it. This is that seam: the badge's own `mousedown` calls
+  // `preventDefault()` and never moves ProseMirror's selection to the heading
+  // that was clicked (see `HeadingFold.ts`), so `onSetLevel` MUST target
+  // `menu.pos` explicitly rather than trust whatever the caret already sat
+  // at — including a caret sitting in an unrelated PARAGRAPH, which this
+  // fixture puts it in on purpose. Getting this wrong doesn't just retitle
+  // the wrong heading; it silently converts a paragraph into a heading.
+  it("changes only the clicked heading's level, leaving an unrelated paragraph alone", async () => {
+    const handleRef = createRef<RichEditorHandle>();
+    renderWithI18n(
+      <RichEditor
+        initialMarkdown={'# Heading A\n\nbody a\n\n# Heading B\n\nbody b'}
+        onChange={vi.fn()}
+        onBlur={vi.fn()}
+        ariaLabel="Note text"
+        handleRef={handleRef}
+        createdAt={0}
+        updatedAt={0}
+      />,
+    );
+
+    await screen.findByRole('heading', { name: 'Heading B' });
+    const editor = handleRef.current!.editor!;
+
+    // The caret sits inside heading A's BODY PARAGRAPH — not inside any
+    // heading at all — precisely so a wiring bug that ignores the clicked
+    // heading and acts on the current selection instead has something
+    // observably wrong to do: turn this paragraph into a heading.
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.setTextSelection(a!.contentStart + 1);
+
+    const badges = editor.view.dom.querySelectorAll('[data-fold-badge]');
+    expect(badges).toHaveLength(2);
+    fireEvent.mouseDown(badges[1]!, { button: 0 });
+
+    const menu = await screen.findByRole('menu');
+    await userEvent.click(within(menu).getByRole('menuitemradio', { name: /Heading 4/ }));
+
+    // Heading B — the one actually clicked — took the new level.
+    expect(editor.view.dom.querySelector('h4')).toHaveTextContent('Heading B');
+    // Heading A is untouched.
+    expect(editor.view.dom.querySelector('h1')).toHaveTextContent('Heading A');
+    // And the paragraph the caret happened to be sitting in was never
+    // touched at all — it must still be a plain paragraph, not a heading.
+    const bodyA = screen.getByText('body a');
+    expect(bodyA.tagName).toBe('P');
   });
 
   it('exposes the current markdown through its handle', async () => {
