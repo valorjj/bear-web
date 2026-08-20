@@ -20,28 +20,41 @@ feature and is not yet scheduled.
 
 ## Status
 
-| Milestone                                | State    |
-| ---------------------------------------- | -------- |
-| M0 scaffold, CI, Pages deploy            | complete |
-| M1 data layer (Dexie)                    | complete |
-| M2 application shell                     | complete |
-| M3 notes CRUD, textarea editor           | complete |
-| M4 editor                                | complete |
-| M5 tags                                  | complete |
-| M5.5 design language                     | complete |
-| M6 smart lists, trash management         | complete |
-| M7 search                                | complete |
-| M7.5 visual design pass                  | complete |
-| M7.6 tag pills                           | complete |
-| M7.7 tag pill activation                 | complete |
-| M8 visual pass (chrome, density, prose)  | complete |
-| M8b export: Markdown, HTML, PDF          | complete |
-| M8c tables as real nodes                 | complete |
-| M9a visual system: themes, scale, picker | complete |
-| M9b callout blocks                       | next     |
-| M9c collapsible headings                 | next     |
+| Milestone                                 | State    |
+| ----------------------------------------- | -------- |
+| M0 scaffold, CI, Pages deploy             | complete |
+| M1 data layer (Dexie)                     | complete |
+| M2 application shell                      | complete |
+| M3 notes CRUD, textarea editor            | complete |
+| M4 editor                                 | complete |
+| M5 tags                                   | complete |
+| M5.5 design language                      | complete |
+| M6 smart lists, trash management          | complete |
+| M7 search                                 | complete |
+| M7.5 visual design pass                   | complete |
+| M7.6 tag pills                            | complete |
+| M7.7 tag pill activation                  | complete |
+| M8 visual pass (chrome, density, prose)   | complete |
+| M8b export: Markdown, HTML, PDF           | complete |
+| M8c tables as real nodes                  | complete |
+| M9a visual system: themes, scale, picker  | complete |
+| A note-list header (scope, sort, preview) | next     |
+| B collapsible headings + level badge      | queued   |
+| C code block language + highlighting      | queued   |
+| M9b callout blocks                        | deferred |
 
 1143 unit tests, 58 end-to-end tests. `main` is always green and auto-deploys.
+
+**The last four rows are not numbered milestones yet**, and the lettering is
+`docs/superpowers/NEXT.md`'s, which holds the order and the reasoning for it.
+B is the sub-project M9a's spec named **M9c**; do not read the letters as new
+milestone ids. **M9b callout blocks is deferred, not dropped** — specced in
+M9a's decomposition, deliberately not chosen this round, still unblocked.
+
+**Image storage is named in this project's goal and has never been
+scheduled** — not by a milestone and not by the three sub-projects above. It is
+larger than all three together and none of them block it. Treat its absence
+from this table as an open decision, not as a ruling.
 
 **Two further Playwright entry points exist and are deliberately not in that
 count, because they assert nothing.** Both drive the fixed corpus in
