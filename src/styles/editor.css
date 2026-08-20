@@ -29,9 +29,42 @@
    * clamping. `width: 100%` restores the fill, so the clamp-then-center
    * recipe actually holds: fill the pane, cap at the measure, center the
    * capped column with the freed-up margin.
+   *
+   * `max-width` is `min(the measure, 100% - 6rem)`, not the measure alone.
+   * The fold toggle sits at `-3rem` from the heading (`.bear-fold-toggle`
+   * below), inside the auto margin this centering produces — and that
+   * margin is only ever `(EditorContent width − measure) / 2`. Below
+   * roughly 688px of pane width that margin is under the toggle's own
+   * 3rem reach, and `EditorContent`'s `overflow-auto` (in
+   * `RichEditor.tsx`) does not merely overlay the toggle there, it CLIPS
+   * it — content past a scroll container's own edge on the start side is
+   * neither visible nor reachable by scrolling. A real click at the
+   * toggle's visual center missed the button and hit the app shell
+   * instead; `e2e/notes.spec.ts`'s fold-and-reload test reproduced this at
+   * the suite's own default 1280x720 viewport. `100% - 6rem` reserves
+   * exactly 3rem of margin on EACH side whenever it is the smaller
+   * operand — i.e. whenever the pane is narrower than the measure plus
+   * 6rem — which guarantees the toggle's reach always lands inside
+   * `EditorContent`'s own box, with the same 1.5rem of slack past its
+   * exact geometric minimum (the toggle needs 1.5rem of margin; this
+   * reserves twice that) so the guarantee survives rounding and holds even
+   * if the toggle's own offset is ever tuned. This is NOT the "reserve a
+   * lane" option the design comment below rejects: `min()` makes the
+   * reservation a no-op above ~736px of pane width (comfortably including
+   * 1440x900), where the measure alone was already the binding constraint
+   * and the achieved reading width is untouched. Below 736px — INCLUDING
+   * the 640-736px band where the plain 40em measure was previously fully
+   * achieved, not merely approached — the reservation now wins instead,
+   * so the rendered column is narrower than 40em there where it was not
+   * before. That narrowing is the deliberate, disclosed cost of this fix:
+   * `e2e/appearance.spec.ts`'s "the editor typography tokens reach the
+   * rendered prose" test runs at the suite's default 1280x720 viewport
+   * (a 656px pane, inside that band) and asserts the column against the
+   * reservation-adjusted clamp, not the raw token, for exactly this
+   * reason.
    */
   width: 100%;
-  max-width: var(--bear-line-width);
+  max-width: min(var(--bear-line-width), 100% - 6rem);
   margin-inline: auto;
 }
 

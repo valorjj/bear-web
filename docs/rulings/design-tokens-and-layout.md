@@ -395,25 +395,37 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   note-list pane and the editor pane's content, measured in `editor.css`'s own
   comment at 88px at 1440x900.
 
-- **That gutter is real screen space only when the pane is wider than the
-  clamped measure; below that, it is not merely "overlapped" but genuinely
-  CLIPPED.** `EditorContent` (`RichEditor.tsx`, the direct parent of
-  `.ProseMirror`) sets `overflow-auto` for vertical scrolling, and — the same
-  "a `visible` axis paired with a non-`visible` one computes to `auto`" CSS
-  quirk already on record here for `BottomToolbar` — that clips the horizontal
-  axis too, at `EditorContent`'s own box edge. When `.ProseMirror` is
-  narrower than its pane (the normal, wide case), `margin-inline: auto`
-  centers it with room to spare, and the toggle's `-3rem` box lands inside
-  that spare room, fully visible. Once the pane narrows to the measure (this
-  project's own default pane widths land an editor pane at 656px — already
-  under the ~688px threshold `editor.css` names), `.ProseMirror` fills the
-  whole pane with no centering margin left, and most of the toggle's `-3rem`
-  box falls OUTSIDE `EditorContent`'s own edge — genuinely clipped, not
-  merely covered, so a real click at its visual center can miss it entirely
-  and land on the app shell instead. `e2e/notes.spec.ts`'s fold-and-reload
-  test widens its viewport to 1440x900 for exactly this reason, matching how
-  a real mouse user with a normal-width window experiences the control;
-  `Mod-Alt-f` remains the one route that never depends on pane width at all.
+- **The gutter used to be real screen space only when the pane was wider
+  than the clamped measure, and below that the toggle was not merely
+  "overlapped" but genuinely CLIPPED — this was a real, shipped bug, found by
+  this task's own browser coverage and fixed in the same task, not filed as
+  an accepted limitation.** `EditorContent` (`RichEditor.tsx`, the direct
+  parent of `.ProseMirror`) sets `overflow-auto` for vertical scrolling, and
+  — the same "a `visible` axis paired with a non-`visible` one computes to
+  `auto`" CSS quirk already on record here for `BottomToolbar` — that clips
+  the horizontal axis too, at `EditorContent`'s own box edge. `margin-inline:
+  auto` only ever gives `.ProseMirror` `(EditorContent width − measure) / 2`
+  of margin on each side, and below ~688px of pane width (this project's own
+  default pane widths land the editor pane at 656px, already under that
+  line) that margin fell under the toggle's own `3rem` reach, so most of its
+  box fell OUTSIDE `EditorContent`'s edge — genuinely clipped, not merely
+  covered. A real Playwright `.click()` at the toggle's visual center missed
+  the button and landed on the app shell instead, reproduced at the suite's
+  own default 1280x720 viewport. The fix (`editor.css`) is `.ProseMirror`'s
+  `max-width: min(var(--bear-line-width), 100% - 6rem)`: `min()` makes the
+  `6rem` reservation a no-op above ~736px of pane width, where the achieved
+  reading width is untouched, and only below that width does it reserve a
+  guaranteed 3rem of margin on each side — twice the toggle's actual 1.5rem
+  reach past the column's edge, deliberate slack so the guarantee survives
+  rounding — so the toggle can never again be invisible-and-unclickable, at
+  the cost of
+  narrowing the rendered column below the raw 40em token in the 640-736px
+  pane-width band, where it previously achieved the full measure. This IS a
+  narrowing the earlier "reserve a lane" rejection did not anticipate, and it
+  is deliberately accepted rather than reserving the lane on the heading or
+  prose itself, which would have narrowed the column at every pane width
+  instead of only this one band. `Mod-Alt-f` remains the one route that
+  never depended on pane width at all, before or after this fix.
 
 - **The persistent folded cue (`.bear-fold-marker`, the inline "…") sits at
   the END of the heading's own line, inside the measure — deliberately not in

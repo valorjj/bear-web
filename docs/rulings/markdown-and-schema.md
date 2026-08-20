@@ -169,14 +169,16 @@ matched = true })`: once any rule commits steps, `matched` is set and every
 
 - **`HeadingFold` is an `Extension`, not a `Node` or a `Mark`, so it registers
   nothing in the schema.** Folding is decoration only: a `Decoration.widget`
-  for the toggle and badge, a `Decoration.node` for the accessible name (see
-  below), and `Decoration.hide` for the hidden blocks — the document itself is
-  never mutated, so Markdown round-tripping and every existing schema test are
-  completely blind to whether this plugin runs at all. That is the exact same
-  blind spot that once let a dead `==highlight==` tokenizer and a live-but-
-  banned underline mark ship in M4 unnoticed; `headingFold.test.ts` exists
-  specifically to assert on the decoration set itself, because nothing else in
-  the suite can see it.
+  for the toggle and badge, and a `Decoration.node` both for the accessible
+  name (see below) and, separately, for each hidden top-level block — tagged
+  `class: 'bear-fold-hidden'`, which `editor.css` renders `display: none`.
+  (There is no `Decoration.hide` in ProseMirror's API; do not grep for one.)
+  The document itself is never mutated, so Markdown round-tripping and every
+  existing schema test are completely blind to whether this plugin runs at
+  all. That is the exact same blind spot that once let a dead `==highlight==`
+  tokenizer and a live-but-banned underline mark ship in M4 unnoticed;
+  `headingFold.test.ts` exists specifically to assert on the decoration set
+  itself, because nothing else in the suite can see it.
 
 - **Fold identity is content-derived (`foldKeyOf`) and fails open, not
   closed.** An ordinal section index (first `##`, second `##`, …) fails

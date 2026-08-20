@@ -795,18 +795,19 @@ test('folding a heading hides its section, and the fold survives a reload', asyn
     settings: [],
   });
 
-  // At the suite's default 1280x720 viewport the editor pane lands at 656px —
-  // just under the ~688px-wide-pane threshold `editor.css` documents for the
-  // gutter affordance. Below it, `EditorContent`'s own `overflow-auto` (the
-  // same "a visible axis paired with a non-visible one computes to auto" CSS
-  // quirk already on record for `BottomToolbar`) clips most of the toggle's
-  // `-3rem` box, leaving only a thin sliver clickable — a real click at its
-  // *center* lands on the app shell, not the button, which is how this test
-  // was first written and first failed. Widened to 1440x900 — the same
-  // reference size `editor.css`'s own comment measures 88px of real gutter
-  // at, and the one `shots.spec.ts` uses — the toggle is fully unclipped and
-  // clickable the way a mouse user with a normal-width window experiences it.
-  await page.setViewportSize({ width: 1440, height: 900 });
+  // Deliberately the suite's DEFAULT viewport (1280x720, `playwright.config.ts`),
+  // not a widened one. A real click on the toggle at this width is exactly
+  // the regression this test exists to catch: at 1280x720 the editor pane
+  // lands at 656px, under the ~688px-wide-pane threshold `editor.css`
+  // documents, and `EditorContent`'s own `overflow-auto` used to clip most
+  // of the toggle's `-3rem` box there, so a real `.click()` at its visual
+  // center missed the button entirely and landed on the app shell instead.
+  // `.ProseMirror`'s `max-width: min(--bear-line-width, 100% - 6rem)` fixes
+  // this (see `editor.css`) by guaranteeing 3rem of margin on each side
+  // whenever the pane is narrower than the measure PLUS 6rem (736px, not
+  // 640px) — this test's own 656px pane sits inside exactly that band, which
+  // is exactly the toggle's own reach — so this test must run at the width
+  // where the bug lived, not one wide enough to avoid it.
   await page.goto('/');
   await page.getByRole('button', { name: /Alpha/ }).first().click();
 
@@ -837,13 +838,22 @@ test('folding a heading hides its section, and the fold survives a reload', asyn
           request.onsuccess = () => resolve(request.result);
           request.onerror = () => reject(request.error);
         });
-        const store = db.transaction('noteFolds', 'readonly').objectStore('noteFolds');
-        const row = await new Promise<{ keys: string[] } | undefined>((resolve, reject) => {
-          const req = store.get('n-fold');
-          req.onsuccess = () => resolve(req.result as { keys: string[] } | undefined);
-          req.onerror = () => reject(req.error);
-        });
-        return row?.keys.length ?? 0;
+        try {
+          const store = db.transaction('noteFolds', 'readonly').objectStore('noteFolds');
+          const row = await new Promise<{ keys: string[] } | undefined>((resolve, reject) => {
+            const req = store.get('n-fold');
+            req.onsuccess = () => resolve(req.result as { keys: string[] } | undefined);
+            req.onerror = () => reject(req.error);
+          });
+          return row?.keys.length ?? 0;
+        } finally {
+          // A fresh connection is opened on every poll iteration, and this
+          // project's own second-connection warning (see CLAUDE.md's
+          // "Dexie's version(1) is IndexedDB version 10" entry) makes an
+          // explicit close cheap insurance against a stray open handle
+          // blocking a later version upgrade in this same page.
+          db.close();
+        }
       }),
     )
     .toBeGreaterThan(0);

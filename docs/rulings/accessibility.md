@@ -71,10 +71,11 @@ Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
 
 - **A heading containing a `Decoration.widget` becomes a subtree Chromium
   refuses `.focus()` to, for every descendant — established by measurement,
-  not inferred.** `HeadingFold.ts`'s decorations function documents roughly a
-  dozen live Playwright experiments (its own comment enumerates them): once a
-  heading has ANY `Decoration.widget` child, `.focus()` silently fails for
-  every element under that heading, independent of `tabindex`, DOM position,
+  not inferred.** `HeadingFold.ts:436-437` cites seven live Playwright
+  experiments, enumerated in this task's own fix report rather than in the
+  code comment itself. Once a heading has ANY `Decoration.widget` child,
+  `.focus()` silently fails for every element under that heading,
+  independent of `tabindex`, DOM position,
   or whether the target is the widget itself — even a bare, unrelated,
   manually injected `<button tabindex="0">` placed elsewhere in the same
   heading is equally unfocusable. The same heading with the widgets removed
