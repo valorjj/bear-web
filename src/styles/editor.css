@@ -30,41 +30,68 @@
    * recipe actually holds: fill the pane, cap at the measure, center the
    * capped column with the freed-up margin.
    *
-   * `max-width` is `min(the measure, 100% - 6rem)`, not the measure alone.
-   * The fold toggle sits at `-3rem` from the heading (`.bear-fold-toggle`
-   * below), inside the auto margin this centering produces — and that
-   * margin is only ever `(EditorContent width − measure) / 2`. Below
-   * roughly 688px of pane width that margin is under the toggle's own
-   * 3rem reach, and `EditorContent`'s `overflow-auto` (in
+   * `max-width` is `min(the measure, 100% - 3rem)`, not the measure alone
+   * (a separate `min-width: 12rem` below provides the floor — see its own
+   * paragraph for why that could not live inside `max-width` itself). The
+   * fold toggle sits at `-3rem` from the heading
+   * (`.bear-fold-toggle` below), inside the auto margin this centering
+   * produces — and that margin is only ever `(EditorContent width −
+   * measure) / 2`. Below roughly 688px of pane width that margin is under
+   * the toggle's own 3rem reach (the toggle's own reach PAST the column's
+   * edge is exactly 1.5rem — the badge already accounts for the other
+   * 1.5rem — so 3rem total, split evenly by centering, is exactly
+   * sufficient), and `EditorContent`'s `overflow-auto` (in
    * `RichEditor.tsx`) does not merely overlay the toggle there, it CLIPS
    * it — content past a scroll container's own edge on the start side is
    * neither visible nor reachable by scrolling. A real click at the
    * toggle's visual center missed the button and hit the app shell
    * instead; `e2e/notes.spec.ts`'s fold-and-reload test reproduced this at
-   * the suite's own default 1280x720 viewport. `100% - 6rem` reserves
-   * exactly 3rem of margin on EACH side whenever it is the smaller
+   * the suite's own default 1280x720 viewport. `100% - 3rem` reserves
+   * exactly 1.5rem of margin on EACH side whenever it is the smaller
    * operand — i.e. whenever the pane is narrower than the measure plus
-   * 6rem — which guarantees the toggle's reach always lands inside
-   * `EditorContent`'s own box, with the same 1.5rem of slack past its
-   * exact geometric minimum (the toggle needs 1.5rem of margin; this
-   * reserves twice that) so the guarantee survives rounding and holds even
-   * if the toggle's own offset is ever tuned. This is NOT the "reserve a
+   * 3rem (688px) — which guarantees the toggle's reach lands exactly at
+   * `EditorContent`'s own edge, not past it. This is NOT the "reserve a
    * lane" option the design comment below rejects: `min()` makes the
-   * reservation a no-op above ~736px of pane width (comfortably including
+   * reservation a no-op above ~688px of pane width (comfortably including
    * 1440x900), where the measure alone was already the binding constraint
-   * and the achieved reading width is untouched. Below 736px — INCLUDING
-   * the 640-736px band where the plain 40em measure was previously fully
-   * achieved, not merely approached — the reservation now wins instead,
-   * so the rendered column is narrower than 40em there where it was not
-   * before. That narrowing is the deliberate, disclosed cost of this fix:
-   * `e2e/appearance.spec.ts`'s "the editor typography tokens reach the
-   * rendered prose" test runs at the suite's default 1280x720 viewport
-   * (a 656px pane, inside that band) and asserts the column against the
-   * reservation-adjusted clamp, not the raw token, for exactly this
-   * reason.
+   * and the achieved reading width is untouched. Below 688px — INCLUDING
+   * the 640-688px band where the plain 40em measure was previously fully
+   * achieved, not merely approached — the reservation now wins instead
+   * (656px pane → 608px column, not 640px), so the rendered column is
+   * narrower than 40em there where it was not before. That narrowing is
+   * the deliberate, disclosed cost of this fix: `e2e/appearance.spec.ts`'s
+   * "the editor typography tokens reach the rendered prose" test runs at
+   * the suite's default 1280x720 viewport (a 656px pane, inside that band)
+   * and asserts the column against the reservation-adjusted clamp, not the
+   * raw token, for exactly this reason.
+   *
+   * `min-width: 12rem` is a separate floor, because `min()` alone has no
+   * lower bound: at a pane narrow enough that `100% - 3rem` goes negative
+   * or near-zero, the effective `max-width` would too, and Chromium renders
+   * that as a genuinely collapsed (near-)zero-width column rather than an
+   * error — verified directly against a 76px-wide container. This is
+   * DELIBERATELY NOT folded into `max-width` as `max(12rem, min(…))`: a
+   * `max-width` can only ever SHRINK an item below its other constraints,
+   * never grow it past them — `width: 100%` already makes this a flex item
+   * whose preferred size is the (already-narrow) pane's own width, so a
+   * larger `max-width` ceiling is simply unreached and has no effect. Only
+   * `min-width` can force the item wider than its flex container, which is
+   * exactly the floor this needs: below 12rem of available pane width, the
+   * column overflows `EditorContent` on purpose, and `overflow-auto` (on
+   * `EditorContent` in `RichEditor.tsx`) makes that overflow horizontally
+   * scrollable rather than clipped or collapsed. (This was found by
+   * measurement, not reasoned out in advance: an earlier version of this
+   * rule used `max-width: max(12rem, min(…))` and measured a rendered width
+   * BELOW 12rem at a narrow pane regardless — the nested `max()` inside
+   * `max-width` never took effect, for the reason above.) Nothing in this
+   * app currently drives the editor pane this narrow (the note list and
+   * sidebar resizers have their own 160px floor, but the editor pane
+   * itself has none), so its absence was silent until covered by a test at
+   * a small viewport.
    */
   width: 100%;
-  max-width: min(var(--bear-line-width), 100% - 6rem);
+  min-width: 12rem;
+  max-width: min(var(--bear-line-width), 100% - 3rem);
   margin-inline: auto;
 }
 
@@ -412,11 +439,17 @@
  * The gutter affordance.
  *
  * Absolutely positioned so it costs no layout: at 1440x900 the prose column
- * clamps to 640px inside an 816px pane, leaving 88px of gutter, but panes are
- * user-resizable and below roughly 688px of pane width there is no gutter at
- * all. Rather than reserve a lane — which would narrow a deliberately measured
- * `--bear-line-width` at every width — the controls sit in negative inline
- * space and simply overlay the text's left edge when there is none.
+ * clamps to 640px inside an 816px pane, leaving 88px of gutter. Panes are
+ * user-resizable, and below roughly 688px of pane width the plain measure
+ * alone would leave no gutter at all — `.ProseMirror`'s own `max-width`
+ * (above) conditionally reserves exactly enough margin to prevent that,
+ * rather than reserving a lane on the heading or prose itself (which would
+ * narrow the deliberately measured `--bear-line-width` at every pane width,
+ * not only the narrow ones). There is therefore always at least a sliver of
+ * real gutter now, and the controls never overlay prose — see `.ProseMirror`'s
+ * own comment above for the full history: this used to be false, a real
+ * clipping bug found and fixed as part of the same task that added this
+ * gutter.
  *
  * Hover-only AT REST, so nothing overlaps prose when nothing is folded. A
  * folded heading keeps its toggle visible even without hover (see the

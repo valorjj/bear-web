@@ -37,16 +37,25 @@ import { seedDatabase } from './fixtures/seed.ts';
 
 /** Every construct below in one note, so one editor mount covers them all. */
 /**
- * `.ProseMirror`'s `max-width` is `min(var(--bear-line-width), 100% - 6rem)`
- * (`editor.css`) — the `6rem` reservation guarantees the fold toggle's
- * gutter is never clipped by `EditorContent`'s own `overflow-auto`, at the
- * cost of narrowing the achieved column below the raw token on any pane
- * narrower than the token plus 6rem (736px at the default 16px root font
- * size). Chromium does not resolve a `min()` mixing an absolute length and a
- * percentage into a single used-value pixel number for `getComputedStyle` —
- * it reports the partially-resolved expression itself (e.g.
- * `"min(640px, 100% - 96px)"`), so `Number.parseFloat` on it is `NaN`. This
- * computes the effective clamp in the test instead of relying on the
+ * `.ProseMirror` is `min-width: 12rem; max-width: min(var(
+ * --bear-line-width), 100% - 3rem)` (`editor.css`, two separate
+ * properties, deliberately not one nested `max(12rem, min(…))` inside
+ * `max-width` — see that file's own comment for why a `max-width` cannot
+ * enforce a floor at all: it only ever shrinks an item below its other
+ * constraints, never grows it past them). The `3rem` reservation
+ * guarantees the fold toggle's gutter is never clipped by
+ * `EditorContent`'s own `overflow-auto` (the toggle's own reach past the
+ * column's edge is `1.5rem`; `3rem` split evenly by centering gives
+ * exactly `1.5rem` on each side), at the cost of narrowing the achieved
+ * column below the raw token on any pane narrower than the token plus
+ * 3rem (688px at the default 16px root font size). The `12rem` `min-width`
+ * is a separate guarantee: without it, a pane narrow enough would collapse
+ * the reservation-adjusted column toward zero width with nothing to catch
+ * it. Chromium does not resolve a `min()` mixing an absolute length and a
+ * percentage into a single used-value pixel number for `getComputedStyle`
+ * — it reports the partially-resolved expression itself (e.g.
+ * `"min(640px, 100% - 48px)"`), so `Number.parseFloat` on it is `NaN`.
+ * This computes the effective clamp in the test instead of relying on the
  * browser to have resolved it.
  */
 function measureProseClamp(element: Element): {
@@ -63,13 +72,26 @@ function measureProseClamp(element: Element): {
   const fontSizePx = Number.parseFloat(style.fontSize);
   const tokenPx = emMatch ? Number.parseFloat(emMatch[1]) * fontSizePx : Number.NaN;
   const paneWidth = pane === null ? 0 : pane.getBoundingClientRect().width;
-  const RESERVED_PX = 96; // 6rem at the fixed 16px root font size.
+  const RESERVED_PX = 48; // 3rem at the fixed 16px root font size.
+  const FLOOR_PX = 192; // 12rem at the fixed 16px root font size.
   return {
     prose: prose.getBoundingClientRect().width,
     pane: paneWidth,
     tokenPx,
-    effectiveMax: Math.min(tokenPx, paneWidth - RESERVED_PX),
+    effectiveMax: Math.max(FLOOR_PX, Math.min(tokenPx, paneWidth - RESERVED_PX)),
   };
+}
+
+/** Sets a `--bear-*` custom property on the root, the way M8's sliders do. */
+async function setToken(
+  page: import('@playwright/test').Page,
+  name: string,
+  value: string,
+): Promise<void> {
+  await page.evaluate(
+    ([property, next]) => document.documentElement.style.setProperty(property, next),
+    [name, value] as const,
+  );
 }
 
 async function openNoteWithProse(page: import('@playwright/test').Page) {
@@ -589,10 +611,10 @@ test('the prose column is measured on a wide window', async ({ page }) => {
   expect(widths.pane).toBeGreaterThan(0);
   expect(widths.prose).toBeLessThan(widths.pane);
 
-  // At 1600x900 the editor pane is comfortably past the 736px threshold
+  // At 1600x900 the editor pane is comfortably past the 688px threshold
   // where `min()`'s reservation branch would engage, so the effective clamp
   // is still the plain token value — this window size is deliberately wide
-  // enough that this test is unaffected by the `6rem` reservation and stays
+  // enough that this test is unaffected by the `3rem` reservation and stays
   // a pure "does the token reach the column" check.
   expect(widths.effectiveMax).toBeCloseTo(widths.tokenPx, 0);
 
@@ -600,9 +622,31 @@ test('the prose column is measured on a wide window', async ({ page }) => {
   // `width: 100%` from `.ProseMirror` in editor.css shrinks the flex item to
   // its content (a single short line, ~150px in a 1000px+ pane), and
   // `prose < pane` stays true. The contract is clamp-then-centre — the
-  // rendered width should equal the effective clamp — so assert the lower
-  // bound too, against the actual token value rather than a pixel constant.
+  // rendered width should equal the effective clamp — so assert both
+  // bounds, against the actual token value rather than a pixel constant:
+  // the lower bound alone would not catch a clamp applied UNconditionally
+  // (e.g. narrower than the token even here, at a width where nothing
+  // should narrow it).
   expect(widths.prose).toBeGreaterThan(widths.effectiveMax - 2);
+  expect(widths.prose).toBeLessThan(widths.effectiveMax + 2);
+
+  // None of the assertions above fail if `--bear-line-width` were ignored
+  // entirely — at this viewport the pane-derived clamp and the token-derived
+  // one coincide, so a rule that consumed only the pane width would satisfy
+  // every check above too. Drive the token itself, the same way M8's slider
+  // does, and confirm the render actually follows it — the guard this
+  // test's own docstring says it exists to provide, restored. `20em` (320px),
+  // not something smaller: `.ProseMirror`'s separate `min-width: 12rem`
+  // (192px) floor would otherwise win instead of the token, which would
+  // prove the floor works (already covered by its own test) rather than
+  // that the token does.
+  await setToken(page, '--bear-line-width', '20em');
+  const shrunk = await editor.evaluate(measureProseClamp);
+  expect(shrunk.tokenPx).toBeCloseTo(320, 0);
+  expect(shrunk.effectiveMax).toBeCloseTo(320, 0);
+  expect(shrunk.prose).toBeGreaterThan(300);
+  expect(shrunk.prose).toBeLessThan(340);
+  await setToken(page, '--bear-line-width', '40em');
 });
 
 test('a tag renders as a pill, distinct from the prose beside it', async ({ page }) => {
@@ -774,42 +818,35 @@ test('the editor typography tokens reach the rendered prose', async ({ page }) =
       return list.getBoundingClientRect().top - paragraph.getBoundingClientRect().bottom;
     });
 
-  const setToken = async (name: string, value: string): Promise<void> => {
-    await page.evaluate(
-      ([property, next]) => document.documentElement.style.setProperty(property, next),
-      [name, value] as const,
-    );
-  };
-
   // Both blocks must actually be there, or every comparison below is vacuous.
   const restingGap = await gapBetweenBlocks();
   expect(Number.isNaN(restingGap)).toBe(false);
 
   // `--bear-para-spacing` is additional space on top of the base rhythm, which
   // is Bear's own semantics for the slider. 2em at 16px is 32px.
-  await setToken('--bear-para-spacing', '2em');
+  await setToken(page, '--bear-para-spacing', '2em');
   const spacedGap = await gapBetweenBlocks();
   expect(spacedGap - restingGap).toBeGreaterThan(30);
-  await setToken('--bear-para-spacing', '0em');
+  await setToken(page, '--bear-para-spacing', '0em');
 
   // `--bear-para-indent` reaches paragraphs. Read from computed style rather
   // than measured, because a first-line indent moves glyphs inside a box whose
   // own rect does not change.
-  await setToken('--bear-para-indent', '3em');
+  await setToken(page, '--bear-para-indent', '3em');
   const indent = await page.getByRole('textbox', { name: 'Note text' }).evaluate((element) => {
     const paragraph = element.querySelector('p');
     return paragraph === null ? null : getComputedStyle(paragraph).textIndent;
   });
   expect(indent).toBe('48px');
-  await setToken('--bear-para-indent', '0em');
+  await setToken(page, '--bear-para-indent', '0em');
 
   // `--bear-line-width` reaches the column, and — unlike before M8 — the clamp
   // engages at the default viewport rather than only on an unusually wide one.
   // At THIS test's default (1280x720) viewport the editor pane is 656px —
-  // inside the band where `.ProseMirror`'s `min(token, 100% - 6rem)` (see
+  // inside the band where `.ProseMirror`'s `min(token, 100% - 3rem)` (see
   // `measureProseClamp`'s own doc comment) reserves margin for the fold
-  // toggle's gutter rather than the raw token deciding the column: the
-  // effective clamp here is `pane - 6rem`, narrower than the plain 40em
+  // toggle's gutter rather than the raw token deciding the column:
+  // the effective clamp here is `pane - 3rem`, narrower than the plain 40em
   // token, and that reservation — not the token alone — is what the
   // rendered column must match at this width.
   const clamped = await page
@@ -819,6 +856,26 @@ test('the editor typography tokens reach the rendered prose', async ({ page }) =
   expect(clamped.effectiveMax).toBeLessThan(clamped.pane);
   expect(clamped.prose).toBeLessThan(clamped.effectiveMax + 2);
   expect(clamped.prose).toBeGreaterThan(clamped.effectiveMax - 2);
+
+  // At THIS viewport the pane-derived reservation and the token happen to
+  // agree with every check above regardless of whether the token is read at
+  // all (40em is comfortably wider than the 608px reservation-adjusted
+  // clamp, so the reservation always wins here). Drive the token itself,
+  // the same way the two tokens above were driven, to prove the rule
+  // actually reads `--bear-line-width` rather than merely reserving margin
+  // off the pane: set it small enough to become the binding constraint even
+  // inside the reservation band, and confirm the render follows. `20em`
+  // (320px), not something smaller: `.ProseMirror`'s separate
+  // `min-width: 12rem` (192px) floor would otherwise win instead of the
+  // token, which would prove the floor works (already covered by its own
+  // test) rather than that the token does.
+  await setToken(page, '--bear-line-width', '20em');
+  const shrunk = await page.getByRole('textbox', { name: 'Note text' }).evaluate(measureProseClamp);
+  expect(shrunk.tokenPx).toBeCloseTo(320, 0);
+  expect(shrunk.effectiveMax).toBeCloseTo(320, 0);
+  expect(shrunk.prose).toBeGreaterThan(300);
+  expect(shrunk.prose).toBeLessThan(340);
+  await setToken(page, '--bear-line-width', '40em');
 });
 
 /*
@@ -1123,8 +1180,8 @@ test('the fold toggle stays inside the visible editor at every pane width, wide 
   // note-list pane cannot see this, because a layout box is reported
   // regardless of an ancestor's clip. This test measures `EditorContent`'s
   // own real `getBoundingClientRect()` instead, which is the one comparison
-  // that can actually fail: before `.ProseMirror`'s
-  // `max-width: min(var(--bear-line-width), 100% - 6rem)` fix, the toggle's
+  // that can actually fail: before `.ProseMirror`'s `min-width: 12rem;
+  // max-width: min(var(--bear-line-width), 100% - 3rem)` fix, the toggle's
   // `x` fell BELOW this boundary at a narrow pane, and a real Playwright
   // `.click()` at that position landed on the app shell instead of the
   // button (reproduced in `e2e/notes.spec.ts`'s fold-and-reload test at the
@@ -1171,18 +1228,62 @@ test('the fold toggle stays inside the visible editor at every pane width, wide 
 
   // Narrow: the pane is well under the clamped measure, so the fix's
   // guaranteed reservation is the ONLY thing between the toggle and
-  // `EditorContent`'s clip boundary. Clearance must still be positive — the
-  // toggle must still be inside the visible, clickable box, not merely
-  // "less overlapped than before" — and it should sit near the guaranteed
-  // minimum (`3rem` reserved margin minus the toggle's own `1.5rem` further
-  // offset than the badge = `1.5rem` ≈ 24px), not the large, incidental
-  // margin the wide case gets from having room to spare.
+  // `EditorContent`'s clip boundary. The reservation (`3rem` total, split
+  // evenly by centering into `1.5rem` each side) is deliberately sized to
+  // exactly cancel the toggle's own `1.5rem` reach past the column's edge —
+  // no more — so clearance here is expected to land at exactly zero: the
+  // toggle's edge exactly meets `EditorContent`'s own edge, neither past it
+  // (clipped, the original bug) nor comfortably inside it (which would mean
+  // more margin was reserved than necessary, narrowing the column further
+  // than it has to be). Zero is therefore the PASSING value, not a
+  // boundary to avoid — `toBeGreaterThanOrEqual(0)` is the guarantee this
+  // fix actually makes, and it still discriminates: reverting the CSS
+  // reservation entirely reproduces the pre-fix `-24` clearance measured
+  // when this test was first written (see the task's fix report for that
+  // RED run), which fails this same assertion.
   await page.setViewportSize({ width: 900, height: viewport.height });
   const narrowClearance = await toggleClearance();
-  expect(narrowClearance).toBeGreaterThan(0);
+  expect(narrowClearance).toBeGreaterThanOrEqual(0);
   expect(narrowClearance).toBeLessThan(wideClearance);
-  expect(narrowClearance).toBeGreaterThanOrEqual(16);
-  expect(narrowClearance).toBeLessThanOrEqual(32);
+  // A small float tolerance above zero, not a wide band: this pins the
+  // reservation to "exactly sufficient," not "generously more than
+  // sufficient" — a regression that reserved 6rem again (comfortably
+  // clipping-free but narrowing the column more than necessary) would still
+  // pass `toBeGreaterThanOrEqual(0)` above but fails this upper bound.
+  expect(narrowClearance).toBeLessThanOrEqual(4);
 
   await page.setViewportSize(viewport);
+});
+
+test('the prose column never collapses to zero at a very narrow pane', async ({ page }) => {
+  // `.ProseMirror`'s `min-width: 12rem` (`editor.css`) is the floor `min()`
+  // alone cannot provide: `max-width: min(var(--bear-line-width), 100% -
+  // 3rem)` has no lower bound of its own, so at a pane narrow enough for
+  // `100% - 3rem` to approach zero, the effective clamp would too — and
+  // Chromium renders that as a genuinely collapsed column, not an error.
+  // Nothing else in this app drives the editor pane this narrow today (the
+  // note list and sidebar resizers have their own 160px floor; the editor
+  // pane itself has none), which is exactly why this was silent until a
+  // test actually looked at this width.
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await editor.pressSequentially('A line of prose.');
+
+  // 720 total width puts the editor pane at roughly 96px — well under the
+  // 240px (12rem floor + 3rem reservation) point where the floor must take
+  // over, and confirmed not to break the rest of the shell's own layout.
+  await page.setViewportSize({ width: 720, height: 800 });
+
+  const widths = await editor.evaluate(measureProseClamp);
+  expect(widths.pane).toBeLessThan(150);
+  expect(widths.prose).toBeCloseTo(192, 0);
+
+  // The floor must win regardless of how narrow the pane gets past that
+  // point too, not merely at one sampled width.
+  await page.setViewportSize({ width: 650, height: 800 });
+  const narrower = await editor.evaluate(measureProseClamp);
+  expect(narrower.prose).toBeCloseTo(192, 0);
 });

@@ -382,10 +382,8 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   suppressed.
 
 - **The fold toggle and badge are absolutely positioned at a negative inline
-  offset from the heading (`-3rem` and `-1.5rem`), never a reserved lane on
-  the heading or the prose itself.** Reserving a lane on `.ProseMirror` would
-  narrow the measured `--bear-line-width` (40em) at every pane width, which
-  this project has already ruled out once for the prose column generally.
+  offset from the heading (`-3rem` and `-1.5rem`) — their OWN offsets never
+  changed and are not a reserved lane on the heading or prose.**
   `.bear-fold-badge`'s `-1.5rem` exactly cancels `.ProseMirror`'s own `1.5rem`
   padding, so the badge always lands flush with the prose column's own edge —
   it is effectively always visible, at any pane width, and never usefully
@@ -393,7 +391,11 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   badge-width further out at `-3rem`, is the one that actually reaches past
   `.ProseMirror`'s own box into the real gutter — the free space between the
   note-list pane and the editor pane's content, measured in `editor.css`'s own
-  comment at 88px at 1440x900.
+  comment at 88px at 1440x900. (`.ProseMirror`'s own `max-width` DOES
+  conditionally reserve a lane on the surrounding container below a
+  threshold — see the next bullet — but that is a separate mechanism from
+  these two fixed offsets, which is why this bullet and the next do not
+  contradict each other despite both using the words "reserve a lane.")
 
 - **The gutter used to be real screen space only when the pane was wider
   than the clamped measure, and below that the toggle was not merely
@@ -407,25 +409,40 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   auto` only ever gives `.ProseMirror` `(EditorContent width − measure) / 2`
   of margin on each side, and below ~688px of pane width (this project's own
   default pane widths land the editor pane at 656px, already under that
-  line) that margin fell under the toggle's own `3rem` reach, so most of its
-  box fell OUTSIDE `EditorContent`'s edge — genuinely clipped, not merely
-  covered. A real Playwright `.click()` at the toggle's visual center missed
-  the button and landed on the app shell instead, reproduced at the suite's
-  own default 1280x720 viewport. The fix (`editor.css`) is `.ProseMirror`'s
-  `max-width: min(var(--bear-line-width), 100% - 6rem)`: `min()` makes the
-  `6rem` reservation a no-op above ~736px of pane width, where the achieved
-  reading width is untouched, and only below that width does it reserve a
-  guaranteed 3rem of margin on each side — twice the toggle's actual 1.5rem
-  reach past the column's edge, deliberate slack so the guarantee survives
-  rounding — so the toggle can never again be invisible-and-unclickable, at
-  the cost of
-  narrowing the rendered column below the raw 40em token in the 640-736px
-  pane-width band, where it previously achieved the full measure. This IS a
-  narrowing the earlier "reserve a lane" rejection did not anticipate, and it
-  is deliberately accepted rather than reserving the lane on the heading or
-  prose itself, which would have narrowed the column at every pane width
-  instead of only this one band. `Mod-Alt-f` remains the one route that
-  never depended on pane width at all, before or after this fix.
+  line) that margin fell under the toggle's own `1.5rem` reach past the
+  column's own edge, so most of its box fell OUTSIDE `EditorContent`'s edge —
+  genuinely clipped, not merely covered. A real Playwright `.click()` at the
+  toggle's visual center missed the button and landed on the app shell
+  instead, reproduced at the suite's own default 1280x720 viewport. The fix
+  (`editor.css`) is `.ProseMirror`'s `max-width: min(var(--bear-line-width),
+  100% - 3rem)`: `min()` makes the `3rem` reservation a no-op above ~688px
+  of pane width, where the achieved reading width is untouched, and only
+  below that width does it reserve a guaranteed `1.5rem` of margin on each
+  side — exactly the toggle's own reach, no more — so the toggle's edge
+  lands exactly at `EditorContent`'s own edge rather than past it. (An
+  earlier version of this fix used `6rem`/`736px`/twice the needed margin
+  as deliberate slack; review correctly identified that as reserving more
+  than necessary, at a real cost — see below — so it was tightened to the
+  minimum sufficient value.) A separate `min-width: 12rem` is the floor:
+  `max-width` alone has no lower bound — it can only ever SHRINK an item
+  below its other constraints, never grow it past them, so nesting a
+  `max(12rem, …)` INSIDE `max-width` does not work (measured directly: the
+  rendered width still fell below `12rem` at a narrow pane) — and a narrow
+  enough pane would otherwise collapse the column to a genuinely
+  zero-or-negative width with nothing to catch it, verified directly
+  against a 76px container. Only `min-width` can force the item past its
+  flex container's own width, letting it overflow `EditorContent`
+  (scrollable, via the same `overflow-auto` already on that element) rather
+  than collapse. `12rem` guarantees the column never disappears,
+  independent of the `3rem` reservation above. Narrowing the rendered
+  column below the raw 40em token in the 640-688px pane-width band (656px
+  pane → 608px column, not 640px), where it previously achieved the full
+  measure, is the deliberate, disclosed cost of this fix — a real narrowing
+  the earlier "reserve a lane" rejection did not anticipate, and accepted
+  rather than reserving the lane on the heading or prose itself, which
+  would have narrowed the column at every pane width instead of only this
+  one band. `Mod-Alt-f` remains the one route that never depended on pane
+  width at all, before or after this fix.
 
 - **The persistent folded cue (`.bear-fold-marker`, the inline "…") sits at
   the END of the heading's own line, inside the measure — deliberately not in

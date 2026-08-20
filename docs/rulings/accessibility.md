@@ -72,18 +72,42 @@ Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
 - **A heading containing a `Decoration.widget` becomes a subtree Chromium
   refuses `.focus()` to, for every descendant — established by measurement,
   not inferred.** `HeadingFold.ts:436-437` cites seven live Playwright
-  experiments, enumerated in this task's own fix report rather than in the
-  code comment itself. Once a heading has ANY `Decoration.widget` child,
-  `.focus()` silently fails for every element under that heading,
-  independent of `tabindex`, DOM position,
-  or whether the target is the widget itself — even a bare, unrelated,
-  manually injected `<button tabindex="0">` placed elsewhere in the same
-  heading is equally unfocusable. The same heading with the widgets removed
-  focuses normally. The explanation on file — that Chromium excludes a whole
-  editing-host subtree once it contains a `contenteditable="false"` widget
-  island — is a HYPOTHESIS consistent with the measurements, not a cited
-  mechanism; treat the measurement as fact and the explanation as open. This
-  is why the gutter's toggle and badge are mouse-only controls and why
+  experiments, enumerated in Task 4's fix report (`.superpowers/sdd/`, local
+  and gitignored — not Task 8's, which contains none of this enumeration).
+  Since that ledger does not survive outside this machine's working copy,
+  the seven are repeated here in full:
+  1. A bare `# Hello` with HeadingFold's decorations disabled: an injected
+     `<button tabindex="0" contenteditable="false">` inside the real `<h1>`
+     focuses fine.
+  2. Same heading, only the `aria-label` node decoration re-enabled (no
+     widgets): the injected button still focuses fine.
+  3. Same heading, only the widgets re-enabled (no `aria-label` decoration):
+     the injected button does NOT focus, before or after the widgets.
+  4. The real toggle itself, given an explicit `tabindex="0"` and called via
+     a plain `page.evaluate(() => toggle.focus())` with no keydown at all:
+     still does not focus.
+  5. A nested (non-top-level) heading, which `headingSections()` excludes
+     from all decorations, allows an injected button to focus fine — ruling
+     out the tag name `h1`/`h2` itself as the cause.
+  6. A synthetic `<h2>` created via `document.createElement` and appended
+     directly into `.ProseMirror`, never touched by ProseMirror's own
+     rendering, allows focus fine with or without `aria-label` — ruling out
+     `aria-label` alone as the cause.
+  7. Deferred focus attempts (`requestAnimationFrame`, `setTimeout(0)`,
+     blurring the view first) all still fail — ruling out a timing/re-render
+     race.
+
+  Once a heading has ANY `Decoration.widget` child, `.focus()` silently
+  fails for every element under that heading, independent of `tabindex`,
+  DOM position, or whether the target is the widget itself — even a bare,
+  unrelated, manually injected `<button tabindex="0">` placed elsewhere in
+  the same heading is equally unfocusable. The same heading with the
+  widgets removed focuses normally. The explanation on file — that Chromium
+  excludes a whole editing-host subtree once it contains a
+  `contenteditable="false"` widget island — is a HYPOTHESIS consistent with
+  the measurements above (especially #5 and #6), not a cited mechanism;
+  treat the seven measurements as fact and the explanation as open. This is
+  why the gutter's toggle and badge are mouse-only controls and why
   `Mod-Alt-f` exists as the keyboard route: no focusable in-editor control
   could be built at all.
 

@@ -205,7 +205,7 @@ test.describe('@measure', () => {
       await measure(
         prose,
         'editor: prose column',
-        'max-width is --bear-line-width. Compare box width against it: if they differ, the clamp is engaging.',
+        'min-width is 12rem (a floor); max-width is min(--bear-line-width, 100% - 3rem). The token alone only decides the box above roughly 688px of pane width; narrower panes reserve margin for the fold gutter instead, down to the 12rem floor. Compare box width against the pane width, not just the token, to tell which rule is engaging.',
       ),
       await measure(prose.locator('h1').first(), 'editor: h1', 'The note title line.'),
       await measure(prose.locator('h2').first(), 'editor: h2', ''),
