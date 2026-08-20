@@ -1,9 +1,10 @@
 import { Editor, getSchema } from '@tiptap/core';
 import type { DecorationSet } from '@tiptap/pm/view';
+import StarterKit from '@tiptap/starter-kit';
 import { describe, expect, it } from 'vitest';
 
 import { editorExtensions } from './extensions';
-import { foldedKeys } from './HeadingFold';
+import { HeadingFold, foldedKeys } from './HeadingFold';
 import { headingSections } from './headingSections';
 import { parseMarkdown, serializeMarkdown } from './markdown';
 
@@ -211,6 +212,89 @@ describe('the gutter affordance', () => {
     // `.ProseMirror h2:hover .bear-fold-toggle`, and `position: absolute`
     // resolves against the heading's own box.
     expect(editor.view.dom.querySelector('h2 [data-fold-toggle]')).not.toBeNull();
+    editor.destroy();
+  });
+});
+
+describe('the gutter affordance is accessible', () => {
+  it("pins the heading's own accessible name, independent of any widget inside it", () => {
+    const editor = docFor('<h1>Hello</h1>');
+
+    // The badge's own `textContent` (its level digit) is the measured
+    // pollution source — verified with `dom-accessibility-api` (the engine
+    // `toHaveAccessibleName` uses): an un-hidden `<button>1</button>` sibling
+    // inside a heading is read as content and produces the name "1 Hello".
+    // The badge stays `aria-hidden` precisely because of this, but the
+    // `Decoration.node` aria-label is what makes the heading's name correct
+    // EVEN IF some future widget forgets to hide itself — simulated here by
+    // stripping the badge's own `aria-hidden` after render and asserting the
+    // heading's name is unaffected. Without the `Decoration.node` in
+    // `HeadingFold.ts`, this fails: the heading announces as "1 Hello".
+    const badge = editor.view.dom.querySelector('[data-fold-badge]');
+    expect(badge).not.toBeNull();
+    badge!.removeAttribute('aria-hidden');
+
+    const heading = editor.view.dom.querySelector('h1');
+    expect(heading).not.toBeNull();
+    expect(heading).toHaveAccessibleName('Hello');
+    editor.destroy();
+  });
+
+  it("tracks an edit to the heading's own text", () => {
+    const editor = docFor('<h2>Old title</h2><p>x</p>');
+
+    editor.commands.setTextSelection(1);
+    editor.commands.insertContentAt(1, 'New ');
+
+    const heading = editor.view.dom.querySelector('h2');
+    expect(heading).toHaveAccessibleName('New Old title');
+    editor.destroy();
+  });
+
+  it('is not aria-hidden, and carries aria-label and aria-expanded', () => {
+    // A standalone editor so `foldHint` is a real, non-null value — the
+    // shipped app's `editorExtensions` registers `HeadingFold` with no
+    // options, so `docFor` alone could never exercise a non-null hint.
+    const editor = new Editor({
+      extensions: [StarterKit, HeadingFold.configure({ foldHint: 'Fold or unfold this section' })],
+      content: '<h2>A</h2><p>x</p>',
+    });
+
+    const toggle = editor.view.dom.querySelector('[data-fold-toggle]');
+    expect(toggle).not.toBeNull();
+    expect(toggle).not.toHaveAttribute('aria-hidden');
+    expect(toggle).toHaveAttribute('aria-label', 'Fold or unfold this section');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+    expect(editor.view.dom.querySelector('[data-fold-toggle]')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+
+    editor.destroy();
+  });
+
+  it('the badge stays aria-hidden and out of tab order, since its digit is what polluted the name', () => {
+    const editor = docFor('<h3>C</h3>');
+
+    const badge = editor.view.dom.querySelector('[data-fold-badge]');
+    expect(badge).toHaveAttribute('aria-hidden', 'true');
+    expect(badge).toHaveAttribute('tabindex', '-1');
+    editor.destroy();
+  });
+
+  it('renders a visible glyph, not an empty box', () => {
+    const editor = docFor('<h2>A</h2>');
+
+    const toggle = editor.view.dom.querySelector('[data-fold-toggle]');
+    // jsdom has no layout engine, so a rendered pixel size cannot be asserted
+    // here (see CLAUDE.md's toolchain notes) — a glyph child is the
+    // structural proxy for "this control has visible content", and is
+    // exactly what `e2e/appearance.spec.ts` would additionally confirm has
+    // non-zero `getBoundingClientRect()` in a real browser.
+    expect(toggle?.querySelector('svg')).not.toBeNull();
     editor.destroy();
   });
 });

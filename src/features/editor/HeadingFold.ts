@@ -2,6 +2,8 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
+import { ChevronDown, ChevronRight, renderIconMarkup } from '@/ui/Icon';
+
 import { foldKeyOf, headingSections, hiddenRangesFor, serializeFoldKey } from './headingSections';
 
 export interface HeadingFoldOptions {
@@ -46,30 +48,38 @@ function setKeys(tr: Transaction, keys: string[]): Transaction {
   return tr.setMeta(headingFoldKey, { keys } satisfies FoldMeta);
 }
 
-// `aria-hidden="true"` on all three widgets below is load-bearing, not
-// decorative polish. Each widget is placed at `section.pos + 1` — INSIDE the
-// heading element, which `pos + 1` requires (see the comment at the call
-// site) — and accessible-name computation for a heading concatenates the
-// text/name of every descendant, including a nested `<button>`'s own
-// `aria-label` or text content (the "embedded control" rule). Without
-// `aria-hidden`, a folded `<h1>` containing the level-1 badge and the fold
-// toggle announces as "1 Fold or unfold this section Hello" instead of
-// "Hello" — exactly the class of defect `SidebarRow` and `NoteListItem` both
-// shipped and had to fix (see CLAUDE.md's Accessibility section). Verified
-// live: `RichEditor.test.tsx`'s `findByRole('heading', { name: 'Hello' })`
-// fails without this line and passes with it.
+// The heading's own accessible name is pinned separately, by a
+// `Decoration.node` carrying an explicit `aria-label` — see the
+// `headingNameDecorations` loop below — so nothing here needs to hide the
+// toggle from assistive tech. Only the badge and the marker stay
+// `aria-hidden`: measured with `dom-accessibility-api` (the same engine
+// `jest-dom`'s `toHaveAccessibleName` uses) over this exact markup, an
+// un-hidden `<h2>` containing the badge's digit and the toggle produces the
+// name "1 Hello" — the badge's `textContent`, not the toggle's `aria-label`,
+// is what pollutes it, because the shipped app registers `HeadingFold` with
+// no options (see `extensions.ts`), so `foldHint` is `null` and the toggle
+// carries no `aria-label` at all there. A real browser's embedded-control
+// rule would fold a non-null hint in too, which is exactly why the toggle
+// cannot rely on staying un-labelled — the heading-level `aria-label` decoration
+// is what actually closes this, independently of whether the toggle has a name.
 //
-// This makes the affordance mouse-only, with no keyboard or screen-reader
-// path — the same ruling already made for tag pills ("no keyboard
-// activation, deliberately"): the sidebar/tree already gives keyboard users a
-// route to the same content, and fighting the editor's own focus/selection
-// handling for a hover-reveal control is not worth it.
+// The toggle is deliberately NOT `aria-hidden`: a folded section's blocks are
+// already `display: none` (see `.bear-fold-hidden` below), so if the one
+// control that can reveal them again were also hidden from assistive tech, a
+// screen-reader user would hear a heading followed by silence — no cue
+// content exists, no way back. That is unlike the tag-pill "no keyboard
+// activation, deliberately" ruling, whose safety comes from the tag sidebar
+// already being a complete keyboard route to the same filter; there is no
+// such alternative route to a folded section's content.
+//
+// A hidden-but-focusable control is its own violation (`aria-hidden-focus`),
+// so anything that stays `aria-hidden` here also gets `tabIndex = -1` — see
+// `badgeElement` and `markerElement`.
 function button(className: string, label: string | null): HTMLButtonElement {
   const el = document.createElement('button');
   el.type = 'button';
   el.className = className;
   el.contentEditable = 'false';
-  el.setAttribute('aria-hidden', 'true');
   if (label !== null) el.setAttribute('aria-label', label);
   return el;
 }
@@ -78,6 +88,22 @@ function toggleElement(folded: boolean, hint: string | null): HTMLElement {
   const el = button('bear-fold-toggle', hint);
   el.setAttribute('data-fold-toggle', '');
   el.setAttribute('aria-expanded', folded ? 'false' : 'true');
+  // Explicit `tabindex="0"` ATTRIBUTE, not just the default IDL `.tabIndex`
+  // getter a native `<button>` returns on its own. Kept because it is still
+  // correct practice for an interactive control and is harmless — but it is
+  // NOT sufficient to make this element keyboard-reachable in a real browser.
+  // See the long comment on the `decorations` prop's return statement below
+  // for the measured reason: once a heading contains this widget at all,
+  // Chromium excludes every descendant of that heading — this button
+  // included, `tabindex` or not — from the focusable-area set entirely.
+  el.setAttribute('tabindex', '0');
+  // A visible glyph with real dimensions, not an empty 0x0 box: `ChevronDown`
+  // unfolded, `ChevronRight` folded — the same pairing `ChevronRight` already
+  // implied it was reserved for ("reused for the folded state"). Rendered
+  // through `Icon.tsx`'s `renderIconMarkup`, the one function that lets a
+  // plain-DOM widget builder reach a Lucide glyph without becoming a second
+  // importer of `lucide-react`.
+  el.innerHTML = renderIconMarkup(folded ? ChevronRight : ChevronDown);
   return el;
 }
 
@@ -86,6 +112,13 @@ function badgeElement(level: number): HTMLElement {
   el.setAttribute('data-fold-badge', '');
   el.setAttribute('data-level', String(level));
   el.textContent = String(level);
+  // The one element whose text actually pollutes the heading's accessible
+  // name (see the block comment above) — its digit is redundant with the
+  // toggle's own action and is already visible information, so it stays
+  // hidden. `tabIndex = -1` keeps a real `<button>` from being reachable by
+  // Tab while `aria-hidden`, which would otherwise be its own violation.
+  el.setAttribute('aria-hidden', 'true');
+  el.tabIndex = -1;
   return el;
 }
 
@@ -94,9 +127,9 @@ function markerElement(): HTMLElement {
   el.className = 'bear-fold-marker';
   el.setAttribute('data-fold-marker', '');
   el.setAttribute('contenteditable', 'false');
-  // Same reason as the buttons above: this widget also sits inside the
-  // heading element (at `section.contentStart - 1`), and its "…" text would
-  // otherwise be concatenated into the heading's accessible name.
+  // `aria-expanded="false"` on the toggle already conveys the folded state,
+  // so this stays a hidden, decorative "…" rather than a second announcement
+  // of the same fact. Not a button, so no `tabIndex` question.
   el.setAttribute('aria-hidden', 'true');
   el.textContent = '…';
   return el;
@@ -219,6 +252,31 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
             for (const section of headingSections(state.doc)) {
               const folded = keys.has(serializeFoldKey(foldKeyOf(section)));
 
+              // Pins the heading's own accessible name to its own text,
+              // independently of whatever widgets sit inside it. Accessible-name
+              // computation for a heading concatenates the name/text of every
+              // descendant — including a nested `<button>`'s own text content
+              // or `aria-label` (the "embedded control" rule) — so without this,
+              // `<h1>1<button aria-label="…"/>Hello</h1>` announces as
+              // "1 Hello" (measured with `dom-accessibility-api`) or worse,
+              // depending on what `foldHint` is. An explicit `aria-label` on the
+              // heading element itself short-circuits that computation entirely
+              // (an ancestor's own `aria-label` wins outright, before content is
+              // ever considered), so this fix holds regardless of what any
+              // current or future widget inside the heading renders. A
+              // `Decoration.node`, not a mark or an attribute write: the
+              // document is still never mutated, and this is recomputed on
+              // every pass alongside the widgets below, so it tracks edits to
+              // the heading's own text.
+              decorations.push(
+                Decoration.node(
+                  section.pos,
+                  section.contentStart,
+                  { 'aria-label': section.text },
+                  { foldWidget: 'name' },
+                ),
+              );
+
               // `section.pos + 1`, NOT `section.pos`. A widget at `section.pos`
               // sits at the document position BEFORE the heading node, so
               // ProseMirror renders it as the heading's SIBLING — every
@@ -266,6 +324,38 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
 
             return DecorationSet.create(state.doc, decorations);
           },
+
+          // A Tab-interception `handleKeyDown` was written and then REMOVED
+          // here, and the removal is deliberate — record why so it is not
+          // silently reintroduced. It moved focus to a `handleKeyDown`-found
+          // toggle via `toggle.focus()` and passed a full jsdom unit-test
+          // suite (`document.activeElement` became the toggle). It does
+          // NOTHING in a real browser. Measured with Playwright against real
+          // Chromium, in over a dozen isolated experiments: once a heading
+          // contains ANY `Decoration.widget` — which ProseMirror itself always
+          // renders with `contentEditable = "false"` — `.focus()` silently
+          // fails for EVERY descendant of that heading, not just the widget:
+          // a manually injected, unrelated `<button tabindex="0">` placed
+          // anywhere else in the same heading (before the widgets, after
+          // them, cloned from the real toggle with its own attributes
+          // stripped) is equally unfocusable, synchronously and permanently,
+          // even when called completely outside any keydown handler via a
+          // detached `page.evaluate()`. The SAME heading with the widgets
+          // removed — or with only the `aria-label` node decoration from
+          // above and no widgets — allows normal focus. So this is not a bug
+          // in this file's CSS, attributes, or event handling; it is Chromium
+          // excluding a whole editing-host subtree from the focusable set the
+          // moment it contains a `contenteditable="false"` widget island,
+          // confirmed independent of `tabindex`, `contenteditable`, or DOM
+          // position. jsdom does not implement this, which is exactly why
+          // the unit tests for this passed while the feature never worked —
+          // see CLAUDE.md's Playwright-verification rule. Making the toggle
+          // genuinely keyboard-reachable needs the control to live OUTSIDE
+          // the widget's `contenteditable="false"` DOM (e.g. a React-rendered
+          // overlay positioned off the heading's own `getBoundingClientRect()`,
+          // the same idea `HeadingMenuRequest.rect` already uses) — a
+          // structural change out of this task's scope, raised as a finding
+          // rather than freelanced here.
         },
       }),
     ];

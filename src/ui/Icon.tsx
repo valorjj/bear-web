@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ReactElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 export interface IconProps {
   glyph: LucideIcon;
@@ -32,6 +33,18 @@ export function Icon({ glyph: Glyph, size = 'md', className = '' }: IconProps): 
       className={`shrink-0 ${className}`}
     />
   );
+}
+
+/**
+ * Renders a glyph to a static SVG markup string, for the one place in the app
+ * that needs an icon OUTSIDE React's tree: `HeadingFold.ts`'s widget builders
+ * are plain DOM (ProseMirror decorations, not React), so they cannot render
+ * `<Icon />` directly. This keeps `Icon.tsx` the single source of truth for
+ * every glyph's markup — stroke width, size, `aria-hidden` — even there,
+ * rather than a second call site hand-copying path data from lucide.
+ */
+export function renderIconMarkup(glyph: LucideIcon, size: IconProps['size'] = 'md'): string {
+  return renderToStaticMarkup(<Icon glyph={glyph} size={size} />);
 }
 
 /**

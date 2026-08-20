@@ -385,8 +385,10 @@
  * `--bear-line-width` at every width — the controls sit in negative inline
  * space and simply overlay the text's left edge when there is none.
  *
- * Hover-only, so at rest nothing overlaps prose. The persistent "this is
- * folded" cue is `.bear-fold-marker` below, which is inline and inside the
+ * Hover-only AT REST, so nothing overlaps prose when nothing is folded. A
+ * folded heading keeps its toggle visible even without hover (see the
+ * `[aria-expanded='false']` rule below) — the persistent "this is folded" cue
+ * is both that and `.bear-fold-marker`, which is inline and inside the
  * measure for exactly that reason.
  */
 .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
@@ -397,6 +399,15 @@
 .bear-fold-badge {
   position: absolute;
   top: 0.25em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
   opacity: 0;
   color: var(--bear-faint);
   transition:
@@ -416,7 +427,7 @@
 .ProseMirror :is(h1, h2, h3, h4, h5, h6):hover .bear-fold-badge,
 .bear-fold-toggle:focus-visible,
 .bear-fold-badge:focus-visible,
-.bear-fold-badge[aria-expanded='true'] {
+.bear-fold-toggle[aria-expanded='false'] {
   opacity: 1;
 }
 
