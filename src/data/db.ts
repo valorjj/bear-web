@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable, type Table } from 'dexie';
 
-import type { FileRecord, Note, NoteTag, SettingRecord, TagMeta } from './types';
+import type { FileRecord, Note, NoteFolds, NoteTag, SettingRecord, TagMeta } from './types';
 
 export class BearDatabase extends Dexie {
   notes!: EntityTable<Note, 'id'>;
@@ -14,6 +14,7 @@ export class BearDatabase extends Dexie {
   tags!: EntityTable<TagMeta, 'tag'>;
   files!: EntityTable<FileRecord, 'id'>;
   settings!: EntityTable<SettingRecord, 'key'>;
+  noteFolds!: EntityTable<NoteFolds, 'noteId'>;
 
   constructor(name: string) {
     super(name);
@@ -27,6 +28,17 @@ export class BearDatabase extends Dexie {
       tags: 'tag, sortOrder',
       files: 'id, noteId',
       settings: 'key',
+    });
+
+    // Version 2 adds fold state. No `.upgrade()` hook: the table starts empty
+    // and an absent row already means "nothing folded", so there is nothing to
+    // backfill. Dexie multiplies declared versions by ten, so this is
+    // IndexedDB version 20 — `e2e/fixtures/seed.ts` opens at the raw IndexedDB
+    // number and must be moved with it, or the seeding connection blocks the
+    // upgrade forever and the app boots to a bare `<div id="root">` with no
+    // error at all.
+    this.version(2).stores({
+      noteFolds: 'noteId',
     });
   }
 }

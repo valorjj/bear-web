@@ -20,12 +20,13 @@ import type { Corpus } from './corpus.ts';
  *   schema against the one it finds and throws `SchemaError` on a mismatch, so
  *   a drift fails loudly on the first shot rather than silently.
  * - **The IndexedDB version is Dexie's version times ten.** Dexie's
- *   `version(1)` is IndexedDB version 10, not 1. Seeding at 1 leaves Dexie
- *   wanting to upgrade 1 → 10 while this script still holds a connection open,
- *   which blocks the upgrade forever: `openDatabase` never settles, so
- *   `main.tsx` never calls `createRoot` and the page stays a blank `#root` with
- *   one console warning as the only clue. That is also why the connection is
- *   closed as soon as the seed transaction completes.
+ *   `version(2)` (added in b1 for fold state) is IndexedDB version 20, not 2.
+ *   Seeding at the wrong number leaves Dexie wanting to upgrade further while
+ *   this script still holds a connection open, which blocks the upgrade
+ *   forever: `openDatabase` never settles, so `main.tsx` never calls
+ *   `createRoot` and the page stays a blank `#root` with one console warning
+ *   as the only clue. That is also why the connection is closed as soon as
+ *   the seed transaction completes.
  * - `noteTags` is created empty and the `tagIndexVersion` marker is never
  *   written, so the app's own startup rebuild fills the tag index from
  *   `notes.text`. The sidebar tree in every screenshot is therefore produced by
@@ -37,9 +38,9 @@ import type { Corpus } from './corpus.ts';
  */
 export async function seedDatabase(page: Page, corpus: Corpus): Promise<void> {
   await page.addInitScript((data: Corpus) => {
-    // Mirrors `src/data/db.ts`'s `version(1).stores({...})`; 10 is how Dexie
-    // encodes version 1. See the docblock.
-    const request = indexedDB.open('bear-web', 10);
+    // Mirrors `src/data/db.ts`'s `version(1)` and `version(2)` stores
+    // together; 20 is how Dexie encodes version 2. See the docblock.
+    const request = indexedDB.open('bear-web', 20);
 
     request.onupgradeneeded = () => {
       const database = request.result;
@@ -63,12 +64,16 @@ export async function seedDatabase(page: Page, corpus: Corpus): Promise<void> {
 
       const settings = database.createObjectStore('settings', { keyPath: 'key' });
 
+      // Added at version 2. Created empty here, exactly as Dexie would: fold
+      // state is view state, not part of the seeded corpus.
+      database.createObjectStore('noteFolds', { keyPath: 'noteId' });
+
       for (const note of data.notes) notes.put(note);
       for (const setting of data.settings) settings.put(setting);
     };
 
-    // Held open, this connection blocks any later upgrade — including Dexie's
-    // own, if `src/data/db.ts` ever declares a version 2.
+    // Held open, this connection blocks any later upgrade — including a
+    // future Dexie version 3.
     request.onsuccess = () => request.result.close();
   }, corpus);
 }

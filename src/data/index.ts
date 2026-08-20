@@ -18,9 +18,10 @@ export type { SweepDeps } from './sweep';
 export { findTagRanges, parseTags } from './tags';
 export type { TagRange } from './tags';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
-export { files, notes, settings, tags } from './repositories';
+export { files, folds, notes, settings, tags } from './repositories';
 export type {
   FilesRepository,
+  FoldsRepository,
   NotesRepository,
   SettingsRepository,
   TagParser,
@@ -30,6 +31,7 @@ export type {
   BackupBundle,
   FileRecord,
   Note,
+  NoteFolds,
   NoteTag,
   SerializedFile,
   SettingRecord,
