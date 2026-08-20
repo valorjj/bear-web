@@ -39,17 +39,20 @@ feature and is not yet scheduled.
 | M8c tables as real nodes                  | complete |
 | M9a visual system: themes, scale, picker  | complete |
 | A note-list header (scope, sort, preview) | next     |
-| B collapsible headings + level badge      | queued   |
+| B collapsible headings + level badge      | complete |
+| B2 drag-to-reorder headings               | queued   |
 | C code block language + highlighting      | queued   |
 | M9b callout blocks                        | deferred |
 
-1143 unit tests, 58 end-to-end tests. `main` is always green and auto-deploys.
+1214 unit tests, 62 end-to-end tests. `main` is always green and auto-deploys.
 
-**The last four rows are not numbered milestones yet**, and the lettering is
+**The last five rows are not numbered milestones yet**, and the lettering is
 `docs/superpowers/NEXT.md`'s, which holds the order and the reasoning for it.
 B is the sub-project M9a's spec named **M9c**; do not read the letters as new
-milestone ids. **M9b callout blocks is deferred, not dropped** — specced in
-M9a's decomposition, deliberately not chosen this round, still unblocked.
+milestone ids. **B2 is not part of that spec** — it is a follow-up named only
+once B shipped, queued but unscheduled, and does not block or get blocked by
+C. **M9b callout blocks is deferred, not dropped** — specced in M9a's
+decomposition, deliberately not chosen this round, still unblocked.
 
 **Image storage is named in this project's goal and has never been
 scheduled** — not by a milestone and not by the three sub-projects above. It is

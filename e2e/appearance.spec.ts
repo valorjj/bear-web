@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { seedDatabase } from './fixtures/seed.ts';
+
 /*
  * Appearance regressions — the class of defect this project's unit suite
  * cannot see, by construction.
@@ -1069,4 +1071,69 @@ test('the first line reads as a title, separated by space and not a rule', async
   // that difference is the whole point, and equal gaps would mean the rule
   // silently stopped applying while every other assertion still passed.
   expect(measured!.titleGap).toBeGreaterThan(measured!.bodyGap);
+});
+
+test('the fold toggle sits in a real gutter when the pane is wide, and has none left when it is not', async ({
+  page,
+}) => {
+  // The toggle and badge are absolutely positioned at a negative inline
+  // offset from the heading (`editor.css`'s `.bear-fold-toggle` /
+  // `.bear-fold-badge`), on the deliberate ruling that reserving a lane would
+  // narrow the measured `--bear-line-width` at every pane width instead.
+  // `.bear-fold-badge`'s `-1.5rem` exactly cancels `.ProseMirror`'s own
+  // `1.5rem` padding, so the badge always lands flush with the prose
+  // column's own edge — it never usefully distinguishes "wide" from
+  // "narrow", which is why this test measures the toggle instead, at
+  // `-3rem`, one badge-width further out.
+  //
+  // That extra step lands the toggle in the true gutter: the free space
+  // between the note list pane's right edge and the editor pane's own
+  // content, which is real only when the editor pane is wider than the
+  // clamped prose column (`editor.css`'s own comment measures this at 88px
+  // at 1440x900). Below the width where the column stops being centered —
+  // 900px total here, comfortably past the ~688px-wide-pane threshold that
+  // comment names — the prose fills the whole pane with no margin to spare,
+  // and the toggle lands exactly flush against the note list's edge: zero
+  // gutter, the state `editor.css` calls "overlay the text's left edge when
+  // there is none".
+  await seedDatabase(page, {
+    notes: [
+      {
+        id: 'n-fold-gutter',
+        title: 'Alpha',
+        text: '## Alpha\n\nbody',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pinned: false,
+        trashedAt: null,
+        archivedAt: null,
+      },
+    ],
+    settings: [],
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Alpha/ }).first().click();
+
+  const heading = page.locator('.ProseMirror h2', { hasText: 'Alpha' });
+  const toggle = heading.locator('[data-fold-toggle]');
+  const noteList = page.getByRole('region', { name: 'Note list' });
+
+  const viewport = page.viewportSize()!;
+
+  await page.setViewportSize({ width: 1440, height: viewport.height });
+  await heading.hover();
+  const wideToggle = (await toggle.boundingBox())!;
+  const wideNoteList = (await noteList.boundingBox())!;
+  expect(wideToggle.x).toBeGreaterThan(wideNoteList.x + wideNoteList.width);
+
+  // Narrow the total viewport so the editor pane itself narrows below the
+  // clamped measure — the prose column stops being centered and fills the
+  // whole pane, leaving no gutter to spare.
+  await page.setViewportSize({ width: 900, height: viewport.height });
+  await heading.hover();
+  const narrowToggle = (await toggle.boundingBox())!;
+  const narrowNoteList = (await noteList.boundingBox())!;
+  expect(narrowToggle.x).toBeLessThanOrEqual(narrowNoteList.x + narrowNoteList.width);
+
+  await page.setViewportSize(viewport);
 });

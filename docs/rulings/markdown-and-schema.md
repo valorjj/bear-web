@@ -7,11 +7,15 @@ not able to prove.
 **Trigger:** any change under `src/features/editor/` touching `markdown.ts`,
 `extensions.ts` (`buildEditorExtensions`, `editorExtensions`, `StarterKit.configure`),
 `RawBlock.ts` (`createRawBlock`, `RawDefinition`, `RawHtmlBlock`, `RawImage`,
-`createRawInlineHtmlNode`), `toolbarSelection.ts`, or `taskItemPromotion.ts`; any edit
+`createRawInlineHtmlNode`), `toolbarSelection.ts`, `taskItemPromotion.ts`,
+`HeadingFold.ts` (`headingFoldKey`, `foldedKeys`, `toggleElement`, `badgeElement`,
+`markerElement`), `headingSections.ts` (`foldKeyOf`, `headingSections`,
+`hiddenRangesFor`, `serializeFoldKey`), or `HeadingMenu.tsx`; any edit
 to `markdown.test.ts`'s `CANONICAL`, `stability.test.ts`'s `NON_CANONICAL`,
-`rawBlock.test.ts`, `characterization.test.ts` or `extensions.test.ts`; a new import of
-`@tiptap/markdown` anywhere; a new or removed Tiptap extension, input rule or
-`markdownTokenName`; and any `normalizeMarkdown` / `parseMarkdown` /
+`rawBlock.test.ts`, `characterization.test.ts`, `extensions.test.ts` or
+`headingFold.test.ts`; a new import of `@tiptap/markdown` anywhere; a new or
+removed Tiptap extension, input rule or `markdownTokenName`; a new or changed
+`Mod-Alt-*` keymap entry; and any `normalizeMarkdown` / `parseMarkdown` /
 `serializeMarkdown` call site.
 
 - **`markdown.ts` is the only importer of `@tiptap/markdown`.** The round-trip
@@ -162,4 +166,59 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   above); `TaskItemPromotion` uses that half. The `!tr.steps.length` half is a
   separate guard for a handler that returns non-null but happens not to have
   queued any steps — not the mechanism this rule relies on.
+
+- **`HeadingFold` is an `Extension`, not a `Node` or a `Mark`, so it registers
+  nothing in the schema.** Folding is decoration only: a `Decoration.widget`
+  for the toggle and badge, a `Decoration.node` for the accessible name (see
+  below), and `Decoration.hide` for the hidden blocks — the document itself is
+  never mutated, so Markdown round-tripping and every existing schema test are
+  completely blind to whether this plugin runs at all. That is the exact same
+  blind spot that once let a dead `==highlight==` tokenizer and a live-but-
+  banned underline mark ship in M4 unnoticed; `headingFold.test.ts` exists
+  specifically to assert on the decoration set itself, because nothing else in
+  the suite can see it.
+
+- **Fold identity is content-derived (`foldKeyOf`) and fails open, not
+  closed.** An ordinal section index (first `##`, second `##`, …) fails
+  *closed* on the single commonest edit — inserting or deleting a heading
+  above the folded one silently refolds the wrong section — while a stable id
+  written into the document would be view state leaking into the user's own
+  Markdown, which this project treats as worse than an occasional stale fold.
+  Content-derived keys fail *open*: at worst a fold that no longer matches any
+  heading is simply dropped, never applied to the wrong section.
+
+- **`Mod-Alt-1`–`6` come from `@tiptap/extension-heading` itself, not from any
+  code in this repo, and Bear's own `⌘1`–`⌘6` for the same job is unavailable
+  to any web app** (browser/OS chrome claims low digit-only Cmd/Ctrl chords).
+  Do not "fix" the level menu's shortcut hints to match Bear's screenshots —
+  they are already correct for the web.
+
+- **`Mod-Alt-0` is NOT free.** It is `@tiptap/extension-paragraph`'s
+  `setParagraph`, registered as a Tiptap extension like the heading levels
+  above it. Tiptap's `StarterKit`/extension list is applied in *reverse*
+  registration order for keymap purposes, so whichever extension is later in
+  the array wins a shortcut collision silently — no build warning, no runtime
+  error, just the other extension's command firing. The general rule this
+  cost us: a candidate keybinding, including a template-literal family like
+  `` `Mod-Alt-${level}` ``, must be checked against every installed editor
+  package's own keymap before being treated as free, not merely against
+  browser/OS shortcuts.
+
+- **`HeadingFold` adds `Mod-Alt-f` as a new keymap entry — this is a real,
+  deliberate addition, not "no new keyboard binding."** It exists because no
+  focusable in-editor control could be built for the toggle: see the Chromium
+  finding in `docs/rulings/accessibility.md` (any heading containing a
+  `Decoration.widget` becomes a subtree Chromium refuses `.focus()` to, for
+  every descendant, regardless of `tabindex`). With no route to a focusable
+  gutter control, a keymap was the only way to give keyboard and
+  screen-reader users any way at all to reveal `display: none` content.
+
+- **The level menu SETS a level; the `Mod-Alt-N` shortcut TOGGLES.** Choosing
+  the level a heading already has via the menu is a no-op — the check mark is
+  radio semantics, and toggling from a selected radio item would contradict
+  the mark. The shortcut's toggle behaviour is pre-existing upstream
+  (`@tiptap/extension-heading`) behaviour, deliberately left alone rather than
+  overridden to match the menu, because there is nothing wrong with a
+  shortcut and a menu having different semantics for the same underlying
+  command.
 

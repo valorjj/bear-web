@@ -12,11 +12,14 @@ chrome and prose column are positioned.
 `src/ui/Resizer.tsx`, `src/ui/Button.tsx`, `src/features/appearance/ThemePicker.tsx`,
 `src/features/editor/RichEditor.tsx`, `src/features/editor/BottomToolbar.tsx`,
 `src/features/notes/SearchField.tsx`, `<main>`'s class list in
-`src/app/AppShell.tsx`; a new `--bear-*` custom property or a new
-`[data-theme='…']` block; any Tailwind spacing, `rounded-*`, `shadow-*` or
-`outline-none` utility; and the guards in `scripts/sourceLint.test.ts`,
-`scripts/contrast.ts`, `scripts/contrast.test.ts`, `scripts/fonts.test.ts`,
-`e2e/appearance.spec.ts`, `e2e/contrast.spec.ts` and `e2e/smoke.spec.ts`.
+`src/app/AppShell.tsx`; the `.bear-fold-toggle` / `.bear-fold-badge` /
+`.bear-fold-marker` / `.bear-fold-hidden` rules in `src/styles/editor.css` and
+`EditorContent`'s own class list in `src/features/editor/RichEditor.tsx`; a
+new `--bear-*` custom property or a new `[data-theme='…']` block; any Tailwind
+spacing, `rounded-*`, `shadow-*` or `outline-none` utility; and the guards in
+`scripts/sourceLint.test.ts`, `scripts/contrast.ts`, `scripts/contrast.test.ts`,
+`scripts/fonts.test.ts`, `e2e/appearance.spec.ts`, `e2e/contrast.spec.ts` and
+`e2e/smoke.spec.ts`.
 
 - **Tokens sit in THREE TIERS, and the split is what the theme system rests
   on.** Tier 1, palette (16 tokens): `bg` `surface` `sidebar` `canvas` `text`
@@ -377,3 +380,46 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   freshly designed field. `type="search"` stays (it is what makes the
   `searchbox` role and its tests hold); only the native widget's rendering is
   suppressed.
+
+- **The fold toggle and badge are absolutely positioned at a negative inline
+  offset from the heading (`-3rem` and `-1.5rem`), never a reserved lane on
+  the heading or the prose itself.** Reserving a lane on `.ProseMirror` would
+  narrow the measured `--bear-line-width` (40em) at every pane width, which
+  this project has already ruled out once for the prose column generally.
+  `.bear-fold-badge`'s `-1.5rem` exactly cancels `.ProseMirror`'s own `1.5rem`
+  padding, so the badge always lands flush with the prose column's own edge —
+  it is effectively always visible, at any pane width, and never usefully
+  distinguishes a "gutter" state from an "overlay" one. The toggle, one
+  badge-width further out at `-3rem`, is the one that actually reaches past
+  `.ProseMirror`'s own box into the real gutter — the free space between the
+  note-list pane and the editor pane's content, measured in `editor.css`'s own
+  comment at 88px at 1440x900.
+
+- **That gutter is real screen space only when the pane is wider than the
+  clamped measure; below that, it is not merely "overlapped" but genuinely
+  CLIPPED.** `EditorContent` (`RichEditor.tsx`, the direct parent of
+  `.ProseMirror`) sets `overflow-auto` for vertical scrolling, and — the same
+  "a `visible` axis paired with a non-`visible` one computes to `auto`" CSS
+  quirk already on record here for `BottomToolbar` — that clips the horizontal
+  axis too, at `EditorContent`'s own box edge. When `.ProseMirror` is
+  narrower than its pane (the normal, wide case), `margin-inline: auto`
+  centers it with room to spare, and the toggle's `-3rem` box lands inside
+  that spare room, fully visible. Once the pane narrows to the measure (this
+  project's own default pane widths land an editor pane at 656px — already
+  under the ~688px threshold `editor.css` names), `.ProseMirror` fills the
+  whole pane with no centering margin left, and most of the toggle's `-3rem`
+  box falls OUTSIDE `EditorContent`'s own edge — genuinely clipped, not
+  merely covered, so a real click at its visual center can miss it entirely
+  and land on the app shell instead. `e2e/notes.spec.ts`'s fold-and-reload
+  test widens its viewport to 1440x900 for exactly this reason, matching how
+  a real mouse user with a normal-width window experiences the control;
+  `Mod-Alt-f` remains the one route that never depends on pane width at all.
+
+- **The persistent folded cue (`.bear-fold-marker`, the inline "…") sits at
+  the END of the heading's own line, inside the measure — deliberately not in
+  the gutter.** A gutter-positioned persistent mark would overlay prose text
+  at rest on a narrow pane, exactly the failure mode the hover-only rule for
+  the toggle and badge exists to prevent. Putting the "this section is
+  folded" cue inline instead means it never overlaps anything: it is ordinary
+  flowed content, sized and coloured (`--bear-faint`) like the rest of the
+  heading.

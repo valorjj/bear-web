@@ -10,7 +10,9 @@ affordances a control must keep at rest.
 `src/features/notes/NoteListItem.tsx`'s `label` string and its two sibling
 buttons; `src/ui/Button.tsx`'s `VARIANTS` map (`default` / `ghost` / `danger`);
 `src/features/notes/NoteList.tsx`'s header strip; `src/ui/ConfirmDialog.tsx`'s
-Cancel button; and the hover/name tests in `e2e/appearance.spec.ts`,
+Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
+(the `Decoration.node` call and its `aria-label`) and its `.focus()` /
+`tabindex` handling; and the hover/name tests in `e2e/appearance.spec.ts`,
 `src/ui/ui.test.tsx` and `src/features/notes/NoteListItem.test.tsx`.
 
 - **Never rely on a CSS `gap` to separate text for assistive tech.**
@@ -66,4 +68,41 @@ Cancel button; and the hover/name tests in `e2e/appearance.spec.ts`,
   muted-mic or no-wifi glyph), not "click to pin". The button is always the
   `Pin` glyph, differentiated by colour; `aria-label` and `aria-pressed` carry
   the state for assistive tech.
+
+- **A heading containing a `Decoration.widget` becomes a subtree Chromium
+  refuses `.focus()` to, for every descendant — established by measurement,
+  not inferred.** `HeadingFold.ts`'s decorations function documents roughly a
+  dozen live Playwright experiments (its own comment enumerates them): once a
+  heading has ANY `Decoration.widget` child, `.focus()` silently fails for
+  every element under that heading, independent of `tabindex`, DOM position,
+  or whether the target is the widget itself — even a bare, unrelated,
+  manually injected `<button tabindex="0">` placed elsewhere in the same
+  heading is equally unfocusable. The same heading with the widgets removed
+  focuses normally. The explanation on file — that Chromium excludes a whole
+  editing-host subtree once it contains a `contenteditable="false"` widget
+  island — is a HYPOTHESIS consistent with the measurements, not a cited
+  mechanism; treat the measurement as fact and the explanation as open. This
+  is why the gutter's toggle and badge are mouse-only controls and why
+  `Mod-Alt-f` exists as the keyboard route: no focusable in-editor control
+  could be built at all.
+
+- **The fold widgets sit inside the heading, at `section.pos + 1`, not
+  `section.pos` — this is required, not stylistic.** A widget at `section.pos`
+  renders as the heading's DOM *sibling*, not its child: every
+  `.ProseMirror h2:hover .bear-fold-toggle`-shaped CSS rule stops matching,
+  and the widget's `position: absolute` resolves against the wrong
+  positioned ancestor. `pos + 1` is the start of the heading's own inline
+  content, making the widget a genuine child of the heading element.
+
+- **The badge's digit needs its own `aria-label` fix, or it corrupts the
+  heading's accessible name.** Because the badge widget is a DOM child of the
+  heading, its `textContent` (the level digit) concatenates into the
+  heading's own accessible-name computation unless something stops it — an
+  embedded control's `aria-label` is ignored for THAT control's own name but
+  still contributes its text content to an ancestor's name unless the
+  ancestor supplies an explicit `aria-label` of its own. `HeadingFold.ts`
+  pins each heading's name with a `Decoration.node(section.pos,
+  section.contentStart, { 'aria-label': section.text })`. Measured with the
+  repo's own `dom-accessibility-api`: without that decoration a heading whose
+  text is "Hello" announces as `"1 Hello"`; with it, `"Hello"`.
 

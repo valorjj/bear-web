@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
+import { seedDatabase } from './fixtures/seed.ts';
+
 // A literal, defined here and never read back from the page before the
 // assertion. M2 shipped a persistence test that compared a value read out of
 // the page against itself, so it passed with persistence completely broken.
@@ -774,4 +776,108 @@ test('Mod-Alt-f folds and unfolds the section under the cursor', async ({ page }
   await settleAfterClick(page);
   await page.keyboard.press('ControlOrMeta+Alt+f');
   await expect(bodyText).toBeVisible();
+});
+
+test('folding a heading hides its section, and the fold survives a reload', async ({ page }) => {
+  await seedDatabase(page, {
+    notes: [
+      {
+        id: 'n-fold',
+        title: 'Alpha',
+        text: '## Alpha\n\nhidden body\n\n## Beta\n\nkept',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pinned: false,
+        trashedAt: null,
+        archivedAt: null,
+      },
+    ],
+    settings: [],
+  });
+
+  // At the suite's default 1280x720 viewport the editor pane lands at 656px —
+  // just under the ~688px-wide-pane threshold `editor.css` documents for the
+  // gutter affordance. Below it, `EditorContent`'s own `overflow-auto` (the
+  // same "a visible axis paired with a non-visible one computes to auto" CSS
+  // quirk already on record for `BottomToolbar`) clips most of the toggle's
+  // `-3rem` box, leaving only a thin sliver clickable — a real click at its
+  // *center* lands on the app shell, not the button, which is how this test
+  // was first written and first failed. Widened to 1440x900 — the same
+  // reference size `editor.css`'s own comment measures 88px of real gutter
+  // at, and the one `shots.spec.ts` uses — the toggle is fully unclipped and
+  // clickable the way a mouse user with a normal-width window experiences it.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Alpha/ }).first().click();
+
+  const heading = page.locator('.ProseMirror h2', { hasText: 'Alpha' });
+  const toggle = heading.locator('[data-fold-toggle]');
+
+  // Quiet at rest, revealed on hover.
+  await expect(toggle).toHaveCSS('opacity', '0');
+  await heading.hover();
+  await expect(toggle).toHaveCSS('opacity', '1');
+
+  await toggle.click();
+  await expect(page.locator('.ProseMirror p', { hasText: 'hidden body' })).toBeHidden();
+  await expect(heading.locator('[data-fold-marker]')).toBeVisible();
+  // The next section is untouched.
+  await expect(page.locator('.ProseMirror p', { hasText: 'kept' })).toBeVisible();
+
+  // The fold is written to `noteFolds` on the same debounced rhythm as
+  // autosave (`FOLD_PERSIST_DELAY_MS`, 300ms) — reloading immediately races
+  // that write, which is exactly the intermittent failure this poll first
+  // surfaced (2 failures in 5 runs before this wait was added, reload
+  // happening before the debounce had fired).
+  await expect
+    .poll(async () =>
+      page.evaluate(async () => {
+        const request = indexedDB.open('bear-web');
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        const store = db.transaction('noteFolds', 'readonly').objectStore('noteFolds');
+        const row = await new Promise<{ keys: string[] } | undefined>((resolve, reject) => {
+          const req = store.get('n-fold');
+          req.onsuccess = () => resolve(req.result as { keys: string[] } | undefined);
+          req.onerror = () => reject(req.error);
+        });
+        return row?.keys.length ?? 0;
+      }),
+    )
+    .toBeGreaterThan(0);
+
+  await page.reload();
+  await page.getByRole('button', { name: /Alpha/ }).first().click();
+  await expect(page.locator('.ProseMirror p', { hasText: 'hidden body' })).toBeHidden();
+});
+
+test('the badge menu changes a heading level, and the change reaches the Markdown', async ({
+  page,
+}) => {
+  await seedDatabase(page, {
+    notes: [
+      {
+        id: 'n-fold-level',
+        title: 'Alpha',
+        text: '## Alpha\n\nbody',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pinned: false,
+        trashedAt: null,
+        archivedAt: null,
+      },
+    ],
+    settings: [],
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Alpha/ }).first().click();
+
+  const heading = page.locator('.ProseMirror h2', { hasText: 'Alpha' });
+  await heading.hover();
+  await heading.locator('[data-fold-badge]').click();
+  await page.getByRole('menuitemradio', { name: /Heading 3/ }).click();
+
+  await expect(page.locator('.ProseMirror h3', { hasText: 'Alpha' })).toBeVisible();
 });
