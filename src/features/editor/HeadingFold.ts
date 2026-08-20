@@ -48,6 +48,16 @@ function setKeys(tr: Transaction, keys: string[]): Transaction {
   return tr.setMeta(headingFoldKey, { keys } satisfies FoldMeta);
 }
 
+// Computed ONCE at module init, not per render. `Decoration.widget`'s builder
+// function runs on every `decorations(state)` pass that doesn't reuse the old
+// DOM (see the `key` spec fields below for why that used to be EVERY pass),
+// and `renderIconMarkup` is a `renderToStaticMarkup` call plus an `innerHTML`
+// parse — cheap once, not something to pay per keystroke, per heading. Both
+// glyphs are always rendered at `Icon`'s `md` size, so there is exactly one
+// of each to precompute.
+const CHEVRON_DOWN_MARKUP = renderIconMarkup(ChevronDown);
+const CHEVRON_RIGHT_MARKUP = renderIconMarkup(ChevronRight);
+
 // The heading's own accessible name is pinned separately, by a
 // `Decoration.node` carrying an explicit `aria-label` — see the
 // `headingNameDecorations` loop below — so nothing here needs to hide the
@@ -99,11 +109,12 @@ function toggleElement(folded: boolean, hint: string | null): HTMLElement {
   el.setAttribute('tabindex', '0');
   // A visible glyph with real dimensions, not an empty 0x0 box: `ChevronDown`
   // unfolded, `ChevronRight` folded — the same pairing `ChevronRight` already
-  // implied it was reserved for ("reused for the folded state"). Rendered
-  // through `Icon.tsx`'s `renderIconMarkup`, the one function that lets a
-  // plain-DOM widget builder reach a Lucide glyph without becoming a second
-  // importer of `lucide-react`.
-  el.innerHTML = renderIconMarkup(folded ? ChevronRight : ChevronDown);
+  // implied it was reserved for ("reused for the folded state"). The markup
+  // itself is a MODULE-LEVEL constant (see above), not a fresh
+  // `renderIconMarkup` call here — this function runs on every
+  // `decorations(state)` pass a widget isn't reused across, which used to be
+  // every pass at all (see the `key` spec fields at the call site).
+  el.innerHTML = folded ? CHEVRON_RIGHT_MARKUP : CHEVRON_DOWN_MARKUP;
   return el;
 }
 
@@ -207,6 +218,40 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
     };
   },
 
+  /**
+   * `Mod-Alt-0` toggles the fold of the section the cursor is currently in.
+   *
+   * Added specifically BECAUSE a focusable toggle proved impossible (see the
+   * long comment on the `decorations` prop below) — this is the alternative
+   * keyboard route that finding closed off. It sits beside
+   * `@tiptap/extension-heading`'s existing `Mod-Alt-1`–`Mod-Alt-6` family, is
+   * numeric so it stays clear of letter-based browser/OS shortcuts, and
+   * `Cmd/Ctrl+Alt+0` is unclaimed in Chrome, Safari and Firefox. Needs no
+   * focusable element at all, unlike the toggle button.
+   *
+   * Reuses `headingSections` rather than writing a second search for "the
+   * heading that owns this position" — that function is already the single
+   * definition of section ownership (`toggleHeadingFold` itself matches on
+   * `section.pos`), and a second implementation of "which section is this"
+   * is exactly the kind of duplicated grammar this project avoids elsewhere
+   * (see `parseTags`/`findTagRanges` in `CLAUDE.md`).
+   *
+   * Returns `false` — letting the key fall through to whatever else binds it
+   * — when the cursor is not inside any top-level section, rather than
+   * swallowing the keystroke for nothing.
+   */
+  addKeyboardShortcuts() {
+    return {
+      'Mod-Alt-0': () => {
+        const { state } = this.editor;
+        const pos = state.selection.from;
+        const section = headingSections(state.doc).find((s) => s.pos <= pos && pos < s.end);
+        if (!section) return false;
+        return this.editor.commands.toggleHeadingFold(section.pos);
+      },
+    };
+  },
+
   addProseMirrorPlugins() {
     const { foldHint } = this.options;
     return [
@@ -263,19 +308,27 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               // heading element itself short-circuits that computation entirely
               // (an ancestor's own `aria-label` wins outright, before content is
               // ever considered), so this fix holds regardless of what any
-              // current or future widget inside the heading renders. A
-              // `Decoration.node`, not a mark or an attribute write: the
-              // document is still never mutated, and this is recomputed on
-              // every pass alongside the widgets below, so it tracks edits to
-              // the heading's own text.
-              decorations.push(
-                Decoration.node(
-                  section.pos,
-                  section.contentStart,
-                  { 'aria-label': section.text },
-                  { foldWidget: 'name' },
-                ),
-              );
+              // current or future widget inside the heading renders — EXCEPT
+              // when `section.text` is empty: per the accname spec an empty
+              // `aria-label` is treated as absent and computation falls back
+              // to content, so an empty heading gets no protection from this
+              // decoration (and none is needed — there is no digit or hint
+              // text to pollute it with yet, only the widgets' own content,
+              // which the badge/toggle handle by staying `aria-hidden` or
+              // unlabelled respectively). `Decoration.node`, not a mark or an
+              // attribute write: the document is still never mutated, and
+              // this is recomputed on every pass alongside the widgets below,
+              // so it tracks edits to the heading's own text.
+              if (section.text !== '') {
+                decorations.push(
+                  Decoration.node(
+                    section.pos,
+                    section.contentStart,
+                    { 'aria-label': section.text },
+                    { foldWidget: 'name' },
+                  ),
+                );
+              }
 
               // `section.pos + 1`, NOT `section.pos`. A widget at `section.pos`
               // sits at the document position BEFORE the heading node, so
@@ -293,6 +346,16 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
                   // in `textBetween` and could reach the serializer.
                   ignoreSelection: true,
                   foldWidget: 'toggle',
+                  // `Decoration.widget` passes a FRESH arrow function every
+                  // call, and `WidgetType.eq` falls back to comparing that
+                  // function's IDENTITY when `spec.key` is absent — which
+                  // always fails, so ProseMirror destroyed and rebuilt this
+                  // widget's DOM on every single `decorations(state)` pass
+                  // (every keystroke anywhere in the document, not just this
+                  // heading). A stable `key`, scoped to what actually changes
+                  // the rendered output (`folded`), lets `eq` short-circuit on
+                  // the key alone and reuse the existing DOM instead.
+                  key: `toggle-${folded}`,
                 }),
               );
 
@@ -304,6 +367,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
                   // Mirrored into the spec so a test can assert the level
                   // without reaching into ProseMirror's widget internals.
                   level: section.level,
+                  key: `badge-${section.level}`,
                 }),
               );
 
@@ -317,6 +381,9 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
                     side: 1,
                     ignoreSelection: true,
                     foldWidget: 'marker',
+                    // No variable content (always "…"), but the same
+                    // rebuild-on-every-pass cost applies without a key.
+                    key: 'marker',
                   }),
                 );
               }
@@ -330,12 +397,14 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
           // silently reintroduced. It moved focus to a `handleKeyDown`-found
           // toggle via `toggle.focus()` and passed a full jsdom unit-test
           // suite (`document.activeElement` became the toggle). It does
-          // NOTHING in a real browser. Measured with Playwright against real
-          // Chromium, in over a dozen isolated experiments: once a heading
-          // contains ANY `Decoration.widget` — which ProseMirror itself always
-          // renders with `contentEditable = "false"` — `.focus()` silently
-          // fails for EVERY descendant of that heading, not just the widget:
-          // a manually injected, unrelated `<button tabindex="0">` placed
+          // NOTHING in a real browser — this half is MEASURED, not inferred.
+          // Measured with Playwright against real Chromium, across many isolated
+          // experiments (seven of them enumerated in this task's fix report):
+          // once a heading contains ANY
+          // `Decoration.widget` — which ProseMirror itself always renders
+          // with `contentEditable = "false"` — `.focus()` silently fails for
+          // EVERY descendant of that heading, not just the widget: a
+          // manually injected, unrelated `<button tabindex="0">` placed
           // anywhere else in the same heading (before the widgets, after
           // them, cloned from the real toggle with its own attributes
           // stripped) is equally unfocusable, synchronously and permanently,
@@ -343,19 +412,29 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
           // detached `page.evaluate()`. The SAME heading with the widgets
           // removed — or with only the `aria-label` node decoration from
           // above and no widgets — allows normal focus. So this is not a bug
-          // in this file's CSS, attributes, or event handling; it is Chromium
-          // excluding a whole editing-host subtree from the focusable set the
-          // moment it contains a `contenteditable="false"` widget island,
-          // confirmed independent of `tabindex`, `contenteditable`, or DOM
-          // position. jsdom does not implement this, which is exactly why
-          // the unit tests for this passed while the feature never worked —
-          // see CLAUDE.md's Playwright-verification rule. Making the toggle
-          // genuinely keyboard-reachable needs the control to live OUTSIDE
-          // the widget's `contenteditable="false"` DOM (e.g. a React-rendered
+          // in this file's CSS, attributes, or event handling.
+          //
+          // What actually causes it is a HYPOTHESIS, not something measured
+          // directly: the pattern above is consistent with Chromium excluding
+          // a whole editing-host subtree from the focusable-area set once it
+          // contains a `contenteditable="false"` widget island, but that is
+          // an inference from those experiments, not a citation of the
+          // spec text or of Chromium's own source. Experiment 1 (a BARE
+          // heading with no decorations at all still allows a plain injected
+          // button to focus) already rules out the naive "nothing inside a
+          // contenteditable is ever focusable" reading of that rule — so
+          // whatever the precise trigger is, it is more specific than that.
+          // Trust the measured behaviour above; treat this paragraph as an
+          // open question, not an established mechanism.
+          //
+          // Making the toggle genuinely keyboard-reachable via a focusable
+          // element would need the control to live OUTSIDE the widget's
+          // `contenteditable="false"` DOM entirely (e.g. a React-rendered
           // overlay positioned off the heading's own `getBoundingClientRect()`,
           // the same idea `HeadingMenuRequest.rect` already uses) — a
-          // structural change out of this task's scope, raised as a finding
-          // rather than freelanced here.
+          // structural change out of scope here. Reachability is instead
+          // provided by `addKeyboardShortcuts` below (`Mod-Alt-0`), which
+          // needs no focusable element at all.
         },
       }),
     ];

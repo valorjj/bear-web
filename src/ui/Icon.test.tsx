@@ -1,9 +1,9 @@
 import { render } from '@testing-library/react';
 import type { LucideIcon } from 'lucide-react';
-import { Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 
-import { Icon } from './Icon';
+import { Icon, renderIconMarkup } from './Icon';
 
 describe('Icon', () => {
   // An icon that is not hidden joins the accessible name of whatever control
@@ -47,5 +47,44 @@ describe('Icon', () => {
   it('takes a className so callers can colour it', () => {
     const { container } = render(<Icon glyph={Search} className="text-accent" />);
     expect(container.querySelector('svg')?.getAttribute('class')).toContain('text-accent');
+  });
+});
+
+describe('renderIconMarkup', () => {
+  // `renderIconMarkup` hardcodes `ChevronDown`/`ChevronRight`'s path data
+  // rather than calling lucide's own components (see the long comment above
+  // `CHEVRON_PATHS` in `Icon.tsx` for why — hooks inside lucide's base `Icon`
+  // component make that non-viable without a full React renderer, which is
+  // the exact weight avoiding `react-dom/server` was for). These two tests
+  // are what keeps that duplicate from silently drifting: they render the
+  // REAL lucide components through `@testing-library/react` — a test-only
+  // dependency that never reaches the shipped bundle — and compare the `d`
+  // each one actually produces against `renderIconMarkup`'s hardcoded output.
+  // A `lucide-react` version bump that changes either glyph's shape fails
+  // one of these instead of shipping a silently wrong icon.
+  it('matches the real ChevronDown glyph', () => {
+    const { container } = render(<Icon glyph={ChevronDown} />);
+    const real = container.querySelector('path')?.getAttribute('d');
+
+    const built = document.createElement('div');
+    built.innerHTML = renderIconMarkup(ChevronDown);
+    const ours = built.querySelector('path')?.getAttribute('d');
+
+    expect(ours).toBe(real);
+  });
+
+  it('matches the real ChevronRight glyph', () => {
+    const { container } = render(<Icon glyph={ChevronRight} />);
+    const real = container.querySelector('path')?.getAttribute('d');
+
+    const built = document.createElement('div');
+    built.innerHTML = renderIconMarkup(ChevronRight);
+    const ours = built.querySelector('path')?.getAttribute('d');
+
+    expect(ours).toBe(real);
+  });
+
+  it('throws for a glyph with no registered path data', () => {
+    expect(() => renderIconMarkup(Search)).toThrow();
   });
 });

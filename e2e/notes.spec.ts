@@ -726,3 +726,44 @@ test('the export menu closes on Escape and returns nothing', async ({ page }) =>
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 });
+
+test('Mod-Alt-0 folds and unfolds the section under the cursor', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await expect(editor).toBeVisible();
+  await editor.click();
+  // The `# ` input rule promotes this to a real heading node; `\n` starts a
+  // new paragraph after it — the same pattern other specs in this file use
+  // to exercise real input rules rather than a programmatic `.fill()`.
+  await page.keyboard.type('## Section one\nbody text\n## Section two\nmore text');
+
+  const bodyText = page.locator('.ProseMirror p', { hasText: 'body text' });
+  await expect(bodyText).toBeVisible();
+
+  // Place the caret inside the FIRST section's body paragraph — proving the
+  // binding resolves the ENCLOSING section, not merely a heading the caret
+  // happens to sit on.
+  await bodyText.click();
+  // ProseMirror syncs its own model selection from a native click via a
+  // `selectionchange` listener, which can lag a frame or two behind the
+  // browser's own DOM selection change (see the investigation in this
+  // milestone's HeadingFold work). Settling for two animation frames before
+  // pressing the shortcut is what makes this deterministic rather than racy.
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+
+  await page.keyboard.press('ControlOrMeta+Alt+0');
+  await expect(bodyText).toBeHidden();
+
+  // The second section's own text must survive untouched — only the first
+  // section folded.
+  await expect(page.locator('.ProseMirror p', { hasText: 'more text' })).toBeVisible();
+
+  // Pressing it again on the (still-collapsed) heading's own line unfolds it.
+  await page.locator('h2', { hasText: 'Section one' }).click();
+  await page.keyboard.press('ControlOrMeta+Alt+0');
+  await expect(bodyText).toBeVisible();
+});

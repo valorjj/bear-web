@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { editorExtensions } from './extensions';
 import { HeadingFold, foldedKeys } from './HeadingFold';
-import { headingSections } from './headingSections';
+import { foldKeyOf, headingSections, serializeFoldKey } from './headingSections';
 import { parseMarkdown, serializeMarkdown } from './markdown';
 
 function docFor(html: string): Editor {
@@ -295,6 +295,114 @@ describe('the gutter affordance is accessible', () => {
     // exactly what `e2e/appearance.spec.ts` would additionally confirm has
     // non-zero `getBoundingClientRect()` in a real browser.
     expect(toggle?.querySelector('svg')).not.toBeNull();
+    editor.destroy();
+  });
+});
+
+describe('widget DOM reuse across re-renders', () => {
+  it('keeps the same toggle DOM node across an unrelated (selection-only) transaction', () => {
+    const editor = docFor('<h2>A</h2><p>x</p>');
+
+    const before = editor.view.dom.querySelector('[data-fold-toggle]');
+    expect(before).not.toBeNull();
+
+    // A selection-only change still runs `decorations(state)` again, but
+    // `folded` hasn't changed, so the widget's `key` should let ProseMirror
+    // reuse the existing DOM node rather than destroy and rebuild it.
+    editor.commands.setTextSelection(1);
+
+    const after = editor.view.dom.querySelector('[data-fold-toggle]');
+    expect(after).toBe(before);
+    editor.destroy();
+  });
+
+  it('rebuilds the toggle only when its own folded state actually changes', () => {
+    const editor = docFor('<h2>A</h2><p>x</p>');
+    const [a] = headingSections(editor.state.doc);
+
+    const before = editor.view.dom.querySelector('[data-fold-toggle]');
+    expect(before).toHaveAttribute('aria-expanded', 'true');
+
+    editor.commands.toggleHeadingFold(a!.pos);
+    const after = editor.view.dom.querySelector('[data-fold-toggle]');
+
+    // Different `folded` state means a different `key`, so a genuine change
+    // is still expected to produce a new element with the updated
+    // `aria-expanded` — reuse must not mean "never updates".
+    expect(after).not.toBeNull();
+    expect(after).toHaveAttribute('aria-expanded', 'false');
+    // Not asserting `after !== before` by identity: ProseMirror MAY recycle
+    // the DOM node itself and merely re-run the builder, or may swap it for
+    // a fresh element — either is correct. What matters is the rendered
+    // attribute reflects the new state, checked above.
+    editor.destroy();
+  });
+});
+
+describe('an empty heading', () => {
+  it('gets no aria-label decoration', () => {
+    const editor = docFor('<h2></h2>');
+
+    const heading = editor.view.dom.querySelector('h2');
+    expect(heading).not.toBeNull();
+    expect(heading).not.toHaveAttribute('aria-label');
+    editor.destroy();
+  });
+});
+
+/**
+ * Dispatches the real `Mod-Alt-0` key combination through the editor's own
+ * `handleKeyDown` chain, the way `addKeyboardShortcuts` bindings are actually
+ * reached — never a made-up `editor.commands.*` shortcut-invoker, which does
+ * not exist on `Editor`. Under jsdom, `navigator.platform` is `''`
+ * (see CLAUDE.md's `isMacOS()` note), so `prosemirror-keymap`'s own
+ * mac-detection is also false there and normalizes `Mod` to `Ctrl`, not `Meta`
+ * — hence `ctrlKey`, not `metaKey`, below.
+ *
+ * Uses `someProp`'s short-circuit-on-first-truthy form DELIBERATELY, unlike
+ * the `decorations` prop elsewhere in this file: `handleKeyDown` is a
+ * "first plugin to claim it wins" prop in real ProseMirror dispatch (each
+ * keymap plugin's handler runs in order until one returns true), so this is
+ * the correct simulation, not the aggregation trap `widgetKinds`/`hiddenCount`
+ * exist to avoid for `decorations`.
+ */
+function pressModAlt0(editor: Editor): boolean {
+  const event = new KeyboardEvent('keydown', {
+    key: '0',
+    ctrlKey: true,
+    altKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  return editor.view.someProp('handleKeyDown', (f) => f(editor.view, event)) === true;
+}
+
+describe('Mod-Alt-0 folds the section under the cursor', () => {
+  it('toggles the fold of the enclosing top-level section', () => {
+    const editor = docFor('<h2>A</h2><p>x</p><h2>B</h2><p>y</p>');
+    const [a] = headingSections(editor.state.doc);
+
+    // Cursor inside the FIRST section's body paragraph, not on the heading
+    // line itself — proving this resolves "enclosing section", not merely
+    // "the heading the caret sits on".
+    editor.commands.setTextSelection(a!.contentStart + 1);
+
+    const handled = pressModAlt0(editor);
+    expect(handled).toBe(true);
+    expect(foldedKeys(editor.state)).toEqual([serializeFoldKey(foldKeyOf(a!))]);
+
+    editor.destroy();
+  });
+
+  it('returns false, letting the key fall through, when the cursor is outside any section', () => {
+    const editor = docFor('<p>before any heading</p><h2>A</h2><p>x</p>');
+
+    editor.commands.setTextSelection(1);
+
+    const handled = pressModAlt0(editor);
+    expect(handled).toBe(false);
+    expect(foldedKeys(editor.state)).toEqual([]);
+
     editor.destroy();
   });
 });
