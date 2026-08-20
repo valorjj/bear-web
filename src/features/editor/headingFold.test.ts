@@ -3,8 +3,8 @@ import type { DecorationSet } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import { describe, expect, it } from 'vitest';
 
-import { editorExtensions } from './extensions';
-import { HeadingFold, foldedKeys } from './HeadingFold';
+import { buildEditorExtensions, editorExtensions } from './extensions';
+import { HeadingFold, foldedKeys, type HeadingMenuRequest } from './HeadingFold';
 import { foldKeyOf, headingSections, serializeFoldKey } from './headingSections';
 import { parseMarkdown, serializeMarkdown } from './markdown';
 
@@ -408,6 +408,146 @@ describe('Mod-Alt-f folds the section under the cursor', () => {
 
     const handled = pressModAltF(editor);
     expect(handled).toBe(false);
+    expect(foldedKeys(editor.state)).toEqual([]);
+
+    editor.destroy();
+  });
+});
+
+/**
+ * Invokes the plugin's own `handleDOMEvents.mousedown` against the REAL,
+ * mounted `EditorView` — not a fake `posAtCoords` stand-in like `TagPill`'s
+ * `mousedownAt` needs, because this handler resolves through `posAtDOM`
+ * against an actual DOM element rather than viewport coordinates, and
+ * `posAtDOM` needs no layout engine to work in jsdom (only `posAtCoords`
+ * does). `target` is set with `Object.defineProperty` because a
+ * manually-constructed `MouseEvent` has a `null` target until the browser
+ * dispatches it, and the handler is invoked directly here rather than
+ * through a real DOM dispatch.
+ */
+function mousedownOn(
+  editor: Editor,
+  element: Element,
+  init: MouseEventInit = {},
+): { handled: boolean; defaultPrevented: boolean } {
+  const event = new MouseEvent('mousedown', {
+    cancelable: true,
+    bubbles: true,
+    button: 0,
+    ...init,
+  });
+  Object.defineProperty(event, 'target', { value: element, configurable: true });
+  const handled =
+    editor.view.someProp('handleDOMEvents', (handlers) =>
+      handlers.mousedown === undefined ? false : handlers.mousedown(editor.view, event as never),
+    ) === true;
+  return { handled, defaultPrevented: event.defaultPrevented };
+}
+
+describe('the mousedown handler on the badge and toggle', () => {
+  it('toggles the fold when the toggle is clicked, and does not open the menu', () => {
+    const opened: HeadingMenuRequest[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onOpenMenu: (request) => opened.push(request) }),
+      content: '<h2>A</h2><p>x</p>',
+    });
+
+    const toggle = editor.view.dom.querySelector('[data-fold-toggle]')!;
+    const result = mousedownOn(editor, toggle);
+
+    expect(result.handled).toBe(true);
+    expect(result.defaultPrevented).toBe(true);
+    const [a] = headingSections(editor.state.doc);
+    expect(foldedKeys(editor.state)).toEqual([serializeFoldKey(foldKeyOf(a!))]);
+    expect(opened).toEqual([]);
+
+    editor.destroy();
+  });
+
+  // The widgets are rendered as CHILDREN of the heading (`section.pos + 1`,
+  // not `section.pos`), so a click's `posAtDOM` resolution lands strictly
+  // INSIDE the heading, never on its own boundary. A doc with two headings is
+  // the case that actually exercises the arithmetic: resolving to the wrong
+  // section (e.g. always finding the first) would be invisible with only one
+  // heading in the fixture.
+  it('resolves a badge click on the SECOND heading to its own section, not the first', () => {
+    const opened: HeadingMenuRequest[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onOpenMenu: (request) => opened.push(request) }),
+      content: '<h1>A</h1><p>x</p><h3>B</h3><p>y</p>',
+    });
+
+    const [a, b] = headingSections(editor.state.doc);
+    const badges = editor.view.dom.querySelectorAll('[data-fold-badge]');
+    expect(badges).toHaveLength(2);
+
+    const result = mousedownOn(editor, badges[1]!);
+
+    expect(result.handled).toBe(true);
+    expect(result.defaultPrevented).toBe(true);
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toMatchObject({ pos: b!.pos, level: b!.level, folded: false });
+    // Not the first heading's position, and not folded as a side effect.
+    expect(opened[0]!.pos).not.toBe(a!.pos);
+    expect(foldedKeys(editor.state)).toEqual([]);
+
+    editor.destroy();
+  });
+
+  it('reports the current fold state to the menu request', () => {
+    const opened: HeadingMenuRequest[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onOpenMenu: (request) => opened.push(request) }),
+      content: '<h2>A</h2><p>x</p>',
+    });
+
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+
+    const badge = editor.view.dom.querySelector('[data-fold-badge]')!;
+    mousedownOn(editor, badge);
+
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!.folded).toBe(true);
+
+    editor.destroy();
+  });
+
+  it('does nothing on a right-click', () => {
+    const opened: HeadingMenuRequest[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onOpenMenu: (request) => opened.push(request) }),
+      content: '<h2>A</h2><p>x</p>',
+    });
+
+    const badge = editor.view.dom.querySelector('[data-fold-badge]')!;
+    const result = mousedownOn(editor, badge, { button: 2 });
+
+    expect(result.handled).toBe(false);
+    expect(result.defaultPrevented).toBe(false);
+    expect(opened).toEqual([]);
+
+    editor.destroy();
+  });
+
+  // `editorExtensions` (the shipped, schema-only constant) registers
+  // `HeadingFold` with no options, so `onOpenMenu` is `null` — the same
+  // "nobody is listening" state `TagPill.onActivate` uses. A badge click must
+  // not throw, and must leave the caret placement to the browser rather than
+  // swallowing the click for a menu that will never open.
+  it('does nothing when nobody is listening for the menu', () => {
+    const editor = docFor('<h2>A</h2><p>x</p>');
+
+    const badge = editor.view.dom.querySelector('[data-fold-badge]')!;
+    const result = mousedownOn(editor, badge);
+
+    // `handled` is false — ProseMirror's own mousedown handling is otherwise
+    // free to run. `defaultPrevented` is still true, because `preventDefault`
+    // runs unconditionally once a section is resolved (see the handler's own
+    // comment): what must never happen is the caret jumping to the widget's
+    // position, regardless of whether a menu was actually opened.
+    expect(result.handled).toBe(false);
+    expect(result.defaultPrevented).toBe(true);
     expect(foldedKeys(editor.state)).toEqual([]);
 
     editor.destroy();
