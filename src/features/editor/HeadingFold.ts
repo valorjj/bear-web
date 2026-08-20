@@ -37,7 +37,7 @@ interface FoldMeta {
   keys: string[];
 }
 
-/** The fold keys currently held in plugin state, in document order where they match. */
+/** The fold keys currently held in plugin state, in the order they were folded. */
 export function foldedKeys(state: EditorState): string[] {
   return headingFoldKey.getState(state)?.keys ?? [];
 }

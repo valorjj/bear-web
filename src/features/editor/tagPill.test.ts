@@ -583,6 +583,13 @@ describe('tag activation', () => {
     // `someProp` would silently return whichever plugin happens to run
     // first, hiding every other plugin's decorations from this assertion
     // without saying anything went wrong.
+    // Measured directly: `Decoration.inline(from, to, attrs)` puts `attrs`
+    // at `decoration.type.attrs`; `decoration.type.spec` is `{}`.
+    // `Decoration.type` isn't public in `@tiptap/pm/view`'s types, so this
+    // reads it through the same shape every call site in this file already
+    // casts to.
+    type DecoWithAttrs = { type: { attrs?: Record<string, string> } };
+
     const titles = editor.state.plugins
       .flatMap((plugin) => {
         const prop = plugin.props.decorations;
@@ -594,15 +601,18 @@ describe('tag activation', () => {
         const result = prop.call(plugin, editor.state) as DecorationSet | null | undefined;
         return result?.find() ?? [];
       })
-      // Measured directly: `Decoration.inline(from, to, attrs)` puts `attrs`
-      // at `decoration.type.attrs`; `decoration.type.spec` is `{}`. Node
-      // decorations (e.g. `HeadingFold`'s) carry no `title`, so filtering on
-      // it keeps this assertion about tag pills specifically.
-      .map(
-        (decoration) =>
-          (decoration as unknown as { type: { attrs: Record<string, string> } }).type.attrs.title,
+      // Filtered on the decoration's OWN CLASS (`bear-tag`, the class
+      // `tagDecorations` always writes), not on whether `title` happens to
+      // be present — a titleless pill must still fail this assertion rather
+      // than being silently skipped by a filter that only keeps decorations
+      // with a title. `WidgetType` (a fold's badge widget, once Task 4 adds
+      // one) has no `attrs` at all, so the access below is
+      // optional-chained: it must degrade to `undefined`, not throw, on a
+      // decoration type this test isn't looking for.
+      .filter(
+        (decoration) => (decoration as unknown as DecoWithAttrs).type.attrs?.class === 'bear-tag',
       )
-      .filter((title): title is string => title !== undefined);
+      .map((decoration) => (decoration as unknown as DecoWithAttrs).type.attrs!.title);
     expect(titles).toEqual(['Cmd-click to filter', 'Cmd-click to filter']);
     editor.destroy();
   });

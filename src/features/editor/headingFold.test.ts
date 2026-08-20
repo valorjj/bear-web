@@ -76,21 +76,36 @@ describe('folding commands', () => {
   });
 });
 
-/** How many blocks the plugin is currently hiding. */
+/**
+ * How many blocks the plugin is currently hiding.
+ *
+ * Gathers every plugin's `decorations` prop and concatenates the results,
+ * the way ProseMirror's own `viewDecorations` does, rather than
+ * `editor.view.someProp('decorations', (f) => f(editor.state))`'s
+ * short-circuit-on-first-truthy-result form. That form happens to work
+ * today only because extension order is reversed when `state.plugins` is
+ * built (see `tagPill.test.ts` and `RichEditor.test.tsx`, which hit the
+ * same thing), which puts `headingFold$` first — but Task 4 adds more
+ * plugin props to this same file, and that ordering is not something to
+ * depend on. The stakes here are asymmetric: `toBe(1)`/`toBe(3)` below
+ * would fail loudly if this read the wrong plugin's decorations, but the
+ * fail-open assertion — `hiddenCount(editor)` toBe(0) for a fold key that
+ * matches no heading — would PASS VACUOUSLY if `HeadingFold` were shadowed,
+ * dead, or merely reading some other plugin's empty set instead of its own.
+ */
 function hiddenCount(editor: Editor): number {
-  // `someProp`'s declared return type is the general `DecorationSource`,
-  // which has no `.find()` — only the concrete `DecorationSet` class does.
-  // Every `decorations` prop registered in this app (this one included)
-  // returns `DecorationSet.create(...)` or `DecorationSet.empty`, never a
-  // `DecorationGroup`, so this narrowing reflects what is actually returned
-  // at runtime rather than weakening what the assertion below checks.
-  const decorations = editor.view.someProp('decorations', (f) => f(editor.state)) as
-    DecorationSet | undefined;
-  let count = 0;
-  decorations?.find().forEach((d) => {
-    if ((d.spec as { foldHidden?: boolean }).foldHidden) count += 1;
-  });
-  return count;
+  return editor.state.plugins
+    .flatMap((plugin) => {
+      const prop = plugin.props.decorations;
+      if (!prop) return [];
+      // `decorations`'s declared `this` is the owning `Plugin`, and its
+      // declared return type is the general `DecorationSource`, which has
+      // no `.find()` — only the concrete `DecorationSet` every plugin in
+      // this app actually returns does.
+      const result = prop.call(plugin, editor.state) as DecorationSet | null | undefined;
+      return result?.find() ?? [];
+    })
+    .filter((d) => (d.spec as { foldHidden?: boolean }).foldHidden).length;
 }
 
 describe('fold decorations', () => {

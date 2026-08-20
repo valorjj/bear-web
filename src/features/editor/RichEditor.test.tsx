@@ -255,10 +255,19 @@ describe('RichEditor tag pill tooltip', () => {
    * first truthy result: with `HeadingFold` now also registering a
    * `decorations` prop, `someProp` can return that plugin's (empty, but
    * still a truthy object) `DecorationSet` before ever reaching `TagPill`'s.
-   * Filtering on `title` — only a tag pill's decoration carries one — keeps
-   * this about the pill regardless of which plugin's decorations come first.
+   *
+   * Filtered on the decoration's OWN CLASS (`bear-tag`, the class
+   * `tagDecorations` always writes), not on whether `title` happens to be
+   * present — a titleless pill must still fail the two tests below rather
+   * than being silently treated as "no pill here, keep looking". `attrs` is
+   * read with optional chaining throughout: `WidgetType` (a fold's badge
+   * widget, once Task 4 adds one) has no `attrs` at all, and this must
+   * degrade to `undefined` rather than throw on a decoration type this
+   * helper isn't looking for.
    */
   function firstPillTitle(editor: Editor): string | undefined {
+    type DecoWithAttrs = { type: { attrs?: Record<string, string> } };
+
     const decoration = editor.state.plugins
       .flatMap((plugin) => {
         const prop = plugin.props.decorations;
@@ -270,13 +279,8 @@ describe('RichEditor tag pill tooltip', () => {
         const result = prop.call(plugin, editor.state) as DecorationSet | null | undefined;
         return result?.find() ?? [];
       })
-      .find(
-        (d) =>
-          (d as unknown as { type: { attrs: Record<string, string> } }).type.attrs.title !==
-          undefined,
-      );
-    return (decoration as unknown as { type: { attrs: Record<string, string> } } | undefined)?.type
-      .attrs.title;
+      .find((d) => (d as unknown as DecoWithAttrs).type.attrs?.class === 'bear-tag');
+    return (decoration as unknown as DecoWithAttrs | undefined)?.type.attrs?.title;
   }
 
   // `isMacOS()` runs inside `RichEditor`'s `useState` initializer, which runs
