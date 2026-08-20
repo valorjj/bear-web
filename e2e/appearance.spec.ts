@@ -95,8 +95,17 @@ test('a quiet header control still has a hover affordance and a name', async ({ 
   expect(await background()).toBe('rgba(0, 0, 0, 0)');
 
   await created.hover();
+
+  // Polled, not read once. The fill TRANSITIONS in over
+  // `--bear-duration-fast`, so a single read immediately after `hover()` can
+  // catch the animation at 0% and see the resting transparent — which made
+  // this test fail roughly one run in three. Polling still fails, by timing
+  // out, when the fill genuinely never compiles; that was re-verified by
+  // deleting `hover:bg-hover` from the ghost variant.
+  await expect
+    .poll(background, { message: 'the hover fill did not compile' })
+    .not.toBe('rgba(0, 0, 0, 0)');
   const hovered = await background();
-  expect(hovered, 'the hover fill did not compile').not.toBe('rgba(0, 0, 0, 0)');
 
   // And it must differ from the pane, or the "fill" is invisible anyway — the
   // same trap the pane-card test documents.
