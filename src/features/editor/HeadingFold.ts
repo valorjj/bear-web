@@ -483,8 +483,26 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
           // highlight), and it is undoable. Only a collapsed caret is guarded
           // here — `!selection.empty` returns false unconditionally, letting
           // any non-empty selection fall through to normal deletion.
+          //
+          // Two keys each, not one: `@tiptap/core`'s own built-in `Keymap`
+          // extension binds the macOS delete-variant chords — `Ctrl-h` and
+          // `Alt-Backspace` alongside plain `Backspace`; `Ctrl-d`, `Alt-d` and
+          // `Alt-Delete` alongside plain `Delete` — to the SAME
+          // `deleteSelection → … → joinForward/joinBackward` chain plain
+          // Backspace/Delete run. `Alt-Backspace`, `Ctrl-Alt-Backspace` and
+          // `Alt-Delete` still report `event.key` as `'Backspace'`/`'Delete'`
+          // (Alt/Ctrl are modifiers, not a different key), so the plain
+          // `event.key` check already catches those — but `Ctrl-h` and
+          // `Ctrl-d`/`Alt-d` report `event.key` as the literal letter, so
+          // without checking for them explicitly a Mac user pressing the
+          // Emacs-style chord would destroy hidden content right past this
+          // guard. The modifier check is what keeps a PLAIN "h" or "d"
+          // keystroke (ordinary typing) from ever matching.
           handleKeyDown(view, event) {
-            if (event.key !== 'Delete' && event.key !== 'Backspace') return false;
+            const isBackspace = event.key === 'Backspace' || (event.key === 'h' && event.ctrlKey);
+            const isDelete =
+              event.key === 'Delete' || (event.key === 'd' && (event.ctrlKey || event.altKey));
+            if (!isBackspace && !isDelete) return false;
 
             const { selection } = view.state;
             if (!selection.empty) return false;
@@ -493,12 +511,32 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
             if (keys.size === 0) return false;
 
             const at = selection.from;
+            const docSize = view.state.doc.content.size;
             const section = headingSections(view.state.doc).find((s) => {
               if (!keys.has(serializeFoldKey(foldKeyOf(s)))) return false;
               if (s.end <= s.contentStart) return false;
-              // Delete forward from the caret at the end of the heading's own
-              // line, or Backspace from the start of the first hidden block.
-              return event.key === 'Delete' ? at === s.contentStart - 1 : at === s.contentStart + 1;
+              if (isDelete) {
+                // Forward from the caret at the end of the heading's own
+                // line — the last position that is still VISIBLE, right
+                // before the hidden body begins.
+                return at === s.contentStart - 1;
+              }
+              // Backspace's reachable hazard is NOT `contentStart + 1` — that
+              // position is one character into the section's hidden body
+              // (`hiddenRangesFor` hides `[contentStart, end)`), so it sits
+              // inside `display: none` content no caret can ever actually
+              // land on. The hazard a user really hits is the caret at the
+              // START of the first VISIBLE block after the folded section
+              // (measured: the next top-level heading, since `end` is
+              // defined as that heading's own `pos` — see `headingSections`).
+              // Backspacing there runs `joinBackward`, which merges that
+              // visible block into the section's last HIDDEN block — for
+              // example merging a following heading into a hidden paragraph,
+              // silently deleting the heading. `s.end < docSize` guards the
+              // case where the folded section runs to the end of the
+              // document and there is no following block to backspace from
+              // at all.
+              return s.end < docSize && at === s.end + 1;
             });
             if (!section) return false;
 
@@ -506,12 +544,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
             // content the user cannot see. Select-all-then-delete DOES still
             // delete folded content — that is the user asking for the whole
             // document, and it is undoable.
-            view.dispatch(
-              setKeys(
-                view.state.tr,
-                foldedKeys(view.state).filter((k) => k !== serializeFoldKey(foldKeyOf(section))),
-              ),
-            );
+            view.dispatch(setKeys(view.state.tr, nextKeysToggling(view.state, section)));
             return true;
           },
 

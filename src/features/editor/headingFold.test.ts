@@ -593,10 +593,115 @@ describe('editing at a fold boundary', () => {
     expect(editor.getHTML()).not.toBe(before);
     editor.destroy();
   });
+
+  // The reachable Backspace hazard, measured: with `<h2>A</h2><p>hidden</p>`
+  // folded, then `<h2>B</h2><p>visible</p>` after it, `headingSections` gives
+  // section A an `end` equal to B's own `pos` (11 in this fixture) — `end` is
+  // defined as the next heading's position. `end + 1` (12) is therefore the
+  // start of B's own inline content: a real, VISIBLE caret position, unlike
+  // `contentStart + 1`, which sits inside A's hidden body and can never hold
+  // a caret at all. Backspacing at `end + 1` with no guard runs
+  // `joinBackward`, which merges heading B into A's hidden last block —
+  // confirmed by a scratch measurement (not committed) before this fix: the
+  // document went from four blocks (`A`, hidden `hidden`, `B`, `visible`) to
+  // three, with B's text silently absorbed into the hidden paragraph as
+  // `"hiddenB"` and the heading itself gone.
+  it('Backspace at the start of the block after a folded section unfolds instead of destroying it', () => {
+    const editor = docFor('<h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
+    const [a] = headingSections(editor.state.doc);
+    expect(a!.end).toBe(11);
+    editor.commands.toggleHeadingFold(a!.pos);
+    editor.commands.setTextSelection(a!.end + 1);
+
+    const before = editor.getHTML();
+    const handled = editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'Backspace' })),
+    );
+
+    expect(handled).toBe(true);
+    expect(foldedKeys(editor.state)).toEqual([]);
+    expect(editor.getHTML()).toBe(before);
+    editor.destroy();
+  });
+
+  it('leaves Backspace alone when the section is not folded', () => {
+    const editor = docFor('<h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.setTextSelection(a!.end + 1);
+
+    const before = editor.getHTML();
+    editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'Backspace' })),
+    );
+
+    // Unrelated to this guard, joinBackward merges B into the (unfolded, so
+    // fully visible) "hidden" paragraph — a real edit, so the document
+    // changes, just as the equivalent Delete case does above.
+    expect(editor.getHTML()).not.toBe(before);
+    editor.destroy();
+  });
+
+  // The macOS delete-variant chords: `@tiptap/core`'s own `Keymap` extension
+  // binds `Ctrl-h` to the same handler as plain `Backspace`, and `Ctrl-d`/
+  // `Alt-d` to the same handler as plain `Delete` — but `event.key` for those
+  // chords is the literal letter, not `'Backspace'`/`'Delete'`, so a naive
+  // `event.key` check would let a Mac user destroy hidden content through
+  // exactly this route. One of each is covered here; `Alt-Backspace`,
+  // `Ctrl-Alt-Backspace` and `Alt-Delete` still report `event.key` as
+  // `'Backspace'`/`'Delete'` and are already covered by the tests above.
+  it('Ctrl-h at the Backspace boundary unfolds, like plain Backspace', () => {
+    const editor = docFor('<h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+    editor.commands.setTextSelection(a!.end + 1);
+
+    const handled = editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'h', ctrlKey: true })),
+    );
+
+    expect(handled).toBe(true);
+    expect(foldedKeys(editor.state)).toEqual([]);
+    editor.destroy();
+  });
+
+  it('Ctrl-d at the Delete boundary unfolds, like plain Delete', () => {
+    const editor = docFor('<h2>A</h2><p>hidden</p>');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+    editor.commands.setTextSelection(a!.contentStart - 1);
+
+    const handled = editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'd', ctrlKey: true })),
+    );
+
+    expect(handled).toBe(true);
+    expect(foldedKeys(editor.state)).toEqual([]);
+    editor.destroy();
+  });
+
+  it('does not intercept a plain "h" or "d" keystroke (ordinary typing)', () => {
+    const editor = docFor('<h2>A</h2><p>hidden</p>');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+    editor.commands.setTextSelection(a!.contentStart - 1);
+
+    const handledH = editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'h' })),
+    );
+    const handledD = editor.view.someProp('handleKeyDown', (f) =>
+      f(editor.view, new KeyboardEvent('keydown', { key: 'd' })),
+    );
+
+    expect(handledH).toBeFalsy();
+    expect(handledD).toBeFalsy();
+    // Still folded: neither plain letter unfolded the section.
+    expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
+    editor.destroy();
+  });
 });
 
 describe('the fold-boundary guard only intercepts a collapsed caret', () => {
-  it('leaves a non-empty selection spanning the boundary alone, even when folded', () => {
+  it('leaves a non-empty selection spanning the boundary alone, even when folded, and the deletion still happens', () => {
     const editor = docFor('<h2>A</h2><p>hidden</p>');
     const [a] = headingSections(editor.state.doc);
     editor.commands.toggleHeadingFold(a!.pos);
@@ -605,16 +710,19 @@ describe('the fold-boundary guard only intercepts a collapsed caret', () => {
     // intercept.
     editor.commands.setTextSelection({ from: a!.contentStart - 1, to: a!.contentStart + 1 });
 
-    const handled = editor.view.someProp('handleKeyDown', (f) =>
+    const before = editor.getHTML();
+    editor.view.someProp('handleKeyDown', (f) =>
       f(editor.view, new KeyboardEvent('keydown', { key: 'Delete' })),
     );
 
     // The guard must not fire for this selection: it stays folded (the guard
-    // didn't unfold it), because a real selection whose bounds the user can
-    // see is left to normal deletion, not intercepted the way a collapsed
-    // caret is.
+    // didn't unfold it) AND the selected content is actually gone — a real
+    // selection whose bounds the user can see is left to normal deletion,
+    // not intercepted the way a collapsed caret is. Asserting only the fold
+    // key survives would also pass a guard that swallowed the keystroke
+    // without deleting anything, which is not the intended asymmetry.
     expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
-    void handled;
+    expect(editor.getHTML()).not.toBe(before);
     editor.destroy();
   });
 });
