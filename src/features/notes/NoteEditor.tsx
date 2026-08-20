@@ -1,4 +1,5 @@
 import { type ReactElement, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import type { Editor } from '@tiptap/react';
 
 import { deriveTitle, folds, notes } from '@/data';
 import type { Note } from '@/data';
@@ -230,51 +231,85 @@ export function NoteEditor({
     seed(atMount);
   }, [seed]);
 
+  // `RichEditor`'s own `editor` is what actually goes from `null` to ready;
+  // `handleRef` is a plain ref, and reading it once from an effect keyed only
+  // on `note.id` races Tiptap's construction with no way to notice if it ever
+  // loses that race — which is exactly the failure mode `RichEditor.test.tsx`
+  // itself has to guard against with a `waitFor`. Fold persistence subscribes
+  // to this reactive signal instead, so it re-attaches if the editor is ever
+  // not ready at first commit, rather than silently never running at all.
+  const [foldEditor, setFoldEditor] = useState<Editor | null>(null);
+
+  // Shared between the two effects below, so the restore effect can mark a
+  // set of keys as "already accounted for" BEFORE dispatching the command
+  // that applies them — see the long comment inside the persist effect for
+  // why this has to be shared state rather than each effect's own local.
+  const lastFoldedKeysRef = useRef('');
+
   // Folds are loaded once per mount. `NoteEditor` is keyed by `note.id`, so
   // one mounted editor serves exactly one note for its lifetime — the same
   // property that makes its autosave flush-on-unmount correct — and no
   // cross-note reconciliation is needed here.
   useEffect(() => {
+    if (!foldEditor) return;
     let cancelled = false;
     void folds.get(note.id).then((keys) => {
       if (cancelled || keys.length === 0) return;
-      handleRef.current?.editor?.commands.setHeadingFolds(keys);
+      // Recorded BEFORE dispatching, not after: `setHeadingFolds` fires its
+      // transaction synchronously, so if the persist effect's own change
+      // detector ran first it would see the empty starting state and read
+      // this restore as a brand-new fold to write straight back. Marking the
+      // restored set as "already the last known state" first closes that
+      // race instead of merely hoping the two effects commit in a lucky order.
+      lastFoldedKeysRef.current = keys.join('|');
+      foldEditor.commands.setHeadingFolds(keys);
     });
     return () => {
       cancelled = true;
     };
-  }, [note.id]);
+  }, [note.id, foldEditor]);
 
   // Persisted on change, debounced, fire-and-forget. The fold has ALREADY
   // applied in plugin state by the time this runs, so a failed write costs a
   // fold and never content — which is why it is deliberately not awaited and
   // deliberately does not surface an error.
   useEffect(() => {
-    const editorInstance = handleRef.current?.editor;
-    if (!editorInstance) return;
+    if (!foldEditor) return;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let last = '';
+    let pending: string[] | null = null;
 
     const onTransaction = (): void => {
-      const keys = foldedKeys(editorInstance.state);
+      const keys = foldedKeys(foldEditor.state);
       const serialized = keys.join('|');
-      if (serialized === last) return;
-      last = serialized;
+      if (serialized === lastFoldedKeysRef.current) return;
+      lastFoldedKeysRef.current = serialized;
+      pending = keys;
       clearTimeout(timer);
-      timer = setTimeout(() => void folds.set(note.id, keys), FOLD_PERSIST_DELAY_MS);
+      timer = setTimeout(() => {
+        pending = null;
+        void folds.set(note.id, keys);
+      }, FOLD_PERSIST_DELAY_MS);
     };
 
-    // Seeded from the mounted editor's own reading, so restoring a stored set
-    // in the effect above does not immediately write it back.
-    last = foldedKeys(editorInstance.state).join('|');
+    // Seeded from the editor's own reading, matching whatever the restore
+    // effect above has (or has not yet) applied.
+    lastFoldedKeysRef.current = foldedKeys(foldEditor.state).join('|');
 
-    editorInstance.on('transaction', onTransaction);
+    foldEditor.on('transaction', onTransaction);
     return () => {
-      editorInstance.off('transaction', onTransaction);
+      foldEditor.off('transaction', onTransaction);
       clearTimeout(timer);
+      // Flushes a fold made in the last debounce window rather than dropping
+      // it, mirroring `useAutosave`'s flush-on-unmount for the same reason:
+      // `NoteEditor` remounts on every note switch, so this cleanup runs
+      // routinely, not just on a genuine teardown, and a fold made moments
+      // before switching notes must not be silently lost.
+      if (pending !== null) {
+        void folds.set(note.id, pending);
+      }
     };
-  }, [note.id]);
+  }, [note.id, foldEditor]);
 
   const onChange = useCallback(() => {
     editedRef.current = true;
@@ -321,6 +356,7 @@ export function NoteEditor({
         updatedAt={note.updatedAt}
         onActivateTag={onActivateTag}
         onExport={handleExport}
+        onEditorReady={setFoldEditor}
       />
 
       {(failed || serializeFailed || exportFailed) && (

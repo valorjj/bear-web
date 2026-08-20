@@ -39,6 +39,15 @@ export interface RichEditorProps {
    * menu. Omit it and no export control is rendered at all.
    */
   onExport?: (format: ExportFormat) => void;
+  /**
+   * Called with the live `editor` every time IT changes identity — in
+   * particular the transition from `null` to a ready instance, and back to
+   * `null` on unmount. `handleRef` is a plain ref: reading it once from a
+   * caller's own effect races Tiptap's own construction, which is exactly
+   * why `NoteEditor`'s fold persistence needs a reactive signal instead of a
+   * ref read at a single moment.
+   */
+  onEditorReady?: (editor: Editor | null) => void;
 }
 
 /**
@@ -58,6 +67,7 @@ export function RichEditor({
   updatedAt,
   onActivateTag,
   onExport,
+  onEditorReady,
 }: RichEditorProps): ReactElement {
   const t = useT();
   const [infoOpen, setInfoOpen] = useState(false);
@@ -146,11 +156,19 @@ export function RichEditor({
     },
   });
 
+  // `onEditorReady` is read through a ref, the same discipline as
+  // `activateRef` above: the callback's IDENTITY must not be a dependency
+  // here, or a caller that doesn't memoize it would tear this effect down
+  // and rebuild `handleRef.current` on every one of its own re-renders.
+  const onEditorReadyRef = useRef(onEditorReady);
+  onEditorReadyRef.current = onEditorReady;
+
   useEffect(() => {
     handleRef.current = {
       getMarkdown: () => (editor === null ? initialMarkdown : serializeMarkdown(editor.getJSON())),
       editor,
     };
+    onEditorReadyRef.current?.(editor);
 
     return () => {
       handleRef.current = null;
