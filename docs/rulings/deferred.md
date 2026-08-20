@@ -1,0 +1,126 @@
+# Deferred, with a ruling
+
+The standing set of things this project knows about and has deliberately chosen
+not to do yet, each with the reasoning that justified deferring it — real, not
+forgotten. Historically titled "Carried into M5b and M6"; the list has outlived
+those milestones. Full reasoning lives in the per-milestone ledgers
+(`.superpowers/sdd/2026-08-08-m3-notes/progress.md`,
+`.superpowers/sdd/2026-08-09-m4-editor/progress.md`,
+`.superpowers/sdd/2026-08-10-m5-tags/progress.md`; M5.5's ledger is gitignored
+and not carried forward — the items below are what survived it). Items resolved
+since are struck rather than deleted, so a reader can see the ruling was retired
+on purpose.
+
+**Trigger:** open this when planning a milestone — fold these in rather than
+rediscovering them — and before touching any subsystem named here: pane-width
+persistence, `NoteEditor`'s seed/discard logic, `AppShell`'s confirm handlers,
+the tag tree and tag pills, the note-list header, the editor typography tokens,
+theme palettes, or the Playwright pointer-drag tests. A deferral you disagree
+with is not resolved; only code can retire one.
+
+- **A tag pill has no keyboard activation, deliberately.** Making a span inside
+  a contenteditable focusable fights the editor for the selection and for Tab,
+  and the tag sidebar is already a complete keyboard route to every filter.
+  Recorded as a ruling rather than an omission.
+- **The note list has no header naming the current scope.** Bear has one. The
+  only on-screen indication of an active filter is the `aria-current` sidebar
+  row, which is why activation reveals collapsed ancestors. `NoteList`'s header
+  strip holds action buttons and the search field only; it names nothing. Still
+  open past M8 and M9a.
+- Tag rename and delete are still carried from M5b and unscheduled. So is
+  syntax-visibility toggling — M5's original three-item list named it
+  alongside the inline mark and rename/delete; M7.6 ruled only on the inline
+  mark (a decoration, not a mark), and the toggle itself remains unimplemented
+  and unscheduled.
+- ~~**`usePaneWidths` writes `void settings.set(...)` with no flush**, so
+  dragging a separator and reloading immediately can lose the width. Deferred
+  because it costs a pane width rather than note content, and because
+  `useAutosave` now has the general `beforeunload`/`visibilitychange` flush pair
+  that should be extracted and shared rather than duplicated one-off.~~
+  **Resolved**, and by exactly the route the ruling prescribed rather than a
+  one-off: the flush pair was extracted to `src/lib/useFlushTriggers.ts`, and
+  `usePaneWidths` now tracks the last committed width in a `lastCommitted` ref
+  and re-issues both writes from `useFlushTriggers`. The commit write is still
+  fire-and-forget; the redundant re-issue on flush is what closes the window.
+- **The keyed-remount rule (`key={note.id}`) is currently unfalsifiable at the
+  app level.** Removing the key from `AppShell`'s render of `NoteEditor` left
+  all 14 pre-M4 e2e tests green: `useNotes` routes every selection change
+  through a transient `undefined`, which unmounts/remounts `NoteEditor`
+  independently of the key, masking its removal. Reproduced identically on the
+  pre-Tiptap textarea, so this is pre-existing, not a Tiptap regression. The key
+  is not wrong — it is defence in depth whose own app-level test cannot fail. A
+  future milestone touching `useNotes`' selection handling should either close
+  this gap or record why it remains open. (`AppShell.test.tsx` does carry a test
+  named for this — "shows each note's own text after switching" — but it is the
+  one the gap is about: it passes with or without the key, because the transient
+  `undefined` remounts anyway.)
+- **A tag tree row's own count and its children resolve as two independent live
+  queries.** `useTagTree` runs `notes.allTagRows()` and `tags.allMeta()`
+  separately, so a previously-collapsed row can flash open for a frame before
+  the collapsed-state query lands, and a rapid double-toggle click collapses to
+  one logical toggle rather than two (it converges, so no test currently fails
+  on it). Cheap to fix by joining the queries; not done because M5 had no user
+  complaint to point at.
+- **A tag key of `''`, or one with a leading slash, would vanish from the tree
+  entirely** — not merely mis-parented, its note disappears from every list.
+  `buildTagTree` still splits on `/` with no empty-segment guard. Unreachable
+  today because the TDD-pinned `parseTags` grammar never emits such a key, but a
+  one-line defensive skip would be cheap insurance against a future parser
+  change reopening a data-loss-shaped bug.
+- **`NoteEditor`'s seed-vs-editor-reading comparison would be sturdier if it
+  captured the mounted editor's own text at mount** when `note.text === seedText`,
+  the way the general autosave-seed rule already does, rather than trusting
+  `seedText` and the editor to agree. `isEmpty` still compares the editor's
+  reading against a separately-normalized `seedText`. Not reshaped at M5's end
+  because the current failure mode is fail-safe (a stray note lingers, nothing
+  is deleted), unlike the manager/schema divergence that motivated the general
+  rule.
+- **All five editor typography tokens are wired and guarded, but none has a
+  slider.** M7.5 wired `--bear-font-size` and `--bear-line-height`; M8 set
+  `--bear-line-width` to its measured value and wired the last two
+  (`--bear-para-spacing`, `--bear-para-indent`) as additive, with a test that
+  drives each from the page. The CSS half is fully closed. **The UI half is
+  still open**: there is no `type="range"` anywhere in `src/`, and
+  `src/features/appearance/` holds only the M9a theme picker. Bear exposes
+  exactly these five as sliders plus three font pickers, which is the shape the
+  panel should take — see the typography table in
+  `docs/design/DESIGN-bear-web.md`. The theme picker is the natural surface to
+  grow it on.
+- **`confirmPending` in `AppShell` clears its state and then awaits with no
+  `try`/`catch`.** A rejected `purge` or `emptyTrash` closes the dialog and
+  leaves the user believing the deletion succeeded. This matches the four
+  sibling handlers (`handleTrash`, `handleRestore`, `handleTogglePin`,
+  `handleCreate`), so it is a house pattern rather than a regression — but it
+  is the worst place in the app for it, because the action is destructive,
+  irreversible, and has no copy anywhere else. Worth raising to must-fix when
+  a milestone adds any error surface.
+- **The `current === undefined` half of `NoteEditor`'s `discard` condition is
+  untested.** Removing it leaves that file's suite green. It exists so a
+  double-discard is a no-op rather than a `TypeError`; `notes.purge` of a
+  missing id is already a documented no-op, so the consequence is small — but
+  a regression there would pass CI silently.
+- **An intermittent Playwright resize-test flake.** Seen once during M5.5, not
+  reproducible afterwards across three consecutive full runs (18/18 each). Not
+  actionable without a failing artifact, but worth naming because `jsdom` has
+  no `setPointerCapture` — Playwright is the _only_ coverage for pointer-drag
+  paths (`e2e/smoke.spec.ts`), so a flake there is a hole in the one place that
+  can test them. If it recurs, run that spec with `--repeat-each`.
+- **Paper's `--bear-selected` at `rgb(207 59 44 / 0.11)` reads faint.** On the
+  bottom toolbar's pressed toggles it is a light wash over white, and on some
+  displays the pressed state reads mainly through the text-colour shift rather
+  than the background. Ink's `0.18` alpha is comfortable. Raising Paper's alpha
+  is a design call, and it ripples into `e2e/smoke.spec.ts`, which now pins the
+  shipped palette deliberately. Less urgent since M9a — Paper is no longer the
+  default theme — but the value is unchanged and the ruling stands.
+- ~~`rounded-md`, `rounded-lg`, `shadow-popover` and `shadow-dialog` are
+  provisioned but unused.~~ **Resolved.** `ConfirmDialog` took the dialog
+  shadow in M6, and M8 put `rounded-lg` + `shadow-popover` on the panes, both
+  floating toolbar pills, the info popover and the export menu. Every provisioned
+  radius and shadow now has at least one call site.
+- **`scripts/fonts.test.ts` ignores `font-weight` and `font-style`.** Its
+  `declaredFamilies` collects every `font-family:` an `@font-face` block
+  declares regardless of which face it belongs to, so a family declared _only_
+  at a weight or style the app never uses would satisfy the check. Latent, with
+  no live instance — Pretendard ships `font-weight: 45 920` normal and
+  JetBrains Mono `100 800` normal, so every declared family is one the app can
+  actually render.
