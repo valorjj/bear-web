@@ -51,10 +51,11 @@ function setKeys(tr: Transaction, keys: string[]): Transaction {
 // Computed ONCE at module init, not per render. `Decoration.widget`'s builder
 // function runs on every `decorations(state)` pass that doesn't reuse the old
 // DOM (see the `key` spec fields below for why that used to be EVERY pass),
-// and `renderIconMarkup` is a `renderToStaticMarkup` call plus an `innerHTML`
-// parse — cheap once, not something to pay per keystroke, per heading. Both
-// glyphs are always rendered at `Icon`'s `md` size, so there is exactly one
-// of each to precompute.
+// and `renderIconMarkup` builds a fresh `<svg>` element via
+// `document.createElementNS` and serializes it to a string on every call —
+// cheap once, not something to pay per keystroke, per heading. Both glyphs
+// are always rendered at `Icon`'s `md` size, so there is exactly one of each
+// to precompute.
 const CHEVRON_DOWN_MARKUP = renderIconMarkup(ChevronDown);
 const CHEVRON_RIGHT_MARKUP = renderIconMarkup(ChevronRight);
 
@@ -219,15 +220,36 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
   },
 
   /**
-   * `Mod-Alt-0` toggles the fold of the section the cursor is currently in.
+   * `Mod-Alt-f` toggles the fold of the section the cursor is currently in.
    *
    * Added specifically BECAUSE a focusable toggle proved impossible (see the
    * long comment on the `decorations` prop below) — this is the alternative
-   * keyboard route that finding closed off. It sits beside
-   * `@tiptap/extension-heading`'s existing `Mod-Alt-1`–`Mod-Alt-6` family, is
-   * numeric so it stays clear of letter-based browser/OS shortcuts, and
-   * `Cmd/Ctrl+Alt+0` is unclaimed in Chrome, Safari and Firefox. Needs no
-   * focusable element at all, unlike the toggle button.
+   * keyboard route that finding closed off. Needs no focusable element at
+   * all, unlike the toggle button.
+   *
+   * NOT `Mod-Alt-0`: that collides with `@tiptap/extension-paragraph`'s own
+   * `Mod-Alt-0: () => this.editor.commands.setParagraph()`. StarterKit
+   * registers Paragraph, and Tiptap builds its plugins from a REVERSED
+   * extension array, so `HeadingFold` — declared after StarterKit in
+   * `extensions.ts` — would have WON that collision: with the caret
+   * anywhere inside a top-level section, `Mod-Alt-0` folded instead of
+   * resetting the block to a paragraph. A unit test could not have caught
+   * this by exercising the paragraph command's own return value —
+   * `setBlockType` returns `false` on an already-paragraph block, so the
+   * collision is invisible in exactly the case a user would never press the
+   * key for. The only reliable check is against the editor's OWN claimed
+   * bindings, not a browser/OS shortcut list:
+   *
+   *   grep -rEn "Mod-Alt-[0-9a-zA-Z]|Mod-Alt-\\$\{" node_modules/@tiptap \
+   *     --include="*.js" --include="*.ts" --include="*.mjs" --include="*.cjs" \
+   *     | grep -v '\.map:'
+   *
+   * — which is what turned up the collision, `Mod-Alt-c`
+   * (`@tiptap/extension-code-block`, `toggleCodeBlock`), and the
+   * `` `Mod-Alt-${level}` `` template-literal form
+   * (`@tiptap/extension-heading`, levels 1–6) that a plain quoted-string
+   * grep would miss. `Mod-Alt-f` — mnemonic for "fold" — does not appear in
+   * that search at all.
    *
    * Reuses `headingSections` rather than writing a second search for "the
    * heading that owns this position" — that function is already the single
@@ -242,7 +264,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
    */
   addKeyboardShortcuts() {
     return {
-      'Mod-Alt-0': () => {
+      'Mod-Alt-f': () => {
         const { state } = this.editor;
         const pos = state.selection.from;
         const section = headingSections(state.doc).find((s) => s.pos <= pos && pos < s.end);
@@ -433,7 +455,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
           // overlay positioned off the heading's own `getBoundingClientRect()`,
           // the same idea `HeadingMenuRequest.rect` already uses) — a
           // structural change out of scope here. Reachability is instead
-          // provided by `addKeyboardShortcuts` below (`Mod-Alt-0`), which
+          // provided by `addKeyboardShortcuts` above (`Mod-Alt-f`), which
           // needs no focusable element at all.
         },
       }),

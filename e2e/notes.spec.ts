@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 // A literal, defined here and never read back from the page before the
 // assertion. M2 shipped a persistence test that compared a value read out of
@@ -727,7 +728,20 @@ test('the export menu closes on Escape and returns nothing', async ({ page }) =>
   await expect(menu).toBeHidden();
 });
 
-test('Mod-Alt-0 folds and unfolds the section under the cursor', async ({ page }) => {
+// ProseMirror syncs its own model selection from a native click via a
+// `selectionchange` listener, which can lag a frame or two behind the
+// browser's own DOM selection change (see the investigation in this
+// milestone's HeadingFold work). Settling for two animation frames after
+// EVERY click before pressing the shortcut — not just the first — is what
+// makes this deterministic rather than racy: the lag is a property of the
+// click, not of which click in the test it happens to be.
+async function settleAfterClick(page: Page): Promise<void> {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+}
+
+test('Mod-Alt-f folds and unfolds the section under the cursor', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'New note' }).click();
 
@@ -746,16 +760,9 @@ test('Mod-Alt-0 folds and unfolds the section under the cursor', async ({ page }
   // binding resolves the ENCLOSING section, not merely a heading the caret
   // happens to sit on.
   await bodyText.click();
-  // ProseMirror syncs its own model selection from a native click via a
-  // `selectionchange` listener, which can lag a frame or two behind the
-  // browser's own DOM selection change (see the investigation in this
-  // milestone's HeadingFold work). Settling for two animation frames before
-  // pressing the shortcut is what makes this deterministic rather than racy.
-  await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
-  );
+  await settleAfterClick(page);
 
-  await page.keyboard.press('ControlOrMeta+Alt+0');
+  await page.keyboard.press('ControlOrMeta+Alt+f');
   await expect(bodyText).toBeHidden();
 
   // The second section's own text must survive untouched — only the first
@@ -764,6 +771,7 @@ test('Mod-Alt-0 folds and unfolds the section under the cursor', async ({ page }
 
   // Pressing it again on the (still-collapsed) heading's own line unfolds it.
   await page.locator('h2', { hasText: 'Section one' }).click();
-  await page.keyboard.press('ControlOrMeta+Alt+0');
+  await settleAfterClick(page);
+  await page.keyboard.press('ControlOrMeta+Alt+f');
   await expect(bodyText).toBeVisible();
 });

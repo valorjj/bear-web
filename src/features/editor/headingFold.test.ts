@@ -351,13 +351,20 @@ describe('an empty heading', () => {
 });
 
 /**
- * Dispatches the real `Mod-Alt-0` key combination through the editor's own
+ * Dispatches the real `Mod-Alt-f` key combination through the editor's own
  * `handleKeyDown` chain, the way `addKeyboardShortcuts` bindings are actually
  * reached — never a made-up `editor.commands.*` shortcut-invoker, which does
  * not exist on `Editor`. Under jsdom, `navigator.platform` is `''`
  * (see CLAUDE.md's `isMacOS()` note), so `prosemirror-keymap`'s own
  * mac-detection is also false there and normalizes `Mod` to `Ctrl`, not `Meta`
  * — hence `ctrlKey`, not `metaKey`, below.
+ *
+ * `Mod-Alt-f`, not `Mod-Alt-0`: the binding was moved after a review found
+ * `Mod-Alt-0` collides with `@tiptap/extension-paragraph`'s own
+ * `setParagraph()` binding, with `HeadingFold` winning the collision because
+ * Tiptap builds its plugins from a reversed extension array. See the long
+ * comment on `addKeyboardShortcuts` in `HeadingFold.ts` for the verification
+ * command run against `node_modules/@tiptap`.
  *
  * Uses `someProp`'s short-circuit-on-first-truthy form DELIBERATELY, unlike
  * the `decorations` prop elsewhere in this file: `handleKeyDown` is a
@@ -366,9 +373,9 @@ describe('an empty heading', () => {
  * the correct simulation, not the aggregation trap `widgetKinds`/`hiddenCount`
  * exist to avoid for `decorations`.
  */
-function pressModAlt0(editor: Editor): boolean {
+function pressModAltF(editor: Editor): boolean {
   const event = new KeyboardEvent('keydown', {
-    key: '0',
+    key: 'f',
     ctrlKey: true,
     altKey: true,
     bubbles: true,
@@ -377,7 +384,7 @@ function pressModAlt0(editor: Editor): boolean {
   return editor.view.someProp('handleKeyDown', (f) => f(editor.view, event)) === true;
 }
 
-describe('Mod-Alt-0 folds the section under the cursor', () => {
+describe('Mod-Alt-f folds the section under the cursor', () => {
   it('toggles the fold of the enclosing top-level section', () => {
     const editor = docFor('<h2>A</h2><p>x</p><h2>B</h2><p>y</p>');
     const [a] = headingSections(editor.state.doc);
@@ -387,7 +394,7 @@ describe('Mod-Alt-0 folds the section under the cursor', () => {
     // "the heading the caret sits on".
     editor.commands.setTextSelection(a!.contentStart + 1);
 
-    const handled = pressModAlt0(editor);
+    const handled = pressModAltF(editor);
     expect(handled).toBe(true);
     expect(foldedKeys(editor.state)).toEqual([serializeFoldKey(foldKeyOf(a!))]);
 
@@ -399,7 +406,7 @@ describe('Mod-Alt-0 folds the section under the cursor', () => {
 
     editor.commands.setTextSelection(1);
 
-    const handled = pressModAlt0(editor);
+    const handled = pressModAltF(editor);
     expect(handled).toBe(false);
     expect(foldedKeys(editor.state)).toEqual([]);
 

@@ -23,13 +23,22 @@ export interface IconProps {
  */
 const SIZES = { sm: 14, md: 16 } as const;
 
+/**
+ * The ONE stroke width, shared by `Icon` and `renderIconMarkup` below —
+ * hoisted so "one stroke width across every glyph" (the docblock above)
+ * cannot silently become two constants that drift apart. Before this, the
+ * same `1.75` was written as a literal in both places with nothing to
+ * assert they agreed.
+ */
+const STROKE_WIDTH = 1.75;
+
 export function Icon({ glyph: Glyph, size = 'md', className = '' }: IconProps): ReactElement {
   return (
     <Glyph
       aria-hidden="true"
       focusable="false"
       size={SIZES[size]}
-      strokeWidth={1.75}
+      strokeWidth={STROKE_WIDTH}
       className={`shrink-0 ${className}`}
     />
   );
@@ -97,7 +106,7 @@ export function renderIconMarkup(glyph: LucideIcon, size: IconProps['size'] = 'm
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('fill', 'none');
   svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '1.75');
+  svg.setAttribute('stroke-width', String(STROKE_WIDTH));
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
   svg.setAttribute('class', 'shrink-0');

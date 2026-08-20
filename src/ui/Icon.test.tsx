@@ -50,6 +50,30 @@ describe('Icon', () => {
   });
 });
 
+/**
+ * The whole rendered shape, not just one attribute of one child: every
+ * path's `d`, how many paths there are, and the two other attributes
+ * `renderIconMarkup` also states as literals (`stroke-width`, `width`). A
+ * comparison of only the first `<path>`'s `d` would false-pass a future
+ * lucide version that splits a chevron into two paths, or adds a sibling
+ * shape — the extra path would simply never be looked at.
+ */
+function svgShape(container: HTMLElement): {
+  ds: (string | null)[];
+  pathCount: number;
+  strokeWidth: string | null | undefined;
+  width: string | null | undefined;
+} {
+  const svg = container.querySelector('svg');
+  const paths = Array.from(container.querySelectorAll('path'));
+  return {
+    ds: paths.map((p) => p.getAttribute('d')),
+    pathCount: paths.length,
+    strokeWidth: svg?.getAttribute('stroke-width'),
+    width: svg?.getAttribute('width'),
+  };
+}
+
 describe('renderIconMarkup', () => {
   // `renderIconMarkup` hardcodes `ChevronDown`/`ChevronRight`'s path data
   // rather than calling lucide's own components (see the long comment above
@@ -58,30 +82,28 @@ describe('renderIconMarkup', () => {
   // the exact weight avoiding `react-dom/server` was for). These two tests
   // are what keeps that duplicate from silently drifting: they render the
   // REAL lucide components through `@testing-library/react` — a test-only
-  // dependency that never reaches the shipped bundle — and compare the `d`
-  // each one actually produces against `renderIconMarkup`'s hardcoded output.
-  // A `lucide-react` version bump that changes either glyph's shape fails
-  // one of these instead of shipping a silently wrong icon.
+  // dependency that never reaches the shipped bundle — and compare the WHOLE
+  // shape (`svgShape` above), not just one child's `d`, against
+  // `renderIconMarkup`'s hardcoded output. A `lucide-react` version bump that
+  // changes either glyph's shape — a different path, an added sibling shape,
+  // a different stroke width or size — fails one of these instead of
+  // shipping a silently wrong icon.
   it('matches the real ChevronDown glyph', () => {
-    const { container } = render(<Icon glyph={ChevronDown} />);
-    const real = container.querySelector('path')?.getAttribute('d');
+    const { container: real } = render(<Icon glyph={ChevronDown} />);
 
     const built = document.createElement('div');
     built.innerHTML = renderIconMarkup(ChevronDown);
-    const ours = built.querySelector('path')?.getAttribute('d');
 
-    expect(ours).toBe(real);
+    expect(svgShape(built)).toEqual(svgShape(real));
   });
 
   it('matches the real ChevronRight glyph', () => {
-    const { container } = render(<Icon glyph={ChevronRight} />);
-    const real = container.querySelector('path')?.getAttribute('d');
+    const { container: real } = render(<Icon glyph={ChevronRight} />);
 
     const built = document.createElement('div');
     built.innerHTML = renderIconMarkup(ChevronRight);
-    const ours = built.querySelector('path')?.getAttribute('d');
 
-    expect(ours).toBe(real);
+    expect(svgShape(built)).toEqual(svgShape(real));
   });
 
   it('throws for a glyph with no registered path data', () => {
