@@ -21,7 +21,7 @@ describe('the heading fold schema contract', () => {
   });
 
   it('leaves the document byte-identical when a section is folded', () => {
-    const markdown = '## A\n\nbody\n\n## B\n\nmore';
+    const markdown = 'Title\n\n## A\n\nbody\n\n## B\n\nmore';
     const editor = new Editor({ extensions: editorExtensions, content: parseMarkdown(markdown) });
     const before = serializeMarkdown(editor.getJSON());
 
@@ -58,7 +58,7 @@ describe('folding commands', () => {
   });
 
   it('restores a persisted fold set', () => {
-    const editor = docFor('<h2>A</h2><p>x</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p>');
 
     editor.commands.setHeadingFolds(['2:0:A']);
     expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
@@ -66,7 +66,13 @@ describe('folding commands', () => {
   });
 
   it('keeps a fold key that currently matches no heading, so it returns if the heading does', () => {
-    const editor = docFor('<h2>A</h2><p>x</p>');
+    // Leading title paragraph: without it, A is the title and
+    // `headingSections` returns nothing at all, so `2:0:Gone` hiding zero
+    // sections would be trivially true of ANY key — matching or not — and
+    // the fail-open half below would stop discriminating anything. With a
+    // real section present, `2:0:A` (not used here) would have matched it,
+    // so `2:0:Gone` demonstrably does not.
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p>');
 
     editor.commands.setHeadingFolds(['2:0:Gone']);
     // Retained in state...
@@ -199,7 +205,12 @@ describe('the gutter affordance', () => {
   });
 
   it('adds an inline marker only to a folded heading', () => {
-    const editor = docFor('<h2>A</h2><p>x</p><h2>B</h2>');
+    // Leading title paragraph: without it there is exactly one real
+    // section (B, since A would be excluded as the title), and
+    // `toHaveLength(1)` can no longer distinguish "a marker on the folded
+    // section" from "a marker on every section" — the word "only" needs a
+    // second, unfolded section to mean anything.
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p><h2>B</h2>');
     expect(widgetKinds(editor).filter((k) => k === 'marker')).toHaveLength(0);
 
     const [a] = headingSections(editor.state.doc);

@@ -787,7 +787,7 @@ test('folding a heading hides its section, and the fold survives a reload', asyn
     notes: [
       {
         id: 'n-fold',
-        title: 'Alpha',
+        title: 'Title',
         // Leading title line: without it, "Alpha" is the note's title, not a
         // section, and carries no fold toggle at all (see `headingSections`'
         // docblock) — exactly the affordance this test exists to click.
@@ -884,7 +884,7 @@ test('Enter at the end of a folded heading reveals the section instead of hiding
     notes: [
       {
         id: 'n-fold-enter',
-        title: 'Alpha',
+        title: 'Title',
         // Leading title line — see the identical comment on 'n-fold' above.
         text: 'Title\n\n## Alpha\n\nhidden body\n\n## Beta\n\nkept',
         createdAt: Date.now(),
@@ -992,7 +992,7 @@ test('the badge menu changes a heading level, and the change reaches the Markdow
     notes: [
       {
         id: 'n-fold-level',
-        title: 'Alpha',
+        title: 'Title',
         // Leading title line — see the identical comment on 'n-fold' above.
         text: 'Title\n\n## Alpha\n\nbody',
         createdAt: Date.now(),
