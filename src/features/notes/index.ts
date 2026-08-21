@@ -6,6 +6,7 @@ export {
   ACTIVE_SCOPE,
   acceptsNewNote,
   allowsTrash,
+  DEFAULT_SCOPE_QUERY,
   isTrash,
   listForScope,
   scopeKey,
@@ -15,7 +16,7 @@ export {
   tagScope,
   TRASHED_SCOPE,
 } from './scope';
-export type { NoteScope, ScopeLister, SmartListId } from './scope';
+export type { NoteScope, ScopeLister, ScopeQuery, SmartListId } from './scope';
 export { SmartListSidebar } from './SmartListSidebar';
 export type { SmartListSidebarProps } from './SmartListSidebar';
 export { filterByQuery, hasQuery } from './search';

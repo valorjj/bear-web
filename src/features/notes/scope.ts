@@ -1,5 +1,5 @@
 import { notes } from '@/data';
-import type { Note, NotesRepository } from '@/data';
+import { DEFAULT_NOTE_ORDER, type Note, type NoteOrder, type NotesRepository } from '@/data';
 
 import { SMART_LIST_PREDICATES } from './smartLists';
 
@@ -106,19 +106,46 @@ export type ScopeLister = Pick<
 const NEEDS_TAG_INDEX: ReadonlySet<string> = new Set(['untagged']);
 
 /**
+ * The two view preferences that reach the data layer. Bundled into one object
+ * so `listForScope` keeps a stable arity as preferences are added, and so
+ * `useNotes` can put a single value in its `useLiveQuery` dependency chain.
+ */
+export interface ScopeQuery {
+  order: NoteOrder;
+  /** `false` is the "hide sub-tag notes" preference. Ignored outside tag scopes. */
+  includeDescendants: boolean;
+}
+
+export const DEFAULT_SCOPE_QUERY: ScopeQuery = {
+  order: DEFAULT_NOTE_ORDER,
+  includeDescendants: true,
+};
+
+/**
  * Ordering comes from the repository and is never re-sorted here: every lister
  * returns its own order, and pinned-first ordering lives in the repository so
  * it applies to the tag scope too.
+ *
+ * From A, the repository ACCEPTS an order rather than hardcoding one — which
+ * does not move ownership. The order is passed through untouched and the
+ * result is handed on in the order it arrived; the only transformation applied
+ * here is the smart list's predicate filter, which preserves order.
  */
 export async function listForScope(
   scope: NoteScope,
+  query: ScopeQuery = DEFAULT_SCOPE_QUERY,
   repository: ScopeLister = notes,
   now: () => number = Date.now,
 ): Promise<Note[]> {
-  if (scope.kind === 'tag') return repository.listByTag(scope.tag);
+  if (scope.kind === 'tag') {
+    return repository.listByTag(scope.tag, {
+      order: query.order,
+      includeDescendants: query.includeDescendants,
+    });
+  }
   if (scope.list === 'trash') return repository.listTrashed();
 
-  const list = await repository.listActive();
+  const list = await repository.listActive(query.order);
 
   // Only `untagged` reads the index, and `allTagRows` is a full table scan.
   // Paying for it on every scope switch would double the work for six of the
