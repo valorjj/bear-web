@@ -75,9 +75,16 @@ vi.mock('@/features/notes', async (importOriginal) => {
     // Records the scope argument on every render — see `scopeHistory` above
     // for why this, and not a DOM assertion, is what can catch a scope that
     // was set and then reverted within a single synchronous test flush.
-    useNotes: (scope: import('@/features/notes').NoteScope) => {
+    // `...rest`, not just `scope`: this wrapper swallowed every later argument
+    // until A added the ScopeQuery, at which point the sort silently never
+    // reached `listForScope` and the list simply never re-ordered under test.
+    // Forward everything; record only what this spy exists to record.
+    useNotes: (
+      scope: import('@/features/notes').NoteScope,
+      ...rest: [import('@/features/notes').ScopeQuery?]
+    ) => {
       scopeHistory.push(scope);
-      return actual.useNotes(scope);
+      return actual.useNotes(scope, ...rest);
     },
   };
 });
@@ -221,7 +228,10 @@ describe('AppShell', () => {
 
 beforeEach(async () => {
   await db.open();
-  await Promise.all([db.notes.clear(), db.noteTags.clear(), db.files.clear()]);
+  // `settings` too, from A onward: the note-list sort and preview density are
+  // durable preferences, so a test that changes one would otherwise leak it
+  // into every test that runs after it.
+  await Promise.all([db.notes.clear(), db.noteTags.clear(), db.files.clear(), db.settings.clear()]);
 });
 
 describe('AppShell notes', () => {
@@ -923,5 +933,83 @@ describe('StrictMode', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(await db.notes.count()).toBe(1);
+  });
+});
+
+describe('AppShell list preferences', () => {
+  it('re-orders the list when a sort is chosen, and keeps it across a remount', async () => {
+    const user = userEvent.setup();
+    // Apple FIRST, so the default newest-first order is Banana, Apple — the
+    // reverse of the title-ascending order this test chooses. Created the
+    // other way round the two orders coincide and the test cannot fail.
+    await notes.create('Apple');
+    await notes.create('Banana');
+
+    const first = renderShell();
+    await screen.findByRole('button', { name: /Apple/ });
+
+    const noteRows = (): string[] =>
+      within(screen.getByRole('region', { name: 'Note list' }))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent ?? '');
+
+    // The default order, so the assertions below are known to be a change.
+    await waitFor(() => expect(noteRows()[0]).toContain('Banana'));
+
+    await user.click(screen.getByRole('button', { name: /^List options/ }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Title' }));
+    await user.click(screen.getByRole('menuitemcheckbox', { name: 'Newest first' }));
+
+    // Apple before Banana, i.e. ascending by title.
+    //
+    // A longer budget than the 1s default, deliberately: settling takes TWO
+    // chained IndexedDB round trips — the `settings` live query delivers the
+    // new order, which re-keys the notes live query, which then re-queries.
+    // At 1s this failed roughly one run in three under full-suite contention.
+    await waitFor(
+      () => {
+        expect(noteRows()[0]).toContain('Apple');
+        expect(noteRows()[1]).toContain('Banana');
+      },
+      { timeout: 3000 },
+    );
+
+    first.unmount();
+    renderShell();
+
+    // The preference is durable, so the remounted shell must not fall back to
+    // the default newest-first ordering.
+    await waitFor(
+      () => {
+        expect(noteRows()[0]).toContain('Apple');
+        expect(noteRows()[1]).toContain('Banana');
+      },
+      { timeout: 3000 },
+    );
+  });
+
+  it('keeps a chosen preview density across a remount', async () => {
+    const user = userEvent.setup();
+    await notes.create('Groceries\nmilk and bread');
+
+    const first = renderShell();
+    expect(await screen.findByText('milk and bread')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^List options/ }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Small' }));
+
+    await waitFor(() => expect(screen.queryByText('milk and bread')).toBeNull());
+
+    first.unmount();
+    renderShell();
+
+    await screen.findByRole('button', { name: /Groceries/ });
+
+    // `waitFor`, not a bare assertion: `useSetting` renders at the fallback for
+    // the first frame rather than blocking on IndexedDB, so a freshly mounted
+    // shell genuinely shows the default `large` row until the stored value
+    // resolves. Asserting immediately raced that frame and failed
+    // intermittently.
+    await waitFor(() => expect(screen.queryByText('milk and bread')).toBeNull());
   });
 });

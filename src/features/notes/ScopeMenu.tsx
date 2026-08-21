@@ -65,7 +65,9 @@ export interface ScopeMenuProps {
   scope: NoteScope;
   /** From the UNFILTERED scope list, never the query-narrowed view. */
   count: number;
-  query: ScopeQuery;
+  /** Named `scopeQuery`, never `query`: `NoteList` already has a `query`
+   *  string for the SEARCH field, and the two collided once. */
+  scopeQuery: ScopeQuery;
   previewSize: PreviewSize;
   onOrderChange: (next: NoteOrder) => void;
   onPreviewSizeChange: (next: PreviewSize) => void;
@@ -101,7 +103,7 @@ const CHECK = 'text-accent';
 export function ScopeMenu({
   scope,
   count,
-  query,
+  scopeQuery,
   previewSize,
   onOrderChange,
   onPreviewSizeChange,
@@ -113,7 +115,7 @@ export function ScopeMenu({
 
   const trash = isTrash(scope);
   const isTagScope = scope.kind === 'tag';
-  const hidingSubTags = !query.includeDescendants;
+  const hidingSubTags = !scopeQuery.includeDescendants;
 
   /**
    * Roving movement over the ENABLED rows only, so a disabled group is a
@@ -160,7 +162,7 @@ export function ScopeMenu({
       <hr className="border-border my-1" />
 
       {SORT_FIELDS.map(({ field, label }) => {
-        const checked = query.order.field === field;
+        const checked = scopeQuery.order.field === field;
         return (
           <button
             key={field}
@@ -168,7 +170,7 @@ export function ScopeMenu({
             role="menuitemradio"
             aria-checked={checked}
             disabled={trash}
-            onClick={() => onOrderChange({ ...query.order, field })}
+            onClick={() => onOrderChange({ ...scopeQuery.order, field })}
             className={ROW}
           >
             {t(label)}
@@ -184,13 +186,15 @@ export function ScopeMenu({
       <button
         type="button"
         role="menuitemcheckbox"
-        aria-checked={query.order.newestFirst}
+        aria-checked={scopeQuery.order.newestFirst}
         disabled={trash}
-        onClick={() => onOrderChange({ ...query.order, newestFirst: !query.order.newestFirst })}
+        onClick={() =>
+          onOrderChange({ ...scopeQuery.order, newestFirst: !scopeQuery.order.newestFirst })
+        }
         className={ROW}
       >
         {t('noteList.sort.newestFirst')}
-        {query.order.newestFirst && (
+        {scopeQuery.order.newestFirst && (
           <span aria-hidden="true" className={CHECK}>
             ✓
           </span>

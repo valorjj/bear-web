@@ -51,6 +51,7 @@ export const ko: Record<TranslationKey, string> = {
   'noteList.deleteForever': '완전히 삭제',
   'noteList.emptyTrash': '휴지통 비우기',
   'noteList.menu.label': '목록 옵션',
+  'noteList.menu.open': '목록 옵션: {scope}',
   'noteList.count.one': '메모 1개',
   'noteList.count.other': '메모 {count}개',
 

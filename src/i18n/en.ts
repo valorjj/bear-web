@@ -49,6 +49,7 @@ export const en = {
   'noteList.deleteForever': 'Delete forever',
   'noteList.emptyTrash': 'Empty trash',
   'noteList.menu.label': 'List options',
+  'noteList.menu.open': 'List options: {scope}',
   'noteList.count.one': '1 note',
   'noteList.count.other': '{count} notes',
 

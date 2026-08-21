@@ -11,7 +11,7 @@ function renderMenu(overrides: Partial<ScopeMenuProps> = {}): void {
   const props: ScopeMenuProps = {
     scope: smartScope('all'),
     count: 33,
-    query: { order: { field: 'updated', newestFirst: true }, includeDescendants: true },
+    scopeQuery: { order: { field: 'updated', newestFirst: true }, includeDescendants: true },
     previewSize: 'large',
     onOrderChange: vi.fn(),
     onPreviewSizeChange: vi.fn(),
@@ -101,7 +101,7 @@ describe('ScopeMenu', () => {
   it('enables the sub-tag toggle in a tag scope, checked when descendants are hidden', () => {
     renderMenu({
       scope: tagScope('work'),
-      query: { order: { field: 'updated', newestFirst: true }, includeDescendants: false },
+      scopeQuery: { order: { field: 'updated', newestFirst: true }, includeDescendants: false },
     });
 
     const toggle = screen.getByRole('menuitemcheckbox', { name: 'Hide sub-tag notes' });
@@ -113,7 +113,7 @@ describe('ScopeMenu', () => {
     const onIncludeDescendantsChange = vi.fn();
     renderMenu({
       scope: tagScope('work'),
-      query: { order: { field: 'updated', newestFirst: true }, includeDescendants: false },
+      scopeQuery: { order: { field: 'updated', newestFirst: true }, includeDescendants: false },
       onIncludeDescendantsChange,
     });
 
