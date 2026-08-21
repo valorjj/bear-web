@@ -45,7 +45,7 @@ feature and is not yet scheduled.
 | C code block language + highlighting      | queued    |
 | M9b callout blocks                        | deferred  |
 
-1307 unit tests, 72 end-to-end tests. `main` is always green and auto-deploys.
+1308 unit tests, 72 end-to-end tests. `main` is always green and auto-deploys.
 
 **D is new on 2026-08-21 and reverses the "no backend, no account" premise
 above** — a MariaDB instance in Docker on a local Mac Mini, plus Google, GitHub

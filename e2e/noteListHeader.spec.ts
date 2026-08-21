@@ -47,6 +47,48 @@ async function noteTitles(page: Page): Promise<string[]> {
   return (await rows.allTextContents()).map((text) => text.trim());
 }
 
+/**
+ * Waits until a preference has actually reached IndexedDB.
+ *
+ * The DOM cannot be used for this. `useSetting` holds an optimistic value so a
+ * menu choice renders immediately, and `settings.set` is fire-and-forget — so
+ * the list reads as "committed" a moment before the write has landed, and a
+ * `page.reload()` fired in that window reloads a database that never received
+ * it. A human cannot click and reload inside that gap; Playwright does it every
+ * time.
+ *
+ * `smoke.spec.ts` reads IndexedDB directly for exactly this reason, against
+ * `usePaneWidths`' equivalent optimistic override. Same problem, same route.
+ */
+async function waitForSetting(page: Page, key: string, expected: unknown): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          (k) =>
+            new Promise<unknown>((resolve) => {
+              const request = indexedDB.open('bear-web');
+              request.onerror = () => resolve(undefined);
+              request.onsuccess = () => {
+                const database = request.result;
+                const get = database.transaction('settings').objectStore('settings').get(k);
+                get.onsuccess = () => {
+                  resolve((get.result as { value?: unknown } | undefined)?.value);
+                  database.close();
+                };
+                get.onerror = () => {
+                  resolve(undefined);
+                  database.close();
+                };
+              };
+            }),
+          key,
+        ),
+      { message: `waiting for the ${key} setting to reach IndexedDB` },
+    )
+    .toEqual(expected);
+}
+
 async function openMenu(page: Page): Promise<void> {
   await page.getByRole('button', { name: /^List options/ }).click();
   await expect(page.getByRole('menu', { name: 'List options' })).toBeVisible();
@@ -97,6 +139,7 @@ test.describe('note list header', () => {
 
     await expect(page.getByText('red and round')).toHaveCount(0);
 
+    await waitForSetting(page, 'previewSize', 'small');
     await page.reload();
 
     await expect(page.getByRole('button', { name: /Apple/ })).toBeVisible();

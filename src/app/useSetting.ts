@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { settings } from '@/data';
+import { useFlushTriggers } from '@/lib/useFlushTriggers';
 
 /**
  * One durable preference from the `settings` table.
@@ -24,8 +25,14 @@ import { settings } from '@/data';
  * read after a write therefore sees the write, so a value derived from `value`
  * is never derived from a stale one.
  *
- * `useFlushTriggers` is still not needed: unlike a drag, a click's write is
- * issued once and never superseded by a later frame of the same gesture.
+ * `useFlushTriggers` IS needed, for the second reason and not the first. The
+ * write is `void settings.set(...)` — issued, not awaited — so choosing a
+ * preference and reloading immediately could lose it, which is the very defect
+ * `usePaneWidths` carried as a deferred ruling until it was resolved this way.
+ * An earlier version of this hook claimed the write was awaited and skipped the
+ * flush; a Playwright test that chose a density and reloaded caught it, failing
+ * roughly one run in ten. `lastWritten` is re-issued on the flush triggers, at
+ * the cost of one redundant write, exactly as `usePaneWidths` does.
  *
  * `guard` runs on every read. A row written by a future version — or edited by
  * hand in devtools — must fall back rather than reach a consumer that cannot
@@ -57,13 +64,23 @@ export function useSetting<T>(
     if (JSON.stringify(settled) === JSON.stringify(optimistic)) setOptimistic(undefined);
   }, [settled, optimistic]);
 
+  // The last value handed to `settings.set`. See the docblock: the write is
+  // fire-and-forget, so a reload landing between the click and the write
+  // losing the race would drop the preference.
+  const lastWritten = useRef<T | undefined>(undefined);
+
   const set = useCallback(
     (next: T) => {
       setOptimistic(next);
+      lastWritten.current = next;
       void settings.set(key, next);
     },
     [key],
   );
+
+  useFlushTriggers(() => {
+    if (lastWritten.current !== undefined) void settings.set(key, lastWritten.current);
+  });
 
   return [value, set];
 }

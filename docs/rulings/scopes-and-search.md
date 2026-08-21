@@ -206,6 +206,20 @@ vanished-tag effect in `src/app/AppShell.tsx`.
   documents. It also guards on read, because `compareNotes` switches
   exhaustively and a row from a future version would fall through every arm.
 
+  **It also re-issues its last written value from `useFlushTriggers`.** The
+  write is `void settings.set(...)` — issued, not awaited — so choosing a
+  preference and reloading immediately can lose it. That is the same window
+  `usePaneWidths` carried as a deferred ruling until it was resolved by exactly
+  this route, and the claim that a click's write needed no flush (made in A's
+  spec and in this hook's first docblock) was simply wrong.
+
+  **A Playwright test that changes a preference and reloads must wait for the
+  write to reach IndexedDB first**, via `waitForSetting` in
+  `e2e/noteListHeader.spec.ts`. The DOM cannot tell you: the optimistic value
+  makes the list read as committed before the write lands. `smoke.spec.ts`
+  reads IndexedDB directly against `usePaneWidths` for the identical reason.
+  Without that wait the density test failed roughly one run in ten.
+
 - **`ScopeMenu`'s scope rows are generated from `SMART_LIST_IDS`, never hand-
   listed.** M6 deleted `ScopeSidebar` precisely because it hardcoded its rows.
   A second surface listing the same scopes must not reintroduce the

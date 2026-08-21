@@ -61,4 +61,27 @@ describe('useSetting', () => {
     await waitFor(() => expect(result.current.permissive[0]).toBe('enormous'));
     expect(result.current.strict[0]).toBe('large');
   });
+
+  it('re-issues the last written value when the page is going away', async () => {
+    // `settings.set` is fire-and-forget, so a reload landing between the click
+    // and the write losing the race would drop the preference. A Playwright
+    // test that chose a density and reloaded immediately caught exactly that,
+    // failing about one run in ten before `useFlushTriggers` was wired in.
+    const { result } = renderHook(() => useSetting('previewSize', 'large', isSize));
+
+    act(() => result.current[1]('small'));
+    await waitFor(async () => {
+      expect(await settings.get('previewSize', 'large')).toBe('small');
+    });
+
+    // Simulate the write having been lost, then send the page away.
+    await settings.remove('previewSize');
+    act(() => {
+      window.dispatchEvent(new Event('beforeunload'));
+    });
+
+    await waitFor(async () => {
+      expect(await settings.get('previewSize', 'large')).toBe('small');
+    });
+  });
 });
