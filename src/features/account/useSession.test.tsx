@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useSession } from './useSession';
+import { fetchAccount } from './api';
+import { PENDING_LOGOUT_KEY, useSession } from './useSession';
 
 function mockFetch(handler: (url: string, init?: RequestInit) => Response): void {
   vi.stubGlobal(
@@ -10,8 +11,13 @@ function mockFetch(handler: (url: string, init?: RequestInit) => Response): void
   );
 }
 
+beforeEach(() => {
+  localStorage.clear();
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 describe('useSession', () => {
@@ -95,5 +101,99 @@ describe('useSession', () => {
     });
 
     expect(result.current.state.status).toBe('signedOut');
+  });
+
+  it('a failed logout records a pending marker, and the next mount retries logout before /me', async () => {
+    // Sign in, then sign out while the server is unreachable.
+    mockFetch((url) =>
+      url.endsWith('/me')
+        ? new Response(JSON.stringify({ userId: 'u1', email: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : new Response('{}', { status: 200 }),
+    );
+    const first = renderHook(() => useSession());
+    await waitFor(() => expect(first.result.current.state.status).toBe('signedIn'));
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        if (String(input).endsWith('/auth/logout')) throw new TypeError('Failed to fetch');
+        return new Response('{}', { status: 200 });
+      }),
+    );
+    await act(async () => {
+      await first.result.current.signOut();
+    });
+
+    expect(first.result.current.state.status).toBe('signedOut');
+    expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBe('1');
+    first.unmount();
+
+    // Remount with the server now reachable: logout must be retried before
+    // /me is ever consulted, and the marker must clear on success.
+    const order: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        order.push(url);
+        if (url.endsWith('/auth/logout')) return new Response('{}', { status: 200 });
+        return new Response('{}', { status: 401 });
+      }),
+    );
+
+    const second = renderHook(() => useSession());
+    await waitFor(() => expect(second.result.current.state.status).toBe('signedOut'));
+
+    const logoutIndex = order.findIndex((url) => url.endsWith('/auth/logout'));
+    const meIndex = order.findIndex((url) => url.endsWith('/me'));
+    expect(logoutIndex).toBeGreaterThanOrEqual(0);
+    expect(meIndex).toBeGreaterThan(logoutIndex);
+    expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBeNull();
+  });
+
+  it('a successful logout leaves no pending marker behind', async () => {
+    mockFetch((url) =>
+      url.endsWith('/me')
+        ? new Response(JSON.stringify({ userId: 'u1', email: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : new Response('{}', { status: 200 }),
+    );
+
+    const { result } = renderHook(() => useSession());
+    await waitFor(() => expect(result.current.state.status).toBe('signedIn'));
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(result.current.state.status).toBe('signedOut');
+    expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBeNull();
+  });
+
+  it('resolves to a sensible state even when localStorage throws on read', async () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('storage blocked');
+    });
+
+    try {
+      mockFetch(() => new Response('{}', { status: 401 }));
+
+      const { result } = renderHook(() => useSession());
+
+      await waitFor(() => expect(result.current.state.status).toBe('signedOut'));
+    } finally {
+      getItemSpy.mockRestore();
+    }
+  });
+
+  it('a non-OK, non-401 response carries its status in the error message', async () => {
+    mockFetch(() => new Response('{}', { status: 500 }));
+
+    await expect(fetchAccount()).rejects.toThrow(/500/);
   });
 });
