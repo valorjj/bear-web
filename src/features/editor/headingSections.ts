@@ -3,11 +3,26 @@ import type { Node } from '@tiptap/pm/model';
 /**
  * A top-level heading and the extent of the section it owns.
  *
- * Only TOP-LEVEL headings appear here. A heading inside a blockquote or a list
- * item is deliberately not foldable: it keeps the position arithmetic to
- * `doc.forEach`'s offsets, which are absolute for a doc's direct children, and
- * a folded section nested inside another block has no sensible gutter position
- * anyway.
+ * Only TOP-LEVEL headings appear here, and never the note's FIRST block. A
+ * heading inside a blockquote or a list item is deliberately not foldable: it
+ * keeps the position arithmetic to `doc.forEach`'s offsets, which are absolute
+ * for a doc's direct children, and a folded section nested inside another
+ * block has no sensible gutter position anyway.
+ *
+ * The first-block exclusion is a different rule with a different reason. A
+ * note's first block renders as its TITLE whether it is a paragraph or a
+ * heading — `editor.css`'s `> :is(p, h1, h2, h3, h4, h5, h6):first-child` rule
+ * exists precisely so that a note beginning with plain text and one beginning
+ * with `# Heading` present identically. If foldability keyed on the node type,
+ * two visually identical title lines would behave differently, with nothing on
+ * screen to say which is which — the same "behaviour must not depend on
+ * invisible state" rule that made the gutter affordance overlay rather than
+ * hide below a pane-width threshold. Folding a title `h1` would also collapse
+ * everything down to the next `h1`, i.e. the whole note, which is not a
+ * gesture anyone asked for.
+ *
+ * The title is the note's name, not a section. `deriveTitle` already treats
+ * the first line that way.
  */
 export interface HeadingSection {
   /** Absolute document position of the heading node. */
@@ -55,6 +70,13 @@ export function headingSections(doc: Node): HeadingSection[] {
 
   doc.forEach((node, offset) => {
     if (node.type.name !== 'heading') return;
+    // The first block is the title, never a section — see the docblock. An
+    // offset of 0 is the document's first child and nothing else can share it.
+    // Excluded here rather than at the affordance, so every consumer — the
+    // widgets, the Mod-Alt-f keymap, the mousedown hit test and the
+    // fold-boundary key guard — agrees about what a section is by construction
+    // instead of by five separate filters.
+    if (offset === 0) return;
     found.push({
       pos: offset,
       contentStart: offset + node.nodeSize,
