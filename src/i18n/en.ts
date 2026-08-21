@@ -48,6 +48,21 @@ export const en = {
   'noteList.restore': 'Restore',
   'noteList.deleteForever': 'Delete forever',
   'noteList.emptyTrash': 'Empty trash',
+  'noteList.menu.label': 'List options',
+  'noteList.count.one': '1 note',
+  'noteList.count.other': '{count} notes',
+
+  'noteList.sort.updated': 'Date modified',
+  'noteList.sort.created': 'Date created',
+  'noteList.sort.title': 'Title',
+  'noteList.sort.newestFirst': 'Newest first',
+  'noteList.sort.trashNote': 'Trash is ordered by when notes were deleted.',
+
+  'noteList.preview.small': 'Small',
+  'noteList.preview.medium': 'Medium',
+  'noteList.preview.large': 'Large',
+  'noteList.preview.hideSubTags': 'Hide sub-tag notes',
+  'noteList.preview.hideSubTagsNote': 'Only tag lists have sub-tags.',
 
   'confirm.cancel': 'Cancel',
   'confirm.deleteForever.title': 'Delete this note forever?',
