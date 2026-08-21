@@ -124,3 +124,33 @@ with is not resolved; only code can retire one.
   no live instance — Pretendard ships `font-weight: 45 920` normal and
   JetBrains Mono `100 800` normal, so every declared family is one the app can
   actually render.
+- **The title line's fold affordance depends on markup the user cannot see —
+  OPEN, found by eyeball testing on 2026-08-21, not by a test.** A note's first
+  block renders as its title whether it is a `paragraph` or an `h1`, by design:
+  `editor.css`'s `> :is(p, h1, h2, h3, h4, h5, h6):first-child` rule exists so
+  that "a note beginning with a plain paragraph and a note beginning with
+  `# Heading` present the same title". B1's gutter affordance, however, keys on
+  the node type. Measured:
+
+  ```
+  "Title test\n\n## header2 test"    → first node paragraph → sections [2:header2 test]
+  "# Title test\n\n## header2 test"  → first node heading   → sections [1:Title test, 2:header2 test]
+  ```
+
+  So two visually identical title lines behave differently — one offers a fold
+  chevron on hover, the other does not — and nothing on screen explains which
+  is which. That is the same "behaviour must not depend on invisible state"
+  rule B1 invoked to REJECT hiding the affordance below a pane-width threshold;
+  it was applied to the gutter and never to the title line. Second consequence:
+  when the first block IS an `h1`, folding it collapses everything to the next
+  `h1` — i.e. the whole note — which is a gesture nobody asked for.
+
+  **Recommended resolution, not yet taken:** never render the affordance on the
+  first block, whatever its markup. The title line is the note's name, not a
+  section. One guard in `headingSections`, a test, and a ruling. The competing
+  option — show it whenever the first block is a heading — keeps the
+  inconsistency and is only defensible if `# Title` should be foldable.
+
+  **No test covers a note whose first line is a heading.** That absence is why
+  this reached a human's eyes instead of the suite's, and it should be closed
+  alongside whichever resolution is chosen.
