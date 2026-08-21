@@ -142,10 +142,33 @@ Blobs in IndexedDB, an image node in the editor schema, Markdown round-trip,
 embedding in HTML and PDF export, backup and import, and a story for eviction
 and quota. Bigger than A, B and C together; none of them block it.
 
-## D. Server sync and OAuth login — new 2026-08-21, unspecced
+## D. Server sync and OAuth login — **SPECCED 2026-08-21**
+
+Spec: `docs/superpowers/specs/2026-08-21-d-server-sync-and-oauth-design.md`.
+It supersedes this section; the notes below are kept only where the spec cites
+them. **Read the spec, not this.**
 
 Raised by the user mid-session while A was being planned: a MariaDB instance in
 Docker on a local Mac Mini, and OAuth2 login with Google, GitHub and Naver.
+
+**Two things below were overturned during the 2026-08-21 brainstorm:**
+
+- ~~**Single user.**~~ **STRUCK.** D is a real multi-tenant product with open
+  signup: guest mode on IndexedDB with no account, and per-user isolated notes
+  once signed in. The user reversed this deliberately after being shown the
+  cost. Consequence: rate limits, per-user quota and `DELETE /account` are
+  day-one requirements.
+- ~~**Naver.**~~ **DROPPED from D.** Google first, then GitHub. Not ruled out
+  later.
+
+Settled by the same brainstorm: the app moves to the apex **`markflowing.com`**
+(Pages, `base: '/'`) with the API at **`api.markflowing.com`** (Cloudflare
+Tunnel), because same-site is what allows an HttpOnly cookie session instead of
+a token in localStorage. Server is **Node + TypeScript in `server/`** as a fifth
+tsconfig project, so it imports `src/data/types.ts` and cannot drift. Conflict
+resolution is **last-write-wins with the losing edit kept as a `(conflict)`
+note**. Sync is automatic and quiet. D splits into **D1** (hosting, accounts,
+Google login — no note data on the wire) and **D2** (the sync protocol).
 
 **This reverses the project's founding premise** — "No backend, no account —
 everything lives in the browser's IndexedDB" — so it is not a feature in the
@@ -158,8 +181,9 @@ Decisions already taken, so they are not re-derived:
   app must keep working with the Mini asleep or off-network. Consequence: this
   project owns a conflict-resolution decision (last-write-wins, per-note
   versioning, or CRDT) and that is its hardest part, not the schema.
-- **Single user.** OAuth is identity for sync, not multi-tenancy. No sharing,
-  no permissions, no per-note ACLs.
+- ~~**Single user.** OAuth is identity for sync, not multi-tenancy.~~ **STRUCK
+  2026-08-21 — see the strike above.** Open signup, per-user isolation. Sharing,
+  permissions and per-note ACLs remain out of scope.
 - **A ships first.** Nothing in A depends on this, and this does not block A.
 
 Constraints established when it was raised, each of which shapes the spec:
@@ -196,6 +220,10 @@ that is kept:
 3. How should the app behave when the server is unreachable, which is the
    normal case for a machine that sleeps? Local-first means it must keep
    working, so this is about what the UI says, not whether it functions.
+
+**RULED 2026-08-21 — conflict resolution.** The spec settles this: LWW with
+the losing edit kept as a `(conflict)` note. The paragraph below is the
+reasoning that led there, kept for provenance.
 
 **The open design question, and the hard part: conflict resolution.** Two
 devices edit one note while the Mini is asleep; both sync later. The candidates
