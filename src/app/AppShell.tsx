@@ -27,6 +27,7 @@ import { Resizer } from '@/ui/Resizer';
 
 import { MAX_PANE_WIDTH, MIN_PANE_WIDTH } from './paneWidths';
 import { usePaneWidths } from './usePaneWidths';
+import { useScopeShortcuts } from './useScopeShortcuts';
 import { useSetting } from './useSetting';
 
 const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
@@ -194,17 +195,18 @@ export function AppShell(): ReactElement {
   // action awaits confirmation, and stealing focus into the search field
   // would escape that trap, leaving Tab free to walk the page behind the
   // still-open modal.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'f' || !(event.metaKey || event.ctrlKey)) return;
-      if (pending !== null) return;
-      event.preventDefault();
+  useScopeShortcuts({
+    onSearch: useCallback(() => {
       searchRef.current?.focus();
       searchRef.current?.select();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [pending]);
+    }, []),
+    onScope: setScope,
+    // The `pending` guard the inline handler carried, kept and widened: it
+    // stopped the search shortcut escaping `ConfirmDialog`'s focus trap, and a
+    // scope shortcut would be worse still — it rearranges the list behind a
+    // dialog that names a note in it.
+    enabled: pending === null,
+  });
 
   const confirmPending = useCallback(async () => {
     if (pending === null) return;

@@ -939,11 +939,19 @@ describe('StrictMode', () => {
 describe('AppShell list preferences', () => {
   it('re-orders the list when a sort is chosen, and keeps it across a remount', async () => {
     const user = userEvent.setup();
-    // Apple FIRST, so the default newest-first order is Banana, Apple — the
-    // reverse of the title-ascending order this test chooses. Created the
-    // other way round the two orders coincide and the test cannot fail.
-    await notes.create('Apple');
-    await notes.create('Banana');
+    // The timestamps are pinned, not left to the clock. `notes.create` stamps
+    // `Date.now()`, so two creations in the same millisecond tie on
+    // `updatedAt` and `compareNotes` falls back to its `id` tiebreaker — which
+    // is a random id, making the DEFAULT order nondeterministic and this test
+    // flaky in a way that has nothing to do with what it tests.
+    //
+    // Banana newer, so the default newest-first order is Banana, Apple — the
+    // reverse of the title-ascending order this test chooses. If the two
+    // orders coincided the test could not fail.
+    const apple = await notes.create('Apple');
+    const banana = await notes.create('Banana');
+    await db.notes.update(apple.id, { updatedAt: 1000 });
+    await db.notes.update(banana.id, { updatedAt: 2000 });
 
     const first = renderShell();
     await screen.findByRole('button', { name: /Apple/ });
