@@ -5,8 +5,12 @@ import react from '@vitejs/plugin-react';
 import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  // GitHub Pages serves the site from /<repo-name>/. Local dev serves from /.
-  base: process.env.GITHUB_ACTIONS ? '/bear-web/' : '/',
+  // Served from the apex `markflowing.com`, so the base is the domain root in
+  // every environment. It previously varied under GITHUB_ACTIONS while Pages
+  // served the app behind a repo-subpath prefix; the conditional is gone
+  // rather than retargeted, because there is no longer an environment with a
+  // path prefix.
+  base: '/',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
