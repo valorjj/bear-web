@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { configDefaults, defineConfig } from 'vitest/config';
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // Served from the apex `markflowing.com`, so the base is the domain root in
@@ -18,17 +18,33 @@ export default defineConfig({
     },
   },
   test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: ['./vitest.setup.ts'],
-    css: true,
-    exclude: [
-      ...configDefaults.exclude,
-      '**/dist/**',
-      'e2e/**',
-      'playwright-report/**',
-      'test-results/**',
-      'coverage/**',
+    /*
+     * Two projects, because the environments are genuinely incompatible.
+     * `vitest.setup.ts` installs jsdom and swaps the global `Blob` for Node's
+     * so fake-indexeddb can structuredClone it — behaviour the app suite
+     * depends on and the server suite must never see. The server project
+     * therefore does NOT `extend`, so it inherits no setup file, no jsdom, and
+     * no `globals`.
+     */
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'app',
+          globals: true,
+          environment: 'jsdom',
+          setupFiles: ['./vitest.setup.ts'],
+          css: true,
+          include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'server',
+          environment: 'node',
+          include: ['server/**/*.test.ts'],
+        },
+      },
     ],
   },
 });

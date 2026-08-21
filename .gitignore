@@ -12,3 +12,7 @@ test-results/
 # reproducible, so not carried in the repo; commit a specific before/after pair
 # deliberately if a review needs one.
 docs/design/shots/
+
+# Provider secrets. server/.env.example carries the shape; this carries the
+# values and must never be committed.
+server/.env
