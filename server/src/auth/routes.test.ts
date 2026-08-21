@@ -1,0 +1,153 @@
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { createApp } from '../app.ts';
+import { migrate } from '../db/migrate.ts';
+import { createPool, type Pool } from '../db/pool.ts';
+import { readEnv } from '../env.ts';
+import { SESSION_COOKIE, TX_COOKIE } from './cookies.ts';
+
+const url = process.env.TEST_DATABASE_URL;
+
+const ENV = {
+  APP_ORIGIN: 'http://localhost:5173',
+  API_ORIGIN: 'http://localhost:8787',
+  DATABASE_URL: url ?? 'mysql://unused',
+  GOOGLE_CLIENT_ID: 'test-client-id',
+  GOOGLE_CLIENT_SECRET: 'test-client-secret',
+};
+
+/** An id_token with the claims we want and a signature nobody checks. See google.ts. */
+function idToken(sub: string, email: string): string {
+  const payload = Buffer.from(JSON.stringify({ sub, email })).toString('base64url');
+  return `header.${payload}.signature`;
+}
+
+function stubFetch(sub = 'sub-1', email = 'a@example.com'): typeof globalThis.fetch {
+  return (async () =>
+    new Response(JSON.stringify({ id_token: idToken(sub, email) }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as typeof globalThis.fetch;
+}
+
+/** Reads one Set-Cookie value by name from a response. */
+function setCookie(response: Response, name: string): string | undefined {
+  return response.headers
+    .getSetCookie()
+    .find((cookie) => cookie.startsWith(`${name}=`) && !cookie.includes(`${name}=;`));
+}
+
+describe.skipIf(!url)('the Google flow', () => {
+  let pool: Pool;
+
+  function app(fetchImpl = stubFetch()) {
+    return createApp({
+      env: readEnv(ENV),
+      query: pool.query,
+      fetch: fetchImpl,
+      secureCookies: false,
+    });
+  }
+
+  beforeEach(async () => {
+    pool ??= createPool(url!);
+    await migrate(pool.query);
+    /* tenancy-ok: test teardown truncates every row by design. */
+    await pool.query('DELETE FROM users');
+  });
+
+  afterAll(async () => {
+    await pool.end();
+  });
+
+  it('redirects to Google with PKCE and sets a transaction cookie', async () => {
+    const response = await app().request('/auth/google');
+
+    expect(response.status).toBe(302);
+
+    const location = new URL(response.headers.get('location')!);
+    expect(location.origin).toBe('https://accounts.google.com');
+    expect(location.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(location.searchParams.get('redirect_uri')).toBe(
+      'http://localhost:8787/auth/google/callback',
+    );
+    // The verifier must never leave the server.
+    expect(location.searchParams.get('code_verifier')).toBeNull();
+
+    expect(setCookie(response, TX_COOKIE)).toBeDefined();
+  });
+
+  it('signs the user in and redirects to the app', async () => {
+    const start = await app().request('/auth/google');
+    const tx = setCookie(start, TX_COOKIE)!.split(';')[0]!;
+    const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
+
+    const response = await app().request(
+      `/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`,
+      { headers: { cookie: tx } },
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('http://localhost:5173/');
+
+    const session = setCookie(response, SESSION_COOKIE);
+    expect(session).toBeDefined();
+    expect(session).toContain('HttpOnly');
+  });
+
+  it('rejects a callback whose state does not match the cookie', async () => {
+    // Without this check the callback accepts a code an attacker obtained
+    // elsewhere, which is the whole reason `state` exists.
+    const start = await app().request('/auth/google');
+    const tx = setCookie(start, TX_COOKIE)!.split(';')[0]!;
+
+    const response = await app().request('/auth/google/callback?code=abc&state=forged', {
+      headers: { cookie: tx },
+    });
+
+    expect(response.status).toBe(400);
+    expect(setCookie(response, SESSION_COOKIE)).toBeUndefined();
+  });
+
+  it('rejects a callback with no transaction cookie at all', async () => {
+    const response = await app().request('/auth/google/callback?code=abc&state=whatever');
+
+    expect(response.status).toBe(400);
+  });
+
+  it('returns 502 when the provider fails, without creating a user', async () => {
+    const start = await app().request('/auth/google');
+    const tx = setCookie(start, TX_COOKIE)!.split(';')[0]!;
+    const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
+
+    const failing = (async () => new Response('nope', { status: 500 })) as typeof globalThis.fetch;
+    const response = await app(failing).request(
+      `/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`,
+      { headers: { cookie: tx } },
+    );
+
+    expect(response.status).toBe(502);
+
+    /* tenancy-ok: asserting no user row was created by anyone. */
+    const rows = (await pool.query('SELECT COUNT(*) AS n FROM users')) as Array<{ n: number }>;
+    expect(Number(rows[0]!.n)).toBe(0);
+  });
+
+  it('reuses the account on a second sign-in', async () => {
+    async function signIn() {
+      const start = await app().request('/auth/google');
+      const tx = setCookie(start, TX_COOKIE)!.split(';')[0]!;
+      const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
+      return app().request(`/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`, {
+        headers: { cookie: tx },
+      });
+    }
+
+    await signIn();
+    await signIn();
+
+    /* tenancy-ok: asserting the total account count across all users. */
+    const rows = (await pool.query('SELECT COUNT(*) AS n FROM users')) as Array<{ n: number }>;
+    expect(Number(rows[0]!.n)).toBe(1);
+  });
+});

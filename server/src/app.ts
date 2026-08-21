@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 
+import { authRoutes } from './auth/routes.ts';
 import type { Env } from './env.ts';
 
 /** A parameterised SQL call. The only shape route code may use. */
@@ -8,6 +9,10 @@ export type Query = (sql: string, params?: readonly unknown[]) => Promise<unknow
 export interface AppDeps {
   env: Env;
   query: Query;
+  /** Injected so the provider's token endpoint is reachable in tests without the network. */
+  fetch: typeof globalThis.fetch;
+  /** False only for http://localhost, where a Secure cookie would be dropped. */
+  secureCookies: boolean;
 }
 
 /**
@@ -22,11 +27,7 @@ export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
 
   app.get('/health', (c) => c.json({ ok: true }));
-
-  // Routes are added here by later tasks. `deps` is referenced so this
-  // signature is load-bearing from the first commit rather than growing a
-  // parameter later.
-  void deps;
+  app.route('/', authRoutes(deps));
 
   return app;
 }

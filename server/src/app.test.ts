@@ -15,6 +15,8 @@ function app() {
   return createApp({
     env: readEnv(ENV),
     query: async () => [],
+    fetch: globalThis.fetch,
+    secureCookies: false,
   });
 }
 
