@@ -18,6 +18,9 @@ services:
       - '127.0.0.1:3308:3306'
     volumes:
       - markflowing-data:/var/lib/mysql
+      # Creates the second, test-only database (see the file's own header).
+      # Only takes effect on an EMPTY volume's first initialisation.
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
     healthcheck:
       test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
       interval: 10s

@@ -71,4 +71,11 @@ D1 ships accounts only: **no note data crosses the network yet.**
   counter, which the spec requires be incremented in the same transaction as
   every write — must use it, or a pooled call lands on an arbitrary connection
   and the atomicity is imaginary.
-- **Integration tests need `TEST_DATABASE_URL`** or they skip.
+- **Integration tests need `TEST_DATABASE_URL`** or they skip. It must point at
+  its own database — `markflowing_test`, separate from `DATABASE_URL`'s
+  `markflowing` — because the suite truncates the `users` table (and
+  `identities`/`sessions` cascade from it) on every run. Point it at the dev
+  database and `npm test` deletes your real signed-in account with no
+  warning; this has already happened once. `docker-compose.yml` creates
+  `markflowing_test` automatically for anyone starting from an empty volume;
+  an existing volume needs it created once by hand (see the file's comment).

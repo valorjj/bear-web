@@ -38,6 +38,28 @@ jobs:
 
       - run: npm ci
 
+      - name: Create test database
+        # The service block's MARIADB_DATABASE creates only `markflowing`
+        # (the would-be dev database). The integration suite must run
+        # against a SEPARATE database — `markflowing_test` — so it can never
+        # collide with dev data, on this throwaway CI instance or anywhere
+        # else. `mysql2` is already an installed dependency, so this reuses
+        # it rather than requiring a mysql client binary on the runner.
+        run: |
+          node --input-type=module -e "
+          import mysql from 'mysql2/promise';
+          const conn = await mysql.createConnection({
+            host: '127.0.0.1',
+            port: 3308,
+            user: 'root',
+            password: 'root',
+          });
+          await conn.query('CREATE DATABASE IF NOT EXISTS markflowing_test');
+          await conn.query(\"GRANT ALL PRIVILEGES ON markflowing_test.* TO 'markflowing'@'%'\");
+          await conn.query('FLUSH PRIVILEGES');
+          await conn.end();
+          "
+
       - name: Lint
         run: npm run lint
 
@@ -53,7 +75,7 @@ jobs:
           # Without this the database integration tests skip, and CI reports
           # green for a suite that ran nothing. `migrate.test.ts` asserts this
           # variable is present whenever CI is set, so a removal fails loudly.
-          TEST_DATABASE_URL: mysql://markflowing:markflowing@127.0.0.1:3308/markflowing
+          TEST_DATABASE_URL: mysql://markflowing:markflowing@127.0.0.1:3308/markflowing_test
 
       - name: Build
         run: npm run build
