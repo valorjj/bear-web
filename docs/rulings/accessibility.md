@@ -9,7 +9,9 @@ affordances a control must keep at rest.
 `src/ui/SidebarRow.tsx`'s explicit `{' '}` before the count;
 `src/features/notes/NoteListItem.tsx`'s `label` string and its two sibling
 buttons; `src/ui/Button.tsx`'s `VARIANTS` map (`default` / `ghost` / `danger`);
-`src/features/notes/NoteList.tsx`'s header strip; `src/ui/ConfirmDialog.tsx`'s
+`src/features/notes/NoteList.tsx`'s header strip and its scope-header button;
+`src/features/notes/ScopeMenu.tsx`'s `role` attributes and disabled-group copy;
+`src/features/notes/preview.ts`'s `snippetLines`; `src/ui/ConfirmDialog.tsx`'s
 Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
 (the `Decoration.node` call and its `aria-label`) and its `.focus()` /
 `tabindex` handling; and the hover/name tests in `e2e/appearance.spec.ts`,
@@ -131,3 +133,42 @@ Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
   repo's own `dom-accessibility-api`: without that decoration a heading whose
   text is "Hello" announces as `"1 Hello"`; with it, `"Hello"`.
 
+- **Preview size drives the rendered row and its accessible name from ONE
+  decision.** `snippetLines(size)` returns 0, 1 or 2, and `NoteListItem` uses
+  that same value for both the rendered snippet and the `aria-label`. At Small
+  the row announces `title, date` and nothing more, because the name must never
+  describe content a sighted user cannot see. The alternative — always
+  announcing the full triple regardless of density — was considered and
+  rejected: it creates two contracts where there is one, and this row's label
+  exists precisely because the announcement once diverged from the rendering
+  ("Groceries14:32milk and bread", M3 to M7). Confirmed falsifiable by
+  injecting an always-full label.
+
+- **The scope-header button is named `List options: {scope}`, not `{scope}`.**
+  The sidebar already has a row named "Notes"; two controls sharing an
+  accessible name is ambiguous to anyone reaching for either, and the bare
+  scope name does not convey that the button opens anything. The visible label
+  is still contained in the accessible name, as WCAG 2.5.3 requires.
+
+- **`ScopeMenu` conveys its checkmarks structurally AND visually.** One-of-N
+  choices are `role="menuitemradio"` with `aria-checked`; the two toggles are
+  `role="menuitemcheckbox"`. The ✓ glyph is `aria-hidden` decoration on top of
+  that, never the signal — but it must be present: the scope rows shipped
+  briefly with `aria-checked` and no glyph, and a sighted user could not tell
+  which list was current from inside the menu. That gap was found by eye in a
+  screenshot, not by any test.
+
+- **A disabled menu group carries copy naming the reason.** The sort group in
+  Trash and the sub-tag toggle outside a tag scope both render an explanatory
+  line beside the disabled rows. Same rule B1 invoked to reject hiding the fold
+  affordance below a pane-width threshold, and `deferred.md` invoked again
+  against the title-line affordance.
+
+- **Roving arrow-key movement in `ScopeMenu` skips disabled rows**, so a
+  disabled group is a skipped region rather than a dead stop. `ExportMenu` has
+  no equivalent because three rows did not need one; sixteen do.
+
+- **`Button` declares `ariaHasPopup` / `ariaExpanded` explicitly, never a prop
+  spread.** A button that opens a menu has to say so, and those two are the
+  only ARIA a presentation primitive can own without knowing what the menu
+  contains.

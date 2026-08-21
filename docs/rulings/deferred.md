@@ -22,11 +22,19 @@ with is not resolved; only code can retire one.
   a contenteditable focusable fights the editor for the selection and for Tab,
   and the tag sidebar is already a complete keyboard route to every filter.
   Recorded as a ruling rather than an omission.
-- **The note list has no header naming the current scope.** Bear has one. The
+- ~~**The note list has no header naming the current scope.** Bear has one. The
   only on-screen indication of an active filter is the `aria-current` sidebar
   row, which is why activation reveals collapsed ancestors. `NoteList`'s header
   strip holds action buttons and the search field only; it names nothing. Still
-  open past M8 and M9a.
+  open past M8 and M9a.~~ **Resolved by A** (2026-08-21). The strip now opens
+  with a chevron button naming the scope — a smart list's translated label, or
+  the raw tag — which also opens the options menu. Two things worth carrying
+  forward from how it landed: its accessible name is `List options: {scope}`,
+  NOT the bare scope name, because the sidebar already has a row called
+  "Notes" and two controls sharing an accessible name is ambiguous to anyone
+  reaching for either; and the count it shows comes from the UNFILTERED scope
+  list, the same distinction `emptyTrashDisabled` and `hasUnfilteredItems`
+  already draw.
 - Tag rename and delete are still carried from M5b and unscheduled. So is
   syntax-visibility toggling — M5's original three-item list named it
   alongside the inline mark and rename/delete; M7.6 ruled only on the inline

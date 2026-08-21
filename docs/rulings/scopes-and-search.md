@@ -6,7 +6,9 @@ that list without ever becoming part of the query itself.
 
 **Trigger:** any change to `src/features/notes/scope.ts` (`NoteScope`,
 `SMART_LIST_IDS`, `scopeKey`, `isTrash`, `allowsTrash`, `acceptsNewNote`,
-`seedTagFor`, `listForScope`), `smartLists.ts` (`UNCHECKED_TASK`,
+`seedTagFor`, `listForScope`, `ScopeQuery`), `src/data/order.ts` (`NoteOrder`,
+`compareNotes`, `isNoteOrder`), `src/features/notes/ScopeMenu.tsx`,
+`src/app/useSetting.ts`, `smartLists.ts` (`UNCHECKED_TASK`,
 `SMART_LIST_PREDICATES`), `useNotes.ts`, `useSmartListCounts.ts`, `search.ts`
 (`findMatchRanges`, `filterByQuery`, `normalizeForSearch`), `HighlightedText.tsx`,
 `NoteList.tsx`'s `emptyTrashDisabled`/`hasUnfilteredItems` props,
@@ -162,3 +164,56 @@ vanished-tag effect in `src/app/AppShell.tsx`.
   answers the sibling question by the same rule: whether the no-results empty
   state may override a scope's own special-cased empty copy (Locked, Trash)
   depends on whether the scope held anything before the query narrowed it.
+
+- **Ordering is a repository argument, and is never re-sorted downstream.**
+  `listActive` and `listByTag` take a `NoteOrder`; `listForScope` passes it
+  through and returns the result in the order it arrived. The only
+  transformation it applies is the smart list's predicate filter, which
+  preserves order. Applying a comparator in `listForScope`, in `useNotes` or in
+  `NoteList` would split ownership of row order across two layers — the shape
+  that produced the pinned-everywhere bug the original ruling was written
+  against — and sorting in the component would put ordering downstream of the
+  search filter, silently reordering only the visible subset.
+  `scope.test.ts`'s "preserves the repository order" test is what catches a
+  reversal: a repository returning C, A, B under a title sort must still yield
+  C, A, B.
+
+- **The pinned partition is applied first under every order.** `byPinnedThen`
+  splits on `pinned` and only then applies the user's comparator, so the chosen
+  order is a tiebreaker WITHIN each partition and can never lift an unpinned
+  note above a pinned one. Otherwise pinning would stop meaning what the Pinned
+  smart list means.
+
+- **Trash keeps `trashedAt` ordering, and the menu says so.** `listTrashed`
+  deliberately takes no `NoteOrder`; deletion time is not one of the three
+  fields, and inventing a fourth implicit field for one scope is worse than the
+  exception. `ScopeMenu` renders the sort group `disabled` there **with copy
+  naming the reason** — a control disabled for a reason the user cannot see is
+  the defect B1 rejected the pane-width threshold over.
+
+- **Sort and preview density are GLOBAL preferences, not per-scope.** Two
+  `settings` rows (`noteOrder`, `previewSize`), plus `hideSubTagNotes`. Keying
+  them by `scopeKey()` was rejected on a concrete cost: tag scopes are
+  unbounded, so per-scope rows accumulate one per tag ever visited with nothing
+  to prune them when a tag stops existing.
+
+- **`useSetting` holds an optimistic value, and that is load-bearing.** Reads
+  after a write must see the write: two menu clicks in quick succession each
+  derive their new value from the RENDERED one, so choosing "Title" and then
+  flipping "Newest first" wrote `{field: 'title'}` and then, from a still-stale
+  render, `{field: 'updated', newestFirst: false}` — silently discarding the
+  field just chosen. This is the same fire-and-forget window `usePaneWidths`
+  documents. It also guards on read, because `compareNotes` switches
+  exhaustively and a row from a future version would fall through every arm.
+
+- **`ScopeMenu`'s scope rows are generated from `SMART_LIST_IDS`, never hand-
+  listed.** M6 deleted `ScopeSidebar` precisely because it hardcoded its rows.
+  A second surface listing the same scopes must not reintroduce the
+  registry-grown-row-by-row shape; adding a builtin stays a one-line change in
+  `scope.ts`.
+
+- **`useNotes` folds the view preferences into its live-query key.** The
+  tag-and-verify guard must reject a list fetched under the previous sort for
+  exactly the reason it rejects one fetched under the previous scope: rendering
+  the order the user just asked to change is worse than rendering "still
+  loading".

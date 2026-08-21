@@ -14,33 +14,64 @@ already made. Delete a section once its sub-project has a real spec in
 - `m8-visual-and-export` and `b1-collapsible-headings` are merged and can be
   deleted whenever.
 
-**A is now the next sub-project.** (A fourth, **D — server sync and OAuth**, was added on 2026-08-21 and is deliberately last; see its section below.) Its section below is unchanged and still
-current — nothing B did touched the note-list header.
+**A shipped on 2026-08-21.** **B2 and C are what remain**, and their relative
+order is still undecided — nobody has ruled on whether either blocks the other.
+A fourth sub-project, **D — server sync and OAuth**, was added the same day and
+is deliberately last; see its section below.
 
 ## The three sub-projects, in order
 
 Chosen from four Bear screenshots the user supplied. All three are
 **architectural** — each gets its own spec, plan, and implementation cycle.
-Order is A → B → C, and the reasoning matters more than the order:
+Order was A → B → C; **A and B have both shipped**, and the reasoning below
+matters more than the order:
 
-### A. Note-list header
+### A. Note-list header — **SHIPPED 2026-08-21**
 
-A header naming the current scope, with a dropdown carrying **sort order** and
-**preview style**. Bear's version also lists every scope with `⌥⌘1`–`⌥⌘0`
-shortcuts.
+Spec: `docs/superpowers/specs/2026-08-21-a-note-list-header-design.md`.
+Plan: `docs/superpowers/plans/2026-08-21-a-note-list-header.md`.
+Rulings: `docs/rulings/scopes-and-search.md`, `markdown-and-schema.md`,
+`accessibility.md`, and the struck note-list-header item in `deferred.md`.
 
-- **The header itself is trivial; the dropdown's contents are not.** Ordering is
-  hardcoded `byPinnedThenRecent` in `src/data/repositories/notes.ts` (Trash
-  sorts by `trashedAt`), so a user-chosen sort changes a data-layer contract and
-  needs a durable preference.
-- **Preview style** touches `NoteListItem`, which has a pinned `aria-label`
-  contract and a deliberately reserved two-line snippet height
-  (`min-h-[2.0625rem]`). Both are load-bearing; see CLAUDE.md.
-- **Open question, not yet decided:** whether the scope list belongs in the
-  dropdown at all. Bear can collapse its sidebar, so that menu is sometimes the
-  only route to a scope. Ours is always visible, which may make it redundant.
-- First because it is the least entangled, and because its parts can be cut
-  freely — drop sort or preview style and the header still stands alone.
+What landed: a chevron button naming the scope, opening a flat menu with a note
+count, three sort fields plus a direction toggle, three preview densities, a
+hide-sub-tag-notes filter, and all seven builtin scopes with shortcuts. Sort and
+preview persist globally. This closed the "note list has no header naming the
+current scope" deferral open since M3.
+
+Five things diverged from this file's original sketch or were only learned by
+building it, each worth carrying forward rather than rediscovering:
+
+- **The shortcuts are `⇧⌘1`–`⇧⌘6` and `⇧⌘0`, NOT Bear's `⌥⌘` family.** B1
+  shipped heading levels on `@tiptap/extension-heading`'s
+  `` `Mod-Alt-${level}` ``, so `⌥⌘1` with the editor focused would make an H1
+  and switch scope at once. `Ctrl`+digit is free in Tiptap and rejected anyway
+  — it switches browser tabs off macOS, and this ships to Pages. Bear's digits
+  are kept; only the modifier differs. **`⇧⌘7/8/9` are unavailable** (ordered
+  list, bullet list, blockquote), so a future Archive list cannot take Bear's
+  `⇧⌘9`.
+- **The digits follow `SMART_LIST_IDS`, not Bear.** Bear orders 잠긴항목 before
+  고정됨; our sidebar has always run pinned before locked, and a digit
+  disagreeing with the row above it is worse than one disagreeing with another
+  app. Positions 1–4 and 0 match Bear regardless.
+- **The scope list DID belong in the menu.** This file left that undecided on
+  the grounds that our always-visible sidebar might make it redundant. It is
+  redundant, and it stays: the menu is where the shortcut hints live, and a
+  shortcut nobody can discover is a shortcut nobody uses.
+- **The menu is flat, not nested.** Bear nests 정렬 and 미리 보기 스타일.
+  Nesting costs hover-intent timing, a second placement layer and focus return
+  on close, none of it unit-testable because jsdom has no layout engine to
+  place a submenu against — for a menu that is sixteen rows flat.
+- **`useSetting` needed an optimistic value after all**, which the spec did not
+  anticipate. Two menu clicks in quick succession each derived from the
+  rendered value, so choosing "Title" then flipping "Newest first" silently
+  discarded the field just chosen. Same fire-and-forget window `usePaneWidths`
+  documents.
+
+Cut from Bear's menu, with reasons: bulk 메모 내보내기 (per-note export shipped
+in M8b; scope-wide export needs its own filename and archive story), 첨부 파일
+숨기기 (no attachments until image storage is scheduled), and collapsing search
+behind a magnifier (churns `SearchField` coverage for nothing A needed).
 
 ### B. Collapsible headings + level badge — **SHIPPED 2026-08-21**
 
