@@ -14,7 +14,7 @@ already made. Delete a section once its sub-project has a real spec in
 - `m8-visual-and-export` and `b1-collapsible-headings` are merged and can be
   deleted whenever.
 
-**A is now the next sub-project.** Its section below is unchanged and still
+**A is now the next sub-project.** (A fourth, **D — server sync and OAuth**, was added on 2026-08-21 and is deliberately last; see its section below.) Its section below is unchanged and still
 current — nothing B did touched the note-list header.
 
 ## The three sub-projects, in order
@@ -110,3 +110,43 @@ use, markdown, **image storage**", and no milestone has ever scheduled it.
 Blobs in IndexedDB, an image node in the editor schema, Markdown round-trip,
 embedding in HTML and PDF export, backup and import, and a story for eviction
 and quota. Bigger than A, B and C together; none of them block it.
+
+## D. Server sync and OAuth login — new 2026-08-21, unspecced
+
+Raised by the user mid-session while A was being planned: a MariaDB instance in
+Docker on a local Mac Mini, and OAuth2 login with Google, GitHub and Naver.
+
+**This reverses the project's founding premise** — "No backend, no account —
+everything lives in the browser's IndexedDB" — so it is not a feature in the
+A/B/C queue. It gets its own brainstorm, spec and plan.
+
+Decisions already taken, so they are not re-derived:
+
+- **Local-first is KEPT.** IndexedDB stays the source of truth; the server is a
+  sync target holding a per-user copy for backup and cross-device access. The
+  app must keep working with the Mini asleep or off-network. Consequence: this
+  project owns a conflict-resolution decision (last-write-wins, per-note
+  versioning, or CRDT) and that is its hardest part, not the schema.
+- **Single user.** OAuth is identity for sync, not multi-tenancy. No sharing,
+  no permissions, no per-note ACLs.
+- **A ships first.** Nothing in A depends on this, and this does not block A.
+
+Constraints established when it was raised, each of which shapes the spec:
+
+- **A browser cannot speak MySQL's wire protocol.** "Hook up MariaDB"
+  necessarily means an HTTP API service in front of it. The server is the
+  project; the database is the small half.
+- **OAuth2 needs a confidential client**, so the Google / GitHub / Naver
+  secrets live on that server and never in the bundle. Naver additionally
+  requires registered redirect URIs.
+- **The live site is `https://valorjj.github.io/bear-web/` and cannot reach a
+  Mac Mini on a LAN.** Mixed content blocks `http://`, and a local hostname is
+  not routable from outside the network. A public HTTPS endpoint (Cloudflare
+  Tunnel or equivalent) plus CORS is a prerequisite, not a detail — without it
+  the deployed app and the local app become two different products.
+- **"Runs every day" is not "always."** Availability gaps are the normal case,
+  which is exactly why local-first is kept.
+
+Worth a spike before the spec: whether the Mini can expose HTTPS reliably, what
+Naver OAuth requires for this account, and how auth behaves when the server is
+unreachable.
