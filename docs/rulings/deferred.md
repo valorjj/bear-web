@@ -154,3 +154,24 @@ with is not resolved; only code can retire one.
   **No test covers a note whose first line is a heading.** That absence is why
   this reached a human's eyes instead of the suite's, and it should be closed
   alongside whichever resolution is chosen.
+- **A stale fold key can fold the wrong `h1` after the title-line rule, in one
+  narrow shape.** Fold keys are `level:nth:text`, and `nth` is counted over the
+  post-exclusion section list — so excluding the title renumbers any heading
+  that shared its level and text. Almost always this fails open: a stale key
+  matches nothing and the section simply shows. The exception is a note whose
+  title `h1` and a body `h1` carry identical text, where a fold persisted
+  against the title before this change (`1:0:Title`) now matches the body
+  heading and folds it on open. Not data loss, self-correcting the moment the
+  user unfolds, and it needs both headings to share level and text exactly.
+  **Ruled: no migration.** Writing one means versioning a view-state table to
+  repair a case that costs one click, in an app where fold rows are already
+  discarded on import. Recorded so nobody re-derives it from a bug report.
+- **Every fold test's fixture used to begin with a heading — a document shape
+  the app never produces.** A note's first block is its title, so a real
+  document always has a title line before its first section. That unrealistic
+  shape is why the title-line affordance gap survived eight tasks and their
+  reviews, and why repairing it surfaced seven tests passing for the wrong
+  reason — one whose `Decoration.node` aria-label was never applied at all, and
+  one that could not fail for the reason it existed. **When writing an editor
+  fixture, start it the way a real note starts.** `docFor` in
+  `headingSections.test.ts` and `headingFold.test.ts` carries this as a comment.
