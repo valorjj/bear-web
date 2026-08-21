@@ -270,8 +270,20 @@ export function ScopeMenu({
             className={ROW}
           >
             {t(SMART_LIST_LABELS[list])}
-            <span aria-hidden="true" className="text-faint">
-              ⇧⌘{SCOPE_SHORTCUT_DIGITS[list]}
+            <span className="flex items-center gap-2">
+              {/* The active scope draws a ✓ like every other group here.
+                  `aria-checked` alone would leave a sighted user unable to see
+                  which list is current from inside the menu — the same
+                  invisible-state problem B1 rejected the pane-width threshold
+                  over. */}
+              {checked && (
+                <span aria-hidden="true" className={CHECK}>
+                  ✓
+                </span>
+              )}
+              <span aria-hidden="true" className="text-faint">
+                ⇧⌘{SCOPE_SHORTCUT_DIGITS[list]}
+              </span>
             </span>
           </button>
         );

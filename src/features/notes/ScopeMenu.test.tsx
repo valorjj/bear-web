@@ -134,9 +134,11 @@ describe('ScopeMenu', () => {
   it('lists every smart list, in sidebar order, with its shortcut hint', () => {
     renderMenu();
 
+    // Label and hint asserted as a pair, ignoring the ✓ the active row also
+    // draws — the contract is which digit belongs to which list.
     const hints = screen
       .getAllByRole('menuitemradio')
-      .map((row) => row.textContent ?? '')
+      .map((row) => (row.textContent ?? '').replace('✓', ''))
       .filter((text) => text.includes('⇧⌘'));
 
     expect(hints).toEqual([
@@ -150,9 +152,14 @@ describe('ScopeMenu', () => {
     ]);
   });
 
-  it('marks the current scope checked among the scope rows', () => {
+  it('marks the current scope checked among the scope rows, and draws it', () => {
     renderMenu({ scope: smartScope('todo') });
-    expect(screen.getByRole('menuitemradio', { name: /Todo/ })).toBeChecked();
+
+    const row = screen.getByRole('menuitemradio', { name: /Todo/ });
+    expect(row).toBeChecked();
+    // Visible, not only announced: a sighted user must be able to see which
+    // list is current without leaving the menu.
+    expect(row.textContent).toContain('✓');
   });
 
   it('checks no scope row when the scope is a tag', () => {

@@ -140,7 +140,16 @@ for (const theme of THEMES) {
       await blur(page);
       await shot(list, `07-note-list-search-${theme.name}`);
 
+      // The header menu, open. It is the only surface in the app that stacks a
+      // popover directly over the note list, so it is the one place where the
+      // popover's own surface and shadow are read against list rows rather
+      // than against a pane edge.
       await page.getByRole('searchbox').fill('');
+      await page.getByRole('button', { name: /^List options/ }).click();
+      await blur(page);
+      await shot(list, `12-note-list-menu-${theme.name}`);
+      await page.keyboard.press('Escape');
+
       await sidebar.getByRole('button', { name: /^Trash/ }).click();
       await openNote(page, /Old meeting notes/, 'Superseded by');
       await blur(page);
