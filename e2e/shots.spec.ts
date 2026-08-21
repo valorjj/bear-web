@@ -180,5 +180,77 @@ for (const theme of THEMES) {
 
       await shot(page, `09-empty-${theme.name}`);
     });
+
+    // A heading-dense note with two sections folded, one open. This is the
+    // one surface the badge and the fold controls have never been shot in:
+    // every other shot's corpus note is unfolded prose. The badge is the
+    // element most at risk of vanishing in a theme this suite does not
+    // otherwise render against — its colour comes from `--bear-faint`, which
+    // moves independently per theme, and nothing but a real screenshot in
+    // every theme in the roster can catch a value that renders invisible
+    // against `--bear-bg` in one of them.
+    test(`folded headings @shots`, async ({ page }) => {
+      await page.clock.setFixedTime(FIXED_NOW);
+      await seedDatabase(page, {
+        notes: [
+          {
+            id: 'n-fold-shot',
+            title: 'Quarterly planning',
+            text: [
+              '# Quarterly planning',
+              '',
+              '## Goals',
+              '',
+              'Ship the collapsible-headings milestone and start image storage.',
+              '',
+              '## Risks',
+              '',
+              'Scope creep on the drag-to-reorder follow-up.',
+              '',
+              '### Mitigation',
+              '',
+              'Keep B2 a separate milestone rather than folding it into B1.',
+              '',
+              '## Open questions',
+              '',
+              'Does image storage get its own spec before or after B2?',
+            ].join('\n'),
+            createdAt: FIXED_NOW,
+            updatedAt: FIXED_NOW,
+            pinned: false,
+            trashedAt: null,
+            archivedAt: null,
+          },
+        ],
+        settings: [
+          { key: 'pane.sidebarWidth', value: 240 },
+          { key: 'pane.noteListWidth', value: 320 },
+        ],
+      });
+      await page.goto('/');
+      await settle(page, { seeded: false });
+      await openNote(page, /Quarterly planning/, 'Goals');
+
+      const editor = page.getByRole('region', { name: 'Editor' });
+
+      // Fold both sections from the gutter, the way a mouse user would, so
+      // the shot also proves the toggle itself renders and is clickable —
+      // not just the decoration's existence, which every unit test already
+      // covers blind to layout. (Not the `Mod-Alt-f` keyboard binding here:
+      // it resolves the section under ProseMirror's OWN selection, which
+      // lags a click by a frame or two — see `settleAfterClick` in
+      // `notes.spec.ts` — and this harness has no need to race that for a
+      // screenshot two toggle clicks already cover.)
+      const risks = page.locator('.ProseMirror h2', { hasText: 'Risks' });
+      await risks.hover();
+      await risks.locator('[data-fold-toggle]').click();
+
+      const openQuestions = page.locator('.ProseMirror h2', { hasText: 'Open questions' });
+      await openQuestions.hover();
+      await openQuestions.locator('[data-fold-toggle]').click();
+
+      await blur(page);
+      await shot(editor, `11-editor-folded-${theme.name}`);
+    });
   });
 }

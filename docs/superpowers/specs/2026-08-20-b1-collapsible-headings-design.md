@@ -57,23 +57,32 @@ heading unfolds it. That direction is mandatory, not incidental — the opposite
 failure hides content in an app with no server copy, which is indistinguishable
 from data loss.
 
-### The badge overlays the prose when there is no gutter
+### The gutter is reserved, not overlaid — what shipped and why
 
-Measured at 1440x900: the editor pane is 816px, the prose column clamps to
-`--bear-line-width` (640px), leaving 88px of gutter each side. Panes are
-user-resizable, and below roughly 688px of pane width the clamp stops engaging
-and the gutter is zero.
+This section originally planned an affordance that OVERLAYS the prose when
+there is no gutter: absolutely positioned, floating over the text's left
+edge below roughly 688px of pane width, on the reasoning that reserving a
+permanent lane would narrow the measure at every width, including the wide
+case where the gutter is already free.
 
-The affordance is absolutely positioned and, when there is no room beside the
-text, floats over its left edge. It renders on hover, so it covers a character
-or two only while the pointer is on that heading, and never at rest.
-
-Reserving a permanent lane was rejected: it would narrow the measure at every
-width, including the wide case where the gutter is already free, and
-`--bear-line-width` holds a deliberately measured value. Hiding the affordance
-below a threshold was rejected against the standing rule that behaviour must not
-depend on invisible state — folding would silently become unavailable with
-nothing on screen to explain why.
+**That is not what shipped, and this section is corrected to describe the
+actual mechanism.** `.ProseMirror`'s rule is
+`max-width: min(var(--bear-line-width), 100% - 3rem)` (`src/styles/editor.css`),
+plus a separate `min-width: 12rem` floor. This RESERVES 1.5rem of margin on
+each side whenever the pane is narrower than the measure plus 3rem, rather
+than letting the prose run edge to edge and overlaying the toggle on top of
+it. The outcome is better than the original plan — the toggle never sits on
+top of live text at any width — but the original "narrows the measure at
+every width" objection is still real at the threshold itself: at exactly
+`--bear-line-width` + 3rem of pane width, the reserved margin and the
+would-be-zero gutter meet, and clearance for the toggle is exactly zero
+there. A future change to `EditorContent`'s own `px-6` padding narrows that
+already-zero margin further and silently reopens the clipping bug this
+mechanism exists to prevent (see CLAUDE.md's `--bear-line-width` /
+`min-width: 12rem` toolchain-surprise entry for the measured history of that
+clip). Hiding the affordance below a threshold was rejected against the
+standing rule that behaviour must not depend on invisible state — folding
+would silently become unavailable with nothing on screen to explain why.
 
 ## Out of scope
 
@@ -199,6 +208,14 @@ Two cases need explicit rulings:
 - **Backspace/Delete at the boundary of a folded heading unfolds instead of
   deleting.** Otherwise a keypress destroys content the user cannot see. This is
   the same fail-open direction as the identity scheme.
+- **Enter at the end of a folded heading's own line unfolds, then lets the
+  split proceed.** `splitBlock` inserts its new empty paragraph exactly where
+  a folded section's hidden range begins, so an unguarded Enter there leaves
+  the user typing into `display: none` content with no visible feedback.
+  Unlike Backspace/Delete, nothing here is destructive, so the fix does not
+  swallow the keystroke — it unfolds the section and then lets Enter do its
+  normal job against the now-visible document, rather than doing nothing but
+  revealing content the user still can't type into.
 - **Select-all then delete does delete the folded content.** That is the user
   asking for the whole document, and it is undoable.
 
@@ -256,6 +273,16 @@ Before any e2e run that follows a source change: `lsof -ti:4173 | xargs -r kill 
   will keep the fold attached to the ordinal occurrence rather than to the
   section that moved. Fail-open in the sense that nothing is hidden that the
   user did not fold at that position; not worth a heavier identity scheme.
+- **Inserting a new heading identical to an already-folded one, above it,**
+  has the same root cause and is the more likely edit of the two — reordering
+  requires deliberately moving a section, while this can happen from
+  ordinary typing. Fold `## A`, then write a new `## A` above it: the new
+  section is occurrence 0 and inherits the fold, while the section the user
+  actually folded becomes occurrence 1 and opens. Nothing is hidden that the
+  user never folded, but the visible section is not the one they folded
+  either. Recoverable — the inline "…" marker on the now-folded section cues
+  that something is folded there — and not worth a heavier identity scheme
+  for the same reason as the reordering case above.
 - **The menu's locale is frozen at mount**, inherited from `RichEditor`'s
   extension array being built once.
 - **A folded section is still found by note-list search**, because search reads

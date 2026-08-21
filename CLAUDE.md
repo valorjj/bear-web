@@ -39,17 +39,21 @@ feature and is not yet scheduled.
 | M8c tables as real nodes                  | complete |
 | M9a visual system: themes, scale, picker  | complete |
 | A note-list header (scope, sort, preview) | next     |
-| B collapsible headings + level badge      | queued   |
+| B collapsible headings + level badge      | complete |
+| B2 drag-to-reorder headings               | queued   |
 | C code block language + highlighting      | queued   |
 | M9b callout blocks                        | deferred |
 
-1143 unit tests, 58 end-to-end tests. `main` is always green and auto-deploys.
+1221 unit tests, 64 end-to-end tests. `main` is always green and auto-deploys.
 
-**The last four rows are not numbered milestones yet**, and the lettering is
+**The last five rows are not numbered milestones yet**, and the lettering is
 `docs/superpowers/NEXT.md`'s, which holds the order and the reasoning for it.
 B is the sub-project M9a's spec named **M9c**; do not read the letters as new
-milestone ids. **M9b callout blocks is deferred, not dropped** — specced in
-M9a's decomposition, deliberately not chosen this round, still unblocked.
+milestone ids. **B2 is not part of that spec** — it is a follow-up named only
+once B shipped, queued but unscheduled. Its ordering relative to C is an open
+question, not a ruling — nobody has decided whether either blocks the other.
+**M9b callout blocks is deferred, not dropped** — specced in M9a's
+decomposition, deliberately not chosen this round, still unblocked.
 
 **Image storage is named in this project's goal and has never been
 scheduled** — not by a milestone and not by the three sub-projects above. It is
@@ -63,7 +67,8 @@ count, because they assert nothing.** Both drive the fixed corpus in
 
 - `npm run shots` → `e2e/shots.spec.ts` writes design reference screenshots to
   `docs/design/shots/` (gitignored) — three panes, search, trash, the empty
-  state and the exported document, **in every theme in the roster** (50 files).
+  state, a folded heading-dense note and the exported document, **in every
+  theme in the roster** (11 shots × 5 themes = 55 files).
   Themes are selected through the paint-time mirror, the way a user selects
   one. Until M9a it drove `colorScheme` instead, i.e. the media query, and the
   shot labelled `paper` silently started rendering Indigo Light the moment the

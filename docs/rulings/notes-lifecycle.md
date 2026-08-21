@@ -10,8 +10,11 @@ between the selected note and the database.
 / `seed` / `setSeed` lines in `src/app/AppShell.tsx`; the symbols `seedText`,
 `normalizedSeedText`, `hadTextAtMountRef`, `editedRef`, `pendingDiscards`,
 `discard`, `deriveTitle`, `persistedRef`, `attemptedRef`, `saveSeqRef`,
-`sanitize`; any new `useLiveQuery(` call site whose dependency array is not
-`[]`; and `notes.purge` / `notes.save` call sites.
+`sanitize`, `foldEditor`, `lastFoldedKeysRef`, `FOLD_PERSIST_DELAY_MS`; any new
+`useLiveQuery(` call site whose dependency array is not `[]`; `folds.get` /
+`folds.set` call sites; the Backspace/Delete guard in
+`src/features/editor/HeadingFold.ts`'s `handleKeyDown`; and `notes.purge` /
+`notes.save` call sites.
 
 - **`NoteEditor`'s `seedText` is scoped to the just-created note, and `AppShell`
   must clear it when the selection leaves that note.** A note created inside a
@@ -145,3 +148,38 @@ between the selected note and the database.
   `notes.create` returned it, and no note could be created at all under
   `npm run dev`. The map must stay at module scope: a remount is a new
   component instance, so a ref would start empty and cancel nothing.
+
+- **The fold-restore effect's baseline MUST be seeded from the keys being
+  restored, before `setHeadingFolds` dispatches — never from editor state read
+  at mount.** `folds.get(note.id)` is an IndexedDB round trip; it cannot have
+  resolved by the time a mount-phase effect runs, so an editor-state baseline
+  captured at mount is always the empty starting state. When the restore
+  later dispatches `setHeadingFolds(keys)`, the SEPARATE persist effect's
+  change detector sees the (empty) baseline diverge from the (restored,
+  non-empty) new state and treats a plain reopen of an already-folded note as
+  a fresh edit, writing the identical row straight back to `noteFolds` every
+  time the note opens. `NoteEditor.tsx`'s `lastFoldedKeysRef` is written
+  inside the restore effect itself — `lastFoldedKeysRef.current =
+  keys.join('|')` — BEFORE calling `foldEditor.commands.setHeadingFolds(keys)`,
+  precisely to close this race rather than rely on the two effects committing
+  in a lucky order.
+
+- **A Backspace at a fold boundary is guarded at `section.end + 1` — the
+  first caret position in the next VISIBLE block after the folded section —
+  NOT at `contentStart + 1`.** `contentStart + 1` sits one character into the
+  section's own hidden body, which `hiddenRangesFor` renders `display: none`;
+  no caret can ever actually land there, so guarding it would guard a
+  position Backspace never reaches. The real hazard measured is a caret at
+  the START of the following block: `joinBackward` from there merges that
+  visible block into the section's last hidden block, silently deleting it
+  (for example, merging a following heading into a hidden paragraph erases
+  the heading with one keypress and no visible change). Delete's own
+  hazard is symmetric but on the OTHER side of the fold, at `contentStart -
+  1` — the last position still visible, right before the hidden body starts.
+  Select-all-then-delete still deletes folded content regardless of these
+  guards, deliberately: that is the user asking for the whole document, and
+  it is undoable. The macOS letter-chord variants (`Ctrl-h` for Backspace;
+  `Ctrl-d` / `Alt-d` for Delete) are covered by the same guard, but gated
+  behind `isMacOS()` — `@tiptap/core` itself only binds those chords on Mac,
+  so binding them unconditionally here would claim keys Windows/Linux never
+  assign this meaning to.

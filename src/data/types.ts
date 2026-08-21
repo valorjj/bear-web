@@ -27,6 +27,17 @@ export interface TagMeta {
   sortOrder: number;
 }
 
+/**
+ * Which sections of a note are folded, as `serializeFoldKey` strings.
+ *
+ * View state, not content: deliberately absent from the backup bundle, because
+ * a restore should return the user's notes and not their reading position.
+ */
+export interface NoteFolds {
+  noteId: string;
+  keys: string[];
+}
+
 export interface FileRecord {
   id: string;
   noteId: string;

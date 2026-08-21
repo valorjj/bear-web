@@ -119,27 +119,47 @@ export async function importDatabase(
 
   let rebuiltRows = 0;
 
-  await db.transaction('rw', db.notes, db.noteTags, db.tags, db.files, db.settings, async () => {
-    await Promise.all([
-      db.notes.clear(),
-      db.noteTags.clear(),
-      db.tags.clear(),
-      db.files.clear(),
-      db.settings.clear(),
-    ]);
+  // `noteFolds` is cleared here too, alongside the other tables, even though
+  // it is deliberately absent from `assertBundle`'s required-table loop and
+  // from `exportDatabase` below: fold state is view state, not content (see
+  // the B1 spec's "Persistence" section,
+  // `docs/superpowers/specs/2026-08-20-b1-collapsible-headings-design.md`),
+  // so a restore should never carry it in — but a replace-only
+  // import must still leave the table consistent with the notes that now
+  // exist. Without this, fold rows from the database being REPLACED survive
+  // the import as orphans, and worse, a note id that happens to match one
+  // (the common case: a user re-importing their own backup) reopens with a
+  // section folded that was never folded in the restored database.
+  // The array form of `transaction`, not the up-to-five-tables overload: six
+  // tables (five original plus `noteFolds`) exceed Dexie's fixed-arity
+  // overloads, which stop at five.
+  await db.transaction(
+    'rw',
+    [db.notes, db.noteTags, db.tags, db.files, db.settings, db.noteFolds],
+    async () => {
+      await Promise.all([
+        db.notes.clear(),
+        db.noteTags.clear(),
+        db.tags.clear(),
+        db.files.clear(),
+        db.settings.clear(),
+        db.noteFolds.clear(),
+      ]);
 
-    await Promise.all([
-      db.notes.bulkAdd(notes),
-      db.tags.bulkAdd(bundle.tags),
-      db.files.bulkAdd(files),
-      db.settings.bulkAdd(bundle.settings),
-    ]);
+      await Promise.all([
+        db.notes.bulkAdd(notes),
+        db.tags.bulkAdd(bundle.tags),
+        db.files.bulkAdd(files),
+        db.settings.bulkAdd(bundle.settings),
+      ]);
 
-    // `noteTags` is derived data. Trusting a file's copy of it contradicts the
-    // rule that the index comes from `notes.text` and is never authoritative,
-    // and it is what made a pre-M5 backup restore an empty index.
-    rebuiltRows = await deps.rebuildTagIndex();
-  });
+      // `noteTags` is derived data. Trusting a file's copy of it contradicts
+      // the rule that the index comes from `notes.text` and is never
+      // authoritative, and it is what made a pre-M5 backup restore an empty
+      // index.
+      rebuiltRows = await deps.rebuildTagIndex();
+    },
+  );
 
   return {
     notes: notes.length,

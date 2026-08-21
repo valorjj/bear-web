@@ -1,5 +1,5 @@
 import { Editor, isMacOS } from '@tiptap/core';
-import type { Decoration } from '@tiptap/pm/view';
+import type { DecorationSet } from '@tiptap/pm/view';
 import { describe, expect, it } from 'vitest';
 
 import { buildEditorExtensions, editorExtensions } from './extensions';
@@ -573,17 +573,46 @@ describe('tag activation', () => {
       content: '<p>#work and #home</p>',
     });
 
-    // Through the real registered plugin's `decorations` prop — same
-    // `someProp` mechanism `mousedownAt` uses for `handleDOMEvents` — so this
-    // proves the option actually reaches the mounted extension, not just a
-    // direct call to `tagDecorations`.
-    const decorationSet = editor.view.someProp('decorations', (f) => f(editor.state));
-    const titles = (decorationSet as unknown as { find(): Decoration[] }).find().map(
-      // Measured directly: `Decoration.inline(from, to, attrs)` puts `attrs`
-      // at `decoration.type.attrs`; `decoration.type.spec` is `{}`.
-      (decoration) =>
-        (decoration as unknown as { type: { attrs: Record<string, string> } }).type.attrs.title,
-    );
+    // Through the real registered plugin's `decorations` prop, gathered the
+    // way ProseMirror's own `viewDecorations` does: by calling every
+    // plugin's `decorations` prop and collecting every non-empty result,
+    // never stopping at the first one. `EditorView.someProp`'s short-circuit
+    // (return the first truthy result) is right for `handleDOMEvents` below,
+    // where exactly one plugin ever answers, but wrong here now that a
+    // second plugin (`HeadingFold`) also registers a `decorations` prop —
+    // `someProp` would silently return whichever plugin happens to run
+    // first, hiding every other plugin's decorations from this assertion
+    // without saying anything went wrong.
+    // Measured directly: `Decoration.inline(from, to, attrs)` puts `attrs`
+    // at `decoration.type.attrs`; `decoration.type.spec` is `{}`.
+    // `Decoration.type` isn't public in `@tiptap/pm/view`'s types, so this
+    // reads it through the same shape every call site in this file already
+    // casts to.
+    type DecoWithAttrs = { type: { attrs?: Record<string, string> } };
+
+    const titles = editor.state.plugins
+      .flatMap((plugin) => {
+        const prop = plugin.props.decorations;
+        if (!prop) return [];
+        // `decorations`'s declared `this` is the owning `Plugin`, and its
+        // declared return type is the general `DecorationSource`, which has
+        // no `.find()` — only the concrete `DecorationSet` every plugin in
+        // this app actually returns does (see `HeadingFold.ts`, `TagPill.ts`).
+        const result = prop.call(plugin, editor.state) as DecorationSet | null | undefined;
+        return result?.find() ?? [];
+      })
+      // Filtered on the decoration's OWN CLASS (`bear-tag`, the class
+      // `tagDecorations` always writes), not on whether `title` happens to
+      // be present — a titleless pill must still fail this assertion rather
+      // than being silently skipped by a filter that only keeps decorations
+      // with a title. `WidgetType` (a fold's badge widget, once Task 4 adds
+      // one) has no `attrs` at all, so the access below is
+      // optional-chained: it must degrade to `undefined`, not throw, on a
+      // decoration type this test isn't looking for.
+      .filter(
+        (decoration) => (decoration as unknown as DecoWithAttrs).type.attrs?.class === 'bear-tag',
+      )
+      .map((decoration) => (decoration as unknown as DecoWithAttrs).type.attrs!.title);
     expect(titles).toEqual(['Cmd-click to filter', 'Cmd-click to filter']);
     editor.destroy();
   });

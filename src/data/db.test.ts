@@ -3,21 +3,22 @@ import { describe, expect, it } from 'vitest';
 import { createTestDatabase } from './testing';
 
 describe('BearDatabase', () => {
-  it('opens at schema version 1', async () => {
+  it('opens at schema version 2', async () => {
     const db = createTestDatabase();
     await db.open();
 
-    expect(db.verno).toBe(1);
+    expect(db.verno).toBe(2);
 
     db.close();
   });
 
-  it('declares all five tables', async () => {
+  it('declares all six tables', async () => {
     const db = createTestDatabase();
     await db.open();
 
     expect(db.tables.map((t) => t.name).sort()).toEqual([
       'files',
+      'noteFolds',
       'noteTags',
       'notes',
       'settings',

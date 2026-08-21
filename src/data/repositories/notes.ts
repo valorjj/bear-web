@@ -144,15 +144,16 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
      * with another tab's purge of the same note, should not see an error.
      */
     async purge(id) {
-      await db.transaction('rw', db.notes, db.noteTags, db.files, async () => {
+      await db.transaction('rw', db.notes, db.noteTags, db.files, db.noteFolds, async () => {
         await db.noteTags.where('noteId').equals(id).delete();
         await db.files.where('noteId').equals(id).delete();
+        await db.noteFolds.delete(id);
         await db.notes.delete(id);
       });
     },
 
     async emptyTrash() {
-      return db.transaction('rw', db.notes, db.noteTags, db.files, async () => {
+      return db.transaction('rw', db.notes, db.noteTags, db.files, db.noteFolds, async () => {
         // The trashedAt index holds only trashed notes, since IndexedDB omits
         // nulls. Use aboveOrEqual(0), not above(0), so a note trashed at epoch
         // 0 is still purged.
@@ -161,6 +162,7 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
 
         await db.noteTags.where('noteId').anyOf(ids).delete();
         await db.files.where('noteId').anyOf(ids).delete();
+        await db.noteFolds.bulkDelete(ids);
         await db.notes.bulkDelete(ids);
 
         return ids.length;

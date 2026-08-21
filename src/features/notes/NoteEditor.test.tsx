@@ -1,10 +1,14 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, type RenderResult } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createRef, type RefObject } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { db, notes } from '@/data';
+import '@/styles/editor.css';
+
+import { db, folds, notes } from '@/data';
 import type { Note } from '@/data';
 import * as editor from '@/features/editor';
+import { foldedKeys, headingSections, type RichEditorHandle } from '@/features/editor';
 import { renderWithI18n } from '@/i18n/testing';
 
 import { NoteEditor } from './NoteEditor';
@@ -54,6 +58,19 @@ async function createNote(text: string): Promise<Note> {
   const stored = await notes.get(created.id);
   if (stored === undefined) throw new Error('note vanished');
   return stored;
+}
+
+/**
+ * Renders `NoteEditor` with an externally-owned `handleRef`, so a test can
+ * reach the mounted Tiptap instance (`handle.current.editor`) the same way
+ * `RichEditor.test.tsx` does. Nothing in the app passes this ref itself —
+ * `AppShell` never needs the editor instance — it exists purely so tests
+ * don't each grow their own parallel ref plumbing.
+ */
+function renderEditor(note: Note): RenderResult & { handle: RefObject<RichEditorHandle | null> } {
+  const handle = createRef<RichEditorHandle>();
+  const result = renderWithI18n(<NoteEditor note={note} handleRef={handle} />);
+  return { ...result, handle };
 }
 
 /**
@@ -554,5 +571,112 @@ describe('serialization failure', () => {
 
     expect(save).not.toHaveBeenCalled();
     expect(await screen.findByRole('status')).toBeInTheDocument();
+  });
+});
+
+describe('fold persistence', () => {
+  it('applies the stored fold set when the note opens', async () => {
+    const note = await notes.create('## A\n\nbody');
+    await folds.set(note.id, ['2:0:A']);
+
+    renderEditor(note);
+
+    await waitFor(() => {
+      expect(screen.getByText('body')).not.toBeVisible();
+    });
+  });
+
+  it('writes the new fold set when a section is folded', async () => {
+    const note = await notes.create('## A\n\nbody');
+    const set = vi.spyOn(folds, 'set');
+
+    const { handle } = renderEditor(note);
+    await waitFor(() => expect(handle.current?.editor).not.toBeNull());
+    const [section] = headingSections(handle.current!.editor!.state.doc);
+    handle.current!.editor!.commands.toggleHeadingFold(section!.pos);
+
+    // Asserted directly against plugin state too, the same pattern
+    // `headingFold.test.ts` uses: it needs no stylesheet and no jsdom
+    // visibility semantics, unlike the CSS-based assertion above.
+    expect(foldedKeys(handle.current!.editor!.state)).toEqual(['2:0:A']);
+
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledWith(note.id, ['2:0:A']);
+    });
+  });
+
+  it('opening a note produces no fold write', async () => {
+    const note = await notes.create('## A\n\nbody');
+    await folds.set(note.id, ['2:0:A']);
+    const set = vi.spyOn(folds, 'set');
+
+    renderEditor(note);
+
+    // Proves the restore actually happened — not merely that render
+    // finished — before the "no write" assertion below is allowed to mean
+    // anything.
+    await waitFor(() => {
+      expect(screen.getByText('body')).not.toBeVisible();
+    });
+
+    // The persist effect debounces at 300ms (`FOLD_PERSIST_DELAY_MS` in
+    // `NoteEditor.tsx`). A window shorter than that cannot distinguish "no
+    // write happened" from "the write just hasn't fired yet" — this test
+    // used to assert synchronously right after the heading text appeared,
+    // which passed even when a restore-triggered write was scheduled a
+    // moment later. Waiting past the debounce is what makes this a real
+    // guard rather than a race the assertion always wins.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    // Mirrors the standing rule that opening a note produces no write. A
+    // persistence layer that rewrites on mount churns a row on every note
+    // switch, and this app switches notes constantly.
+    expect(set).not.toHaveBeenCalled();
+  }, 10000);
+
+  // The entire justification for a separate `noteFolds` table, rather than a
+  // field on the note record, is that folding must not move `updatedAt` and
+  // reorder the note list. That is true today only because Tiptap gates its
+  // `onUpdate` callback on `tr.docChanged` and a fold transaction carries no
+  // steps (only meta) — an upstream detail nothing in THIS codebase asserts.
+  // This pins it: toggling a fold, waited well past the autosave debounce,
+  // must never call `notes.save`.
+  it('folding a section never calls notes.save — folding must not touch the note', async () => {
+    const note = await notes.create('## A\n\nbody');
+    const save = vi.spyOn(notes, 'save');
+
+    const { handle } = renderEditor(note);
+    await waitFor(() => expect(handle.current?.editor).not.toBeNull());
+    const [section] = headingSections(handle.current!.editor!.state.doc);
+    handle.current!.editor!.commands.toggleHeadingFold(section!.pos);
+
+    expect(foldedKeys(handle.current!.editor!.state)).toEqual(['2:0:A']);
+
+    // Real timers, well past AUTOSAVE_DELAY_MS (300ms) — long enough for an
+    // autosave that SHOULD NOT have been scheduled to have fired if it had
+    // been.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(save).not.toHaveBeenCalled();
+  }, 10000);
+
+  it('flushes a pending fold to storage when the note is closed', async () => {
+    const note = await notes.create('## A\n\nbody');
+    const set = vi.spyOn(folds, 'set');
+
+    const { handle, unmount } = renderEditor(note);
+    await waitFor(() => expect(handle.current?.editor).not.toBeNull());
+    const [section] = headingSections(handle.current!.editor!.state.doc);
+    handle.current!.editor!.commands.toggleHeadingFold(section!.pos);
+
+    // Unmounted well before the 300ms debounce could have fired on its own —
+    // `NoteEditor` remounts on every note switch, so a fold made moments
+    // before switching notes must reach storage anyway, the same way
+    // `useAutosave` flushes unsaved text on unmount rather than dropping it.
+    unmount();
+
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledWith(note.id, ['2:0:A']);
+    });
   });
 });

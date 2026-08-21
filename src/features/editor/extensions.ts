@@ -5,6 +5,7 @@ import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
 import StarterKit from '@tiptap/starter-kit';
 
+import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
 import { Highlight } from './Highlight';
 import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
 import type { TagPillOptions } from './TagPill';
@@ -21,7 +22,9 @@ import { TaskItemPromotion } from './taskItemPromotion';
  * registers nothing in the schema, so the options passed to `TagPill` cannot
  * change what that schema build sees.
  */
-function buildSupportedExtensions(options: Partial<TagPillOptions>): Extensions {
+function buildSupportedExtensions(
+  options: Partial<TagPillOptions & HeadingFoldOptions>,
+): Extensions {
   return [
     // `underline: false` is load-bearing, not tidying. StarterKit registers
     // `@tiptap/extension-underline`, which binds Mod-U and serializes to
@@ -73,6 +76,12 @@ function buildSupportedExtensions(options: Partial<TagPillOptions>): Extensions 
     // decorates `#tag` text as a pill; the document and its Markdown are
     // untouched. See `TagPill.ts` and `tagPill.test.ts`.
     TagPill.configure(options),
+    // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
+    // schema — `computeRecognizedHtmlTags()` and every round-trip suite are
+    // unaffected. It contributes one plugin that decorates folded sections;
+    // the document and its Markdown are untouched. See `HeadingFold.ts` and
+    // `headingFold.test.ts`.
+    HeadingFold.configure(options),
   ];
 }
 
@@ -121,7 +130,9 @@ function computeRecognizedHtmlTags(): Set<string> {
  * `computeRecognizedHtmlTags()` and every existing test keep working
  * untouched, and only `RichEditor` ever passes anything.
  */
-export function buildEditorExtensions(options: Partial<TagPillOptions> = {}): Extensions {
+export function buildEditorExtensions(
+  options: Partial<TagPillOptions & HeadingFoldOptions> = {},
+): Extensions {
   return [
     ...buildSupportedExtensions(options),
     RawDefinition,

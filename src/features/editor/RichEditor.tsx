@@ -7,6 +7,8 @@ import { useT } from '@/i18n';
 
 import { BottomToolbar } from './BottomToolbar';
 import { buildEditorExtensions } from './extensions';
+import { HeadingMenu } from './HeadingMenu';
+import type { HeadingMenuRequest } from './HeadingFold';
 import { InfoPanel } from './InfoPanel';
 import { parseMarkdown, serializeMarkdown } from './markdown';
 import { TopControls } from './TopControls';
@@ -37,6 +39,17 @@ export interface RichEditorProps {
    * menu. Omit it and no export control is rendered at all.
    */
   onExport?: (format: ExportFormat) => void;
+  /**
+   * Called with the live `editor` every time IT changes identity — in
+   * particular the transition from `null` to a ready instance. The mount
+   * effect's cleanup only clears `handleRef.current`, never calls this again
+   * with `null` — so on unmount the caller's last-known `editor` value goes
+   * stale rather than being told. `handleRef` is a plain ref: reading it once
+   * from a caller's own effect races Tiptap's own construction, which is
+   * exactly why `NoteEditor`'s fold persistence needs a reactive signal
+   * instead of a ref read at a single moment.
+   */
+  onEditorReady?: (editor: Editor | null) => void;
 }
 
 /**
@@ -56,10 +69,12 @@ export function RichEditor({
   updatedAt,
   onActivateTag,
   onExport,
+  onEditorReady,
 }: RichEditorProps): ReactElement {
   const t = useT();
   const [infoOpen, setInfoOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [menu, setMenu] = useState<HeadingMenuRequest | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
 
   // The plugin reads its callback once, at construction, and `useEditor` reads
@@ -68,6 +83,16 @@ export function RichEditor({
   // callback the very first render supplied.
   const activateRef = useRef(onActivateTag);
   activateRef.current = onActivateTag;
+
+  // Same discipline as `activateRef` above, for `HeadingFold`'s `onOpenMenu`:
+  // the extension array is built once in the `useState` initializer below, so
+  // the plugin must capture a function whose IDENTITY never changes rather
+  // than the `setMenu` state setter's value at that one moment. `setMenu`
+  // itself is stable across renders, but routing it through a ref keeps this
+  // callback's shape consistent with every other extension option this
+  // component threads in, rather than being the one exception.
+  const openMenuRef = useRef((request: HeadingMenuRequest) => setMenu(request));
+  openMenuRef.current = (request: HeadingMenuRequest) => setMenu(request);
 
   const [extensions] = useState(() =>
     buildEditorExtensions({
@@ -94,6 +119,11 @@ export function RichEditor({
       // the two now share.
       onActivate: onActivateTag === undefined ? null : (tag) => activateRef.current?.(tag) === true,
       activateHint: t(isMacOS() ? 'editor.tagPill.hint.mac' : 'editor.tagPill.hint.other'),
+      // Unlike `onActivate`, this is unconditionally wired: the level menu is
+      // a built-in editor affordance, not an opt-in prop the app may omit, so
+      // there is no "nobody is listening" state to represent with `null` here.
+      onOpenMenu: (request) => openMenuRef.current(request),
+      foldHint: t('editor.fold.toggle'),
     }),
   );
 
@@ -128,11 +158,19 @@ export function RichEditor({
     },
   });
 
+  // `onEditorReady` is read through a ref, the same discipline as
+  // `activateRef` above: the callback's IDENTITY must not be a dependency
+  // here, or a caller that doesn't memoize it would tear this effect down
+  // and rebuild `handleRef.current` on every one of its own re-renders.
+  const onEditorReadyRef = useRef(onEditorReady);
+  onEditorReadyRef.current = onEditorReady;
+
   useEffect(() => {
     handleRef.current = {
       getMarkdown: () => (editor === null ? initialMarkdown : serializeMarkdown(editor.getJSON())),
       editor,
     };
+    onEditorReadyRef.current?.(editor);
 
     return () => {
       handleRef.current = null;
@@ -224,6 +262,49 @@ export function RichEditor({
           <BottomToolbar editor={editor} />
         </div>
       </div>
+
+      {/*
+       * `HeadingMenu` is `fixed`-positioned off the badge's own
+       * `getBoundingClientRect()`, so it needs no placement of its own here —
+       * unlike the toolbars above, it is not anchored to this pane at all.
+       * Rendered by the app, never by the plugin: the editor learns nothing
+       * about app concerns, the same boundary `onActivateTag` keeps.
+       */}
+      {menu !== null && (
+        <HeadingMenu
+          request={menu}
+          // `.setTextSelection(menu.pos + 1)` before `setNode`, not left to
+          // whatever the caret already sat at: the badge's own `mousedown`
+          // calls `preventDefault()` and never moves ProseMirror's selection
+          // to the clicked heading, so `setNode` without this targeted the
+          // WRONG node — whatever the caret was already in, heading or not.
+          // `menu.pos + 1` matches the widget's own offset (`section.pos +
+          // 1`, the start of the heading's own content), so this always
+          // lands inside the heading the user actually clicked.
+          onSetLevel={(level) =>
+            editor
+              ?.chain()
+              .focus()
+              .setTextSelection(menu.pos + 1)
+              .setNode('heading', { level })
+              .run()
+          }
+          onToggleFold={() => editor?.commands.toggleHeadingFold(menu.pos)}
+          onFoldAll={() => editor?.commands.foldAllHeadings()}
+          onUnfoldAll={() => editor?.commands.unfoldAllHeadings()}
+          onClose={() => {
+            setMenu(null);
+            // The only sensible destination: Task 4 measured that Chromium
+            // refuses `.focus()` to any descendant of a heading containing a
+            // widget, so returning focus to the badge/toggle that opened this
+            // menu is not an option. Without this, Escape and every action
+            // except `onSetLevel` (which already focuses as part of its own
+            // chain) leave focus on the menu button React is about to unmount,
+            // and it falls to `<body>` — the user's next keystroke goes nowhere.
+            editor?.commands.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

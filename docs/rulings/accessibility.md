@@ -10,7 +10,9 @@ affordances a control must keep at rest.
 `src/features/notes/NoteListItem.tsx`'s `label` string and its two sibling
 buttons; `src/ui/Button.tsx`'s `VARIANTS` map (`default` / `ghost` / `danger`);
 `src/features/notes/NoteList.tsx`'s header strip; `src/ui/ConfirmDialog.tsx`'s
-Cancel button; and the hover/name tests in `e2e/appearance.spec.ts`,
+Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
+(the `Decoration.node` call and its `aria-label`) and its `.focus()` /
+`tabindex` handling; and the hover/name tests in `e2e/appearance.spec.ts`,
 `src/ui/ui.test.tsx` and `src/features/notes/NoteListItem.test.tsx`.
 
 - **Never rely on a CSS `gap` to separate text for assistive tech.**
@@ -66,4 +68,66 @@ Cancel button; and the hover/name tests in `e2e/appearance.spec.ts`,
   muted-mic or no-wifi glyph), not "click to pin". The button is always the
   `Pin` glyph, differentiated by colour; `aria-label` and `aria-pressed` carry
   the state for assistive tech.
+
+- **A heading containing a `Decoration.widget` becomes a subtree Chromium
+  refuses `.focus()` to, for every descendant — established by measurement,
+  not inferred.** `HeadingFold.ts:436-437` cites seven live Playwright
+  experiments, enumerated in Task 4's fix report (`.superpowers/sdd/`, local
+  and gitignored — not Task 8's, which contains none of this enumeration).
+  Since that ledger does not survive outside this machine's working copy,
+  the seven are repeated here in full:
+  1. A bare `# Hello` with HeadingFold's decorations disabled: an injected
+     `<button tabindex="0" contenteditable="false">` inside the real `<h1>`
+     focuses fine.
+  2. Same heading, only the `aria-label` node decoration re-enabled (no
+     widgets): the injected button still focuses fine.
+  3. Same heading, only the widgets re-enabled (no `aria-label` decoration):
+     the injected button does NOT focus, before or after the widgets.
+  4. The real toggle itself, given an explicit `tabindex="0"` and called via
+     a plain `page.evaluate(() => toggle.focus())` with no keydown at all:
+     still does not focus.
+  5. A nested (non-top-level) heading, which `headingSections()` excludes
+     from all decorations, allows an injected button to focus fine — ruling
+     out the tag name `h1`/`h2` itself as the cause.
+  6. A synthetic `<h2>` created via `document.createElement` and appended
+     directly into `.ProseMirror`, never touched by ProseMirror's own
+     rendering, allows focus fine with or without `aria-label` — ruling out
+     `aria-label` alone as the cause.
+  7. Deferred focus attempts (`requestAnimationFrame`, `setTimeout(0)`,
+     blurring the view first) all still fail — ruling out a timing/re-render
+     race.
+
+  Once a heading has ANY `Decoration.widget` child, `.focus()` silently
+  fails for every element under that heading, independent of `tabindex`,
+  DOM position, or whether the target is the widget itself — even a bare,
+  unrelated, manually injected `<button tabindex="0">` placed elsewhere in
+  the same heading is equally unfocusable. The same heading with the
+  widgets removed focuses normally. The explanation on file — that Chromium
+  excludes a whole editing-host subtree once it contains a
+  `contenteditable="false"` widget island — is a HYPOTHESIS consistent with
+  the measurements above (especially #5 and #6), not a cited mechanism;
+  treat the seven measurements as fact and the explanation as open. This is
+  why the gutter's toggle and badge are mouse-only controls and why
+  `Mod-Alt-f` exists as the keyboard route: no focusable in-editor control
+  could be built at all.
+
+- **The fold widgets sit inside the heading, at `section.pos + 1`, not
+  `section.pos` — this is required, not stylistic.** A widget at `section.pos`
+  renders as the heading's DOM *sibling*, not its child: every
+  `.ProseMirror h2:hover .bear-fold-toggle`-shaped CSS rule stops matching,
+  and the widget's `position: absolute` resolves against the wrong
+  positioned ancestor. `pos + 1` is the start of the heading's own inline
+  content, making the widget a genuine child of the heading element.
+
+- **The badge's digit needs its own `aria-label` fix, or it corrupts the
+  heading's accessible name.** Because the badge widget is a DOM child of the
+  heading, its `textContent` (the level digit) concatenates into the
+  heading's own accessible-name computation unless something stops it — an
+  embedded control's `aria-label` is ignored for THAT control's own name but
+  still contributes its text content to an ancestor's name unless the
+  ancestor supplies an explicit `aria-label` of its own. `HeadingFold.ts`
+  pins each heading's name with a `Decoration.node(section.pos,
+  section.contentStart, { 'aria-label': section.text })`. Measured with the
+  repo's own `dom-accessibility-api`: without that decoration a heading whose
+  text is "Hello" announces as `"1 Hello"`; with it, `"Hello"`.
 
