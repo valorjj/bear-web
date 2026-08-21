@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchAccount } from './api';
@@ -29,6 +30,21 @@ describe('useSession', () => {
     // The first render must return synchronously with no awaited network call:
     // the app's boot guarantee is that nothing here can delay paint.
     expect(result.current.state.status).toBe('loading');
+  });
+
+  // StrictMode double-invokes every effect once in dev: mount, clean up,
+  // remount, to prove effects tolerate it. A cleanup-only effect that never
+  // re-armed its guard on the phantom remount left `mountedRef.current`
+  // permanently false, so the session fetch's `setState` was silently
+  // skipped and the hook never left `loading` under `npm run dev`. This
+  // wraps the hook in a real `StrictMode` to reproduce that phantom
+  // mount/unmount/remount and asserts the hook still resolves.
+  it('still resolves out of loading after a StrictMode phantom remount', async () => {
+    mockFetch(() => new Response('{}', { status: 401 }));
+
+    const { result } = renderHook(() => useSession(), { wrapper: StrictMode });
+
+    await waitFor(() => expect(result.current.state.status).toBe('signedOut'));
   });
 
   it('resolves to signedIn with the account', async () => {

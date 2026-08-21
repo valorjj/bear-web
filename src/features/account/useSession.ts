@@ -81,12 +81,21 @@ export function useSession(): Session {
   const [state, setState] = useState<SessionState>({ status: 'loading' });
   const mountedRef = useRef(true);
 
-  useEffect(
-    () => () => {
+  // Merged into one effect deliberately: in dev StrictMode React mounts,
+  // cleans up, and remounts every effect once to test resilience. A
+  // cleanup-only effect that never re-sets `mountedRef.current = true` on
+  // that phantom remount left the ref permanently false, so the session
+  // fetch below (a second, separate effect) would resolve after the guard
+  // had already been falsified and its `setState` calls were silently
+  // skipped forever. Setting it true on mount, in the same effect that
+  // clears it on unmount, keeps the original intent (no `setState` after a
+  // REAL unmount) while surviving the phantom one.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   useEffect(() => {
     void (async () => {
