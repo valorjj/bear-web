@@ -31,17 +31,22 @@ export async function fetchAccount(): Promise<Account | null> {
   return (await response.json()) as Account;
 }
 
+/**
+ * Revokes the session server-side.
+ *
+ * A non-OK response MUST throw. `useSession.signOut` records the owed
+ * revocation only when this rejects, so a swallowed 403 from the origin guard
+ * or 429 from the rate limiter would report `signedOut` while the session row
+ * and cookie both still live — and the next `/me` would quietly sign the user
+ * back in. Refusals are as much a failure to revoke as an unreachable host.
+ */
 export async function postLogout(): Promise<void> {
-  await call('/auth/logout', { method: 'POST', headers: { 'content-type': 'application/json' } });
-}
-
-export async function deleteAccount(): Promise<void> {
-  const response = await call('/account', {
-    method: 'DELETE',
+  const response = await call('/auth/logout', {
+    method: 'POST',
     headers: { 'content-type': 'application/json' },
   });
-  if (!response.ok && response.status !== 204) {
-    throw new ServerUnavailableError(`/account returned ${response.status}`);
+  if (!response.ok) {
+    throw new ServerUnavailableError(`/auth/logout returned ${response.status}`);
   }
 }
 

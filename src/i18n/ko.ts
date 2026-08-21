@@ -145,7 +145,6 @@ export const ko: Record<TranslationKey, string> = {
   'account.signIn.google': 'Google로 로그인',
   'account.signOut': '로그아웃',
   'account.unavailable': '동기화 서버에 연결할 수 없음',
-  'account.unavailable.body':
-    '메모는 이 기기에 안전하게 있습니다. 동기화는 자동으로 다시 시작됩니다.',
+  'account.unavailable.body': '메모는 이 기기에 안전하게 있습니다. 서버는 깨어나면 응답합니다.',
   'account.signOut.note': '메모는 이 기기에 그대로 남습니다.',
 };

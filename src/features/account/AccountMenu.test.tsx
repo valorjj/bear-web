@@ -1,10 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '@/i18n';
 
 import { AccountMenu } from './AccountMenu';
+import { SESSION_HINT_KEY } from './useSession';
 
 function mount(handler: (url: string) => Response) {
   vi.stubGlobal(
@@ -24,8 +25,16 @@ const signedIn = () =>
     headers: { 'content-type': 'application/json' },
   });
 
+beforeEach(() => {
+  localStorage.clear();
+  // A returning user. Without the hint the hook never calls `/me` at all, so
+  // every signed-in case below would render the signed-out menu.
+  localStorage.setItem(SESSION_HINT_KEY, '1');
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 describe('AccountMenu', () => {

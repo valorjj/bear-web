@@ -12,7 +12,10 @@ services:
       MARIADB_USER: markflowing
       MARIADB_PASSWORD: ${MARIADB_PASSWORD:-markflowing}
     ports:
-      - '3308:3306'
+      # Loopback ONLY. Published on all interfaces this database is directly
+      # reachable from anything on the Mini's LAN, which bypasses the origin
+      # guard, the rate limiter and the session cookie in one hop.
+      - '127.0.0.1:3308:3306'
     volumes:
       - markflowing-data:/var/lib/mysql
     healthcheck:

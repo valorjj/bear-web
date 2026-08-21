@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Query } from '../app.ts';
+import type { Query, Transaction } from '../app.ts';
 
 export interface Claims {
   provider: string;
@@ -30,23 +30,35 @@ async function findIdentity(query: Query, claims: Claims): Promise<string | null
  * inside an authenticated session. A provider that admits an unverified address
  * would otherwise be a path to someone else's notes, and "the addresses match"
  * is not proof of the same person.
+ *
+ * Takes a `Transaction`, not a `Query`, because the two inserts must be one
+ * unit. Run through the pool they were not: two concurrent first-time logins
+ * for the same subject raced, the second `identities` insert violated the
+ * primary key, and the `users` row it was meant to justify survived — an
+ * orphan account nobody can ever sign into, contradicting this function's own
+ * guarantee that no user exists unless an identity was proven.
  */
-export async function findOrCreateUserByIdentity(query: Query, claims: Claims): Promise<string> {
-  const existing = await findIdentity(query, claims);
-  if (existing !== null) return existing;
+export async function findOrCreateUserByIdentity(
+  transaction: Transaction,
+  claims: Claims,
+): Promise<string> {
+  return transaction(async (query) => {
+    const existing = await findIdentity(query, claims);
+    if (existing !== null) return existing;
 
-  const userId = randomUUID();
-  const now = Date.now();
+    const userId = randomUUID();
+    const now = Date.now();
 
-  await query('INSERT INTO users (id, created_at) VALUES (?, ?)', [userId, now]);
-  /* tenancy-ok: creating the first identity for a user that did not exist a line ago. */
-  await query(
-    `INSERT INTO identities (provider, provider_subject, email, user_id, created_at)
-     VALUES (?, ?, ?, ?, ?)`,
-    [claims.provider, claims.subject, claims.email, userId, now],
-  );
+    await query('INSERT INTO users (id, created_at) VALUES (?, ?)', [userId, now]);
+    /* tenancy-ok: creating the first identity for a user that did not exist a line ago. */
+    await query(
+      `INSERT INTO identities (provider, provider_subject, email, user_id, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [claims.provider, claims.subject, claims.email, userId, now],
+    );
 
-  return userId;
+    return userId;
+  });
 }
 
 /** Attaches another provider to an existing account. Callers must be authenticated. */

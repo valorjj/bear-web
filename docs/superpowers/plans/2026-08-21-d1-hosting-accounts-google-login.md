@@ -4,8 +4,17 @@
 
 **Goal:** Move the app to `markflowing.com` and stand up an authenticated HTTP
 service at `api.markflowing.com` where a user can sign in with Google, see who
-they are signed in as, sign out, and delete their account — with **no note data
-crossing the network**.
+they are signed in as, and sign out — with **no note data crossing the
+network**.
+
+> **Corrected after the whole-branch review.** Account deletion shipped as the
+> `DELETE /account` ENDPOINT only. The client wrapper and the hook's
+> `deleteAccount` (Task 9 below) were removed: they were reachable only from
+> their own tests — no UI, no i18n key, no consumer. Task 9's listed hook
+> shape is therefore `{ state, signIn, signOut }`. Also changed by that
+> review: the boot `/me` call is gated on a stored "has signed in before"
+> hint, `findOrCreateUserByIdentity` takes a `Transaction` rather than a
+> `Query`, and both the server and the database bind loopback only.
 
 **Architecture:** A new `server/` directory in this repo becomes a fifth
 tsconfig project: a Hono service on Node, plain SQL against its own MariaDB

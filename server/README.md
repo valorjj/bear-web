@@ -60,4 +60,15 @@ D1 ships accounts only: **no note data crosses the network yet.**
 - **Identities are never linked by email.** Signing in with a second provider
   creates a second account until you link it from inside a session. This is
   deliberate; see the spec.
+- **`DELETE /account` exists as an endpoint and has no UI.** It is the spec's
+  day-one requirement and is covered by route tests, but nothing in the app
+  calls it: there is no client wrapper and no menu row. Deleting an account
+  today means calling the endpoint directly.
+- **Several statements must run in one transaction, so repositories take a
+  `Tx`, not just `Query`.** `pool.transaction()` checks out a single
+  connection and does `BEGIN`/`COMMIT`/`ROLLBACK`. Anything spanning more than
+  one statement — creating a user and its identity, and D2's per-user revision
+  counter, which the spec requires be incremented in the same transaction as
+  every write — must use it, or a pooled call lands on an arbitrary connection
+  and the atomicity is imaginary.
 - **Integration tests need `TEST_DATABASE_URL`** or they skip.

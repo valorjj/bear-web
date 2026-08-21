@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import {
-  type Account,
-  deleteAccount as deleteAccountRequest,
-  fetchAccount,
-  postLogout,
-  startGoogleSignIn,
-} from './api';
+import { type Account, fetchAccount, postLogout, startGoogleSignIn } from './api';
 
 export type SessionState =
   | { status: 'loading' }
@@ -18,7 +12,6 @@ export interface Session {
   state: SessionState;
   signIn: () => void;
   signOut: () => Promise<void>;
-  deleteAccount: () => Promise<void>;
 }
 
 /**
@@ -34,6 +27,21 @@ export interface Session {
  * `/me`.
  */
 export const PENDING_LOGOUT_KEY = 'bear-web:account:pendingLogout';
+
+/**
+ * Marks a browser that has signed in at least once.
+ *
+ * Without it, `AccountMenu` being mounted in the shell meant EVERY page load
+ * by EVERY visitor fired a cross-origin `GET /me` — a permanent console error
+ * for anyone offline or with no API to reach (it turned `e2e/smoke.spec.ts`
+ * red on `net::ERR_NAME_NOT_RESOLVED`), and an announcement of that visitor's
+ * browser to the API for no benefit at all. A visitor who has never signed in
+ * has nothing to resolve, so nothing is requested.
+ *
+ * It gates only `/me`. A pending revocation is retried regardless: an owed
+ * logout matters more than a saved request.
+ */
+export const SESSION_HINT_KEY = 'bear-web:account:hasSession';
 
 /**
  * `localStorage` throws outright in some contexts (private windows, blocked
@@ -60,6 +68,31 @@ function markPendingLogout(): void {
 function clearPendingLogout(): void {
   try {
     localStorage.removeItem(PENDING_LOGOUT_KEY);
+  } catch {
+    // Nothing to clear if storage never accepted the write.
+  }
+}
+
+function hasSessionHint(): boolean {
+  try {
+    return localStorage.getItem(SESSION_HINT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markSessionHint(): void {
+  try {
+    localStorage.setItem(SESSION_HINT_KEY, '1');
+  } catch {
+    // Best effort, exactly as for the pending-logout marker. The cost of a
+    // lost hint is one unresolved session at the next boot, not a wrong state.
+  }
+}
+
+function clearSessionHint(): void {
+  try {
+    localStorage.removeItem(SESSION_HINT_KEY);
   } catch {
     // Nothing to clear if storage never accepted the write.
   }
@@ -103,6 +136,7 @@ export function useSession(): Session {
         try {
           await postLogout();
           clearPendingLogout();
+          clearSessionHint();
         } catch {
           // Still unreachable: the revocation is still owed, so /me must not
           // be consulted — a signed-in answer here would be the exact leak
@@ -112,8 +146,18 @@ export function useSession(): Session {
         }
       }
 
+      // No session was ever established from this browser, so there is
+      // nothing for `/me` to tell us. Resolve, rather than sit in `loading`
+      // forever: the menu must still say "not signed in" and offer sign-in.
+      if (!hasSessionHint()) {
+        if (mountedRef.current) setState({ status: 'signedOut' });
+        return;
+      }
+
       try {
         const account = await fetchAccount();
+        if (account === null) clearSessionHint();
+        else markSessionHint();
         if (!mountedRef.current) return;
         setState(account === null ? { status: 'signedOut' } : { status: 'signedIn', account });
       } catch {
@@ -132,6 +176,7 @@ export function useSession(): Session {
       // revocation is retried the moment the server can be reached.
       markPendingLogout();
     }
+    clearSessionHint();
     if (mountedRef.current) setState({ status: 'signedOut' });
   }, []);
 
@@ -141,16 +186,12 @@ export function useSession(): Session {
     // no old session left in this browser worth revoking. The navigation
     // ends this JS context, so the marker must clear before it, not after.
     clearPendingLogout();
+    // Written BEFORE the navigation, which ends this JS context: the redirect
+    // back from the provider boots a fresh app that must know to consult
+    // `/me`. Nothing after `assign` reliably runs.
+    markSessionHint();
     startGoogleSignIn();
   }, []);
 
-  const deleteAccount = useCallback(async () => {
-    // Deliberately asymmetric with signOut: a failed DELETE must propagate,
-    // not report signedOut — that would claim the account is gone when it
-    // may still exist. Task 10 handles the error at the call site.
-    await deleteAccountRequest();
-    if (mountedRef.current) setState({ status: 'signedOut' });
-  }, []);
-
-  return { state, signIn, signOut, deleteAccount };
+  return { state, signIn, signOut };
 }

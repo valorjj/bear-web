@@ -57,7 +57,7 @@ export function authRoutes(deps: AppDeps): Hono {
    * from one code, not a privilege boundary — and the login-CSRF vector that
    * would have made it matter is closed by the __Host- prefix.
    */
-  function invalidTransaction(c: Context, message: string, status: 400 | 502) {
+  function invalidTransaction(c: Context, message: string, status: 400 | 500 | 502) {
     c.header('set-cookie', clearedTxCookie(deps.secureCookies));
     return c.text(message, status);
   }
@@ -131,8 +131,19 @@ export function authRoutes(deps: AppDeps): Hono {
       return invalidTransaction(c, 'provider rejected the exchange', 502);
     }
 
-    const userId = await findOrCreateUserByIdentity(deps.query, claims);
-    const token = await createSession(deps.query, userId);
+    let userId: string;
+    let token: string;
+    try {
+      userId = await findOrCreateUserByIdentity(deps.transaction, claims);
+      token = await createSession(deps.query, userId);
+    } catch {
+      // A database failure here is not a client error, but it IS a terminal
+      // failure of this login, so it must end like every other one: the
+      // transaction cookie cleared and a response returned. Left outside the
+      // guard it escaped as an unhandled throw — a bare 500 with the cookie
+      // still set, which the browser then keeps offering.
+      return invalidTransaction(c, 'could not complete sign-in', 500);
+    }
 
     c.header('set-cookie', clearedTxCookie(deps.secureCookies), { append: true });
     c.header('set-cookie', sessionCookie(token, SESSION_MAX_AGE_SECONDS, deps.secureCookies), {

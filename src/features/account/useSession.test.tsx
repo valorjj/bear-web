@@ -3,7 +3,7 @@ import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchAccount } from './api';
-import { PENDING_LOGOUT_KEY, useSession } from './useSession';
+import { PENDING_LOGOUT_KEY, SESSION_HINT_KEY, useSession } from './useSession';
 
 function mockFetch(handler: (url: string, init?: RequestInit) => Response): void {
   vi.stubGlobal(
@@ -14,6 +14,10 @@ function mockFetch(handler: (url: string, init?: RequestInit) => Response): void
 
 beforeEach(() => {
   localStorage.clear();
+  // Almost every test here is a RETURNING user: the boot `/me` call is gated on
+  // this hint, so without it the hook resolves to `signedOut` and never asks
+  // the server anything. The guest case sets no hint and asserts exactly that.
+  localStorage.setItem(SESSION_HINT_KEY, '1');
 });
 
 afterEach(() => {
@@ -119,7 +123,7 @@ describe('useSession', () => {
     expect(result.current.state.status).toBe('signedOut');
   });
 
-  it('a failed logout records a pending marker, and the next mount retries logout before /me', async () => {
+  it('a failed logout records a pending marker, and the next mount retries it before trusting /me', async () => {
     // Sign in, then sign out while the server is unreachable.
     mockFetch((url) =>
       url.endsWith('/me')
@@ -163,10 +167,74 @@ describe('useSession', () => {
     const second = renderHook(() => useSession());
     await waitFor(() => expect(second.result.current.state.status).toBe('signedOut'));
 
-    const logoutIndex = order.findIndex((url) => url.endsWith('/auth/logout'));
-    const meIndex = order.findIndex((url) => url.endsWith('/me'));
-    expect(logoutIndex).toBeGreaterThanOrEqual(0);
-    expect(meIndex).toBeGreaterThan(logoutIndex);
+    // The revocation is retried, and `/me` is never consulted with the old
+    // cookie still live — a signed-in answer there is the exact leak the
+    // marker exists to close. (Sign-out also cleared the hint, so once the
+    // owed logout succeeds there is nothing left to resolve.)
+    expect(order.some((url) => url.endsWith('/auth/logout'))).toBe(true);
+    expect(order.some((url) => url.endsWith('/me'))).toBe(false);
+    expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBeNull();
+  });
+
+  it('makes no request at all when this browser has never signed in', async () => {
+    // The gate. `AccountMenu` lives in the shell, so before this hint existed
+    // every visitor's boot fired a cross-origin `/me` — a permanent console
+    // error offline, and a red `e2e/smoke.spec.ts`.
+    localStorage.removeItem(SESSION_HINT_KEY);
+    mockFetch(() => new Response('{}', { status: 401 }));
+
+    const { result } = renderHook(() => useSession());
+
+    // Resolved, not stuck in `loading`: the menu must still offer sign-in.
+    await waitFor(() => expect(result.current.state.status).toBe('signedOut'));
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it('a refused logout (403) records the marker, and the next mount retries it', async () => {
+    // A 403 from the origin guard or a 429 from the rate limiter is as much a
+    // failure to revoke as an unreachable host: the session row and the cookie
+    // both still live. `postLogout` swallowed every non-OK response once, so
+    // logout resolved happily, no marker was written, and the next `/me` signed
+    // the user straight back in.
+    mockFetch((url) =>
+      url.endsWith('/me')
+        ? new Response(JSON.stringify({ userId: 'u1', email: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : new Response('forbidden', { status: 403 }),
+    );
+
+    const first = renderHook(() => useSession());
+    await waitFor(() => expect(first.result.current.state.status).toBe('signedIn'));
+
+    await act(async () => {
+      await first.result.current.signOut();
+    });
+
+    expect(first.result.current.state.status).toBe('signedOut');
+    expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBe('1');
+    first.unmount();
+
+    // The marker outranks the hint: an owed revocation is retried even though
+    // sign-out cleared the "has signed in before" hint.
+    expect(localStorage.getItem(SESSION_HINT_KEY)).toBeNull();
+
+    const order: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        order.push(url);
+        if (url.endsWith('/auth/logout')) return new Response('{}', { status: 200 });
+        return new Response('{}', { status: 401 });
+      }),
+    );
+
+    const second = renderHook(() => useSession());
+    await waitFor(() => expect(second.result.current.state.status).toBe('signedOut'));
+
+    expect(order.some((url) => url.endsWith('/auth/logout'))).toBe(true);
     expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBeNull();
   });
 
@@ -252,6 +320,9 @@ describe('useSession', () => {
         first.result.current.signIn();
       });
       expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBeNull();
+      // And the hint is (re-)armed, so the mount after the redirect back from
+      // the provider actually consults `/me`.
+      expect(localStorage.getItem(SESSION_HINT_KEY)).toBe('1');
       first.unmount();
 
       // A follow-up mount, as if the OAuth redirect completed, must not

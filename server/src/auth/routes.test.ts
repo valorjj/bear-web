@@ -44,6 +44,7 @@ describe.skipIf(!url)('the Google flow', () => {
     return createApp({
       env: readEnv(ENV),
       query: pool.query,
+      transaction: pool.transaction,
       fetch: fetchImpl,
       secureCookies: false,
     });
@@ -199,6 +200,39 @@ describe.skipIf(!url)('the Google flow', () => {
     const rows = (await pool.query('SELECT COUNT(*) AS n FROM users')) as Array<{ n: number }>;
     expect(Number(rows[0]!.n)).toBe(1);
   });
+  it('clears the transaction cookie when the database fails after a valid exchange', async () => {
+    // The success path's two database calls sat outside the try/catch guarding
+    // the exchange, so a database error escaped as an unhandled throw: a bare
+    // 500 with the transaction cookie still set, which the browser then keeps
+    // offering. A DB failure is not a client error, but it IS terminal, so it
+    // must end like every other terminal failure.
+    const failing = createApp({
+      env: readEnv(ENV),
+      query: pool.query,
+      transaction: async () => {
+        throw new Error('database is down');
+      },
+      fetch: stubFetch(),
+      secureCookies: false,
+    });
+
+    const start = await failing.request('/auth/google');
+    const tx = setCookie(start, TX_COOKIE)!.split(';')[0]!;
+    const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
+
+    const response = await failing.request(
+      `/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`,
+      { headers: { cookie: tx } },
+    );
+
+    expect(response.status).toBe(500);
+    expect(
+      response.headers.getSetCookie().some((cookie) => cookie.includes(`${TX_COOKIE}=;`)),
+    ).toBe(true);
+    // And no session was issued.
+    expect(setCookie(response, SESSION_COOKIE)).toBeUndefined();
+  });
+
   it('drives the full flow with the production (secureCookies: true) configuration', async () => {
     // Every other case in this file uses secureCookies: false. This is the
     // one test that proves the __Host- prefixed name is actually written
@@ -208,6 +242,7 @@ describe.skipIf(!url)('the Google flow', () => {
       return createApp({
         env: readEnv(ENV),
         query: pool.query,
+        transaction: pool.transaction,
         fetch: fetchImpl,
         secureCookies: true,
       });

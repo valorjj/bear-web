@@ -9,9 +9,27 @@ import { accountRoutes } from './routes/account.ts';
 /** A parameterised SQL call. The only shape route code may use. */
 export type Query = (sql: string, params?: readonly unknown[]) => Promise<unknown[]>;
 
+/**
+ * Runs several statements atomically on ONE connection.
+ *
+ * `Query` picks an arbitrary connection from the pool per call, so two
+ * consecutive `query` calls are two independent transactions no matter how
+ * they read. That was a live bug — a user row could outlive the failed insert
+ * of the identity that justified it — and it is unimplementable-as-designed
+ * for D2, whose per-user revision counter the spec requires be incremented
+ * "in the same transaction as every write".
+ *
+ * The callback receives a `Query` bound to that one connection, so a
+ * repository written against `Query` works inside a transaction unchanged.
+ * Committed when the callback resolves, rolled back when it throws.
+ */
+export type Transaction = <T>(run: (query: Query) => Promise<T>) => Promise<T>;
+
 export interface AppDeps {
   env: Env;
   query: Query;
+  /** For anything that must be atomic. See `Transaction`. */
+  transaction: Transaction;
   /** Injected so the provider's token endpoint is reachable in tests without the network. */
   fetch: typeof globalThis.fetch;
   /** False only for http://localhost, where a Secure cookie would be dropped. */

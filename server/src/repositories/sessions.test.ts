@@ -16,7 +16,7 @@ describe.skipIf(!url)('sessions', () => {
     await migrate(pool.query);
     /* tenancy-ok: test teardown truncates every row by design. */
     await pool.query('DELETE FROM users');
-    userId = await findOrCreateUserByIdentity(pool.query, {
+    userId = await findOrCreateUserByIdentity(pool.transaction, {
       provider: 'google',
       subject: 'sub-1',
       email: 'a@example.com',

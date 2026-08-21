@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -56,12 +57,49 @@ describe('server boundaries', () => {
  * by time). Forcing them to lie about a `user_id` predicate would be worse
  * than making the exception visible and reviewable.
  */
-const USER_SCOPED_TABLES = ['sessions', 'identities'] as const;
+/**
+ * Derived from the migrations, never hardcoded.
+ *
+ * A hardcoded `['sessions', 'identities']` was blind to every table D2 has not
+ * created yet: `SELECT * FROM notes WHERE trashed_at IS NULL` passed the whole
+ * guard. Reading the `CREATE TABLE` bodies means a new user-scoped table is
+ * covered the moment the migration lands, and cannot be forgotten by whoever
+ * writes the repository for it.
+ */
+function deriveUserScopedTables(dir = join('server', 'migrations')): string[] {
+  const sql = readdirSync(dir)
+    .filter((name) => name.endsWith('.sql'))
+    .sort()
+    .map((name) => readFileSync(join(dir, name), 'utf8'))
+    .join('\n');
 
-function namesUserScopedTable(line: string): boolean {
-  return USER_SCOPED_TABLES.some((table) =>
+  const tables = new Set<string>();
+  for (const match of sql.matchAll(
+    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(\w+)`?\s*\(([\s\S]*?)\n\s*\)/gi,
+  )) {
+    const [, name, body] = match;
+    // A `user_id` COLUMN, i.e. one at the start of a definition line — not a
+    // mention inside a KEY or CONSTRAINT clause.
+    if (/^\s*`?user_id`?\s+\w/im.test(body!)) tables.add(name!);
+  }
+  return [...tables];
+}
+
+const USER_SCOPED_TABLES: readonly string[] = deriveUserScopedTables();
+
+/**
+ * One definition, used by the real assertion and by the falsification tests
+ * alike. A second copy of this regex is how a guard and its own proof drift
+ * apart without either failing.
+ */
+function namesTable(tables: readonly string[], line: string): boolean {
+  return tables.some((table) =>
     new RegExp(`\\b(FROM|INTO|UPDATE|JOIN)\\s+${table}\\b`, 'i').test(line),
   );
+}
+
+function namesUserScopedTable(line: string): boolean {
+  return namesTable(USER_SCOPED_TABLES, line);
 }
 
 /**
@@ -84,6 +122,50 @@ function isAnnotated(previousLine: string, line: string): boolean {
 }
 
 describe('multi-tenancy guard', () => {
+  it('derives its table list from the migrations', () => {
+    // Guards the guard, the same way the file walk above does: a regex that
+    // stopped matching, or a moved migrations directory, would empty this list
+    // and make every assertion below vacuously true with nothing to see.
+    expect(USER_SCOPED_TABLES.length, 'no user-scoped table was derived').toBeGreaterThan(0);
+    expect(USER_SCOPED_TABLES).toContain('sessions');
+    expect(USER_SCOPED_TABLES).toContain('identities');
+    // `users` is keyed by `id`, not `user_id`: it must NOT be derived, or every
+    // legitimate user-creation statement would need an annotation.
+    expect(USER_SCOPED_TABLES).not.toContain('users');
+  });
+
+  it('covers a user-scoped table the moment its migration exists', () => {
+    // The D2 case, proven without waiting for D2: a table that exists only in
+    // this fixture is picked up, so `SELECT * FROM notes WHERE trashed_at IS
+    // NULL` — which passed the whole guard while the list was hardcoded — is
+    // now an offender.
+    const dir = mkdtempSync(join(tmpdir(), 'tenancy-'));
+    writeFileSync(
+      join(dir, '002_notes.sql'),
+      `CREATE TABLE notes (
+         id         CHAR(36) NOT NULL PRIMARY KEY,
+         user_id    CHAR(36) NOT NULL,
+         trashed_at BIGINT   NULL,
+         KEY idx_notes_user (user_id)
+       ) ENGINE=InnoDB;`,
+    );
+
+    const derived = deriveUserScopedTables(dir);
+    expect(derived).toEqual(['notes']);
+
+    const leak = 'const sql = `SELECT * FROM notes WHERE trashed_at IS NULL`;';
+    expect(namesTable(derived, leak)).toBe(true);
+    expect(constrainsUserId(leak)).toBe(false);
+    expect(isAnnotated('', leak)).toBe(false);
+
+    // And the same statement, properly scoped, is accepted.
+    expect(constrainsUserId('SELECT * FROM notes WHERE user_id = ? AND trashed_at IS NULL')).toBe(
+      true,
+    );
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('constrains user_id in every statement touching a user-scoped table', () => {
     const offenders = sources.flatMap((path) => {
       const lines = readFileSync(path, 'utf8').split('\n');

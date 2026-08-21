@@ -46,8 +46,8 @@ feature and is not yet scheduled.
 | C code block language + highlighting       | queued   |
 | M9b callout blocks                         | deferred |
 
-1360 unit tests (plus 31 server integration tests that skip when
-`TEST_DATABASE_URL` is unset), 72 end-to-end tests. `main` is always green and
+1364 unit tests (plus 33 server integration tests that skip when
+`TEST_DATABASE_URL` is unset), 74 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **D reverses the "no backend, no account" premise above.** D1 shipped
@@ -55,7 +55,17 @@ auto-deploys.
 Mini, with Google OAuth2 accounts (Authorization Code + PKCE) and an opaque,
 revocable session cookie. GitHub and Naver were part of the original idea but
 were not built in D1 — only Google exists today. D1 is accounts only: **no
-note data crosses the network yet**; that is D2. D is NOT in the A/B/C queue.
+note data crosses the network yet**; that is D2. The UI offers sign-in, the
+signed-in identity, and sign-out and nothing else — `DELETE /account` exists as
+an endpoint with no client affordance, deliberately: it is the spec's day-one
+requirement, but a wrapper reachable only from its own tests was removed.
+The boot `GET /me` is gated on a locally stored "has signed in before" hint
+(`bear-web:account:hasSession`), so a visitor who never signed in makes no
+cross-origin request at all — without the gate `e2e/smoke.spec.ts` was red on
+`net::ERR_NAME_NOT_RESOLVED` and every offline user got a console error. The
+server binds `127.0.0.1` and the database publishes `127.0.0.1:3308`: the
+rate limiter trusts `cf-connecting-ip` verbatim, so the tunnel must be the only
+path in. D is NOT in the A/B/C queue.
 Decisions already taken: local-first is KEPT (IndexedDB stays the source of
 truth, the server is a sync target for D2), identity is per-provider with no
 email-based auto-linking, and A shipped first. Constraints and the reasoning
