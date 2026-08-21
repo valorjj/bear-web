@@ -1,16 +1,21 @@
 # Next up
 
-Written 2026-08-20, immediately after M8 + M9a shipped to `main` (`c4c3c64`,
-CI and Deploy both green). This file exists so a fresh session can resume
-without re-deriving decisions already made. Delete a section once its
-sub-project has a real spec in `docs/superpowers/specs/`.
+Written 2026-08-20 after M8 + M9a shipped; updated 2026-08-21 when B shipped.
+This file exists so a fresh session can resume without re-deriving decisions
+already made. Delete a section once its sub-project has a real spec in
+`docs/superpowers/specs/`.
 
 ## Where things stand
 
-- `main` carries M8 (export, tables, chrome) and M9a (five themes, picker,
-  contrast harness, spacing and type scales, Soft Depth). Live on Pages.
-- 1143 unit tests, 58 end-to-end. All six gates green.
-- `m8-visual-and-export` is merged and can be deleted whenever.
+- `main` carries M8 (export, tables, chrome), M9a (five themes, picker,
+  contrast harness, spacing and type scales, Soft Depth) and **B (collapsible
+  headings)**. Live on Pages.
+- 1221 unit tests, 64 end-to-end. All six gates green.
+- `m8-visual-and-export` and `b1-collapsible-headings` are merged and can be
+  deleted whenever.
+
+**A is now the next sub-project.** Its section below is unchanged and still
+current — nothing B did touched the note-list header.
 
 ## The three sub-projects, in order
 
@@ -37,18 +42,43 @@ shortcuts.
 - First because it is the least entangled, and because its parts can be cut
   freely — drop sort or preview style and the header still stands alone.
 
-### B. Collapsible headings + level badge
+### B. Collapsible headings + level badge — **SHIPPED 2026-08-21**
 
-A gutter chevron that folds a section, plus a `≡N` badge left of each heading,
-outside the measure. Clicking the badge opens 머리말 1–6 with `⌘1`–`⌘6` and a
-check on the current level, then toggle fold, collapse all, expand all.
+Spec: `docs/superpowers/specs/2026-08-20-b1-collapsible-headings-design.md`.
+Plan: `docs/superpowers/plans/2026-08-20-b1-collapsible-headings.md`.
+Rulings: `docs/rulings/markdown-and-schema.md`, `design-tokens-and-layout.md`,
+`accessibility.md`.
 
-- This is the sub-project M9a's spec named **M9c**.
-- A new editor subsystem: gutter widgets outside the measure, fold state that is
-  **not** in the document, and interaction with `TagPill`'s existing decoration
-  plugin.
-- Second because it is the highest-value item for the long, heading-dense notes
-  this user actually writes, and it is self-contained in the editor.
+Shipped as **B1**, deliberately split from **B2** (drag-to-reorder, still
+queued). What landed: a hover gutter chevron folding a section, a `≡N` badge
+opening 머리말 1–6 with fold / collapse-all / expand-all, folds persisting per
+note across switches and reloads, and a delete-key guard at the fold boundary.
+
+Four things diverged from this file's original sketch, each for a reason worth
+carrying forward rather than rediscovering:
+
+- **The shortcuts are `⌘⌥1`–`⌘⌥6`, not `⌘1`–`⌘6`.** Browsers own `Cmd-1`..`9`
+  for tab switching and a page cannot `preventDefault` it. The `⌘⌥` family
+  already existed in `@tiptap/extension-heading`; the menu only surfaced it.
+- **Fold toggle is `⌘⌥F`, a genuinely new binding.** `⌘⌥0` was tried and
+  rejected — it is `@tiptap/extension-paragraph`'s `setParagraph`, and Tiptap's
+  reversed extension order means a later extension silently wins. Verify any
+  new binding against `node_modules/@tiptap`, not just against browser
+  shortcuts.
+- **The gutter is reserved, not overlaid.** This file said the badge sits
+  "outside the measure"; it does above a 688px pane, but below that the column
+  clamps rather than letting the control overflow, because `EditorContent`'s
+  `overflow-auto` clips left-side overflow entirely.
+- **The gutter controls are mouse-only.** Chromium refuses `.focus()` to every
+  descendant of a heading containing a ProseMirror widget — measured across
+  seven experiments. `⌘⌥F` is the keyboard and screen-reader route.
+
+### B2. Drag-to-reorder headings — queued, unspecced
+
+Grab the badge to move a heading and its whole subtree, with a drop indicator.
+Split out of B because it is a document mutation with its own coordinate math
+and undo semantics, and because jsdom has no `setPointerCapture`, so Playwright
+would be its only possible coverage. Ordering relative to C is undecided.
 
 ### C. Code block language + syntax highlighting
 
