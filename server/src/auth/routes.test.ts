@@ -199,4 +199,44 @@ describe.skipIf(!url)('the Google flow', () => {
     const rows = (await pool.query('SELECT COUNT(*) AS n FROM users')) as Array<{ n: number }>;
     expect(Number(rows[0]!.n)).toBe(1);
   });
+  it('drives the full flow with the production (secureCookies: true) configuration', async () => {
+    // Every other case in this file uses secureCookies: false. This is the
+    // one test that proves the __Host- prefixed name is actually written
+    // AND read back correctly end to end — a write/read name mismatch here
+    // would silently break login in production with no error anywhere.
+    function secureApp(fetchImpl = stubFetch()) {
+      return createApp({
+        env: readEnv(ENV),
+        query: pool.query,
+        fetch: fetchImpl,
+        secureCookies: true,
+      });
+    }
+
+    const start = await secureApp().request('/auth/google');
+    const txSet = start.headers
+      .getSetCookie()
+      .find((cookie) => cookie.startsWith('__Host-mf_oauth_tx='))!;
+    expect(txSet).toBeDefined();
+    expect(txSet).toContain('Secure');
+    expect(txSet).toContain('Path=/');
+    expect(txSet).not.toContain('Domain');
+
+    const tx = txSet.split(';')[0]!;
+    const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
+
+    const response = await secureApp().request(
+      `/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`,
+      { headers: { cookie: tx } },
+    );
+
+    expect(response.status).toBe(302);
+    const sessionSet = response.headers
+      .getSetCookie()
+      .find((cookie) => cookie.startsWith('__Host-mf_session='))!;
+    expect(sessionSet).toBeDefined();
+    expect(sessionSet).toContain('Secure');
+    expect(sessionSet).toContain('Path=/');
+    expect(sessionSet).not.toContain('Domain');
+  });
 });

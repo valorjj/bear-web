@@ -42,10 +42,20 @@ export function authRoutes(deps: AppDeps): Hono {
   const sessionName = cookieName(SESSION_COOKIE, deps.secureCookies);
 
   /**
-   * Every terminal failure of the callback clears the transaction cookie.
-   * Without this a used or rejected transaction survives its full 600s and
-   * can be replayed — bounded in practice by Google rejecting code reuse, but
-   * the server should not depend on the provider for that.
+   * Every terminal failure of the callback clears the transaction cookie so
+   * the browser stops offering it, but clearing is client-side only: the
+   * transaction itself is deliberately stateless (see the comment above the
+   * route) and never marked consumed server-side, so an attacker who
+   * retained a copy of the cookie value can still replay it within its 600s
+   * lifetime and mint a second session for the identity it resolves to.
+   * Single-use enforcement today comes entirely from the provider rejecting
+   * reuse of the authorization code. That is a real dependency, not a
+   * defence-in-depth backstop: if a future provider ever allowed code reuse,
+   * closing this would require a server-side consumed-transaction store,
+   * which is the statelessness this design deliberately avoids. The impact
+   * is bounded — an attacker mints extra sessions for their own identity
+   * from one code, not a privilege boundary — and the login-CSRF vector that
+   * would have made it matter is closed by the __Host- prefix.
    */
   function invalidTransaction(c: Context, message: string, status: 400 | 502) {
     c.header('set-cookie', clearedTxCookie(deps.secureCookies));
