@@ -43,6 +43,15 @@ export default defineConfig({
           name: 'server',
           environment: 'node',
           include: ['server/**/*.test.ts'],
+          // Every DB-touching test file in this project shares one live
+          // MariaDB instance (see TEST_DATABASE_URL in CLAUDE.md). Running
+          // files in parallel workers races their DROP/CREATE/DELETE
+          // statements against each other — `migrate.test.ts`'s `beforeAll`
+          // drops and recreates the account tables while `users.test.ts`
+          // reads and writes them from a different worker. Files within
+          // this project must run sequentially; the `app` project is
+          // unaffected since it has its own config block.
+          fileParallelism: false,
         },
       },
     ],
