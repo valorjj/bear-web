@@ -70,7 +70,10 @@ describe('RichEditor', () => {
     const handleRef = createRef<RichEditorHandle>();
     renderWithI18n(
       <RichEditor
-        initialMarkdown="# Hello"
+        // Leading title line: a note's first block is never foldable (see
+        // `headingSections`' docblock), so "Hello" needs a title above it to
+        // be a genuine body heading and actually carry a fold toggle.
+        initialMarkdown={'Title\n\n# Hello'}
         onChange={vi.fn()}
         onBlur={vi.fn()}
         ariaLabel="Note text"
@@ -99,7 +102,9 @@ describe('RichEditor', () => {
     const handleRef = createRef<RichEditorHandle>();
     renderWithI18n(
       <RichEditor
-        initialMarkdown={'# Heading A\n\nbody a\n\n# Heading B\n\nbody b'}
+        // Leading title line: without it, "Heading A" would be the title and
+        // never foldable, so its own badge would never render at all.
+        initialMarkdown={'Title\n\n# Heading A\n\nbody a\n\n# Heading B\n\nbody b'}
         onChange={vi.fn()}
         onBlur={vi.fn()}
         ariaLabel="Note text"
@@ -145,7 +150,10 @@ describe('RichEditor', () => {
     const handleRef = createRef<RichEditorHandle>();
     renderWithI18n(
       <RichEditor
-        initialMarkdown="# Heading A"
+        // Leading title line, for the same reason as the other fixtures in
+        // this file: "Heading A" needs to be a body heading, not the title,
+        // to carry a badge the menu can actually open on.
+        initialMarkdown={'Title\n\n# Heading A'}
         onChange={vi.fn()}
         onBlur={vi.fn()}
         ariaLabel="Note text"

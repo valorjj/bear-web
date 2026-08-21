@@ -1191,7 +1191,10 @@ test('the fold toggle stays inside the visible editor at every pane width, wide 
       {
         id: 'n-fold-gutter',
         title: 'Alpha',
-        text: '## Alpha\n\nbody',
+        // Leading title line: a note's first block is its title and is
+        // never foldable (see `headingSections`' docblock), so without it
+        // "Alpha" would be the title and carry no fold toggle to measure.
+        text: 'Title\n\n## Alpha\n\nbody',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         pinned: false,
