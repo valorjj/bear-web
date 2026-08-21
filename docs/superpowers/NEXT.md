@@ -178,6 +178,38 @@ Constraints established when it was raised, each of which shapes the spec:
 - **"Runs every day" is not "always."** Availability gaps are the normal case,
   which is exactly why local-first is kept.
 
-Worth a spike before the spec: whether the Mini can expose HTTPS reliably, what
-Naver OAuth requires for this account, and how auth behaves when the server is
-unreachable.
+### Start here next session
+
+D is **unspecced**. It is architectural, so it begins with brainstorm → spec →
+plan, not with code. The decisions above are settled and should NOT be
+re-litigated; what follows is what is genuinely still open.
+
+**Run the spike first.** Its output is an answer and a recommendation, not code
+that is kept:
+
+1. Can the Mac Mini expose a stable public HTTPS endpoint (Cloudflare Tunnel or
+   equivalent), and what is its hostname? Everything else depends on this: a
+   Pages-hosted `https://` page cannot call `http://` or a LAN name at all.
+2. What does Naver's OAuth2 registration actually require for this account —
+   redirect URIs, review, and which scopes need a business entity? Google and
+   GitHub are well-trodden; Naver is the one that can block.
+3. How should the app behave when the server is unreachable, which is the
+   normal case for a machine that sleeps? Local-first means it must keep
+   working, so this is about what the UI says, not whether it functions.
+
+**The open design question, and the hard part: conflict resolution.** Two
+devices edit one note while the Mini is asleep; both sync later. The candidates
+are last-write-wins on `updatedAt` (trivial, silently loses one edit),
+per-note versioning with an explicit conflict copy (Bear-like, honest, more
+UI), and a CRDT (correct, and a large dependency for an app whose first two
+adjectives are *lightweight* and *fast*). **Nobody has ruled on this.** It
+drives the schema, so it is the first thing the spec must settle.
+
+**Also unsettled, and smaller:** whether sync is manual or automatic; whether
+trashed notes and `noteFolds` sync at all (fold rows are view state and are
+already discarded on import); and what the server does about `settings`.
+
+**Do not start by writing the MariaDB schema.** A browser cannot speak the
+MySQL wire protocol, so the deliverable is an HTTP API service plus the client
+that talks to it — the database is the small half, and its shape falls out of
+the conflict-resolution decision above.
