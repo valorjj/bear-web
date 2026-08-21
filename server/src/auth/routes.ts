@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 
 import type { AppDeps } from '../app.ts';
 import { createSession, revokeSession, SESSION_MAX_AGE_SECONDS } from '../repositories/sessions.ts';
@@ -6,6 +6,7 @@ import { findOrCreateUserByIdentity } from '../repositories/users.ts';
 import {
   clearedSessionCookie,
   clearedTxCookie,
+  cookieName,
   readCookie,
   SESSION_COOKIE,
   sessionCookie,
@@ -20,9 +21,36 @@ interface Transaction {
   verifier: string;
 }
 
+/** True only when both fields decoded to non-empty strings. A partially- or
+ * wrongly-shaped transaction (e.g. an attacker-crafted cookie with a `state`
+ * but no `verifier`) must never reach the state comparison or the exchange. */
+function isTransaction(value: unknown): value is Transaction {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.state === 'string' &&
+    candidate.state.length > 0 &&
+    typeof candidate.verifier === 'string' &&
+    candidate.verifier.length > 0
+  );
+}
+
 export function authRoutes(deps: AppDeps): Hono {
   const app = new Hono();
   const redirectUri = `${deps.env.apiOrigin}/auth/google/callback`;
+  const txName = cookieName(TX_COOKIE, deps.secureCookies);
+  const sessionName = cookieName(SESSION_COOKIE, deps.secureCookies);
+
+  /**
+   * Every terminal failure of the callback clears the transaction cookie.
+   * Without this a used or rejected transaction survives its full 600s and
+   * can be replayed — bounded in practice by Google rejecting code reuse, but
+   * the server should not depend on the provider for that.
+   */
+  function invalidTransaction(c: Context, message: string, status: 400 | 502) {
+    c.header('set-cookie', clearedTxCookie(deps.secureCookies));
+    return c.text(message, status);
+  }
 
   app.get('/auth/google', (c) => {
     const state = createState();
@@ -48,24 +76,34 @@ export function authRoutes(deps: AppDeps): Hono {
   });
 
   app.get('/auth/google/callback', async (c) => {
-    const raw = readCookie(c.req.header('cookie'), TX_COOKIE);
+    const raw = readCookie(c.req.header('cookie'), txName);
     const code = c.req.query('code');
     const state = c.req.query('state');
 
     if (raw === null || code === undefined || state === undefined) {
-      return c.text('invalid login transaction', 400);
+      return invalidTransaction(c, 'invalid login transaction', 400);
     }
 
-    let transaction: Transaction;
+    let decoded: unknown;
     try {
-      transaction = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as Transaction;
+      decoded = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
     } catch {
-      return c.text('invalid login transaction', 400);
+      return invalidTransaction(c, 'invalid login transaction', 400);
     }
+
+    // Guards against a crafted or partially-formed cookie — e.g. the JSON
+    // literal `null`, or an object missing `verifier` — reaching either the
+    // state comparison or the token exchange below.
+    if (!isTransaction(decoded)) {
+      return invalidTransaction(c, 'invalid login transaction', 400);
+    }
+    const transaction = decoded;
 
     // Anti-forgery: without this the callback would accept a code obtained in
     // some other browser, which is the entire purpose of `state`.
-    if (transaction.state !== state) return c.text('invalid login transaction', 400);
+    if (transaction.state !== state) {
+      return invalidTransaction(c, 'invalid login transaction', 400);
+    }
 
     let claims;
     try {
@@ -80,7 +118,7 @@ export function authRoutes(deps: AppDeps): Hono {
     } catch {
       // No user is created on a provider failure: a half-made account whose
       // identity was never proven is worse than a retry.
-      return c.text('provider rejected the exchange', 502);
+      return invalidTransaction(c, 'provider rejected the exchange', 502);
     }
 
     const userId = await findOrCreateUserByIdentity(deps.query, claims);
@@ -95,7 +133,7 @@ export function authRoutes(deps: AppDeps): Hono {
   });
 
   app.post('/auth/logout', async (c) => {
-    const token = readCookie(c.req.header('cookie'), SESSION_COOKIE);
+    const token = readCookie(c.req.header('cookie'), sessionName);
     if (token !== null) await revokeSession(deps.query, token);
 
     c.header('set-cookie', clearedSessionCookie(deps.secureCookies));

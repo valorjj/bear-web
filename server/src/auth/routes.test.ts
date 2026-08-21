@@ -133,6 +133,55 @@ describe.skipIf(!url)('the Google flow', () => {
     expect(Number(rows[0]!.n)).toBe(0);
   });
 
+  it('returns 400, not 500, for a transaction cookie that decodes to the JSON literal null', async () => {
+    // `Buffer.from('null').toString('base64url')` is `bnVsbA`. A naive
+    // `transaction.state` read on `null` throws inside the handler, and an
+    // uncaught throw from an unauthenticated request is a remote crash, not
+    // a rejection.
+    const tx = `${TX_COOKIE}=bnVsbA`;
+
+    const response = await app().request('/auth/google/callback?code=abc&state=whatever', {
+      headers: { cookie: tx },
+    });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects a transaction with a state but no verifier, and issues no session', async () => {
+    // A crafted cookie with a state that matches the query but no verifier
+    // must not reach the token exchange — PKCE contributes nothing if an
+    // attacker can supply their own verifier via an injected transaction.
+    const forged = Buffer.from(JSON.stringify({ state: 'forged-state' })).toString('base64url');
+    const tx = `${TX_COOKIE}=${forged}`;
+
+    const response = await app().request(
+      `/auth/google/callback?code=abc&state=${encodeURIComponent('forged-state')}`,
+      { headers: { cookie: tx } },
+    );
+
+    expect(response.status).toBe(400);
+    expect(setCookie(response, SESSION_COOKIE)).toBeUndefined();
+  });
+
+  it('clears the transaction cookie on a failed callback, so it cannot be replayed', async () => {
+    const start = await app().request('/auth/google');
+    const tx = setCookie(start, TX_COOKIE)!.split(';')[0]!;
+
+    const response = await app().request('/auth/google/callback?code=abc&state=forged', {
+      headers: { cookie: tx },
+    });
+
+    expect(response.status).toBe(400);
+    const cleared = setCookie(response, TX_COOKIE);
+    // setCookie() only matches non-clearing Set-Cookie values, so read the
+    // header directly to confirm the transaction cookie was cleared.
+    const clearing = response.headers
+      .getSetCookie()
+      .find((cookie) => cookie.startsWith(`${TX_COOKIE}=`) && cookie.includes('Max-Age=0'));
+    expect(cleared).toBeUndefined();
+    expect(clearing).toBeDefined();
+  });
+
   it('reuses the account on a second sign-in', async () => {
     async function signIn() {
       const start = await app().request('/auth/google');
