@@ -34,13 +34,3 @@ export function createPool(databaseUrl: string): Pool {
 
   return { query, end: () => pool.end() };
 }
-
-/**
- * A pool for the integration test database, or `null` when none is
- * configured — the shape a caller can check once rather than re-reading the
- * env var, and the one `describe.skipIf` in `migrate.test.ts` is built on.
- */
-export function testPool(): Pool | null {
-  const url = process.env.TEST_DATABASE_URL;
-  return url ? createPool(url) : null;
-}
