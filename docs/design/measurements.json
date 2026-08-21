@@ -13,7 +13,7 @@
       "line-height": "24px",
       "letter-spacing": "normal",
       "color": "rgb(36, 31, 61)",
-      "background-color": "rgb(236, 234, 243)",
+      "background-color": "rgb(230, 225, 245)",
       "padding": "8px",
       "margin": "0px",
       "border-radius": "0px",
@@ -38,7 +38,7 @@
       "line-height": "24px",
       "letter-spacing": "normal",
       "color": "rgb(36, 31, 61)",
-      "background-color": "rgb(236, 234, 243)",
+      "background-color": "rgb(230, 225, 245)",
       "padding": "0px",
       "margin": "0px",
       "border-radius": "12px",
@@ -225,6 +225,31 @@
     }
   },
   {
+    "surface": "note list: scope header button",
+    "note": "Names the active scope and opens the options menu. Bear puts its own at the same corner.",
+    "box": {
+      "width": 68.7,
+      "height": 28
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "13px",
+      "font-weight": "400",
+      "line-height": "18.85px",
+      "letter-spacing": "normal",
+      "color": "rgb(96, 91, 120)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px 8px",
+      "margin": "0px",
+      "border-radius": "6px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "4px",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
     "surface": "note list: search field",
     "note": "Native cancel widget suppressed; our own clear button instead.",
     "box": {
@@ -300,6 +325,81 @@
     }
   },
   {
+    "surface": "note list: row (small)",
+    "note": "Preview density small: no snippet line, its height reserved. The step between these three is the reserved snippet height.",
+    "box": {
+      "width": 304,
+      "height": 61
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px",
+      "margin": "4px 8px",
+      "border-radius": "8px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "note list: row (medium)",
+    "note": "Preview density medium: one snippet line, its height reserved. The step between these three is the reserved snippet height.",
+    "box": {
+      "width": 304,
+      "height": 79.5
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px",
+      "margin": "4px 8px",
+      "border-radius": "8px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
+    "surface": "note list: row (large)",
+    "note": "Preview density large: two snippet lines, its height reserved. The step between these three is the reserved snippet height.",
+    "box": {
+      "width": 304,
+      "height": 96
+    },
+    "style": {
+      "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
+      "font-size": "16px",
+      "font-weight": "400",
+      "line-height": "24px",
+      "letter-spacing": "normal",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding": "0px",
+      "margin": "4px 8px",
+      "border-radius": "8px",
+      "border-top-width": "0px",
+      "border-bottom-width": "0px",
+      "gap": "normal",
+      "max-width": "none",
+      "box-shadow": "none"
+    }
+  },
+  {
     "surface": "editor: top controls",
     "note": "Currently a full-width bar; Bear floats a pill group here.",
     "box": {
@@ -351,7 +451,7 @@
   },
   {
     "surface": "editor: prose column",
-    "note": "max-width is --bear-line-width. Compare box width against it: if they differ, the clamp is engaging.",
+    "note": "min-width is 12rem (a floor); max-width is min(--bear-line-width, 100% - 3rem). The token alone only decides the box above roughly 688px of pane width; narrower panes reserve margin for the fold gutter instead, down to the 12rem floor. Compare box width against the pane width, not just the token, to tell which rule is engaging.",
     "box": {
       "width": 640,
       "height": 884
@@ -370,7 +470,7 @@
       "border-top-width": "0px",
       "border-bottom-width": "0px",
       "gap": "normal",
-      "max-width": "640px",
+      "max-width": "min(640px, 100% - 48px)",
       "box-shadow": "none"
     }
   },
@@ -384,9 +484,9 @@
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
       "font-size": "27.648px",
-      "font-weight": "600",
+      "font-weight": "700",
       "line-height": "34.56px",
-      "letter-spacing": "normal",
+      "letter-spacing": "-0.55296px",
       "color": "rgb(36, 31, 61)",
       "background-color": "rgba(0, 0, 0, 0)",
       "padding": "0px",
@@ -465,7 +565,7 @@
       "color": "rgb(36, 31, 61)",
       "background-color": "rgba(0, 0, 0, 0)",
       "padding": "0px",
-      "margin": "12px 0px 0px",
+      "margin": "28px 0px 0px",
       "border-radius": "0px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",

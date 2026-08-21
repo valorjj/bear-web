@@ -371,4 +371,77 @@ describe('notesRepository', () => {
       expect(await build([3, 1, 0, 2])).toEqual(await build([0, 1, 2, 3]));
     });
   });
+
+  describe('ordering', () => {
+    async function seed(): Promise<void> {
+      clock = 1000;
+      await notes.create('Banana\n#work');
+      clock = 3000;
+      await notes.create('Apple\n#work');
+      clock = 2000;
+      await notes.create('Cherry\n#work');
+    }
+
+    it('defaults listActive to pinned-then-newest, exactly as before', async () => {
+      await seed();
+      const list = await notes.listActive();
+      expect(list.map((n) => n.title)).toEqual(['Apple', 'Cherry', 'Banana']);
+    });
+
+    it('applies a chosen order to listActive', async () => {
+      await seed();
+      const list = await notes.listActive({ field: 'title', newestFirst: false });
+      expect(list.map((n) => n.title)).toEqual(['Apple', 'Banana', 'Cherry']);
+    });
+
+    it('keeps pinned notes on top under every order', async () => {
+      await seed();
+      const ascending = await notes.listActive({ field: 'title', newestFirst: false });
+      const cherry = ascending.at(-1);
+      // Cherry sorts LAST by title. Pinning it must lift it above Apple and
+      // Banana under that very order — the pinned partition is applied first,
+      // and the chosen order only breaks ties within each partition.
+      expect(cherry!.title).toBe('Cherry');
+      await notes.setPinned(cherry!.id, true);
+
+      const list = await notes.listActive({ field: 'title', newestFirst: false });
+      expect(list.map((n) => n.title)).toEqual(['Cherry', 'Apple', 'Banana']);
+    });
+
+    it('applies a chosen order to listByTag', async () => {
+      await seed();
+      const list = await notes.listByTag('work', { order: { field: 'title', newestFirst: true } });
+      expect(list.map((n) => n.title)).toEqual(['Cherry', 'Banana', 'Apple']);
+    });
+
+    it('ignores a chosen order in listTrashed, which orders by deletion time', async () => {
+      await seed();
+      const [first, second] = await notes.listActive();
+      clock = 5000;
+      await notes.trash(second!.id);
+      clock = 6000;
+      await notes.trash(first!.id);
+
+      const list = await notes.listTrashed();
+      expect(list.map((n) => n.id)).toEqual([first!.id, second!.id]);
+    });
+  });
+
+  describe('listByTag sub-tag filtering', () => {
+    it('includes descendants by default', async () => {
+      await notes.create('parent\n#work');
+      await notes.create('child\n#work/urgent');
+
+      const list = await notes.listByTag('work');
+      expect(list).toHaveLength(2);
+    });
+
+    it('excludes descendants when includeDescendants is false', async () => {
+      await notes.create('parent\n#work');
+      await notes.create('child\n#work/urgent');
+
+      const list = await notes.listByTag('work', { includeDescendants: false });
+      expect(list.map((n) => n.title)).toEqual(['parent']);
+    });
+  });
 });

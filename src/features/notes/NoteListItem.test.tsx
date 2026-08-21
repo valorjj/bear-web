@@ -247,3 +247,51 @@ describe('query highlighting', () => {
     expect(container.querySelector('[data-match]')).toBeNull();
   });
 });
+
+describe('preview size', () => {
+  it('shows two snippet lines at large, the default', () => {
+    const { container } = renderItem();
+    expect(screen.getByText('milk, bread, coffee')).toBeInTheDocument();
+    expect(container.querySelector('.line-clamp-2')).not.toBeNull();
+  });
+
+  it('shows one snippet line at medium', () => {
+    const { container } = renderItem({ size: 'medium' });
+    expect(screen.getByText('milk, bread, coffee')).toBeInTheDocument();
+    expect(container.querySelector('.line-clamp-1')).not.toBeNull();
+    expect(container.querySelector('.line-clamp-2')).toBeNull();
+  });
+
+  it('renders no snippet at small', () => {
+    renderItem({ size: 'small' });
+    expect(screen.queryByText('milk, bread, coffee')).not.toBeInTheDocument();
+  });
+
+  it('drops the snippet from the accessible name at small, so the name matches the row', () => {
+    // The date's rendered form is deliberately not pinned here — the sibling
+    // tests in 'accessible name' avoid it too, because it varies with locale
+    // and with how far the note's date is from `now`. The contract under test
+    // is that the snippet is absent, not what the date looks like.
+    renderItem({ size: 'small' });
+
+    const name = screen.getByRole('button', { name: /Groceries/ }).getAttribute('aria-label') ?? '';
+    expect(name).toContain('Groceries, ');
+    expect(name).not.toContain('milk, bread, coffee');
+  });
+
+  it('keeps the snippet in the accessible name at medium and large', () => {
+    for (const size of ['medium', 'large'] as const) {
+      const { unmount } = renderItem({ size });
+
+      const name =
+        screen.getByRole('button', { name: /Groceries/ }).getAttribute('aria-label') ?? '';
+      expect(name).toMatch(/, milk, bread, coffee$/);
+      unmount();
+    }
+  });
+
+  it('reserves the snippet height at medium, so rows stay uniform', () => {
+    const { container } = renderItem({ size: 'medium', note: makeNote({ text: 'Groceries' }) });
+    expect(container.querySelector('.line-clamp-1')?.className).toContain('min-h-[1.03125rem]');
+  });
+});

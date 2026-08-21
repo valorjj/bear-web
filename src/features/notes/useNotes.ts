@@ -4,7 +4,14 @@ import { useEffect, useState } from 'react';
 import { notes } from '@/data';
 import type { Note } from '@/data';
 
-import { isTrash, listForScope, type NoteScope, scopeKey } from './scope';
+import {
+  DEFAULT_SCOPE_QUERY,
+  isTrash,
+  listForScope,
+  type NoteScope,
+  type ScopeQuery,
+  scopeKey,
+} from './scope';
 
 export interface NotesState {
   /** `undefined` while the live query has not yet resolved. */
@@ -20,7 +27,7 @@ export interface NotesState {
   select: (id: string | null) => void;
 }
 
-export function useNotes(scope: NoteScope): NotesState {
+export function useNotes(scope: NoteScope, query: ScopeQuery = DEFAULT_SCOPE_QUERY): NotesState {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
   // Tagged with the `scope` it was fetched for, and only trusted when that
@@ -42,9 +49,18 @@ export function useNotes(scope: NoteScope): NotesState {
   // right after switching scopes. Tagging the result and falling back to
   // `undefined` on a stale tag turns that wrong-but-present value back into
   // "still loading," which is the correct state to show.
-  const key = scopeKey(scope);
+  // The view preferences join the key, not just the scope: changing the sort
+  // must re-run the live query, and the tag-and-verify guard must reject a
+  // result fetched under the previous sort for exactly the reason it rejects
+  // one fetched under the previous scope — a stale-but-present list is worse
+  // than "still loading", because it renders the very order the user just
+  // asked to change.
+  const key = `${scopeKey(scope)}|${query.order.field}|${query.order.newestFirst}|${query.includeDescendants}`;
 
-  const itemsResult = useLiveQuery(async () => ({ key, list: await listForScope(scope) }), [key]);
+  const itemsResult = useLiveQuery(
+    async () => ({ key, list: await listForScope(scope, query) }),
+    [key],
+  );
   const items = itemsResult?.key === key ? itemsResult.list : undefined;
 
   // Reconciliation probes the database for the selected note, NOT `items`.

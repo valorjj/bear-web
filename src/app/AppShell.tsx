@@ -1,9 +1,12 @@
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { notes } from '@/data';
+import { DEFAULT_NOTE_ORDER, isNoteOrder, type NoteOrder, notes } from '@/data';
 import {
   ACTIVE_SCOPE,
   acceptsNewNote,
+  DEFAULT_PREVIEW_SIZE,
+  isPreviewSize,
+  type PreviewSize,
   filterByQuery,
   NoteEditor,
   NoteList,
@@ -24,13 +27,38 @@ import { Resizer } from '@/ui/Resizer';
 
 import { MAX_PANE_WIDTH, MIN_PANE_WIDTH } from './paneWidths';
 import { usePaneWidths } from './usePaneWidths';
+import { useScopeShortcuts } from './useScopeShortcuts';
+import { useSetting } from './useSetting';
+
+const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
 
 export function AppShell(): ReactElement {
   const t = useT();
   const widths = usePaneWidths();
 
   const [scope, setScope] = useState<NoteScope>(ACTIVE_SCOPE);
-  const { items, selectedNoteId, selectedNote, select } = useNotes(scope);
+
+  const [order, setOrder] = useSetting<NoteOrder>('noteOrder', DEFAULT_NOTE_ORDER, isNoteOrder);
+  const [previewSize, setPreviewSize] = useSetting<PreviewSize>(
+    'previewSize',
+    DEFAULT_PREVIEW_SIZE,
+    isPreviewSize,
+  );
+  const [hideSubTagNotes, setHideSubTagNotes] = useSetting<boolean>(
+    'hideSubTagNotes',
+    false,
+    isBoolean,
+  );
+
+  // Memoised because it feeds `useNotes`' live-query dependency chain. A fresh
+  // object identity per render is the same defect `ACTIVE_SCOPE` exists to
+  // avoid for scopes.
+  const scopeQuery = useMemo(
+    () => ({ order, includeDescendants: !hideSubTagNotes }),
+    [order, hideSubTagNotes],
+  );
+
+  const { items, selectedNoteId, selectedNote, select } = useNotes(scope, scopeQuery);
   const tree = useTagTree();
   const counts = useSmartListCounts();
 
@@ -167,17 +195,18 @@ export function AppShell(): ReactElement {
   // action awaits confirmation, and stealing focus into the search field
   // would escape that trap, leaving Tab free to walk the page behind the
   // still-open modal.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'f' || !(event.metaKey || event.ctrlKey)) return;
-      if (pending !== null) return;
-      event.preventDefault();
+  useScopeShortcuts({
+    onSearch: useCallback(() => {
       searchRef.current?.focus();
       searchRef.current?.select();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [pending]);
+    }, []),
+    onScope: setScope,
+    // The `pending` guard the inline handler carried, kept and widened: it
+    // stopped the search shortcut escaping `ConfirmDialog`'s focus trap, and a
+    // scope shortcut would be worse still — it rearranges the list behind a
+    // dialog that names a note in it.
+    enabled: pending === null,
+  });
 
   const confirmPending = useCallback(async () => {
     if (pending === null) return;
@@ -250,6 +279,15 @@ export function AppShell(): ReactElement {
           // empty copy (Locked, Trash) depends on whether the scope had
           // anything before the query narrowed it, not on the narrowed view.
           hasUnfilteredItems={items !== undefined && items.length > 0}
+          count={items?.length ?? 0}
+          scopeQuery={scopeQuery}
+          previewSize={previewSize}
+          onOrderChange={setOrder}
+          onPreviewSizeChange={setPreviewSize}
+          // The menu reports the new `includeDescendants`; the setting stores
+          // its inverse, so exactly one place does the flip.
+          onIncludeDescendantsChange={(next) => setHideSubTagNotes(!next)}
+          onScopeChange={setScope}
           query={query}
           onQueryChange={setQuery}
           searchInputRef={searchRef}

@@ -1,16 +1,19 @@
-import type { ReactElement, RefObject } from 'react';
+import { type ReactElement, type RefObject, useState } from 'react';
 
-import type { Note } from '@/data';
+import type { Note, NoteOrder } from '@/data';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
-import { Icon, SquarePen } from '@/ui/Icon';
+import { ChevronDown, Icon, SquarePen } from '@/ui/Icon';
+import { Popover } from '@/ui/Popover';
 
 import { NoteListItem } from './NoteListItem';
+import type { PreviewSize } from './preview';
 import { hasQuery } from './search';
 import { SearchField } from './SearchField';
-import { allowsTrash, isTrash, type NoteScope } from './scope';
+import { allowsTrash, isTrash, type NoteScope, type ScopeQuery, type SmartListId } from './scope';
+import { ScopeMenu } from './ScopeMenu';
 
 /**
  * Locked gets its own copy deliberately. "No notes" would tell a user their
@@ -29,6 +32,16 @@ function emptyBody(scope: NoteScope): TranslationKey {
   if (isLocked(scope)) return 'locked.empty.body';
   return isTrash(scope) ? 'trash.empty.body' : 'noteList.empty.body';
 }
+
+const SMART_LIST_LABELS: Record<SmartListId, TranslationKey> = {
+  all: 'smartList.all',
+  untagged: 'smartList.untagged',
+  todo: 'smartList.todo',
+  today: 'smartList.today',
+  pinned: 'smartList.pinned',
+  locked: 'smartList.locked',
+  trash: 'smartList.trash',
+};
 
 export interface NoteListProps {
   scope: NoteScope;
@@ -73,6 +86,23 @@ export interface NoteListProps {
   onQueryChange?: (next: string) => void;
   /** So `AppShell` can focus the field from a keyboard shortcut. */
   searchInputRef?: RefObject<HTMLInputElement | null>;
+  /**
+   * Rows in this scope BEFORE the query narrowed it, for the header's count.
+   * Same reason as `emptyTrashDisabled` and `hasUnfilteredItems`: `items` is
+   * the narrowed view, and a search matching one note must not relabel a
+   * 33-note list as "1 note".
+   */
+  count: number;
+  /**
+   * Named `scopeQuery`, never `query`: `query` above is the SEARCH string, and
+   * the two collided the first time this prop was added.
+   */
+  scopeQuery: ScopeQuery;
+  previewSize: PreviewSize;
+  onOrderChange: (next: NoteOrder) => void;
+  onPreviewSizeChange: (next: PreviewSize) => void;
+  onIncludeDescendantsChange: (next: boolean) => void;
+  onScopeChange: (next: NoteScope) => void;
 }
 
 export function NoteList({
@@ -91,8 +121,18 @@ export function NoteList({
   query = '',
   onQueryChange = () => {},
   searchInputRef,
+  count,
+  scopeQuery,
+  previewSize,
+  onOrderChange,
+  onPreviewSizeChange,
+  onIncludeDescendantsChange,
+  onScopeChange,
 }: NoteListProps): ReactElement {
   const t = useT();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const scopeName = scope.kind === 'tag' ? scope.tag : t(SMART_LIST_LABELS[scope.list]);
 
   // A control that acts on the selected note must not render when that note
   // is not on screen: `items` is the query-narrowed view, so a note the
@@ -124,7 +164,56 @@ export function NoteList({
         `default`, so the variant and its ruling both stay live.
       */}
       <div className="border-border flex h-9 shrink-0 items-center gap-1 border-b px-2">
-        <Button variant="ghost" onClick={onCreate} label={t('noteList.create')}>
+        {/*
+          The first thing in the app that names the active scope on screen.
+          Until now the only indication was the sidebar's `aria-current` row,
+          which is why activating a tag pill has to reveal collapsed ancestors.
+          `deferred.md` carried this gap from M3 through M9a.
+
+          Title left, controls right — the reading order of Bear's own header.
+        */}
+        <div className="relative">
+          <Button
+            variant="ghost"
+            onClick={() => setMenuOpen((open) => !open)}
+            ariaHasPopup="menu"
+            ariaExpanded={menuOpen}
+            // Deliberately NOT just the scope name. The sidebar already has a
+            // row named "Notes", and two controls with an identical accessible
+            // name is ambiguous to a screen-reader user reaching for either.
+            // The visible label is still contained in the name, as WCAG 2.5.3
+            // requires, and the prefix says what the button actually does —
+            // "Notes" alone does not convey that it opens anything.
+            label={t('noteList.menu.open').replace('{scope}', scopeName)}
+            className="gap-1"
+          >
+            {scopeName}
+            <Icon glyph={ChevronDown} size="sm" />
+          </Button>
+
+          <Popover
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            label={t('noteList.menu.label')}
+            className="absolute top-full left-0 z-10 mt-1"
+          >
+            <ScopeMenu
+              scope={scope}
+              count={count}
+              scopeQuery={scopeQuery}
+              previewSize={previewSize}
+              onOrderChange={onOrderChange}
+              onPreviewSizeChange={onPreviewSizeChange}
+              onIncludeDescendantsChange={onIncludeDescendantsChange}
+              onScopeChange={(next) => {
+                onScopeChange(next);
+                setMenuOpen(false);
+              }}
+            />
+          </Popover>
+        </div>
+
+        <Button variant="ghost" className="ml-auto" onClick={onCreate} label={t('noteList.create')}>
           <Icon glyph={SquarePen} />
         </Button>
 
@@ -172,6 +261,7 @@ export function NoteList({
               onSelect={() => onSelect(note.id)}
               onTogglePin={onTogglePin}
               query={query}
+              size={previewSize}
             />
           ))}
         </ul>

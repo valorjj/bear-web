@@ -22,11 +22,19 @@ with is not resolved; only code can retire one.
   a contenteditable focusable fights the editor for the selection and for Tab,
   and the tag sidebar is already a complete keyboard route to every filter.
   Recorded as a ruling rather than an omission.
-- **The note list has no header naming the current scope.** Bear has one. The
+- ~~**The note list has no header naming the current scope.** Bear has one. The
   only on-screen indication of an active filter is the `aria-current` sidebar
   row, which is why activation reveals collapsed ancestors. `NoteList`'s header
   strip holds action buttons and the search field only; it names nothing. Still
-  open past M8 and M9a.
+  open past M8 and M9a.~~ **Resolved by A** (2026-08-21). The strip now opens
+  with a chevron button naming the scope — a smart list's translated label, or
+  the raw tag — which also opens the options menu. Two things worth carrying
+  forward from how it landed: its accessible name is `List options: {scope}`,
+  NOT the bare scope name, because the sidebar already has a row called
+  "Notes" and two controls sharing an accessible name is ambiguous to anyone
+  reaching for either; and the count it shows comes from the UNFILTERED scope
+  list, the same distinction `emptyTrashDisabled` and `hasUnfilteredItems`
+  already draw.
 - Tag rename and delete are still carried from M5b and unscheduled. So is
   syntax-visibility toggling — M5's original three-item list named it
   alongside the inline mark and rename/delete; M7.6 ruled only on the inline
@@ -99,6 +107,26 @@ with is not resolved; only code can retire one.
   double-discard is a no-op rather than a `TypeError`; `notes.purge` of a
   missing id is already a documented no-op, so the consequence is small — but
   a regression there would pass CI silently.
+- **An intermittent unit flake in `NoteEditor.test.tsx`'s "purges a seeded note
+  the user typed into and then deleted back to the seed" — OPEN, observed
+  during A on 2026-08-21.** Seen twice in roughly twenty full `npm test` runs,
+  never in isolation (8/8 clean running that file alone, and 20+ clean full
+  runs afterwards, so the assertion message was never captured). It did NOT
+  appear on `main` across six full runs at the time, so A's ~81 extra tests are
+  what surface it, not what break it: nothing in A touches `NoteEditor`, the
+  autosave path, or the seed/discard logic.
+
+  The likely mechanism is contention against a test the file itself already
+  documents as timing-sensitive — its two `userEvent.type` calls are split
+  precisely because jsdom's selection tracking reports a stale `anchorOffset`
+  after `TagPill`'s decoration redraws the span, and a slower machine has more
+  room for that drift.
+
+  Not chased further because it is unreproducible in isolation and the
+  behaviour it guards is verified in a real browser. **If it recurs, capture
+  the assertion message first** — run the full suite in a loop redirecting
+  output, rather than re-running the file alone, which has never failed.
+
 - **An intermittent Playwright resize-test flake.** Seen once during M5.5, not
   reproducible afterwards across three consecutive full runs (18/18 each). Not
   actionable without a failing artifact, but worth naming because `jsdom` has

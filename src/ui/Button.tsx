@@ -12,6 +12,14 @@ export interface ButtonProps {
   size?: ButtonSize;
   disabled?: boolean;
   className?: string;
+  /**
+   * Menu-trigger wiring, declared explicitly rather than by spreading arbitrary
+   * props. A button that opens a menu has to say so, and these two are the only
+   * ARIA attributes a presentation primitive can own without knowing what the
+   * menu contains — everything else belongs to the caller's surface.
+   */
+  ariaHasPopup?: 'menu';
+  ariaExpanded?: boolean;
 }
 
 /*
@@ -45,11 +53,15 @@ export function Button({
   size = 'md',
   disabled = false,
   className = '',
+  ariaHasPopup,
+  ariaExpanded,
 }: ButtonProps): ReactElement {
   return (
     <button
       type="button"
       aria-label={label}
+      aria-haspopup={ariaHasPopup}
+      aria-expanded={ariaExpanded}
       onClick={onClick}
       disabled={disabled}
       className={`inline-flex shrink-0 items-center justify-center rounded-sm transition-colors duration-[var(--bear-duration-fast)] ease-bear disabled:pointer-events-none disabled:opacity-40 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}

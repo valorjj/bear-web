@@ -35,6 +35,13 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
     onEmptyTrash: vi.fn(),
     emptyTrashDisabled: false,
     hasUnfilteredItems: true,
+    count: 2,
+    scopeQuery: { order: { field: 'updated', newestFirst: true }, includeDescendants: true },
+    previewSize: 'large',
+    onOrderChange: vi.fn(),
+    onPreviewSizeChange: vi.fn(),
+    onIncludeDescendantsChange: vi.fn(),
+    onScopeChange: vi.fn(),
     ...overrides,
   };
 }
@@ -352,5 +359,66 @@ describe('search', () => {
     );
 
     expect(container.querySelector('[data-match]')?.textContent).toBe('milk');
+  });
+});
+
+describe('scope header', () => {
+  it('names the current smart list on the header button', () => {
+    renderWithI18n(<NoteList {...props({ scope: smartScope('todo') })} />);
+
+    const header = screen.getByRole('button', { name: /Todo/ });
+    expect(header).toHaveAttribute('aria-haspopup', 'menu');
+  });
+
+  it('names the tag on the header button in a tag scope', () => {
+    renderWithI18n(<NoteList {...props({ scope: tagScope('work/urgent') })} />);
+
+    expect(screen.getByRole('button', { name: /work\/urgent/ })).toBeInTheDocument();
+  });
+
+  it('opens the menu and reports expansion', async () => {
+    renderWithI18n(<NoteList {...props()} />);
+    const header = screen.getByRole('button', { name: /Notes/ });
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.click(header);
+
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('menu', { name: 'List options' })).toBeInTheDocument();
+  });
+
+  it('closes the menu after choosing a scope', async () => {
+    const onScopeChange = vi.fn();
+    renderWithI18n(<NoteList {...props({ onScopeChange })} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Notes/ }));
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /Pinned/ }));
+
+    expect(onScopeChange).toHaveBeenCalledWith(smartScope('pinned'));
+    expect(screen.queryByRole('menu', { name: 'List options' })).not.toBeInTheDocument();
+  });
+
+  it('passes the unfiltered count to the menu, not the length of the narrowed list', async () => {
+    // `items` here is the query-narrowed view. A search matching one note must
+    // not relabel a 33-note list as "1 note" — the same distinction
+    // emptyTrashDisabled and hasUnfilteredItems already draw.
+    renderWithI18n(<NoteList {...props({ count: 33, items: [makeNote('a', 'Alpha')] })} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Notes/ }));
+
+    expect(screen.getByText('33 notes')).toBeInTheDocument();
+  });
+
+  it('renders rows at the given preview size', () => {
+    const { container } = renderWithI18n(<NoteList {...props({ previewSize: 'small' })} />);
+
+    expect(container.querySelector('.line-clamp-2')).toBeNull();
+    expect(container.querySelector('.line-clamp-1')).toBeNull();
+  });
+
+  it('renders two snippet lines at large', () => {
+    const { container } = renderWithI18n(<NoteList {...props({ previewSize: 'large' })} />);
+
+    expect(container.querySelector('.line-clamp-2')).not.toBeNull();
   });
 });

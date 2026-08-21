@@ -5,6 +5,7 @@ import type { Note } from '@/data';
 import {
   ACTIVE_SCOPE,
   acceptsNewNote,
+  DEFAULT_SCOPE_QUERY,
   allowsTrash,
   isTrash,
   listForScope,
@@ -57,19 +58,28 @@ describe('scopeKey', () => {
 describe('listForScope', () => {
   it('routes active to listActive', async () => {
     const repo = lister();
-    await expect(listForScope(ACTIVE_SCOPE, repo)).resolves.toEqual([note('active')]);
+    await expect(listForScope(ACTIVE_SCOPE, DEFAULT_SCOPE_QUERY, repo)).resolves.toEqual([
+      note('active'),
+    ]);
     expect(repo.listByTag).not.toHaveBeenCalled();
   });
 
   it('routes trashed to listTrashed', async () => {
     const repo = lister();
-    await expect(listForScope(TRASHED_SCOPE, repo)).resolves.toEqual([note('trashed')]);
+    await expect(listForScope(TRASHED_SCOPE, DEFAULT_SCOPE_QUERY, repo)).resolves.toEqual([
+      note('trashed'),
+    ]);
   });
 
   it('routes a tag to listByTag with the tag', async () => {
     const repo = lister();
-    await expect(listForScope(tagScope('work/urgent'), repo)).resolves.toEqual([note('tagged')]);
-    expect(repo.listByTag).toHaveBeenCalledWith('work/urgent');
+    await expect(listForScope(tagScope('work/urgent'), DEFAULT_SCOPE_QUERY, repo)).resolves.toEqual(
+      [note('tagged')],
+    );
+    expect(repo.listByTag).toHaveBeenCalledWith('work/urgent', {
+      order: DEFAULT_SCOPE_QUERY.order,
+      includeDescendants: true,
+    });
   });
 });
 
@@ -152,7 +162,7 @@ describe('listForScope over smart lists', () => {
   };
 
   const ids = async (scope: NoteScope) =>
-    (await listForScope(scope, repo, () => NOW)).map((n) => n.id);
+    (await listForScope(scope, DEFAULT_SCOPE_QUERY, repo, () => NOW)).map((n) => n.id);
 
   it('returns every active note for all', async () => {
     expect(await ids(ACTIVE_SCOPE)).toEqual(active.map((n) => n.id));
@@ -201,9 +211,82 @@ describe('listForScope over smart lists', () => {
         return repo.allTagRows();
       },
     };
-    await listForScope(smartScope('todo'), counting, () => NOW);
+    await listForScope(smartScope('todo'), DEFAULT_SCOPE_QUERY, counting, () => NOW);
     expect(calls).toBe(0);
-    await listForScope(smartScope('untagged'), counting, () => NOW);
+    await listForScope(smartScope('untagged'), DEFAULT_SCOPE_QUERY, counting, () => NOW);
     expect(calls).toBe(1);
+  });
+});
+
+describe('listForScope ordering', () => {
+  function fakeRepository(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      listActive: vi.fn().mockResolvedValue([]),
+      listTrashed: vi.fn().mockResolvedValue([]),
+      listByTag: vi.fn().mockResolvedValue([]),
+      allTagRows: vi.fn().mockResolvedValue([]),
+      ...overrides,
+    };
+  }
+
+  it('hands the order to listActive rather than re-sorting the result', async () => {
+    const repository = fakeRepository();
+    const order = { field: 'title', newestFirst: false } as const;
+
+    await listForScope(smartScope('all'), { order, includeDescendants: true }, repository);
+
+    expect(repository.listActive).toHaveBeenCalledWith(order);
+  });
+
+  it('hands both the order and the sub-tag flag to listByTag', async () => {
+    const repository = fakeRepository();
+    const order = { field: 'created', newestFirst: true } as const;
+
+    await listForScope(tagScope('work'), { order, includeDescendants: false }, repository);
+
+    expect(repository.listByTag).toHaveBeenCalledWith('work', {
+      order,
+      includeDescendants: false,
+    });
+  });
+
+  it('calls listTrashed with no arguments, because Trash owns its order', async () => {
+    const repository = fakeRepository();
+
+    await listForScope(
+      smartScope('trash'),
+      { order: { field: 'title', newestFirst: false }, includeDescendants: true },
+      repository,
+    );
+
+    expect(repository.listTrashed).toHaveBeenCalledWith();
+  });
+
+  it('preserves the repository order rather than re-sorting a smart list', async () => {
+    // The repository returns C, A, B. A predicate-filtered smart list must hand
+    // that order straight through — re-sorting here is what this module's
+    // ruling forbids, and a comparator applied here would silently "fix" this
+    // into A, B, C.
+    const make = (id: string, n: number): Note => ({
+      id,
+      title: id.toUpperCase(),
+      text: '',
+      createdAt: n,
+      updatedAt: n,
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    });
+    const repository = fakeRepository({
+      listActive: vi.fn().mockResolvedValue([make('c', 3), make('a', 1), make('b', 2)]),
+    });
+
+    const result = await listForScope(
+      smartScope('all'),
+      { order: { field: 'title', newestFirst: false }, includeDescendants: true },
+      repository,
+    );
+
+    expect(result.map((n) => n.id)).toEqual(['c', 'a', 'b']);
   });
 });

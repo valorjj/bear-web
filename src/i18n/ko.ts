@@ -50,6 +50,22 @@ export const ko: Record<TranslationKey, string> = {
   'noteList.restore': '복원',
   'noteList.deleteForever': '완전히 삭제',
   'noteList.emptyTrash': '휴지통 비우기',
+  'noteList.menu.label': '목록 옵션',
+  'noteList.menu.open': '목록 옵션: {scope}',
+  'noteList.count.one': '메모 1개',
+  'noteList.count.other': '메모 {count}개',
+
+  'noteList.sort.updated': '수정일',
+  'noteList.sort.created': '생성일',
+  'noteList.sort.title': '제목',
+  'noteList.sort.newestFirst': '새로운 항목 맨 위로',
+  'noteList.sort.trashNote': '휴지통은 삭제한 시각 순으로 정렬됩니다.',
+
+  'noteList.preview.small': '작음',
+  'noteList.preview.medium': '중간',
+  'noteList.preview.large': '큼',
+  'noteList.preview.hideSubTags': '하위 태그 메모 숨기기',
+  'noteList.preview.hideSubTagsNote': '태그 목록에만 하위 태그가 있습니다.',
 
   'confirm.cancel': '취소',
   'confirm.deleteForever.title': '이 메모를 완전히 삭제할까요?',

@@ -3,6 +3,8 @@ export type { ImportDeps, ImportResult } from './backup';
 export { BearDatabase, DATABASE_NAME, db } from './db';
 export { deriveTitle } from './derive';
 export { newId } from './ids';
+export { compareNotes, DEFAULT_NOTE_ORDER, isNoteOrder } from './order';
+export type { NoteOrder, NoteOrderField } from './order';
 export {
   runMigrations,
   runStartupMigrations,

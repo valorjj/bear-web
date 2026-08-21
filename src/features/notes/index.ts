@@ -6,6 +6,7 @@ export {
   ACTIVE_SCOPE,
   acceptsNewNote,
   allowsTrash,
+  DEFAULT_SCOPE_QUERY,
   isTrash,
   listForScope,
   scopeKey,
@@ -15,9 +16,13 @@ export {
   tagScope,
   TRASHED_SCOPE,
 } from './scope';
-export type { NoteScope, ScopeLister, SmartListId } from './scope';
+export type { NoteScope, ScopeLister, ScopeQuery, SmartListId } from './scope';
 export { SmartListSidebar } from './SmartListSidebar';
 export type { SmartListSidebarProps } from './SmartListSidebar';
+export { DEFAULT_PREVIEW_SIZE, isPreviewSize, PREVIEW_SIZES, snippetLines } from './preview';
+export type { PreviewSize } from './preview';
+export { SCOPE_SHORTCUT_DIGITS, ScopeMenu } from './ScopeMenu';
+export type { ScopeMenuProps } from './ScopeMenu';
 export { filterByQuery, hasQuery } from './search';
 export type { MatchRange } from './search';
 export { useNotes } from './useNotes';

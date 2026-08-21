@@ -20,7 +20,7 @@ The ground the panes float on. Its padding is the outer inset.
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(36, 31, 61)` |
-| background-color | `rgb(236, 234, 243)` |
+| background-color | `rgb(230, 225, 245)` |
 | padding | `8px` |
 | gap | `8px` |
 
@@ -36,7 +36,7 @@ Width is durable, from the settings table.
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(36, 31, 61)` |
-| background-color | `rgb(236, 234, 243)` |
+| background-color | `rgb(230, 225, 245)` |
 | border-radius | `12px` |
 
 ## pane: note list
@@ -151,6 +151,23 @@ A nested tag. Compare padding-left against depth 0 for the indent step.
 | border-radius | `8px` |
 | gap | `8px` |
 
+## note list: scope header button
+
+Names the active scope and opens the options menu. Bear puts its own at the same corner.
+
+| Property | Value |
+| --- | --- |
+| box | 68.7 x 28 |
+| font-family | `"Pretendard Variable", system-ui, sans-serif` |
+| font-size | `13px` |
+| font-weight | `400` |
+| line-height | `18.85px` |
+| color | `rgb(96, 91, 120)` |
+| background-color | `rgba(0, 0, 0, 0)` |
+| padding | `0px 8px` |
+| border-radius | `6px` |
+| gap | `4px` |
+
 ## note list: search field
 
 Native cancel widget suppressed; our own clear button instead.
@@ -188,6 +205,54 @@ Three stacked lines. Bear fits a two-line snippet in comparable height.
 ## note list: row (resting)
 
 Unselected, for the divider and hover baseline.
+
+| Property | Value |
+| --- | --- |
+| box | 304 x 96 |
+| font-family | `"Pretendard Variable", system-ui, sans-serif` |
+| font-size | `16px` |
+| font-weight | `400` |
+| line-height | `24px` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgba(0, 0, 0, 0)` |
+| margin | `4px 8px` |
+| border-radius | `8px` |
+
+## note list: row (small)
+
+Preview density small: no snippet line, its height reserved. The step between these three is the reserved snippet height.
+
+| Property | Value |
+| --- | --- |
+| box | 304 x 61 |
+| font-family | `"Pretendard Variable", system-ui, sans-serif` |
+| font-size | `16px` |
+| font-weight | `400` |
+| line-height | `24px` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgba(0, 0, 0, 0)` |
+| margin | `4px 8px` |
+| border-radius | `8px` |
+
+## note list: row (medium)
+
+Preview density medium: one snippet line, its height reserved. The step between these three is the reserved snippet height.
+
+| Property | Value |
+| --- | --- |
+| box | 304 x 79.5 |
+| font-family | `"Pretendard Variable", system-ui, sans-serif` |
+| font-size | `16px` |
+| font-weight | `400` |
+| line-height | `24px` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgba(0, 0, 0, 0)` |
+| margin | `4px 8px` |
+| border-radius | `8px` |
+
+## note list: row (large)
+
+Preview density large: two snippet lines, its height reserved. The step between these three is the reserved snippet height.
 
 | Property | Value |
 | --- | --- |
@@ -240,7 +305,7 @@ Currently welded to the window edge; Bear floats a centred rounded bar.
 
 ## editor: prose column
 
-max-width is --bear-line-width. Compare box width against it: if they differ, the clamp is engaging.
+min-width is 12rem (a floor); max-width is min(--bear-line-width, 100% - 3rem). The token alone only decides the box above roughly 688px of pane width; narrower panes reserve margin for the fold gutter instead, down to the 12rem floor. Compare box width against the pane width, not just the token, to tell which rule is engaging.
 
 | Property | Value |
 | --- | --- |
@@ -253,7 +318,7 @@ max-width is --bear-line-width. Compare box width against it: if they differ, th
 | background-color | `rgb(255, 255, 255)` |
 | padding | `48px 24px 96px` |
 | margin | `0px 88px` |
-| max-width | `640px` |
+| max-width | `min(640px, 100% - 48px)` |
 
 ## editor: h1
 
@@ -264,8 +329,9 @@ The note title line.
 | box | 592 x 34.5 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `27.648px` |
-| font-weight | `600` |
+| font-weight | `700` |
 | line-height | `34.56px` |
+| letter-spacing | `-0.55296px` |
 | color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 
@@ -312,7 +378,7 @@ The measure the whole page is set against.
 | line-height | `25.6px` |
 | color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
-| margin | `12px 0px 0px` |
+| margin | `28px 0px 0px` |
 
 ## editor: blockquote
 

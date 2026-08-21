@@ -115,6 +115,46 @@ function toMarkdown(measurements: Measurement[]): string {
   return lines.join('\n');
 }
 
+/**
+ * Measures the note-list row at each preview density, driving the menu the way
+ * a user would rather than writing the setting directly — the same reason
+ * `shots.spec.ts` selects themes through the paint-time mirror. A measurement
+ * taken from a state the app cannot actually reach is not a measurement of the
+ * app.
+ */
+async function measureRowDensities(
+  page: import('@playwright/test').Page,
+  list: Locator,
+): Promise<Measurement[]> {
+  const sizes = [
+    { label: 'Small', lines: 'no snippet line' },
+    { label: 'Medium', lines: 'one snippet line' },
+    { label: 'Large', lines: 'two snippet lines' },
+  ] as const;
+  const out: Measurement[] = [];
+
+  for (const size of sizes) {
+    await list.getByRole('button', { name: /^List options/ }).click();
+    await page.getByRole('menuitemradio', { name: size.label }).click();
+    await page.keyboard.press('Escape');
+    out.push(
+      await measure(
+        list.getByRole('listitem').nth(2),
+        `note list: row (${size.label.toLowerCase()})`,
+        `Preview density ${size.label.toLowerCase()}: ${size.lines}, its height reserved. The step between these three is the reserved snippet height.`,
+      ),
+    );
+  }
+
+  // Back to the default, so every surface measured after this one is measured
+  // in the state the app ships in.
+  await list.getByRole('button', { name: /^List options/ }).click();
+  await page.getByRole('menuitemradio', { name: 'Large' }).click();
+  await page.keyboard.press('Escape');
+
+  return out;
+}
+
 test.describe('@measure', () => {
   test.use({
     viewport: { width: 1440, height: 900 },
@@ -177,6 +217,11 @@ test.describe('@measure', () => {
       ),
 
       await measure(
+        list.getByRole('button', { name: /^List options/ }),
+        'note list: scope header button',
+        'Names the active scope and opens the options menu. Bear puts its own at the same corner.',
+      ),
+      await measure(
         list.getByRole('searchbox'),
         'note list: search field',
         'Native cancel widget suppressed; our own clear button instead.',
@@ -191,6 +236,10 @@ test.describe('@measure', () => {
         'note list: row (resting)',
         'Unselected, for the divider and hover baseline.',
       ),
+      // The three densities, measured at the same row so the heights are
+      // directly comparable. Each size reserves its own snippet height rather
+      // than sharing one constant, so these three numbers ARE the feature.
+      ...(await measureRowDensities(page, list)),
 
       await measure(
         editor.getByRole('toolbar', { name: 'Top controls' }),

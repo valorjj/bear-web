@@ -235,3 +235,33 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   shortcut and a menu having different semantics for the same underlying
   command.
 
+- **`⌥⌘`+digit belongs to heading levels; `⇧⌘`+digit belongs to scope
+  switching.** `@tiptap/extension-heading` binds `` `Mod-Alt-${level}` `` for
+  1–6 and B1 shipped on it, so a scope shortcut in that family would make an H1
+  AND switch scope whenever the editor had focus — one keystroke, two unrelated
+  effects, differing by where focus happens to be. `Ctrl`+digit is free in
+  Tiptap and was rejected anyway: `Ctrl+1`–`8` switches browser tabs on Windows
+  and Linux, and this ships to GitHub Pages.
+
+  **`⇧⌘7`, `⇧⌘8` and `⇧⌘9` are NOT available** — ordered list, bullet list and
+  blockquote own `Mod-Shift-7/8/9`. A future Archive smart list therefore
+  cannot take `⇧⌘9`, which is the digit Bear gives it.
+
+  **Verify any new binding against `node_modules/@tiptap`, not only against
+  browser shortcuts**, and remember the template-literal form a naive grep
+  misses:
+
+  ```
+  grep -rEn "Mod-Shift-[0-9]|Mod-Alt-[0-9]|Mod-Alt-\$\{" node_modules/@tiptap
+  ```
+
+  `e2e/noteListHeader.spec.ts` keeps both halves executable: `⇧⌘4` switches
+  scope with the editor focused and writes no heading, and `⌥⌘4` makes an `h4`
+  and does not switch scope. If the second ever fails, the reason `⇧⌘` was
+  chosen has gone away and this ruling should be revisited.
+
+- **Match global shortcuts on `event.code`, never `event.key`.** With Shift
+  held, `key` for the 1 key is `'!'` on a US layout and shifts again under
+  두벌식; `code` is the physical key regardless of layout or modifier.
+  `useScopeShortcuts` also REJECTS `altKey` rather than merely not matching it,
+  so `⌥⇧⌘1` cannot fire a scope switch and a heading toggle together.
