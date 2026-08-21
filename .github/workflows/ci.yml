@@ -15,6 +15,19 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: markflowing
+          MARIADB_USER: markflowing
+          MARIADB_PASSWORD: markflowing
+        ports:
+          - 3308:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +49,11 @@ jobs:
 
       - name: Unit tests
         run: npm test
+        env:
+          # Without this the database integration tests skip, and CI reports
+          # green for a suite that ran nothing. `migrate.test.ts` asserts this
+          # variable is present whenever CI is set, so a removal fails loudly.
+          TEST_DATABASE_URL: mysql://markflowing:markflowing@127.0.0.1:3308/markflowing
 
       - name: Build
         run: npm run build

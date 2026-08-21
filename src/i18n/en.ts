@@ -137,6 +137,21 @@ export const en = {
   'editor.fold.foldAll': 'Fold all headings',
   'editor.fold.unfoldAll': 'Unfold all headings',
   'editor.fold.headingLevel': 'Heading',
+
+  'account.menu': 'Account',
+  'account.signedOut': 'Not signed in',
+  'account.signIn.google': 'Sign in with Google',
+  'account.signOut': 'Sign out',
+  'account.unavailable': 'Sync server unreachable',
+  // Says only what D1 does: nothing syncs yet, so promising that sync "resumes"
+  // was copy for a feature that does not exist. Unreachable is the NORMAL state
+  // for a machine that sleeps, so this reads as information, not failure.
+  'account.unavailable.body':
+    'Your notes are safe on this device. The server answers when it wakes.',
+  // Stated plainly because it is the honest consequence of the ruling that
+  // logout does not clear this device: on a shared browser the next person can
+  // read these notes. Disclosure is the mitigation.
+  'account.signOut.note': 'Your notes stay on this device.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

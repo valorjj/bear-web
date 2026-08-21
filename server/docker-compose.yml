@@ -1,0 +1,28 @@
+# Its own instance and its own volume, deliberately not the existing
+# lunch-select-mariadb: notes must never share an availability, upgrade or wipe
+# fate with an unrelated project. Port 3308 avoids that container's 3307.
+services:
+  mariadb:
+    image: mariadb:11.8
+    container_name: markflowing-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root}
+      MARIADB_DATABASE: markflowing
+      MARIADB_USER: markflowing
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-markflowing}
+    ports:
+      # Loopback ONLY. Published on all interfaces this database is directly
+      # reachable from anything on the Mini's LAN, which bypasses the origin
+      # guard, the rate limiter and the session cookie in one hop.
+      - '127.0.0.1:3308:3306'
+    volumes:
+      - markflowing-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  markflowing-data:
