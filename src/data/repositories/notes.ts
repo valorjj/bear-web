@@ -1,5 +1,6 @@
 import type { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
+import { compareNotes, DEFAULT_NOTE_ORDER, type NoteOrder } from '../order';
 import { newId } from '../ids';
 import type { Note, NoteTag } from '../types';
 
@@ -12,6 +13,12 @@ export interface NotesRepositoryDeps {
   generateId?: () => string;
 }
 
+export interface ListByTagOptions {
+  order?: NoteOrder;
+  /** `false` is the "hide sub-tag notes" preference. */
+  includeDescendants?: boolean;
+}
+
 export interface NotesRepository {
   create(text?: string): Promise<Note>;
   get(id: string): Promise<Note | undefined>;
@@ -21,12 +28,15 @@ export interface NotesRepository {
   restore(id: string): Promise<void>;
   purge(id: string): Promise<void>;
   emptyTrash(): Promise<number>;
-  listActive(): Promise<Note[]>;
+  listActive(order?: NoteOrder): Promise<Note[]>;
   listTrashed(): Promise<Note[]>;
   tagsOf(id: string): Promise<string[]>;
   rebuildTagIndex(): Promise<number>;
-  /** Active notes carrying `tag` or any descendant of it, newest first. */
-  listByTag(tag: string): Promise<Note[]>;
+  /**
+   * Active notes carrying `tag`, and by default any descendant of it.
+   * `includeDescendants: false` is the "hide sub-tag notes" preference.
+   */
+  listByTag(tag: string, options?: ListByTagOptions): Promise<Note[]>;
   /** Every row of the derived tag index. The sidebar's only door to it. */
   allTagRows(): Promise<NoteTag[]>;
 }
@@ -54,16 +64,25 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
   }
 
   /**
-   * Pinned first, then newest first. Applied to every non-trash lister so a
-   * pinned note is pinned everywhere it appears, not only in the Pinned list.
+   * Pinned first, then the caller's chosen order. Applied to every non-trash
+   * lister so a pinned note is pinned everywhere it appears, not only in the
+   * Pinned list.
+   *
+   * The pinned partition is applied FIRST and unconditionally: the user's order
+   * is the tiebreaker WITHIN each partition, never something that can lift an
+   * unpinned note above a pinned one. Otherwise pinning would mean something
+   * different from the Pinned smart list.
    *
    * `pinned` cannot drive an IndexedDB index — booleans are not valid keys —
    * so this is an in-memory sort, which is also why `listActive` already
    * filters in memory.
    */
-  function byPinnedThenRecent(a: Note, b: Note): number {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    return b.updatedAt - a.updatedAt;
+  function byPinnedThen(order: NoteOrder): (a: Note, b: Note) => number {
+    const within = compareNotes(order);
+    return (a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return within(a, b);
+    };
   }
 
   return {
@@ -169,13 +188,17 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
       });
     },
 
-    async listActive() {
+    async listActive(order = DEFAULT_NOTE_ORDER) {
       // `pinned` and `trashedAt === null` cannot drive an index here; see db.ts.
       const all = await db.notes.toArray();
-      return all.filter((n) => n.trashedAt === null).sort(byPinnedThenRecent);
+      return all.filter((n) => n.trashedAt === null).sort(byPinnedThen(order));
     },
 
     async listTrashed() {
+      // Deliberately takes NO order. Trash orders by deletion time, which is
+      // not one of NoteOrder's three fields; the menu renders the sort group
+      // disabled here rather than accepting a setting it would ignore.
+      //
       // aboveOrEqual(0), not above(0): a note trashed at epoch 0 must still
       // appear here. IndexedDB omits null-valued records from the index, so
       // this still matches only trashed notes.
@@ -202,13 +225,17 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
       });
     },
 
-    async listByTag(tag) {
+    async listByTag(tag, options = {}) {
+      const { order = DEFAULT_NOTE_ORDER, includeDescendants = true } = options;
+
       // Two queries, not one: selecting a parent covers its descendants, and
       // including the `/` in the prefix is what stops `work` matching
-      // `workflow`.
+      // `workflow`. Hiding sub-tag notes is therefore one skipped query.
       const [exact, descendants] = await Promise.all([
         db.noteTags.where('tag').equals(tag).toArray(),
-        db.noteTags.where('tag').startsWith(`${tag}/`).toArray(),
+        includeDescendants
+          ? db.noteTags.where('tag').startsWith(`${tag}/`).toArray()
+          : Promise.resolve([]),
       ]);
 
       const ids = [...new Set([...exact, ...descendants].map((row) => row.noteId))];
@@ -216,7 +243,7 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
 
       return found
         .filter((note): note is Note => note !== undefined && note.trashedAt === null)
-        .sort(byPinnedThenRecent);
+        .sort(byPinnedThen(order));
     },
 
     async allTagRows() {
