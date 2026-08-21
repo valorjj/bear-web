@@ -13,8 +13,8 @@ interface IdentityRow {
 }
 
 async function findIdentity(query: Query, claims: Claims): Promise<string | null> {
-  /* tenancy-ok: this lookup IS how the user is identified; it cannot filter by the user it resolves. */
   const rows = (await query(
+    /* tenancy-ok: this lookup IS how the user is identified; it cannot filter by the user it resolves. */
     'SELECT user_id FROM identities WHERE provider = ? AND provider_subject = ?',
     [claims.provider, claims.subject],
   )) as IdentityRow[];

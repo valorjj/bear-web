@@ -64,6 +64,20 @@ function namesUserScopedTable(line: string): boolean {
   );
 }
 
+/**
+ * A bare mention of `user_id` is not enough: `SELECT user_id FROM identities
+ * WHERE email = ?` contains the string `user_id` while reading it, not
+ * filtering by it, and is exactly the cross-user leak this guard exists to
+ * reject. `INSERT INTO` is the one shape where naming the column is
+ * correct — the value is being supplied, not filtered — so a bare mention
+ * stays acceptable there. Every other shape (`FROM`, `UPDATE`, `JOIN`)
+ * requires `user_id` in predicate position: followed by `=` or by `IN`.
+ */
+function constrainsUserId(line: string): boolean {
+  if (/\bINSERT\s+INTO\b/i.test(line) && /user_id/.test(line)) return true;
+  return /user_id\s*(=|IN\b)/i.test(line);
+}
+
 function isAnnotated(previousLine: string, line: string): boolean {
   const context = `${previousLine}\n${line}`;
   return /tenancy-ok:/.test(context);
@@ -76,7 +90,7 @@ describe('multi-tenancy guard', () => {
 
       return lines.flatMap((line, index) => {
         if (!namesUserScopedTable(line)) return [];
-        if (/user_id/.test(line)) return [];
+        if (constrainsUserId(line)) return [];
         if (isAnnotated(lines[index - 1] ?? '', line)) return [];
 
         return [`${path}:${index + 1}  ${line.trim()}`];
@@ -92,7 +106,7 @@ describe('multi-tenancy guard', () => {
     const unscoped = 'const sql = `SELECT * FROM sessions WHERE created_at > ?`;';
 
     expect(namesUserScopedTable(unscoped)).toBe(true);
-    expect(/user_id/.test(unscoped)).toBe(false);
+    expect(constrainsUserId(unscoped)).toBe(false);
     expect(isAnnotated('', unscoped)).toBe(false);
 
     // The annotation escape hatch must also work: the same line with a tenancy-ok
@@ -101,5 +115,19 @@ describe('multi-tenancy guard', () => {
       '/* tenancy-ok: expiring old sessions by time */ const sql = `SELECT * FROM sessions WHERE created_at > ?`;';
     expect(namesUserScopedTable(annotated)).toBe(true);
     expect(isAnnotated('', annotated)).toBe(true);
+  });
+
+  it('rejects a bare mention of user_id but accepts it as a predicate', () => {
+    // The exact shape task 5's Step 5 injection produced: reading user_id
+    // while filtering by something else entirely. This must be rejected.
+    const readsWithoutFiltering = 'SELECT user_id FROM identities WHERE email = ?';
+    expect(namesUserScopedTable(readsWithoutFiltering)).toBe(true);
+    expect(constrainsUserId(readsWithoutFiltering)).toBe(false);
+
+    // The mirror image: filtering by user_id while selecting something else
+    // must be accepted.
+    const filtersByUserId = 'SELECT email FROM identities WHERE user_id = ?';
+    expect(namesUserScopedTable(filtersByUserId)).toBe(true);
+    expect(constrainsUserId(filtersByUserId)).toBe(true);
   });
 });
