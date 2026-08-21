@@ -58,22 +58,26 @@ describe('server boundaries', () => {
  */
 const USER_SCOPED_TABLES = ['sessions', 'identities'] as const;
 
+function namesUserScopedTable(line: string): boolean {
+  return USER_SCOPED_TABLES.some((table) =>
+    new RegExp(`\\b(FROM|INTO|UPDATE|JOIN)\\s+${table}\\b`, 'i').test(line),
+  );
+}
+
+function isAnnotated(previousLine: string, line: string): boolean {
+  const context = `${previousLine}\n${line}`;
+  return /tenancy-ok:/.test(context);
+}
+
 describe('multi-tenancy guard', () => {
   it('constrains user_id in every statement touching a user-scoped table', () => {
     const offenders = sources.flatMap((path) => {
       const lines = readFileSync(path, 'utf8').split('\n');
 
       return lines.flatMap((line, index) => {
-        const names = USER_SCOPED_TABLES.some((table) =>
-          new RegExp(`\\b(FROM|INTO|UPDATE|JOIN)\\s+${table}\\b`, 'i').test(line),
-        );
-        if (!names) return [];
+        if (!namesUserScopedTable(line)) return [];
         if (/user_id/.test(line)) return [];
-
-        // The annotation may sit on the statement's line or the line above it,
-        // because a multi-line template literal often has no room on its own.
-        const context = `${lines[index - 1] ?? ''}\n${line}`;
-        if (/tenancy-ok:/.test(context)) return [];
+        if (isAnnotated(lines[index - 1] ?? '', line)) return [];
 
         return [`${path}:${index + 1}  ${line.trim()}`];
       });
@@ -85,13 +89,17 @@ describe('multi-tenancy guard', () => {
   it('fails on an unscoped statement', () => {
     // Falsification. The guard above passes trivially while no SQL exists at
     // all, so prove the predicate rejects the thing it claims to reject.
-    const line = 'const sql = `SELECT * FROM sessions WHERE created_at > ?`;';
+    const unscoped = 'const sql = `SELECT * FROM sessions WHERE created_at > ?`;';
 
-    const names = USER_SCOPED_TABLES.some((table) =>
-      new RegExp(`\\b(FROM|INTO|UPDATE|JOIN)\\s+${table}\\b`, 'i').test(line),
-    );
+    expect(namesUserScopedTable(unscoped)).toBe(true);
+    expect(/user_id/.test(unscoped)).toBe(false);
+    expect(isAnnotated('', unscoped)).toBe(false);
 
-    expect(names).toBe(true);
-    expect(/user_id/.test(line)).toBe(false);
+    // The annotation escape hatch must also work: the same line with a tenancy-ok
+    // comment should pass.
+    const annotated =
+      '/* tenancy-ok: expiring old sessions by time */ const sql = `SELECT * FROM sessions WHERE created_at > ?`;';
+    expect(namesUserScopedTable(annotated)).toBe(true);
+    expect(isAnnotated('', annotated)).toBe(true);
   });
 });
