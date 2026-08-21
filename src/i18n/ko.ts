@@ -139,4 +139,13 @@ export const ko: Record<TranslationKey, string> = {
   'editor.fold.foldAll': '모든 머리글 접기',
   'editor.fold.unfoldAll': '모든 머리글 펼치기',
   'editor.fold.headingLevel': '머리말',
+
+  'account.menu': '계정',
+  'account.signedOut': '로그인하지 않음',
+  'account.signIn.google': 'Google로 로그인',
+  'account.signOut': '로그아웃',
+  'account.unavailable': '동기화 서버에 연결할 수 없음',
+  'account.unavailable.body':
+    '메모는 이 기기에 안전하게 있습니다. 동기화는 자동으로 다시 시작됩니다.',
+  'account.signOut.note': '메모는 이 기기에 그대로 남습니다.',
 };

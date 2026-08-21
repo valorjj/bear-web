@@ -137,6 +137,17 @@ export const en = {
   'editor.fold.foldAll': 'Fold all headings',
   'editor.fold.unfoldAll': 'Unfold all headings',
   'editor.fold.headingLevel': 'Heading',
+
+  'account.menu': 'Account',
+  'account.signedOut': 'Not signed in',
+  'account.signIn.google': 'Sign in with Google',
+  'account.signOut': 'Sign out',
+  'account.unavailable': 'Sync server unreachable',
+  'account.unavailable.body': 'Your notes are safe on this device. Sync resumes automatically.',
+  // Stated plainly because it is the honest consequence of the ruling that
+  // logout does not clear this device: on a shared browser the next person can
+  // read these notes. Disclosure is the mitigation.
+  'account.signOut.note': 'Your notes stay on this device.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

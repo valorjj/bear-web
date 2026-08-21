@@ -21,6 +21,7 @@ import { hasTag, TagSidebar, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
+import { AccountMenu } from '@/features/account';
 import { ThemePicker } from '@/features/appearance';
 import { Pane } from '@/ui/Pane';
 import { Resizer } from '@/ui/Resizer';
@@ -241,8 +242,9 @@ export function AppShell(): ReactElement {
           />
         </div>
 
-        <div className="border-border flex shrink-0 items-center border-t p-1">
+        <div className="border-border flex shrink-0 items-center gap-1 border-t p-1">
           <ThemePicker />
+          <AccountMenu />
         </div>
       </Pane>
 

@@ -1,0 +1,88 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { I18nProvider } from '@/i18n';
+
+import { AccountMenu } from './AccountMenu';
+
+function mount(handler: (url: string) => Response) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL) => handler(String(input))),
+  );
+  return render(
+    <I18nProvider>
+      <AccountMenu />
+    </I18nProvider>,
+  );
+}
+
+const signedIn = () =>
+  new Response(JSON.stringify({ userId: 'u1', email: 'a@example.com' }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('AccountMenu', () => {
+  it('offers Google sign-in when signed out', async () => {
+    mount(() => new Response('{}', { status: 401 }));
+
+    await userEvent.click(await screen.findByRole('button', { name: /account/i }));
+
+    expect(screen.getByRole('menuitem', { name: /sign in with google/i })).toBeInTheDocument();
+  });
+
+  it('shows the signed-in address and a sign-out row', async () => {
+    mount(signedIn);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /account/i })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: /account/i }));
+
+    expect(screen.getByText('a@example.com')).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /sign out/i })).toBeInTheDocument();
+  });
+
+  it('discloses that notes stay on the device', async () => {
+    // Required by the spec, not decoration: the ruling that logout leaves
+    // notes behind is only defensible if the user is told.
+    mount(signedIn);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /account/i })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: /account/i }));
+
+    expect(screen.getByText(/stay on this device/i)).toBeInTheDocument();
+  });
+
+  it('says the server is unreachable rather than claiming signed out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    render(
+      <I18nProvider>
+        <AccountMenu />
+      </I18nProvider>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /account/i }));
+
+    expect(screen.getByText(/unreachable/i)).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /sign out/i })).not.toBeInTheDocument();
+  });
+
+  it('is announced as a menu trigger', async () => {
+    mount(() => new Response('{}', { status: 401 }));
+
+    const trigger = await screen.findByRole('button', { name: /account/i });
+
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+});

@@ -158,4 +158,5 @@ export {
   FileCode,
   Printer,
   Table as TableGlyph,
+  UserRound,
 } from 'lucide-react';
