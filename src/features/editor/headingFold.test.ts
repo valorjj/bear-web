@@ -21,7 +21,7 @@ describe('the heading fold schema contract', () => {
   });
 
   it('leaves the document byte-identical when a section is folded', () => {
-    const markdown = '## A\n\nbody\n\n## B\n\nmore';
+    const markdown = 'Title\n\n## A\n\nbody\n\n## B\n\nmore';
     const editor = new Editor({ extensions: editorExtensions, content: parseMarkdown(markdown) });
     const before = serializeMarkdown(editor.getJSON());
 
@@ -35,7 +35,7 @@ describe('the heading fold schema contract', () => {
 
 describe('folding commands', () => {
   it('toggles one heading on and off', () => {
-    const editor = docFor('<h2>A</h2><p>x</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p>');
     const [a] = headingSections(editor.state.doc);
 
     editor.commands.toggleHeadingFold(a!.pos);
@@ -47,7 +47,7 @@ describe('folding commands', () => {
   });
 
   it('folds every heading, and unfolds every heading', () => {
-    const editor = docFor('<h1>A</h1><p>x</p><h2>B</h2><p>y</p>');
+    const editor = docFor('<p>Title</p><h1>A</h1><p>x</p><h2>B</h2><p>y</p>');
 
     editor.commands.foldAllHeadings();
     expect(foldedKeys(editor.state)).toEqual(['1:0:A', '2:0:B']);
@@ -58,7 +58,7 @@ describe('folding commands', () => {
   });
 
   it('restores a persisted fold set', () => {
-    const editor = docFor('<h2>A</h2><p>x</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p>');
 
     editor.commands.setHeadingFolds(['2:0:A']);
     expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
@@ -66,7 +66,13 @@ describe('folding commands', () => {
   });
 
   it('keeps a fold key that currently matches no heading, so it returns if the heading does', () => {
-    const editor = docFor('<h2>A</h2><p>x</p>');
+    // Leading title paragraph: without it, A is the title and
+    // `headingSections` returns nothing at all, so `2:0:Gone` hiding zero
+    // sections would be trivially true of ANY key — matching or not — and
+    // the fail-open half below would stop discriminating anything. With a
+    // real section present, `2:0:A` (not used here) would have matched it,
+    // so `2:0:Gone` demonstrably does not.
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p>');
 
     editor.commands.setHeadingFolds(['2:0:Gone']);
     // Retained in state...
@@ -111,7 +117,7 @@ function hiddenCount(editor: Editor): number {
 
 describe('fold decorations', () => {
   it('hides the section body and not its heading', () => {
-    const editor = docFor('<h2>A</h2><p>x</p><h2>B</h2>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p><h2>B</h2>');
     const [a] = headingSections(editor.state.doc);
 
     editor.commands.toggleHeadingFold(a!.pos);
@@ -121,7 +127,7 @@ describe('fold decorations', () => {
   });
 
   it('folds nested headings along with their parent', () => {
-    const editor = docFor('<h2>A</h2><p>x</p><h3>n</h3><p>y</p><h2>B</h2>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p><h3>n</h3><p>y</p><h2>B</h2>');
     const [a] = headingSections(editor.state.doc);
 
     editor.commands.toggleHeadingFold(a!.pos);
@@ -159,7 +165,7 @@ function widgetKinds(editor: Editor): string[] {
 
 describe('the gutter affordance', () => {
   it('renders a toggle and a badge for every top-level heading', () => {
-    const editor = docFor('<h1>A</h1><p>x</p><h2>B</h2>');
+    const editor = docFor('<p>Title</p><h1>A</h1><p>x</p><h2>B</h2>');
 
     expect(widgetKinds(editor).filter((k) => k === 'toggle')).toHaveLength(2);
     expect(widgetKinds(editor).filter((k) => k === 'badge')).toHaveLength(2);
@@ -173,8 +179,38 @@ describe('the gutter affordance', () => {
     editor.destroy();
   });
 
+  // The title line is the note's name, not a section, and is never
+  // foldable — see `headingSections`' docblock. This must hold even when the
+  // title happens to be an `h1`: `editor.css`'s
+  // `> :is(p, h1..h6):first-child` rule renders it identically to a plain
+  // paragraph title, so it must carry no gutter widget either, exactly the
+  // way a paragraph title never does.
+  it('renders no gutter widget for the title line, even when it is an h1', () => {
+    const editor = docFor('<h1>Title</h1><p>a</p><h2>Real</h2><p>b</p>');
+
+    // The title's own h1 gets nothing...
+    const titleHeading = editor.view.dom.querySelector('h1');
+    expect(titleHeading).not.toBeNull();
+    expect(titleHeading!.querySelector('[data-fold-toggle]')).toBeNull();
+    expect(titleHeading!.querySelector('[data-fold-badge]')).toBeNull();
+
+    // ...while the genuine body heading still gets both, so this isn't
+    // "nothing renders at all", but specifically "not for the title".
+    const bodyHeading = editor.view.dom.querySelector('h2');
+    expect(bodyHeading).not.toBeNull();
+    expect(bodyHeading!.querySelector('[data-fold-toggle]')).not.toBeNull();
+    expect(bodyHeading!.querySelector('[data-fold-badge]')).not.toBeNull();
+
+    editor.destroy();
+  });
+
   it('adds an inline marker only to a folded heading', () => {
-    const editor = docFor('<h2>A</h2><p>x</p><h2>B</h2>');
+    // Leading title paragraph: without it there is exactly one real
+    // section (B, since A would be excluded as the title), and
+    // `toHaveLength(1)` can no longer distinguish "a marker on the folded
+    // section" from "a marker on every section" — the word "only" needs a
+    // second, unfolded section to mean anything.
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p><h2>B</h2>');
     expect(widgetKinds(editor).filter((k) => k === 'marker')).toHaveLength(0);
 
     const [a] = headingSections(editor.state.doc);
@@ -185,7 +221,7 @@ describe('the gutter affordance', () => {
   });
 
   it('carries the heading level on the badge', () => {
-    const editor = docFor('<h3>C</h3>');
+    const editor = docFor('<p>Title</p><h3>C</h3>');
     const levels: number[] = [];
     for (const plugin of editor.state.plugins) {
       const prop = plugin.props.decorations;
@@ -206,7 +242,7 @@ describe('the gutter affordance', () => {
   });
 
   it('places the affordance inside the heading element, not beside it', () => {
-    const editor = docFor('<h2>A</h2>');
+    const editor = docFor('<p>Title</p><h2>A</h2>');
 
     // The whole hover-reveal design depends on this: the CSS selector is
     // `.ProseMirror h2:hover .bear-fold-toggle`, and `position: absolute`
@@ -218,7 +254,7 @@ describe('the gutter affordance', () => {
 
 describe('the gutter affordance is accessible', () => {
   it("pins the heading's own accessible name, independent of any widget inside it", () => {
-    const editor = docFor('<h1>Hello</h1>');
+    const editor = docFor('<p>Title</p><h1>Hello</h1>');
 
     // The badge's own `textContent` (its level digit) is the measured
     // pollution source — verified with `dom-accessibility-api` (the engine
@@ -241,10 +277,17 @@ describe('the gutter affordance is accessible', () => {
   });
 
   it("tracks an edit to the heading's own text", () => {
-    const editor = docFor('<h2>Old title</h2><p>x</p>');
+    // Leading title paragraph: without it, "Old title" would itself be the
+    // note's title and excluded from `headingSections`, so the pinned
+    // `aria-label` decoration this test exercises would never be applied at
+    // all — the assertion below would then pass on the heading's plain
+    // text content instead, which is a different (and always-true)
+    // mechanism than the one this test names.
+    const editor = docFor('<p>Title</p><h2>Old title</h2><p>x</p>');
+    const [section] = headingSections(editor.state.doc);
 
-    editor.commands.setTextSelection(1);
-    editor.commands.insertContentAt(1, 'New ');
+    editor.commands.setTextSelection(section!.pos + 1);
+    editor.commands.insertContentAt(section!.pos + 1, 'New ');
 
     const heading = editor.view.dom.querySelector('h2');
     expect(heading).toHaveAccessibleName('New Old title');
@@ -257,7 +300,7 @@ describe('the gutter affordance is accessible', () => {
     // options, so `docFor` alone could never exercise a non-null hint.
     const editor = new Editor({
       extensions: [StarterKit, HeadingFold.configure({ foldHint: 'Fold or unfold this section' })],
-      content: '<h2>A</h2><p>x</p>',
+      content: '<p>Title</p><h2>A</h2><p>x</p>',
     });
 
     const toggle = editor.view.dom.querySelector('[data-fold-toggle]');
@@ -277,7 +320,7 @@ describe('the gutter affordance is accessible', () => {
   });
 
   it('the badge stays aria-hidden and out of tab order, since its digit is what polluted the name', () => {
-    const editor = docFor('<h3>C</h3>');
+    const editor = docFor('<p>Title</p><h3>C</h3>');
 
     const badge = editor.view.dom.querySelector('[data-fold-badge]');
     expect(badge).toHaveAttribute('aria-hidden', 'true');
@@ -286,9 +329,15 @@ describe('the gutter affordance is accessible', () => {
   });
 
   it('renders a visible glyph, not an empty box', () => {
-    const editor = docFor('<h2>A</h2>');
+    const editor = docFor('<p>Title</p><h2>A</h2>');
 
     const toggle = editor.view.dom.querySelector('[data-fold-toggle]');
+    // Asserted separately from the glyph check below: `toggle?.querySelector`
+    // on a `null` toggle (e.g. if the fixture's heading were the title, and
+    // so had no toggle at all) returns `undefined`, and `undefined` also
+    // satisfies `.not.toBeNull()` — a vacuous pass that would never notice a
+    // missing toggle.
+    expect(toggle).not.toBeNull();
     // jsdom has no layout engine, so a rendered pixel size cannot be asserted
     // here (see CLAUDE.md's toolchain notes) — a glyph child is the
     // structural proxy for "this control has visible content", and is
@@ -301,7 +350,7 @@ describe('the gutter affordance is accessible', () => {
 
 describe('widget DOM reuse across re-renders', () => {
   it('keeps the same toggle DOM node across an unrelated (selection-only) transaction', () => {
-    const editor = docFor('<h2>A</h2><p>x</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p>');
 
     const before = editor.view.dom.querySelector('[data-fold-toggle]');
     expect(before).not.toBeNull();
@@ -317,7 +366,7 @@ describe('widget DOM reuse across re-renders', () => {
   });
 
   it('rebuilds the toggle only when its own folded state actually changes', () => {
-    const editor = docFor('<h2>A</h2><p>x</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p>');
     const [a] = headingSections(editor.state.doc);
 
     const before = editor.view.dom.querySelector('[data-fold-toggle]');
@@ -341,7 +390,11 @@ describe('widget DOM reuse across re-renders', () => {
 
 describe('an empty heading', () => {
   it('gets no aria-label decoration', () => {
-    const editor = docFor('<h2></h2>');
+    // Leading title paragraph: an empty `<h2>` at offset 0 would be excluded
+    // as the title anyway, which would make this pass for the title rule
+    // rather than for the empty-text branch this test names (see
+    // `HeadingFold.ts`'s `section.text !== ''` guard).
+    const editor = docFor('<p>Title</p><h2></h2>');
 
     const heading = editor.view.dom.querySelector('h2');
     expect(heading).not.toBeNull();
@@ -386,7 +439,7 @@ function pressModAltF(editor: Editor): boolean {
 
 describe('Mod-Alt-f folds the section under the cursor', () => {
   it('toggles the fold of the enclosing top-level section', () => {
-    const editor = docFor('<h2>A</h2><p>x</p><h2>B</h2><p>y</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p><h2>B</h2><p>y</p>');
     const [a] = headingSections(editor.state.doc);
 
     // Cursor inside the FIRST section's body paragraph, not on the heading
@@ -449,7 +502,7 @@ describe('the mousedown handler on the badge and toggle', () => {
     const opened: HeadingMenuRequest[] = [];
     const editor = new Editor({
       extensions: buildEditorExtensions({ onOpenMenu: (request) => opened.push(request) }),
-      content: '<h2>A</h2><p>x</p>',
+      content: '<p>Title</p><h2>A</h2><p>x</p>',
     });
 
     const toggle = editor.view.dom.querySelector('[data-fold-toggle]')!;
@@ -474,7 +527,7 @@ describe('the mousedown handler on the badge and toggle', () => {
     const opened: HeadingMenuRequest[] = [];
     const editor = new Editor({
       extensions: buildEditorExtensions({ onOpenMenu: (request) => opened.push(request) }),
-      content: '<h1>A</h1><p>x</p><h3>B</h3><p>y</p>',
+      content: '<p>Title</p><h1>A</h1><p>x</p><h3>B</h3><p>y</p>',
     });
 
     const [a, b] = headingSections(editor.state.doc);
@@ -498,7 +551,7 @@ describe('the mousedown handler on the badge and toggle', () => {
     const opened: HeadingMenuRequest[] = [];
     const editor = new Editor({
       extensions: buildEditorExtensions({ onOpenMenu: (request) => opened.push(request) }),
-      content: '<h2>A</h2><p>x</p>',
+      content: '<p>Title</p><h2>A</h2><p>x</p>',
     });
 
     const [a] = headingSections(editor.state.doc);
@@ -517,11 +570,16 @@ describe('the mousedown handler on the badge and toggle', () => {
     const opened: HeadingMenuRequest[] = [];
     const editor = new Editor({
       extensions: buildEditorExtensions({ onOpenMenu: (request) => opened.push(request) }),
-      content: '<h2>A</h2><p>x</p>',
+      // Leading title paragraph: without it, "A" is the title and gets no
+      // badge at all, and the `querySelector` below would resolve to `null`
+      // — a right-click on a NON-EXISTENT badge trivially "does nothing",
+      // which is not what this test names.
+      content: '<p>Title</p><h2>A</h2><p>x</p>',
     });
 
-    const badge = editor.view.dom.querySelector('[data-fold-badge]')!;
-    const result = mousedownOn(editor, badge, { button: 2 });
+    const badge = editor.view.dom.querySelector('[data-fold-badge]');
+    expect(badge).not.toBeNull();
+    const result = mousedownOn(editor, badge!, { button: 2 });
 
     expect(result.handled).toBe(false);
     expect(result.defaultPrevented).toBe(false);
@@ -536,7 +594,7 @@ describe('the mousedown handler on the badge and toggle', () => {
   // not throw, and must leave the caret placement to the browser rather than
   // swallowing the click for a menu that will never open.
   it('does nothing when nobody is listening for the menu', () => {
-    const editor = docFor('<h2>A</h2><p>x</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>x</p>');
 
     const badge = editor.view.dom.querySelector('[data-fold-badge]')!;
     const result = mousedownOn(editor, badge);
@@ -556,7 +614,7 @@ describe('the mousedown handler on the badge and toggle', () => {
 
 describe('editing at a fold boundary', () => {
   it('Delete at the end of a folded heading unfolds instead of deleting hidden content', () => {
-    const editor = docFor('<h2>A</h2><p>hidden</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>hidden</p>');
     const [a] = headingSections(editor.state.doc);
     editor.commands.toggleHeadingFold(a!.pos);
     editor.commands.setTextSelection(a!.contentStart - 1);
@@ -581,7 +639,7 @@ describe('editing at a fold boundary', () => {
   // blocked, by checking the document actually changed (the merge happened)
   // rather than staying byte-identical the way the folded case above does.
   it('leaves Delete alone when the section is not folded', () => {
-    const editor = docFor('<h2>A</h2><p>visible</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>visible</p>');
     const [a] = headingSections(editor.state.doc);
     editor.commands.setTextSelection(a!.contentStart - 1);
 
@@ -607,9 +665,9 @@ describe('editing at a fold boundary', () => {
   // three, with B's text silently absorbed into the hidden paragraph as
   // `"hiddenB"` and the heading itself gone.
   it('Backspace at the start of the block after a folded section unfolds instead of destroying it', () => {
-    const editor = docFor('<h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
-    const [a] = headingSections(editor.state.doc);
-    expect(a!.end).toBe(11);
+    const editor = docFor('<p>Title</p><h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
+    const [a, b] = headingSections(editor.state.doc);
+    expect(a!.end).toBe(b!.pos);
     editor.commands.toggleHeadingFold(a!.pos);
     editor.commands.setTextSelection(a!.end + 1);
 
@@ -625,7 +683,7 @@ describe('editing at a fold boundary', () => {
   });
 
   it('leaves Backspace alone when the section is not folded', () => {
-    const editor = docFor('<h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
     const [a] = headingSections(editor.state.doc);
     editor.commands.setTextSelection(a!.end + 1);
 
@@ -662,7 +720,7 @@ describe('editing at a fold boundary', () => {
   // would fail this: `splitBlock` would never run and the document would be
   // unchanged aside from the fold clearing.
   it('Enter at the end of a folded heading unfolds and lets the split land in visible content', () => {
-    const editor = docFor('<h2>A</h2><p>hidden</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>hidden</p>');
     const [a] = headingSections(editor.state.doc);
     editor.commands.toggleHeadingFold(a!.pos);
     editor.commands.setTextSelection(a!.contentStart - 1);
@@ -685,7 +743,7 @@ describe('editing at a fold boundary', () => {
   // the document actually changing (the split happened), not by `handled`,
   // which the built-in handler alone already makes `true`.
   it('leaves Enter alone when the section is not folded', () => {
-    const editor = docFor('<h2>A</h2><p>visible</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>visible</p>');
     const [a] = headingSections(editor.state.doc);
     editor.commands.setTextSelection(a!.contentStart - 1);
 
@@ -721,7 +779,7 @@ describe('editing at a fold boundary', () => {
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
     try {
-      const editor = docFor('<h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
+      const editor = docFor('<p>Title</p><h2>A</h2><p>hidden</p><h2>B</h2><p>visible</p>');
       const [a] = headingSections(editor.state.doc);
       editor.commands.toggleHeadingFold(a!.pos);
       editor.commands.setTextSelection(a!.end + 1);
@@ -745,7 +803,7 @@ describe('editing at a fold boundary', () => {
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
     try {
-      const editor = docFor('<h2>A</h2><p>hidden</p>');
+      const editor = docFor('<p>Title</p><h2>A</h2><p>hidden</p>');
       const [a] = headingSections(editor.state.doc);
       editor.commands.toggleHeadingFold(a!.pos);
       editor.commands.setTextSelection(a!.contentStart - 1);
@@ -766,7 +824,7 @@ describe('editing at a fold boundary', () => {
   });
 
   it('does not intercept a plain "h" or "d" keystroke (ordinary typing)', () => {
-    const editor = docFor('<h2>A</h2><p>hidden</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>hidden</p>');
     const [a] = headingSections(editor.state.doc);
     editor.commands.toggleHeadingFold(a!.pos);
     editor.commands.setTextSelection(a!.contentStart - 1);
@@ -791,7 +849,7 @@ describe('the macOS delete-variant chords are platform-gated', () => {
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
     try {
-      const editor = docFor('<h2>A</h2><p>hidden</p>');
+      const editor = docFor('<p>Title</p><h2>A</h2><p>hidden</p>');
       const [a] = headingSections(editor.state.doc);
       editor.commands.toggleHeadingFold(a!.pos);
       editor.commands.setTextSelection(a!.contentStart - 1);
@@ -821,7 +879,7 @@ describe('the macOS delete-variant chords are platform-gated', () => {
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
     try {
-      const editor = docFor('<h2>A</h2><p>hidden</p>');
+      const editor = docFor('<p>Title</p><h2>A</h2><p>hidden</p>');
       const [a] = headingSections(editor.state.doc);
       editor.commands.toggleHeadingFold(a!.pos);
       editor.commands.setTextSelection(a!.contentStart - 1);
@@ -846,7 +904,7 @@ describe('the macOS delete-variant chords are platform-gated', () => {
 
 describe('the fold-boundary guard only intercepts a collapsed caret', () => {
   it('leaves a non-empty selection spanning the boundary alone, even when folded, and the deletion still happens', () => {
-    const editor = docFor('<h2>A</h2><p>hidden</p>');
+    const editor = docFor('<p>Title</p><h2>A</h2><p>hidden</p>');
     const [a] = headingSections(editor.state.doc);
     editor.commands.toggleHeadingFold(a!.pos);
     // A real selection spanning the fold boundary — from just before it to

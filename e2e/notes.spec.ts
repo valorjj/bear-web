@@ -753,7 +753,11 @@ test('Mod-Alt-f folds and unfolds the section under the cursor', async ({ page }
   // The `# ` input rule promotes this to a real heading node; `\n` starts a
   // new paragraph after it — the same pattern other specs in this file use
   // to exercise real input rules rather than a programmatic `.fill()`.
-  await page.keyboard.type('## Section one\nbody text\n## Section two\nmore text');
+  // Leading "Title" line: a note's first block is its title and is never
+  // foldable (see `headingSections`' docblock), so without it "Section one"
+  // would be the title and this test's whole premise — folding the
+  // ENCLOSING section — would have no section to enclose.
+  await page.keyboard.type('Title\n## Section one\nbody text\n## Section two\nmore text');
 
   const bodyText = page.locator('.ProseMirror p', { hasText: 'body text' });
   await expect(bodyText).toBeVisible();
@@ -783,8 +787,11 @@ test('folding a heading hides its section, and the fold survives a reload', asyn
     notes: [
       {
         id: 'n-fold',
-        title: 'Alpha',
-        text: '## Alpha\n\nhidden body\n\n## Beta\n\nkept',
+        title: 'Title',
+        // Leading title line: without it, "Alpha" is the note's title, not a
+        // section, and carries no fold toggle at all (see `headingSections`'
+        // docblock) — exactly the affordance this test exists to click.
+        text: 'Title\n\n## Alpha\n\nhidden body\n\n## Beta\n\nkept',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         pinned: false,
@@ -877,8 +884,9 @@ test('Enter at the end of a folded heading reveals the section instead of hiding
     notes: [
       {
         id: 'n-fold-enter',
-        title: 'Alpha',
-        text: '## Alpha\n\nhidden body\n\n## Beta\n\nkept',
+        title: 'Title',
+        // Leading title line — see the identical comment on 'n-fold' above.
+        text: 'Title\n\n## Alpha\n\nhidden body\n\n## Beta\n\nkept',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         pinned: false,
@@ -984,8 +992,9 @@ test('the badge menu changes a heading level, and the change reaches the Markdow
     notes: [
       {
         id: 'n-fold-level',
-        title: 'Alpha',
-        text: '## Alpha\n\nbody',
+        title: 'Title',
+        // Leading title line — see the identical comment on 'n-fold' above.
+        text: 'Title\n\n## Alpha\n\nbody',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         pinned: false,
@@ -1031,5 +1040,54 @@ test('the badge menu changes a heading level, and the change reaches the Markdow
         }
       }, 'n-fold-level'),
     )
-    .toBe('### Alpha\n\nbody');
+    .toBe('Title\n\n### Alpha\n\nbody');
+});
+
+// This is the case a human found by eyeball testing that nothing in the
+// suite caught: before `headingSections` excluded offset 0, a title `h1`
+// carried the same hover-reveal fold chevron as any other heading, with
+// nothing on screen to say the two behaved differently — folding it
+// collapsed the ENTIRE note. `headingFold.test.ts`'s
+// "renders no gutter widget for the title line" pins this at the
+// ProseMirror-model level; this test pins the same thing as a human would
+// actually see it, in a real browser, on hover.
+test('hovering the title line reveals no fold chevron; hovering a body heading does', async ({
+  page,
+}) => {
+  await seedDatabase(page, {
+    notes: [
+      {
+        id: 'n-title-no-fold',
+        title: 'Title',
+        text: '# Title\n\n## Real section\n\nbody',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pinned: false,
+        trashedAt: null,
+        archivedAt: null,
+      },
+    ],
+    settings: [],
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /Title/ }).first().click();
+
+  const titleHeading = page.locator('.ProseMirror h1', { hasText: 'Title' });
+  const bodyHeading = page.locator('.ProseMirror h2', { hasText: 'Real section' });
+  await expect(titleHeading).toBeVisible();
+  await expect(bodyHeading).toBeVisible();
+
+  // Hovering the title line reveals nothing — there is no chevron in the
+  // DOM to reveal at all, not merely one stuck at zero opacity.
+  await titleHeading.hover();
+  await expect(titleHeading.locator('[data-fold-toggle]')).toHaveCount(0);
+
+  // The same hover, on a genuine body heading, does reveal the chevron —
+  // proving the title's bare DOM is the exception, not a broken selector or
+  // a fold affordance that never renders for anyone.
+  await bodyHeading.hover();
+  const bodyToggle = bodyHeading.locator('[data-fold-toggle]');
+  await expect(bodyToggle).toHaveCount(1);
+  await expect(bodyToggle).toHaveCSS('opacity', '1');
 });

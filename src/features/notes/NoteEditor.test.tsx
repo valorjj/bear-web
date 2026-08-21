@@ -576,7 +576,7 @@ describe('serialization failure', () => {
 
 describe('fold persistence', () => {
   it('applies the stored fold set when the note opens', async () => {
-    const note = await notes.create('## A\n\nbody');
+    const note = await notes.create('Title\n\n## A\n\nbody');
     await folds.set(note.id, ['2:0:A']);
 
     renderEditor(note);
@@ -587,7 +587,7 @@ describe('fold persistence', () => {
   });
 
   it('writes the new fold set when a section is folded', async () => {
-    const note = await notes.create('## A\n\nbody');
+    const note = await notes.create('Title\n\n## A\n\nbody');
     const set = vi.spyOn(folds, 'set');
 
     const { handle } = renderEditor(note);
@@ -606,7 +606,7 @@ describe('fold persistence', () => {
   });
 
   it('opening a note produces no fold write', async () => {
-    const note = await notes.create('## A\n\nbody');
+    const note = await notes.create('Title\n\n## A\n\nbody');
     await folds.set(note.id, ['2:0:A']);
     const set = vi.spyOn(folds, 'set');
 
@@ -642,7 +642,7 @@ describe('fold persistence', () => {
   // This pins it: toggling a fold, waited well past the autosave debounce,
   // must never call `notes.save`.
   it('folding a section never calls notes.save — folding must not touch the note', async () => {
-    const note = await notes.create('## A\n\nbody');
+    const note = await notes.create('Title\n\n## A\n\nbody');
     const save = vi.spyOn(notes, 'save');
 
     const { handle } = renderEditor(note);
@@ -661,7 +661,7 @@ describe('fold persistence', () => {
   }, 10000);
 
   it('flushes a pending fold to storage when the note is closed', async () => {
-    const note = await notes.create('## A\n\nbody');
+    const note = await notes.create('Title\n\n## A\n\nbody');
     const set = vi.spyOn(folds, 'set');
 
     const { handle, unmount } = renderEditor(note);
