@@ -19,6 +19,8 @@ export {
 export type { NoteScope, ScopeLister, ScopeQuery, SmartListId } from './scope';
 export { SmartListSidebar } from './SmartListSidebar';
 export type { SmartListSidebarProps } from './SmartListSidebar';
+export { DEFAULT_PREVIEW_SIZE, isPreviewSize, PREVIEW_SIZES, snippetLines } from './preview';
+export type { PreviewSize } from './preview';
 export { filterByQuery, hasQuery } from './search';
 export type { MatchRange } from './search';
 export { useNotes } from './useNotes';

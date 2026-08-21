@@ -6,6 +6,7 @@ import { Icon, Pin } from '@/ui/Icon';
 
 import { deriveSnippet, formatNoteDate } from './format';
 import { HighlightedText } from './HighlightedText';
+import { DEFAULT_PREVIEW_SIZE, type PreviewSize, snippetLines } from './preview';
 
 export interface NoteListItemProps {
   note: Note;
@@ -16,6 +17,8 @@ export interface NoteListItemProps {
   now?: number;
   /** The active search query, if any. Highlights matches and steers the snippet to the matching line. */
   query?: string;
+  /** Row density. Defaults to `large`, the row the app shipped with. */
+  size?: PreviewSize;
 }
 
 export function NoteListItem({
@@ -25,6 +28,7 @@ export function NoteListItem({
   onTogglePin,
   now,
   query,
+  size = DEFAULT_PREVIEW_SIZE,
 }: NoteListItemProps): ReactElement {
   const t = useT();
   const { locale } = useLocale();
@@ -36,11 +40,18 @@ export function NoteListItem({
   const hasSnippet = snippet !== '';
   const displaySnippet = hasSnippet ? snippet : t('note.noText');
 
-  // Explicit, because the three spans below concatenate with no separator and
-  // accessible-name computation ignores the CSS gap between them: this row
-  // announced as "Groceries14:32milk and bread" from M3 until M7. The label
-  // also keeps the highlight markup out of the name.
-  const label = `${displayTitle}, ${date}, ${displaySnippet}`;
+  const lines = snippetLines(size);
+
+  // Built from the SAME size decision that drives the render below, so the
+  // accessible name can never announce a snippet the row does not display.
+  //
+  // The explicit commas remain load-bearing: the spans concatenate with no
+  // separator and accessible-name computation ignores the CSS gap between
+  // them, which is why this row announced as "Groceries14:32milk and bread"
+  // from M3 until M7. The label also keeps the highlight markup out of the
+  // name.
+  const label =
+    lines === 0 ? `${displayTitle}, ${date}` : `${displayTitle}, ${date}, ${displaySnippet}`;
 
   return (
     <li
@@ -74,17 +85,27 @@ export function NoteListItem({
         </span>
         <span className="text-ui-xs text-faint">{date}</span>
         {/*
-          Two lines of preview, and the space for the second is RESERVED rather
-          than allowed to collapse: Bear's list rows are a uniform height whether
-          or not a note has a body (measured — a body-less note still occupies a
-          full row), and a list whose rows change height with their content reads
-          as ragged. `line-clamp-2` caps it; `min-h` holds it. `leading-snug`
-          rather than the inherited UI leading, so two lines fit in the height one
-          line used to occupy plus a little.
+          The preview lines are RESERVED rather than allowed to collapse: Bear's
+          list rows are a uniform height whether or not a note has a body
+          (measured — a body-less note still occupies a full row), and a list
+          whose rows change height with their content reads as ragged.
+          `line-clamp-N` caps it; `min-h` holds it. `leading-snug` rather than
+          the inherited UI leading, so two lines fit in the height one line used
+          to occupy plus a little.
+
+          That is true at EVERY density, which is why each size clamps and
+          reserves its own height rather than one constant serving all three.
         */}
-        <span className="line-clamp-2 min-h-[2.0625rem] text-ui-sm leading-snug text-muted">
-          <HighlightedText text={displaySnippet} query={hasSnippet ? query : undefined} />
-        </span>
+        {lines === 1 && (
+          <span className="line-clamp-1 min-h-[1.03125rem] text-ui-sm leading-snug text-muted">
+            <HighlightedText text={displaySnippet} query={hasSnippet ? query : undefined} />
+          </span>
+        )}
+        {lines === 2 && (
+          <span className="line-clamp-2 min-h-[2.0625rem] text-ui-sm leading-snug text-muted">
+            <HighlightedText text={displaySnippet} query={hasSnippet ? query : undefined} />
+          </span>
+        )}
       </button>
 
       {/*
