@@ -126,6 +126,15 @@ export function useSession(): Session {
     if (mountedRef.current) setState({ status: 'signedOut' });
   }, []);
 
+  const signIn = useCallback(() => {
+    // Starting a new sign-in supersedes any owed revocation: the intent to
+    // sign in is newer than the unfulfilled intent to sign out, and there is
+    // no old session left in this browser worth revoking. The navigation
+    // ends this JS context, so the marker must clear before it, not after.
+    clearPendingLogout();
+    startGoogleSignIn();
+  }, []);
+
   const deleteAccount = useCallback(async () => {
     // Deliberately asymmetric with signOut: a failed DELETE must propagate,
     // not report signedOut — that would claim the account is gone when it
@@ -134,5 +143,5 @@ export function useSession(): Session {
     if (mountedRef.current) setState({ status: 'signedOut' });
   }, []);
 
-  return { state, signIn: startGoogleSignIn, signOut, deleteAccount };
+  return { state, signIn, signOut, deleteAccount };
 }

@@ -196,4 +196,72 @@ describe('useSession', () => {
 
     await expect(fetchAccount()).rejects.toThrow(/500/);
   });
+
+  it('signIn clears a pending revocation marker, so a fresh sign-in is not signed back out', async () => {
+    const originalLocation = window.location;
+    const assign = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, assign },
+    });
+
+    try {
+      // Sign in, then fail a logout so the marker is written.
+      mockFetch((url) =>
+        url.endsWith('/me')
+          ? new Response(JSON.stringify({ userId: 'u1', email: null }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            })
+          : new Response('{}', { status: 200 }),
+      );
+      const first = renderHook(() => useSession());
+      await waitFor(() => expect(first.result.current.state.status).toBe('signedIn'));
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          if (String(input).endsWith('/auth/logout')) throw new TypeError('Failed to fetch');
+          return new Response('{}', { status: 200 });
+        }),
+      );
+      await act(async () => {
+        await first.result.current.signOut();
+      });
+      expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBe('1');
+
+      // The user starts a new sign-in: the marker must clear before the
+      // full-page navigation, since nothing after it reliably runs.
+      act(() => {
+        first.result.current.signIn();
+      });
+      expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBeNull();
+      first.unmount();
+
+      // A follow-up mount, as if the OAuth redirect completed, must not
+      // retry a stale logout against the brand-new session.
+      const order: string[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = String(input);
+          order.push(url);
+          if (url.endsWith('/auth/logout')) return new Response('{}', { status: 200 });
+          return new Response(JSON.stringify({ userId: 'u2', email: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }),
+      );
+
+      const second = renderHook(() => useSession());
+      await waitFor(() => expect(second.result.current.state.status).toBe('signedIn'));
+      expect(order.some((url) => url.endsWith('/auth/logout'))).toBe(false);
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
 });
