@@ -20,40 +20,47 @@ feature and is not yet scheduled.
 
 ## Status
 
-| Milestone                                 | State     |
-| ----------------------------------------- | --------- |
-| M0 scaffold, CI, Pages deploy             | complete  |
-| M1 data layer (Dexie)                     | complete  |
-| M2 application shell                      | complete  |
-| M3 notes CRUD, textarea editor            | complete  |
-| M4 editor                                 | complete  |
-| M5 tags                                   | complete  |
-| M5.5 design language                      | complete  |
-| M6 smart lists, trash management          | complete  |
-| M7 search                                 | complete  |
-| M7.5 visual design pass                   | complete  |
-| M7.6 tag pills                            | complete  |
-| M7.7 tag pill activation                  | complete  |
-| M8 visual pass (chrome, density, prose)   | complete  |
-| M8b export: Markdown, HTML, PDF           | complete  |
-| M8c tables as real nodes                  | complete  |
-| M9a visual system: themes, scale, picker  | complete  |
-| A note-list header (scope, sort, preview) | complete  |
-| B collapsible headings + level badge      | complete  |
-| B2 drag-to-reorder headings               | queued    |
-| D server sync + OAuth (MariaDB, local)    | unspecced |
-| C code block language + highlighting      | queued    |
-| M9b callout blocks                        | deferred  |
+| Milestone                                  | State    |
+| ------------------------------------------ | -------- |
+| M0 scaffold, CI, Pages deploy              | complete |
+| M1 data layer (Dexie)                      | complete |
+| M2 application shell                       | complete |
+| M3 notes CRUD, textarea editor             | complete |
+| M4 editor                                  | complete |
+| M5 tags                                    | complete |
+| M5.5 design language                       | complete |
+| M6 smart lists, trash management           | complete |
+| M7 search                                  | complete |
+| M7.5 visual design pass                    | complete |
+| M7.6 tag pills                             | complete |
+| M7.7 tag pill activation                   | complete |
+| M8 visual pass (chrome, density, prose)    | complete |
+| M8b export: Markdown, HTML, PDF            | complete |
+| M8c tables as real nodes                   | complete |
+| M9a visual system: themes, scale, picker   | complete |
+| A note-list header (scope, sort, preview)  | complete |
+| B collapsible headings + level badge       | complete |
+| B2 drag-to-reorder headings                | queued   |
+| D1 server: hosting, accounts, Google login | complete |
+| D2 server: the sync protocol               | queued   |
+| C code block language + highlighting       | queued   |
+| M9b callout blocks                         | deferred |
 
-1308 unit tests, 72 end-to-end tests. `main` is always green and auto-deploys.
+1360 unit tests (plus 31 server integration tests that skip when
+`TEST_DATABASE_URL` is unset), 72 end-to-end tests. `main` is always green and
+auto-deploys.
 
-**D is new on 2026-08-21 and reverses the "no backend, no account" premise
-above** — a MariaDB instance in Docker on a local Mac Mini, plus Google, GitHub
-and Naver OAuth2. It is NOT in the A/B/C queue and has no spec yet. Decisions
-already taken: local-first is KEPT (IndexedDB stays the source of truth, the
-server is a sync target), single-user (OAuth is identity, not multi-tenancy),
-and A ships first. Constraints and the reasoning are in `NEXT.md`; a browser
-cannot speak the MySQL wire protocol, so the server is the project.
+**D reverses the "no backend, no account" premise above.** D1 shipped
+`server/`: a Hono service on Node against its own MariaDB container on the Mac
+Mini, with Google OAuth2 accounts (Authorization Code + PKCE) and an opaque,
+revocable session cookie. GitHub and Naver were part of the original idea but
+were not built in D1 — only Google exists today. D1 is accounts only: **no
+note data crosses the network yet**; that is D2. D is NOT in the A/B/C queue.
+Decisions already taken: local-first is KEPT (IndexedDB stays the source of
+truth, the server is a sync target for D2), identity is per-provider with no
+email-based auto-linking, and A shipped first. Constraints and the reasoning
+are in `NEXT.md`; a browser cannot speak the MySQL wire protocol, so the
+server is the project. See `server/README.md` for how to run it.
 
 **The last five rows are not numbered milestones yet**, and the lettering is
 `docs/superpowers/NEXT.md`'s, which holds the order and the reasoning for it.
@@ -196,6 +203,66 @@ connection holding version 0.1`. `e2e/fixtures/seed.ts` opens at 10 and closes
   wrong diagnosis of the no-flash test. Observe `document` for `<body>`
   appearing instead.
 
+- **Vitest runs two projects now, and the server project deliberately does not
+  `extend` the root config.** `vitest.setup.ts` installs jsdom and swaps the
+  global `Blob` for Node's; inheriting that in server tests would make them
+  lie about the environment they prove. `server/src/app.test.ts` asserts
+  `globalThis` has no `document` property. **What that assertion actually
+  catches is narrower than it sounds**: the `app` project is the one that
+  `extends` the root config and sets `environment: 'jsdom'` and `setupFiles`;
+  the `server` project sets its own `environment: 'node'` explicitly and
+  extends nothing, and the root `test` block itself carries no `environment`
+  or `setupFiles` at all. There is therefore nothing left for the server
+  project to accidentally inherit — the guard can only catch someone
+  explicitly setting the server project's `environment` to `'jsdom'` (or
+  flipping its `extends` to `true`), not a silent collapse of the split. A
+  server test file misplaced under `src/` still runs in jsdom without
+  complaint, because Vitest's `include` glob decides which project a file
+  belongs to, and that glob is not what this test checks.
+- **The database integration tests skip when `TEST_DATABASE_URL` is unset**,
+  which locally is convenient and in CI would be a green suite that ran
+  nothing. `server/src/db/migrate.test.ts` asserts the variable is present
+  whenever `CI` is set, so removing it from `ci.yml` fails loudly instead.
+- **A `Domain=` attribute on the session cookie is a cross-project leak, not a
+  convenience.** `lunch-api.markflowing.com` and `docs-api.markflowing.com`
+  are unrelated projects on the same registrable domain, so the cookie is
+  host-only on `api.markflowing.com`. Nothing in the test suite can see a
+  wrongly-scoped cookie in a real browser — check DevTools.
+- **`SameSite=Strict` silently breaks OAuth.** Strict is dropped on the
+  redirect back from Google, so the user lands on the app still signed out with
+  no error anywhere. Both cookies are `Lax` for this reason.
+- **Both cookies use the `__Host-` name prefix when served over HTTPS.** This
+  is not cosmetic: `HttpOnly` does not protect against an attacker who _is_
+  the client, and host-only scoping stops egress to sibling subdomains but NOT
+  ingress from them — a compromised `lunch-api.markflowing.com` could
+  otherwise set a `Domain=.markflowing.com` cookie this API would read,
+  enabling login CSRF and session shadowing. `__Host-` is browser-enforced.
+  Consequence: the cookie NAME differs between `http://localhost` and
+  production, and `API_ORIGIN` must match the scheme the browser actually
+  uses to reach the API — a mismatch makes the browser silently reject the
+  cookie and login simply stops working, with no error anywhere.
+- **The OAuth transaction is deliberately stateless and therefore replayable
+  within its 600s lifetime.** Single-use enforcement comes from the provider
+  rejecting authorization-code reuse. Closing it properly would need a
+  consumed-transaction store, which contradicts the design decision that the
+  service holds nothing between legs.
+- **The rate limiter trusts `cf-connecting-ip` and `x-forwarded-for`
+  verbatim, and holds windows in an unbounded in-memory `Map`.** Both are safe
+  only while Cloudflare is the guaranteed front door and the process is not
+  reachable directly. Bind the server to localhost so the tunnel is the only
+  path in; the `Map` is never pruned.
+- **`useSession` must survive React StrictMode's phantom double-mount.** A
+  cleanup-only effect that permanently falsified its mounted ref left `npm run
+dev` stuck on "loading" forever while the production build and all six gates
+  passed — so no test caught it. It was found by running the app. No gate can
+  see this class of bug; running the app can.
+- **A plan's component-usage sketch is not a signature reference.** Task 10's
+  plan guessed `Icon`'s prop as `of` (it is `glyph`), invented a
+  `TestI18nProvider` that does not exist (the real helper is
+  `I18nProvider`), and named `lucide-react` icons that do not exist in the
+  package. Every one of those guesses was wrong. Check the real signature
+  before writing code from a plan written from memory, not after.
+
 ## Architecture boundaries
 
 - **These boundaries are enforced by `scripts/sourceLint.test.ts`, not merely
@@ -236,6 +303,22 @@ connection holding version 0.1`. `e2e/fixtures/seed.ts` opens at 10 and closes
   database index. Feature code reaches the index only through
   `notes.listByTag` and `notes.allTagRows` — never Dexie directly. (The parent
   spec sketches the parser under `features/tags/`; the spec is wrong.)
+- `server/` is a fifth tsconfig project and may import **only**
+  `src/data/types.ts` from under `src/` — never `src/features/`, `src/ui/`,
+  `src/app/` or `src/i18n/`. Enforced by `scripts/serverBoundaries.test.ts`,
+  which also holds the **multi-tenancy guard**: every SQL statement naming a
+  user-scoped table must constrain `user_id` or carry an explicit
+  `/* tenancy-ok: reason */`. One forgotten `WHERE` is a cross-user notes leak,
+  which is not a class of bug to catch by review. The guard requires `user_id`
+  in a **predicate** position (`user_id =` / `user_id IN`), not merely
+  mentioned on the line — its original bare-substring form accepted `SELECT
+user_id FROM identities WHERE email = ?`, which reads `user_id` without
+  constraining by it, exactly the leak shape the guard exists to reject. An
+  `INSERT INTO` naming `user_id` in its column list is accepted, because the
+  value is supplied rather than filtered. The `/* tenancy-ok: reason */`
+  annotation is matched on the statement's own line or exactly one line
+  above — a Prettier reflow that moves it further away turns a legitimate
+  statement red, a known nuisance that fails loud rather than silent.
 
 ## Rules that must not be silently reversed
 
