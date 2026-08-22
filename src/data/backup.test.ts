@@ -4,6 +4,7 @@ import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, exportDatabase, importDatabase } 
 import type { BearDatabase } from './db';
 import { createNotesRepository } from './repositories/notes';
 import { parseTags } from './tags';
+import { LAST_PULLED_REV_KEY, SYNCED_ACCOUNT_KEY } from './sync/engine';
 import { createTestDatabase } from './testing';
 
 const noRebuild = { rebuildTagIndex: vi.fn(async () => 0) };
@@ -79,6 +80,22 @@ describe('exportDatabase', () => {
   it('never puts sync bookkeeping in the bundle', async () => {
     const bundle = await exportDatabase(db);
     expect(Object.keys(bundle)).not.toContain('syncState');
+  });
+
+  it('strips the sync cursor from the exported settings', async () => {
+    await db.settings.put({ key: LAST_PULLED_REV_KEY, value: 500 });
+    await db.settings.put({ key: SYNCED_ACCOUNT_KEY, value: 'user-1' });
+
+    const bundle = await exportDatabase(db);
+    const keys = bundle.settings.map((row) => row.key);
+
+    // These live in `settings` only because that is the app's key-value
+    // table; they describe THIS device's relationship with THIS account's
+    // server copy. Exported at rev 500 and restored on a device sitting at
+    // 12, they make that device skip revisions 13-500 forever.
+    expect(keys).not.toContain(LAST_PULLED_REV_KEY);
+    expect(keys).not.toContain(SYNCED_ACCOUNT_KEY);
+    expect(keys).toContain('theme');
   });
 });
 
@@ -180,6 +197,23 @@ describe('importDatabase', () => {
     const state = await target.syncState.get(['note', 'n1']);
     expect(state?.syncedRev).toBe(3);
     expect(state?.dirty).toBe(1);
+  });
+
+  it('drops sync bookkeeping carried by an older bundle', async () => {
+    // Bundles written before the export filter existed are already in the
+    // wild, so the import must not trust what it is handed.
+    const bundle = await exportDatabase(source);
+    bundle.settings.push({ key: LAST_PULLED_REV_KEY, value: 500 });
+    bundle.settings.push({ key: SYNCED_ACCOUNT_KEY, value: 'a-stranger' });
+
+    const result = await importDatabase(target, JSON.parse(JSON.stringify(bundle)), noRebuild);
+
+    expect(await target.settings.get(LAST_PULLED_REV_KEY)).toBeUndefined();
+    // A restored `sync:accountId` also silently suppresses the adoption
+    // dialog, which gates on exactly that key.
+    expect(await target.settings.get(SYNCED_ACCOUNT_KEY)).toBeUndefined();
+    expect(await target.settings.get('theme')).toMatchObject({ value: 'dark' });
+    expect(result.settings).toBe(1);
   });
 
   it('rejects a bundle with the wrong format marker', async () => {

@@ -35,11 +35,32 @@ it, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`,
   comparison invisible to it, so those three call sites bump `updatedAt`
   purely so this guard can see them.
 
-- **`syncState` must never appear in `BackupBundle`.** It is local bookkeeping
-  keyed to THIS device's relationship with THIS account's server copy — a
-  restored backup on a different device, or into a different account, must
-  reindex and re-push from scratch, not inherit a stranger's revision
-  history.
+- **A conflicted TAG resolves by taking the server's copy and clearing
+  `dirty`; there is no `(conflict)` copy for tags.** A tag row is metadata —
+  order, icon, collapsed — not content, so per-row last-write-wins loses
+  nothing the user typed. Without this the row never converges at all: a
+  conflicted tag is absent from `accepted` so the accept loop never touches
+  it, `applyTags` skipped the server's copy because the row was dirty, and
+  the cursor has already moved past the server's revision for it — leaving
+  `dirty: 1` at its old `syncedRev` forever, re-pushed and re-conflicted
+  every sync. Tags are keyed by NAME, so this is the ORDINARY case, not a
+  race: on guest adoption `markAllDirty` marks every tag dirty at
+  `syncedRev: 0`, and on a second device every tag the account already holds
+  (`#work`, `#todo`) conflicts on the very first sync.
+
+- **`syncState` must never appear in `BackupBundle`, and neither must any
+  `sync:`-prefixed `settings` key.** `sync:lastPulledRev` and
+  `sync:accountId` live in `settings` only because that is the app's
+  key-value table; they are the same device-and-account-local bookkeeping.
+  `exportDatabase` strips them by prefix and `importDatabase` drops them
+  again before `markAllDirty` runs, because bundles predating the filter are
+  already in the wild. Carried across, they transplant a stranger's cursor
+  (export at 500, import onto a device at 12, revisions 13-500 never pulled)
+  and silently suppress the adoption dialog, which gates on the same key. All
+  of it is local bookkeeping keyed to THIS device's relationship with THIS
+  account's server copy — a restored backup on a different device, or into a
+  different account, must reindex and re-push from scratch, not inherit a
+  stranger's revision history.
 
 - **The server stores no `title`; `deriveTitle` is its only author.** The wire
   format (`RemoteNote`) carries `text` and nothing else derived from it. A
@@ -62,15 +83,40 @@ it, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`,
   still carries a previous account's notes) and gate on `AdoptNotesDialog`
   before ever calling `syncOnce`.
 
-- **The sync cursor and `SyncOutcome.rev` never move backwards.** `syncOnce`
-  writes `Math.max(remote.rev, result.rev)`, not `result.rev` alone, because
-  the server's push response reports the revision PUSH allocated, which is
-  lower than the pull's counter whenever the push wrote nothing. Writing the
-  lower number back would re-pull the same range forever, or re-apply rows
-  already applied. The same reasoning extends to `SyncOutcome.rev`: it is the
-  same number reported to two audiences (storage and the status line), and a
-  status line reporting a revision lower than the client actually holds is the
-  same defect wearing a different hat.
+- **The sync cursor is the PULL's rev and nothing else — never the push's,
+  never `Math.max` of the two.** The two numbers mean different things.
+  `pull` returns `users.rev_counter` as of the pull: a DELIVERY WATERMARK,
+  "everything allocated up to here has been handed to this device". `push`
+  returns the revision THAT PUSH allocated, which says nothing about
+  revisions another device allocated in between. Because the push allocates
+  after the pull has already returned, its rev is always >= the pull's, so
+  storing it — or `Math.max`, which selects it for exactly that reason —
+  silently skips every revision written by another device between the two
+  legs: device A pulls at 10, device B pushes note X at 11, A allocates 12
+  and stores 12, and X is NEVER delivered again unless B edits it a second
+  time. A note written on one device silently never reaches the other.
+  `SyncOutcome.rev` reports the same pull rev, for the same reason. This
+  ruling previously said the opposite — it mandated the `Math.max` on the
+  theory that a push writing nothing returns a lower counter and would rewind
+  the cursor. That rewind cannot happen (the push allocates last), so the
+  guard was a no-op that entrenched the defect it was meant to prevent. The
+  correct rule's only cost is that this run's own pushed rows come back on
+  the next pull and are re-applied identically, which is harmless.
+
+- **The tag accept branch has an in-flight-edit guard too, and `markedAt` is
+  the only thing it can use.** `TagMeta` carries no `updatedAt`, so the guard
+  compares the row's CURRENT `markedAt` against the one `collect` snapshotted
+  — clearing `dirty` unconditionally strands a tag edit that landed mid-push
+  on this device forever, looking perfectly saved. The snapshot map is keyed
+  by kind AND key for this: tags are keyed by name, so a bare key would let a
+  note id collide with a tag name.
+
+- **The push body is capped BEFORE it is parsed (`MAX_BODY_BYTES`, three
+  times the 10 MiB quota), and `Content-Length` is not the only check.** The
+  quota lives inside `push()`, long after `c.req.json()` would have built the
+  whole object graph in memory on a Mac Mini in someone's house. The stream
+  is counted as it arrives and abandoned at the cap, because a chunked
+  request has no declared length and a declared one can simply lie.
 
 - **Pull applies nothing over a locally dirty row.** A row this device has
   edited but not yet pushed is not overwritten by whatever the pull brings
@@ -141,10 +187,6 @@ it, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`,
   note `updatedAt`.** Harmless today, since the row's note is already gone
   and the accept guard's comparison never runs for it, but it is the one
   place `markedAt` is not a mirror of a stored field.
-- **The tag accept branch clears `dirty` unconditionally**, with no
-  in-flight-edit guard of the kind notes have. `TagMeta` has no `updatedAt` to
-  compare against; a tag edit landing mid-push is lost until the tag is next
-  touched. Metadata only (order, icon, collapsed).
 - **`AdoptNotesDialog` mounts unconditionally beside the account popover** and
   self-gates on `open`, rather than only mounting when the menu itself has
   been opened at least once.

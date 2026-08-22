@@ -704,4 +704,120 @@ describe('sync engine', () => {
       expect.objectContaining({ tag: 'work', collapsed: true, sortOrder: 2, baseRev: 0 }),
     ]);
   });
+
+  it('stores the PULL rev as the cursor, never the higher rev the push allocated', async () => {
+    await db.notes.add({
+      id: 'mine',
+      title: 'a',
+      text: 'a',
+      createdAt: 1,
+      updatedAt: 7,
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    });
+    await db.syncState.put({
+      kind: 'note',
+      key: 'mine',
+      syncedRev: 4,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 7,
+    });
+
+    // The pull delivered everything up to rev 10. Another device then wrote a
+    // note at rev 11 — which this run never saw — and this run's own push
+    // allocated 12.
+    transport.nextPull = { notes: [], tags: [], rev: 10 };
+    transport.nextPush = {
+      accepted: [{ id: 'mine', kind: 'note' }],
+      conflicts: { notes: [], tags: [] },
+      rev: 12,
+    };
+
+    const outcome = await engine().syncOnce(ACCOUNT);
+
+    // A cursor of 12 means the next pull asks `since=12` and rev 11 is never
+    // delivered again — the other device's note silently never arrives. Only
+    // the pull's rev is a delivery watermark.
+    expect(await db.settings.get(LAST_PULLED_REV_KEY)).toMatchObject({ value: 10 });
+    expect(outcome.rev).toBe(10);
+  });
+
+  it('converges a conflicted tag onto the server copy instead of re-pushing forever', async () => {
+    await db.tags.add({ tag: 'work', collapsed: true, iconKey: 'mine', sortOrder: 9 });
+    await db.syncState.put({
+      kind: 'tag',
+      key: 'work',
+      syncedRev: 0,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 1,
+    });
+
+    // The shape guest adoption produces on a second device: tags are keyed by
+    // NAME, so every tag the account already holds conflicts on the first
+    // sync. `applyTags` skipped the server's copy (the row was dirty), the
+    // row is absent from `accepted`, and the cursor has moved past the
+    // server's rev for it — so nothing but this path can ever settle it.
+    transport.nextPull = { notes: [], tags: [], rev: 5 };
+    transport.nextPush = {
+      accepted: [],
+      conflicts: {
+        notes: [],
+        tags: [
+          { tag: 'work', collapsed: false, iconKey: 'house', sortOrder: 1, deleted: false, rev: 5 },
+        ],
+      },
+      rev: 5,
+    };
+
+    await engine().syncOnce(ACCOUNT);
+
+    expect(await db.tags.get('work')).toMatchObject({
+      collapsed: false,
+      iconKey: 'house',
+      sortOrder: 1,
+    });
+    expect(await db.syncState.get(['tag', 'work'])).toMatchObject({ dirty: 0, syncedRev: 5 });
+  });
+
+  it('LEAVES a tag dirty when it was edited while the push was in flight', async () => {
+    await db.tags.add({ tag: 'work', collapsed: true, iconKey: null, sortOrder: 2 });
+    await db.syncState.put({
+      kind: 'tag',
+      key: 'work',
+      syncedRev: 1,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 1,
+    });
+    transport.nextPush = {
+      accepted: [{ id: 'work', kind: 'tag' }],
+      conflicts: { notes: [], tags: [] },
+      rev: 9,
+    };
+
+    const pushing = transport.push.bind(transport);
+    // A local tag edit lands between collection and accept. `TagMeta` has no
+    // `updatedAt`, so `markedAt` is the only witness that the row changed.
+    transport.push = async (batch) => {
+      await db.tags.put({ tag: 'work', collapsed: false, iconKey: 'house', sortOrder: 3 });
+      await db.syncState.put({
+        kind: 'tag',
+        key: 'work',
+        syncedRev: 1,
+        dirty: 1,
+        deleted: 0,
+        markedAt: 2,
+      });
+      return pushing(batch);
+    };
+
+    await engine().syncOnce(ACCOUNT);
+
+    // Clearing here would strand the later edit on this device forever,
+    // looking perfectly saved.
+    expect(await db.syncState.get(['tag', 'work'])).toMatchObject({ dirty: 1, syncedRev: 9 });
+  });
 });

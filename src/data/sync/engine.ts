@@ -5,6 +5,16 @@ import { reindexNote } from '../reindex';
 import type { Note, TagMeta } from '../types';
 import type { PushNote, PushTag, RemoteNote, RemoteTag, Transport } from './transport';
 
+/**
+ * The prefix every sync bookkeeping key in the `settings` table carries.
+ *
+ * Exported so `backup.ts` can exclude these keys from an exported bundle
+ * without hardcoding a second copy of the list: they describe THIS device's
+ * relationship with THIS account's server copy, and a restore that inherited
+ * them would inherit a stranger's cursor.
+ */
+export const SYNC_SETTING_PREFIX = 'sync:';
+
 /** The highest revision this device has applied. Reset when the account changes. */
 export const LAST_PULLED_REV_KEY = 'sync:lastPulledRev';
 
@@ -28,6 +38,14 @@ export interface SyncOutcome {
 interface PushSnapshot {
   markedAt: number;
   deleted: 0 | 1;
+}
+
+/**
+ * Snapshot key. Notes and tags share one map and a tag is keyed by NAME, so
+ * a note whose id happened to equal a tag name would otherwise collide.
+ */
+function snapshotKey(kind: 'note' | 'tag', key: string): string {
+  return `${kind}:${key}`;
 }
 
 export interface EngineDeps {
@@ -219,15 +237,18 @@ export function createEngine(deps: EngineDeps) {
     const notes: PushNote[] = [];
     const tags: PushTag[] = [];
     // What the bookkeeping row looked like at the moment of collection, per
-    // note id. Compared against the CURRENT row on accept, so neither an edit
+    // row. Compared against the CURRENT row on accept, so neither an edit
     // nor a purge landing mid-flight can be cleared as though the server had
     // already heard about it.
     const snapshots = new Map<string, PushSnapshot>();
 
     for (const row of dirty) {
-      if (row.kind === 'note') {
-        snapshots.set(row.key, { markedAt: row.markedAt, deleted: row.deleted });
+      snapshots.set(snapshotKey(row.kind, row.key), {
+        markedAt: row.markedAt,
+        deleted: row.deleted,
+      });
 
+      if (row.kind === 'note') {
         if (row.deleted === 1) {
           notes.push({
             id: row.key,
@@ -369,6 +390,46 @@ export function createEngine(deps: EngineDeps) {
     }
   }
 
+  /**
+   * Takes the server's copy of a conflicted tag and clears the local claim.
+   *
+   * There is no `(conflict)` copy for tags, and there must not be: a tag row
+   * is METADATA — order, icon, collapsed — not content, and the spec resolves
+   * tag metadata by per-row last-write-wins. Nothing the user typed is lost by
+   * taking the server's values.
+   *
+   * Without this the row never converges. A conflicted tag is absent from
+   * `accepted`, so the accept loop never touches it; `applyTags` skipped the
+   * server's copy because the row was dirty; and the cursor has already moved
+   * past the server's revision for it. The row would sit at `dirty: 1` with
+   * its old `syncedRev` forever — re-pushed every sync, conflicted every time,
+   * with the two devices' tag order permanently disagreeing. This is not a
+   * rare race: tags are keyed by NAME, so on guest adoption (where
+   * `markAllDirty` marks every tag dirty at `syncedRev: 0`) EVERY tag the
+   * account already holds conflicts on a second device's first sync.
+   */
+  async function resolveTagConflicts(remotes: RemoteTag[]): Promise<void> {
+    for (const remote of remotes) {
+      await db.transaction('rw', db.tags, db.syncState, async () => {
+        if (remote.deleted) {
+          await db.tags.delete(remote.tag);
+          await db.syncState.delete(['tag', remote.tag]);
+          return;
+        }
+
+        await db.tags.put(toTagMeta(remote));
+        await db.syncState.put({
+          kind: 'tag',
+          key: remote.tag,
+          syncedRev: remote.rev,
+          dirty: 0,
+          deleted: 0,
+          markedAt: now(),
+        });
+      });
+    }
+  }
+
   return {
     /**
      * One pull, then one push. Never called on the render path.
@@ -394,15 +455,29 @@ export function createEngine(deps: EngineDeps) {
       for (const item of result.accepted) {
         if (item.kind === 'tag') {
           const row = await db.syncState.get(['tag', item.id]);
-          if (row?.deleted === 1) await db.syncState.delete(['tag', item.id]);
-          else if (row !== undefined) {
-            await db.syncState.put({ ...row, dirty: 0, syncedRev: result.rev });
+          if (row === undefined) continue;
+
+          const snapshot = snapshots.get(snapshotKey('tag', item.id));
+
+          // The tag in-flight-edit guard, the counterpart of the note one
+          // below. `TagMeta` carries no `updatedAt`, so `markedAt` — stamped
+          // by `markDirty` at the moment of the local write — is the only
+          // thing that can distinguish "the row this run pushed" from "a row
+          // rewritten while the push was in flight". Clearing `dirty`
+          // unconditionally strands that later edit on this device forever,
+          // looking perfectly saved.
+          if (row.markedAt !== snapshot?.markedAt) {
+            await db.syncState.put({ ...row, syncedRev: result.rev, dirty: 1 });
+            continue;
           }
+
+          if (row.deleted === 1) await db.syncState.delete(['tag', item.id]);
+          else await db.syncState.put({ ...row, dirty: 0, syncedRev: result.rev });
           continue;
         }
 
         const row = await db.syncState.get(['note', item.id]);
-        const snapshot = snapshots.get(item.id);
+        const snapshot = snapshots.get(snapshotKey('note', item.id));
 
         if (row === undefined) {
           // The tombstone this run pushed did its job and something already
@@ -453,24 +528,35 @@ export function createEngine(deps: EngineDeps) {
       }
 
       await resolveConflicts(result.conflicts.notes);
+      await resolveTagConflicts(result.conflicts.tags);
 
-      // The cursor must never move BACKWARDS. `result.rev` is the revision the
-      // PUSH allocated, and a push that wrote nothing returns the current
-      // counter — which can be lower than the rev the pull just reported.
-      // Writing it back unconditionally rewinds the cursor and makes the next
-      // pull re-scan a range this run already applied.
-      const cursor = Math.max(remote.rev, result.rev);
-      await db.settings.put({ key: LAST_PULLED_REV_KEY, value: cursor });
-
-      // `rev` below is deliberately the SAME number, not `result.rev`. The
-      // stored cursor and the reported revision are one value with two
-      // audiences, and a status line reporting a revision lower than the one
-      // this client actually holds is the same rewind wearing a different hat.
+      // The cursor is the PULL's rev and nothing else. It was already written
+      // above, immediately after the pull was applied, and this run's push
+      // must not touch it.
+      //
+      // The two revisions mean different things. `remote.rev` is the account's
+      // counter as of the pull: a DELIVERY WATERMARK, "everything allocated up
+      // to here has now been handed to this device". `result.rev` is merely
+      // the revision THIS push allocated, which says nothing about revisions
+      // another device allocated in between. Because a push allocates after
+      // the pull has already returned, `result.rev` is always >= `remote.rev`
+      // — so storing it (or `Math.max` of the two, which selects it for the
+      // same reason) silently skips every revision another device wrote
+      // between the two legs. Device B pushes note X at rev 11 while this
+      // device is mid-run; this device allocates 12; a cursor of 12 means
+      // `since=12` next time and X is NEVER delivered again unless B happens
+      // to edit it a second time. A note written on one device silently never
+      // reaches the other.
+      //
+      // The cost of the correct rule is that this run's own pushed rows come
+      // back on the next pull and are re-applied identically — the row is no
+      // longer dirty by then, so `applyNotes`/`applyTags` write exactly what
+      // is already stored. Harmless, and far cheaper than losing a note.
       return {
         pulled,
         pushed: result.accepted.length,
-        conflicts: result.conflicts.notes.length,
-        rev: cursor,
+        conflicts: result.conflicts.notes.length + result.conflicts.tags.length,
+        rev: remote.rev,
       };
     },
   };

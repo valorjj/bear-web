@@ -74,11 +74,23 @@ const TONE: Record<SyncStatusValue, StatusTone> = {
 export function SyncStatus({
   status,
   message,
+  lastSyncedAt,
 }: {
   status: SyncStatusValue;
   message: string | null;
+  /** `null` until a sync has actually completed on this device. */
+  lastSyncedAt: number | null;
 }): ReactElement {
   const t = useT();
+
+  // `idle` is the resting state BOTH before the first sync and after a
+  // successful one, so it alone cannot be rendered as "Notes are backed up":
+  // that sentence is asserted the moment a user signs in, before a single
+  // byte has left the device — most visibly while the adoption dialog is
+  // open, where `useSync` deliberately parks on `idle` and blocks sync on the
+  // user's answer. `lastSyncedAt` is the only thing that knows the
+  // difference, and the quiet dot goes with the quieter claim.
+  const settled = status === 'idle' && lastSyncedAt === null ? 'pending' : status;
 
   const label =
     status === 'error'
@@ -87,7 +99,9 @@ export function SyncStatus({
         ? t('sync.syncing')
         : status === 'offline'
           ? t('sync.offline')
-          : t('sync.idle');
+          : settled === 'pending'
+            ? t('sync.pending')
+            : t('sync.idle');
 
-  return <Status label={label} tone={TONE[status]} />;
+  return <Status label={label} tone={settled === 'pending' ? 'faint' : TONE[status]} />;
 }

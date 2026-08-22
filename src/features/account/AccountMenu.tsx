@@ -90,7 +90,11 @@ export function AccountMenu(): ReactElement {
         </Status>
 
         {state.status === 'signedIn' ? (
-          <SyncStatus status={sync.status} message={sync.message} />
+          <SyncStatus
+            status={sync.status}
+            message={sync.message}
+            lastSyncedAt={sync.lastSyncedAt}
+          />
         ) : null}
 
         <p className="text-ui text-text px-2">{t('account.notesLocal')}</p>

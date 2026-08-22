@@ -12,6 +12,64 @@ import {
 } from '../repositories/sync.ts';
 
 /**
+ * The largest push body this service will read, in bytes.
+ *
+ * Sized so it cannot reject a legitimate push. The account quota is 10 MiB of
+ * note TEXT, and a push carrying the whole of it also carries JSON structure
+ * — field names, quotes, timestamps, roughly 150 bytes per note — plus
+ * whatever escaping the text needs. Three times the quota leaves room for all
+ * of that and then some, while still being a bound: without one, a single
+ * `POST` of arbitrary size is parsed into memory on a Mac Mini in someone's
+ * house, and the quota check that would have rejected it runs only AFTER the
+ * parse it was supposed to prevent.
+ */
+export const MAX_BODY_BYTES = 3 * 10 * 1024 * 1024;
+
+/**
+ * Reads the request body, or returns `null` if it exceeds `MAX_BODY_BYTES`.
+ *
+ * `Content-Length` is the fast path and is deliberately not trusted as the
+ * only one: it is absent from a chunked request and can simply be wrong, so
+ * the stream is counted as it arrives and abandoned the moment it crosses the
+ * cap. That is what makes this a cap rather than a request to be polite.
+ */
+async function readCappedBody(request: Request): Promise<string | null> {
+  const declared = Number(request.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
+
+  const stream = request.body;
+  if (stream === null) return '';
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new TextDecoder().decode(bytes);
+}
+
+/**
  * Shape-checks the push body.
  *
  * Not a validation library: the body has two array fields and the alternative
@@ -78,9 +136,17 @@ export function syncRoutes(deps: AppDeps): Hono {
     const userId = await authenticate(c.req.header('cookie'));
     if (userId === null) return c.json({ error: 'not signed in' }, 401);
 
+    // Read under a cap BEFORE parsing. `c.req.json()` would buffer and parse
+    // whatever arrives, and the quota that bounds an account's stored bytes
+    // runs inside `push()`, long after the object graph exists.
+    const text = await readCappedBody(c.req.raw);
+    if (text === null) {
+      return c.json({ error: 'body too large', limit: MAX_BODY_BYTES }, 413);
+    }
+
     let body: unknown;
     try {
-      body = await c.req.json();
+      body = JSON.parse(text);
     } catch {
       return c.json({ error: 'body is not JSON' }, 400);
     }

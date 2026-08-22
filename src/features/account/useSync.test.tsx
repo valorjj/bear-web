@@ -47,6 +47,7 @@ describe('useSync', () => {
     // since only `createEngine` is mocked above — a leftover note or setting
     // would make the NEXT test's "first sync" no longer look like one.
     await db.notes.clear();
+    await db.tags.clear();
     await db.settings.clear();
   });
 
@@ -120,6 +121,18 @@ describe('useSync', () => {
 
       await waitFor(() => expect(syncOnce).toHaveBeenCalledWith('u1'));
       expect(result.current.adoption).toBeNull();
+    });
+
+    it('blocks the first sync when a guest has tag metadata but no notes', async () => {
+      // Tags are local data too. Gating on notes alone means `markAllDirty`
+      // never runs for this user and their tag rows — order, icon, collapsed
+      // — are never pushed at all.
+      await db.tags.add({ tag: 'work', collapsed: true, iconKey: 'house', sortOrder: 1 });
+
+      const { result } = renderHook(() => useSync(signedIn), { wrapper });
+
+      await waitFor(() => expect(result.current.adoption).not.toBeNull());
+      expect(syncOnce).not.toHaveBeenCalled();
     });
 
     it('blocks the first sync into a NEW account when local notes exist', async () => {

@@ -1,5 +1,6 @@
 import type { BearDatabase } from './db';
 import { deriveTitle } from './derive';
+import { SYNC_SETTING_PREFIX } from './sync/engine';
 import { markAllDirty } from './sync/markDirty';
 import type { BackupBundle, SerializedFile } from './types';
 
@@ -62,7 +63,18 @@ export async function exportDatabase(db: BearDatabase): Promise<BackupBundle> {
     noteTags,
     tags,
     files,
-    settings,
+    // Sync bookkeeping is deliberately stripped. `sync:lastPulledRev` and
+    // `sync:accountId` describe THIS device's relationship with THIS
+    // account's server copy, and they live in `settings` only because that
+    // is the app's key-value table. Carried in a bundle they transplant a
+    // stranger's cursor: export at rev 500, import on a device sitting at
+    // 12, and that device jumps to 500 and never pulls 13-500 — every note
+    // in that range silently missing, with nothing to indicate it. The same
+    // restored `sync:accountId` also suppresses the adoption dialog, which
+    // gates on exactly that key. The ruling ("a restored backup must
+    // re-push from scratch, not inherit a stranger's revision history") is
+    // enforced here.
+    settings: settings.filter((row) => !row.key.startsWith(SYNC_SETTING_PREFIX)),
   };
 }
 
@@ -120,6 +132,14 @@ export async function importDatabase(
 
   let rebuiltRows = 0;
 
+  // Belt and braces against `exportDatabase`'s filter above: bundles written
+  // before that filter existed are already in the wild, and one of them
+  // carries a stranger's cursor. Dropped here rather than trusted, and
+  // dropped BEFORE `markAllDirty` runs below, so the re-push it queues starts
+  // from a cursor of zero like any other new device.
+  const settings = bundle.settings.filter((row) => !row.key.startsWith(SYNC_SETTING_PREFIX));
+  const importedSettings = settings.length;
+
   // `noteFolds` is cleared here too, alongside the other tables, even though
   // it is deliberately absent from `assertBundle`'s required-table loop and
   // from `exportDatabase` below: fold state is view state, not content (see
@@ -151,7 +171,7 @@ export async function importDatabase(
         db.notes.bulkAdd(notes),
         db.tags.bulkAdd(bundle.tags),
         db.files.bulkAdd(files),
-        db.settings.bulkAdd(bundle.settings),
+        db.settings.bulkAdd(settings),
       ]);
 
       // `noteTags` is derived data. Trusting a file's copy of it contradicts
@@ -186,6 +206,6 @@ export async function importDatabase(
     noteTags: rebuiltRows,
     tags: bundle.tags.length,
     files: files.length,
-    settings: bundle.settings.length,
+    settings: importedSettings,
   };
 }

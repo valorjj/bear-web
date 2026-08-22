@@ -7,6 +7,7 @@ import { createPool, type Pool } from '../db/pool.ts';
 import { createSession } from '../repositories/sessions.ts';
 import { findOrCreateUserByIdentity } from '../repositories/users.ts';
 import { QUOTA_BYTES } from '../repositories/sync.ts';
+import { MAX_BODY_BYTES } from './sync.ts';
 
 const url = process.env.TEST_DATABASE_URL;
 const APP_ORIGIN = 'http://localhost:5173';
@@ -110,6 +111,49 @@ describe.skipIf(!url)('/sync', () => {
     const response = await request('/sync', { method: 'POST', body });
     expect(response.status).toBe(413);
     expect((await response.json()) as { error: string }).toMatchObject({ error: 'quota' });
+  });
+
+  it('rejects an oversized body with 413 without parsing it', async () => {
+    // The declared length is the fast path: rejected before a single byte of
+    // the body is read, let alone parsed into an object graph.
+    const response = await request('/sync', {
+      method: 'POST',
+      body: '{"notes":[],"tags":[]}',
+      headers: { 'content-length': String(MAX_BODY_BYTES + 1) },
+    });
+
+    expect(response.status).toBe(413);
+    expect((await response.json()) as { error: string }).toMatchObject({ error: 'body too large' });
+  });
+
+  it('does not trust content-length: an oversized stream is cut off too', async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    chunk.fill(0x20);
+    let sent = 0;
+
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        // Comfortably past the cap, and deliberately with no `content-length`
+        // at all — a chunked request that lied would otherwise walk straight
+        // past the header check.
+        if (sent > MAX_BODY_BYTES) {
+          controller.close();
+          return;
+        }
+        sent += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+    });
+
+    const response = await app.request('/sync', {
+      method: 'POST',
+      headers: { origin: APP_ORIGIN, cookie, 'content-type': 'application/json' },
+      body,
+      // Node requires this for a streaming request body.
+      duplex: 'half',
+    } as RequestInit);
+
+    expect(response.status).toBe(413);
   });
 
   it('rejects a malformed body with 400 rather than a 500', async () => {

@@ -154,6 +154,7 @@ export const ko: Record<TranslationKey, string> = {
   'account.signOut.cancel': '취소',
 
   'sync.idle': '메모가 백업되었습니다',
+  'sync.pending': '아직 백업되지 않았습니다',
   'sync.syncing': '백업하는 중…',
   'sync.offline': '오프라인 — 메모는 이 기기에 안전하게 있습니다',
   'sync.error': '백업이 중단되었습니다',

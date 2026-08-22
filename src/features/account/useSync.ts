@@ -138,8 +138,15 @@ export function useSync(state: SessionState): SyncController {
         const stored = await db.settings.get(SYNCED_ACCOUNT_KEY);
         if (stored?.value !== id) {
           const count = await db.notes.count();
-          if (count > 0) {
-            // Zero local notes falls through with nothing recorded here:
+          // Tags count as local data too, even though the dialog's copy talks
+          // about notes: a guest can hold tag metadata (order, icon,
+          // collapsed) with no notes left behind it, and gating on notes
+          // alone means `markAllDirty` never runs for them and those rows are
+          // never pushed at all. `count` stays the NOTE count because that is
+          // what the dialog's sentence is about.
+          const local = count + (await db.tags.count());
+          if (local > 0) {
+            // Zero local notes and tags falls through with nothing recorded here:
             // `engine.syncOnce` below reads the cursor first and, finding a
             // new account, records it and resets `LAST_PULLED_REV_KEY`
             // itself — the same "record the account" this branch would

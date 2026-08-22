@@ -148,8 +148,9 @@ export const en = {
   'account.signIn.google': 'Sign in with Google',
   'account.signOut': 'Sign out',
   // The largest, highest-contrast line in the menu, and deliberately the same
-  // in every state: in D1 signing in does NOT move a single note off this
-  // device, so a menu that changed its answer here would be lying. It also
+  // in every state. D2 syncs a COPY to the account; the local database stays
+  // the source of truth and nothing is ever moved off this device, so the
+  // line is as true signed in as signed out. It also
   // carries the disclosure the logout ruling requires — on a shared browser
   // the next person can read these notes — which is why it is stated rather
   // than tucked into a footnote.
@@ -164,6 +165,13 @@ export const en = {
   'account.signOut.cancel': 'Cancel',
 
   'sync.idle': 'Notes are backed up',
+  // The signed-in-but-never-synced state. `sync.idle` is the resting state
+  // both BEFORE the first run and after a successful one, and claiming a
+  // backup that has not happened yet is the one thing this line must not do.
+  // `lastSyncedAt === null` is what separates the two — most visibly while
+  // the adoption dialog is open, where sync is deliberately blocked on the
+  // user's answer.
+  'sync.pending': 'Not backed up yet',
   'sync.syncing': 'Backing up…',
   // "Offline" is the NORMAL state for a machine that sleeps. This reads as
   // information, not as a failure — a copy requirement of the spec, not
