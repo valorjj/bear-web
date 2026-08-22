@@ -588,7 +588,16 @@ describe('activating a tag from the editor', () => {
 
     // The nested row must now be rendered AND current — `reveal` opening the
     // collapsed ancestor is what makes the second half possible at all.
-    const nested = await screen.findByRole('button', { name: /^urgent\b/ });
+    //
+    // The ceiling is raised past testing-library's 1000ms default because this
+    // is the longest async chain in the file: `reveal` sets state, the tag tree
+    // re-queries through Dexie, and only then does the row mount. It failed
+    // once on a loaded CI runner and never locally; lowering the ceiling to
+    // 40ms reproduces that exact error here, which is what identifies it as a
+    // timing ceiling rather than a row that never arrives — `activateTag`
+    // returning true above has already proved the mechanism ran. Vitest has no
+    // retries in CI, so one such flake turns main red.
+    const nested = await screen.findByRole('button', { name: /^urgent\b/ }, { timeout: 5000 });
     expect(nested).toHaveAttribute('aria-current', 'page');
   });
 
