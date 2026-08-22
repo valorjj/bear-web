@@ -509,7 +509,23 @@ describe('tag scopes', () => {
     // The just-created note's row is the only one with `aria-current="true"`
     // (`SmartListSidebar`/`TagSidebar` rows use `aria-current="page"`), which
     // identifies it without depending on its title text.
-    const createdRow = screen.getByRole('button', { current: true });
+    //
+    // `findByRole`, not `getByRole`: the row arrives ASYNCHRONOUSLY and this
+    // query previously had a ceiling of zero. The editor's textbox above
+    // mounts as soon as `AppShell` sets the selected id, but the LIST row
+    // carrying `aria-current` needs the notes `useLiveQuery` to re-emit — a
+    // separate Dexie round trip — and D2's Task 5 put a `syncState` get+put
+    // inside `notes.create` (and `save`/`purge`), lengthening exactly this
+    // path. The result was a flake that failed FAST, in ~363ms, with
+    // `Unable to find an accessible element with the role "button"` and no
+    // name qualifier, which is what a `{ current: true }` query prints.
+    // Measured at ~7ms unloaded; running the same zero-budget query one tick
+    // earlier reproduces that exact error 6 times in 6, and awaiting it at
+    // the same point passes — a timing ceiling, not a row that never
+    // arrives. Vitest has no retries in CI, so one such flake turns `main`
+    // red; see ca40a16 and `NoteEditor.test.tsx`'s seeded-purge ceiling for
+    // the same fix.
+    const createdRow = await screen.findByRole('button', { current: true }, { timeout: 5000 });
 
     // Type real content into the freshly created note. The caret lands at
     // the end of the seeded "#work" text, hence the leading space rather

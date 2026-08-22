@@ -169,4 +169,9 @@ export const ko: Record<TranslationKey, string> = {
     '개 있습니다. 추가하면 계정과 다른 기기에도 사본이 만들어집니다. 삭제하면 이 기기에서 없어집니다.',
   'sync.adopt.confirm': '추가하기',
   'sync.adopt.discard': '삭제하기',
+
+  'sync.adopt.tagsOnly.title': '이 계정에 태그 설정을 추가할까요?',
+  'sync.adopt.tagsOnly.body':
+    '이 기기에는 계정이 아직 모르는 태그 설정(순서, 아이콘, 접힘 상태)이 있습니다. 추가하면 계정과 다른 기기에도 복사됩니다.',
+  'sync.adopt.tagsOnly.discard': '이 기기에만 두기',
 };

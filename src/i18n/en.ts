@@ -193,6 +193,19 @@ export const en = {
     ' notes on this device. Adding them puts a copy in your account and on your other devices. Discarding removes them from this device.',
   'sync.adopt.confirm': 'Add them',
   'sync.adopt.discard': 'Discard them',
+
+  // The notes-zero case. Adoption gates on notes OR tags, because a guest can
+  // hold tag metadata with no notes left behind it and those rows must still
+  // reach the account. The note-count sentence above would read "You have 0
+  // notes on this device" there, which is false, so this branch gets its own
+  // three strings rather than a count of zero. The discard label differs on
+  // purpose too: `onDiscard` purges NOTES, so for a tags-only device nothing
+  // is deleted — the tags simply stay local and unsynced, and a button
+  // reading "Discard them" would promise a deletion that does not happen.
+  'sync.adopt.tagsOnly.title': 'Add your tag settings to this account?',
+  'sync.adopt.tagsOnly.body':
+    'This device has tag settings — their order, icons, and which ones are collapsed — that your account has never seen. Adding them puts a copy in your account and on your other devices.',
+  'sync.adopt.tagsOnly.discard': 'Keep them here only',
 } as const;
 
 export type TranslationKey = keyof typeof en;

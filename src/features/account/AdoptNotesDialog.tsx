@@ -38,16 +38,29 @@ export function AdoptNotesDialog({
 }: AdoptNotesDialogProps): ReactElement | null {
   const t = useT();
 
+  // A guest can hold tag metadata with no notes behind it — adoption gates on
+  // notes OR tags, so this dialog can open with `count === 0`. The note-count
+  // sentence would then read "You have 0 notes on this device", which is
+  // false, so the zero case gets its own title, body and discard label. The
+  // discard label in particular: `onDiscard` purges NOTES, so here it deletes
+  // nothing and the tags merely stay local and unsynced.
+  const tagsOnly = count === 0;
+
   return (
     <ConfirmDialog
       open={open}
-      title={t('sync.adopt.title')}
-      body={`${t('sync.adopt.bodyBefore')}${count}${t('sync.adopt.bodyAfter')}`}
+      title={tagsOnly ? t('sync.adopt.tagsOnly.title') : t('sync.adopt.title')}
+      body={
+        tagsOnly
+          ? t('sync.adopt.tagsOnly.body')
+          : `${t('sync.adopt.bodyBefore')}${count}${t('sync.adopt.bodyAfter')}`
+      }
       cancelLabel={t('sync.adopt.confirm')}
-      confirmLabel={t('sync.adopt.discard')}
+      confirmLabel={tagsOnly ? t('sync.adopt.tagsOnly.discard') : t('sync.adopt.discard')}
       onCancel={onAdopt}
       onConfirm={onDiscard}
-      destructive
+      // Not destructive in the tags-only branch: that button deletes nothing.
+      destructive={!tagsOnly}
     />
   );
 }

@@ -46,7 +46,7 @@ feature and is not yet scheduled.
 | C code block language + highlighting       | queued   |
 | M9b callout blocks                         | deferred |
 
-1406 unit tests (plus 84 server tests, 55 of which are integration tests that
+1407 unit tests (plus 84 server tests, 55 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset), 78 end-to-end tests. `main` is
 always green and auto-deploys.
 

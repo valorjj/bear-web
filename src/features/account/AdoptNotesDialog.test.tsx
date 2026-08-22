@@ -32,6 +32,21 @@ describe('AdoptNotesDialog', () => {
     expect(screen.getByRole('alertdialog')).toHaveTextContent('7');
   });
 
+  it('never says "0 notes" when the device holds only tag settings', () => {
+    // Adoption gates on notes OR tags, so this dialog can open at zero notes.
+    // The counted sentence would then assert something false.
+    renderDialog({ count: 0 });
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).not.toHaveTextContent('0 notes');
+    expect(dialog).toHaveTextContent('tag settings');
+    // `onDiscard` purges NOTES, so in this branch it deletes nothing — a
+    // button reading "Discard them" would promise a deletion that never
+    // happens.
+    expect(screen.queryByRole('button', { name: 'Discard them' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Keep them here only' })).toBeInTheDocument();
+  });
+
   it('clicking "Add them" calls onAdopt and not onDiscard', () => {
     const { onAdopt, onDiscard } = renderDialog();
     fireEvent.click(screen.getByRole('button', { name: 'Add them' }));
