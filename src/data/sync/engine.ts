@@ -89,23 +89,6 @@ export function markConflictText(text: string): string {
   return lines.join('\n');
 }
 
-/**
- * Whether the local note differs from the server's copy in anything the push
- * actually carries.
- *
- * Text alone is not enough: a conflicting push can differ only in `pinned`,
- * `trashedAt` or `archivedAt`, and comparing text alone would silently
- * un-trash a note the user trashed with no copy kept anywhere.
- */
-function differs(local: Note, remote: RemoteNote): boolean {
-  return (
-    local.text !== remote.text ||
-    local.pinned !== remote.pinned ||
-    local.trashedAt !== remote.trashedAt ||
-    local.archivedAt !== remote.archivedAt
-  );
-}
-
 function toTagMeta(remote: RemoteTag): TagMeta {
   return {
     tag: remote.tag,
@@ -327,7 +310,17 @@ export function createEngine(deps: EngineDeps) {
         // that overwrites the same row with the server's version.
         const local = await db.notes.get(remote.id);
 
-        if (local !== undefined && differs(local, remote)) {
+        // TEXT alone decides whether a copy is made. The copy exists to
+        // preserve text the server is about to overwrite; when the text is
+        // identical there is nothing to preserve and a copy is pure
+        // duplication. That includes the case where two devices trashed the
+        // same note at different milliseconds — comparing `trashedAt` here
+        // would mint a visible copy and resurrect, on every device, a note the
+        // user deleted on both. A conflict differing only in `pinned` /
+        // `trashedAt` / `archivedAt` resolves by last-write-wins, this
+        // project's documented rule: the cost is a trash-intent the user may
+        // have to repeat, and nothing is destroyed.
+        if (local !== undefined && local.text !== remote.text) {
           const copyId = generateId();
           const timestamp = now();
           const copyText = markConflictText(local.text);

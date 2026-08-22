@@ -573,7 +573,9 @@ describe('sync engine', () => {
     expect((await db.syncState.get(['note', 'n1']))?.dirty).toBe(0);
   });
 
-  it('keeps a conflict copy when only metadata differs', async () => {
+  it('makes NO copy when a conflict differs only in metadata', async () => {
+    // Both devices trashed the same note, milliseconds apart. Device B pushes
+    // with a stale baseRev and the server conflicts.
     await db.notes.add({
       id: 'n1',
       title: 'Mine',
@@ -602,6 +604,58 @@ describe('sync engine', () => {
             createdAt: 1,
             updatedAt: 8,
             pinned: false,
+            trashedAt: 5,
+            archivedAt: null,
+            deleted: false,
+            rev: 6,
+          },
+        ],
+        tags: [],
+      },
+      rev: 6,
+    };
+
+    await engine().syncOnce(ACCOUNT);
+
+    // The copy exists to preserve TEXT the server is about to overwrite. The
+    // text is identical, so a copy preserves nothing — and being deliberately
+    // visible it would be pushed and pulled everywhere, resurrecting on every
+    // device a note the user deleted on both.
+    expect(await db.notes.get('generated')).toBeUndefined();
+    expect(await db.notes.count()).toBe(1);
+    // Metadata resolves by last-write-wins, this project's documented rule.
+    expect(await db.notes.get('n1')).toMatchObject({ trashedAt: 5 });
+  });
+
+  it('still copies when a conflict has genuinely different text', async () => {
+    await db.notes.add({
+      id: 'n1',
+      title: 'Mine',
+      text: '# Mine\nbody',
+      createdAt: 1,
+      updatedAt: 7,
+      pinned: false,
+      trashedAt: 6,
+      archivedAt: null,
+    });
+    await db.syncState.put({
+      kind: 'note',
+      key: 'n1',
+      syncedRev: 4,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 7,
+    });
+    transport.nextPush = {
+      accepted: [],
+      conflicts: {
+        notes: [
+          {
+            id: 'n1',
+            text: '# Theirs\nbody',
+            createdAt: 1,
+            updatedAt: 8,
+            pinned: false,
             trashedAt: null,
             archivedAt: null,
             deleted: false,
@@ -615,11 +669,9 @@ describe('sync engine', () => {
 
     await engine().syncOnce(ACCOUNT);
 
-    // Comparing text alone would silently un-trash the note and keep nothing.
-    // The server still wins, but the local side survives as a copy.
-    expect(await db.notes.get('n1')).toMatchObject({ trashedAt: null });
-    // The copy is deliberately VISIBLE — never trashed, never pinned — because
-    // a conflict copy the user cannot find in the list is not a copy at all.
+    // Narrowing the comparison must not disable copying altogether. The copy
+    // is deliberately VISIBLE even though the local row was trashed: a copy
+    // the user cannot find in the note list is not a copy at all.
     expect(await db.notes.get('generated')).toMatchObject({
       text: '# Mine (conflict)\nbody',
       trashedAt: null,
