@@ -3,7 +3,11 @@
 The sync API behind `api.markflowing.com`. A Hono service on Node, plain SQL
 against its own MariaDB container.
 
-D1 ships accounts only: **no note data crosses the network yet.**
+D2 adds the sync protocol: `GET`/`POST /sync` push and pull note and tag rows
+under a per-account revision counter, with tombstones and a 90-day sweep.
+Note data now does cross the network, encrypted in transit, to an account the
+signed-in user controls — see `docs/rulings/sync.md` for the constraints no
+test enforces.
 
 ## Run it
 
@@ -12,7 +16,32 @@ D1 ships accounts only: **no note data crosses the network yet.**
     npm run server:migrate
     npm run server:dev
 
-`.env` is gitignored and must stay so.
+`.env` is gitignored and must stay so. This is the **production** config: it
+carries the live origins, and `npm run server:dev` is the `tsx watch` process
+the Cloudflare tunnel points at as `api.markflowing.com`'s upstream. Killing
+or restarting it takes the live site's sign-in down until it comes back up.
+
+### Local development
+
+Local work needs its own config, not edits to `.env`:
+
+    cp .env.example .env.local  # point APP_ORIGIN/API_ORIGIN at localhost
+    npm run server:dev:local
+
+`.env.local` is gitignored like `.env`. **The two servers cannot run at the
+same time.** Both want port 8787, because
+`http://localhost:8787/auth/google/callback` is the one redirect URI
+registered in the Google console — there is no dev/prod split there. Stop
+whichever is running first:
+
+    lsof -ti:8787 | xargs -r kill -9
+
+and always restart production afterwards
+(`npm run server:dev`), then confirm `https://api.markflowing.com/me` answers
+`401` rather than `502` before walking away. **This is still `tsx watch`,
+started by hand** — it does not survive a closed terminal, a reboot, or the
+Mini sleeping, and has already gone down that way once. A launchd service and
+a non-watcher start command are named debt, not yet built.
 
 ## Layout
 

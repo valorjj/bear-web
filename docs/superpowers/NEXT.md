@@ -142,9 +142,11 @@ Blobs in IndexedDB, an image node in the editor schema, Markdown round-trip,
 embedding in HTML and PDF export, backup and import, and a story for eviction
 and quota. Bigger than A, B and C together; none of them block it.
 
-## D. Server sync and OAuth login — **D1 SHIPPED & DEPLOYED, D2 QUEUED**
+## D. Server sync and OAuth login — **D1 AND D2 BOTH SHIPPED**
 
 Spec: `docs/superpowers/specs/2026-08-21-d-server-sync-and-oauth-design.md`.
+Plan: `docs/superpowers/plans/2026-08-23-d2-sync-protocol.md`.
+Rulings: `docs/rulings/sync.md`.
 It supersedes this section; the notes below are kept only where the spec cites
 them. **Read the spec, not this.**
 
@@ -202,65 +204,118 @@ Constraints established when it was raised, each of which shapes the spec:
 - **"Runs every day" is not "always."** Availability gaps are the normal case,
   which is exactly why local-first is kept.
 
-### Start here next session — D2, the sync protocol
+### D1. Hosting, accounts, Google login — **SHIPPED 2026-08-21**
 
 **D1 shipped, merged, deployed and was verified live on 2026-08-21.** Real
 Google sign-in works on `https://markflowing.com`; the session row, the
 `__Host-` cookie, and the 401/403 paths were all confirmed against the running
-deployment, not only against tests. Everything below is about **D2**.
+deployment, not only against tests.
 
-Read the spec first — `docs/superpowers/specs/2026-08-21-d-server-sync-and-oauth-design.md`
-— and in particular its "What this reverses" section. **Single user was
-STRUCK**: D is multi-tenant with open signup. Do not re-derive tenancy from
-this file.
+### D2. The sync protocol — **SHIPPED 2026-08-23**
 
-**What D2 is.** The revision counter, `GET`/`POST /sync`, tombstones, Dexie
-version 3 plus `syncState`, the conflict copy, the sync status indicator, the
-guest-note adoption dialog, and the per-user quota. The quota was deferred out
-of D1 for a reason that expires the moment D2 starts: it is a byte cap on note
-text, and until D2 there is no note text on the server.
+Plan: `docs/superpowers/plans/2026-08-23-d2-sync-protocol.md`. Ledger:
+`.superpowers/sdd/2026-08-23-d2-sync-protocol/progress.md` (gitignored,
+deleted after this session — everything worth keeping from it is folded into
+`docs/rulings/sync.md` and here).
 
-**Already settled — do not re-litigate.** Last-write-wins with the losing edit
-kept as a `(conflict)` note. One monotonic revision counter per user, so pull
-is a single indexed query and no clock comparison between devices is ever
-needed. Tombstones for purges, retained 90 days. `noteTags` is derived locally
-by `parseTags` and never synced; `noteFolds` and `settings` are not synced
-either. Sync is automatic and quiet. Sync state lives in a new `syncState`
-table, never on `Note`, because `Note` is what `BackupBundle` serialises.
+What landed: the per-account revision counter, `GET`/`POST /sync` with
+tombstones and a 90-day sweep, Dexie version 3 plus a `syncState` table,
+dirty-tracking on every note and tag write, the sync engine
+(`createEngine(deps).syncOnce`), a four-state status indicator in the account
+menu, the guest-note adoption dialog for a first sign-in or an account switch,
+and the `(conflict)` note for a losing edit. **This is the change that makes
+the D paragraph above literally true: note data now crosses the network.**
+`src/data/sync/`, `syncState` and `src/features/account/` are the modules a
+future change to any of this touches — see `docs/rulings/sync.md` for the
+constraints no test enforces before touching them.
 
-**Two things D1 built that D2 depends on, and should not rediscover:**
+Ten things diverged from the plan or were only found during review, each
+worth carrying forward rather than rediscovering (full detail in
+`docs/rulings/sync.md`):
 
-- `pool.transaction()` exists. It was added during D1's final review because
-  `findOrCreateUserByIdentity` could leave an orphan `users` row — and because
-  the spec requires `rev_counter` to be incremented *in the same transaction as
-  every write*, which the plain `Query` interface cannot express.
-- `users.rev_counter` already exists in `001_init.sql`, unread. D2 needs no
-  migration to start using it.
+- **The tag-reindex helper was duplicated verbatim by two tasks** written from
+  the same plan; extracted once, to `src/data/reindex.ts`'s `reindexNote`,
+  used by both the notes repository and the engine.
+- **The sync cursor and `SyncOutcome.rev` never move backwards** —
+  `Math.max(remote.rev, result.rev)`, not `result.rev` — because a push that
+  wrote nothing reports a lower revision than the pull already advanced past.
+- **The `(conflict)` marker lives in the copy's TEXT, not its `title`.**
+  `deriveTitle` re-derives `title` on the next edit and on the moment a second
+  device pulls the copy, so a title-only marker evaporates exactly when it is
+  most needed.
+- **A conflict comparison widened to metadata (`pinned`/`trashedAt`/
+  `archivedAt`) was tried and reverted.** It resurrects, on every device, a
+  note trashed on two devices at once — worse than the text-only comparison it
+  replaced, which was already correct.
+- **Two data-loss paths were found and closed in review**, both in the
+  engine's accept loop: a purge landing mid-push (fixed by reading the
+  CURRENT `syncState` row, not the collected snapshot) and `markAllDirty`
+  pinning every row `dirty` forever (fixed by stamping each note's own
+  `updatedAt`, not one shared "now", as `markedAt`).
+- **`useT()` takes no arguments; this app has no string interpolation at
+  all.** The plan guessed a `{count}` placeholder for the adoption dialog's
+  count; it does not exist, and the dialog composes its sentence from two
+  separate translation keys instead.
+- **The rate limiter on `/sync` keyed on the raw `Cookie` header**, so any
+  caller varying one byte got a fresh bucket — fixed to key on the extracted
+  session token, falling back to `clientIp` only when absent.
+- **`readBatch`'s validation gap accepted a note missing
+  `trashedAt`/`archivedAt`/`pinned`/`deleted`/`createdAt`** and let it reach
+  `mysql2`, which throws on an `undefined` bind parameter. Worse than a
+  crash: the pre-fix behaviour was actually a silent **200**, i.e. malformed
+  data accepted rather than rejected. Now a 400 before any SQL binding.
+- **Import no longer resets `syncedRev` to 0.** Clearing it on import made
+  the user's own restored backup lose to the server copy and land as a
+  `(conflict)` note on the most ordinary import flow there is — preserving
+  `syncedRev` lets the import correctly overwrite the server's copy instead.
+- **A unit-test flake in `NoteEditor.test.tsx` was found, chased down, and
+  fixed the way commit `ca40a16` fixed the same class of problem in
+  `AppShell.test`: the `waitFor` ceiling around `notes.purge` was raised, not
+  the assertion changed**, after reproducing the failure reliably under load
+  at a lowered ceiling. Task 5 added a `syncState` get+put inside
+  `notes.purge`, narrowing the margin on an already-tight test.
+
+**Corrected debt this session found while touching the numbers below: the
+e2e flake count is THREE, not two.** `smoke.spec.ts:102` joins the two
+`appearance.spec.ts` flakes already known — its cause is named:
+`usePaneWidths` writes settings fire-and-forget with no way for a test to
+await the write, and D2's own `syncState` get+put on every note write shifted
+timing enough to surface it more often. None are D2 regressions — the failing
+set varies run to run and every one passes in isolation.
+
+**Not part of D2, named and deferred rather than silently dropped** (see
+`docs/rulings/sync.md`'s "Known gaps" section for the full list): import
+being "replace" locally but "merge" against the server; an orphaned
+`syncState` row surviving an import at `dirty: 0`; `sweepTombstones`'s
+non-atomic count-then-delete; the tag accept branch's missing in-flight-edit
+guard; `AdoptNotesDialog` mounting unconditionally beside the account
+popover.
+
+**Two things D1 built that D2 depended on, exactly as anticipated:**
+`pool.transaction()` and `users.rev_counter` (`001_init.sql`) — no migration
+was needed to start using either.
 
 **Live environment facts that are not recoverable from the repo:**
 
-- `server/.env` currently holds PRODUCTION origins. Local development needs
-  `APP_ORIGIN=http://localhost:5173` and `API_ORIGIN=http://localhost:8787`
-  swapped back, which also drops the `__Host-` cookie prefix — correct, since a
-  `Secure` cookie cannot be set over plain http. A timestamped backup of the
-  dev values sits beside it, gitignored.
+- `server/.env` holds PRODUCTION origins; `server/.env.local` (gitignored,
+  documented in `server/.env.example` and `server/README.md`) holds
+  localhost ones for `npm run server:dev:local`. **The two servers cannot run
+  at once** — both want port 8787, the one redirect URI registered in the
+  Google console.
 - The `markflowing` tunnel is the machine's **single** cloudflared connector;
   the tool allows only one system service per machine. `lunch-api`,
   `docs-api` and `yjs` were deliberately deleted — those projects are retired.
 - MariaDB is `markflowing-mariadb` on **127.0.0.1**:3308 (loopback, not all
   interfaces). Dev database `markflowing`, test database `markflowing_test`.
-- **The API server is NOT a service.** It runs as `npm run server:dev`, which
-  is `tsx watch` — a development watcher started by hand in a shell. It does
-  not survive a closed terminal, a reboot, or the Mini sleeping, and it has
-  already gone down once that way: the tunnel stayed up and
+- **The API server is STILL NOT a service**, and D2 did not change that. It
+  runs as `npm run server:dev`, `tsx watch` started by hand, and it has
+  already gone down once when the machine slept: the tunnel stayed up and
   `api.markflowing.com` answered **502** while the apex kept serving the app
-  perfectly, which is exactly the shape this failure takes. Local-first means
-  the app is fine either way, so nothing shouts. **Before relying on sign-in
-  from another device, give it a launchd service and a production start
-  command that is not a file watcher.**
+  perfectly. Local-first means the app is fine either way, so nothing shouts.
+  **Giving it a launchd service and a non-watcher start command is the next
+  thing worth doing after D2** — it was named debt at D1 and remains so.
 
-**Known debt, carried deliberately out of D1.** None blocks D2; several are
-cheapest to fold into it:
+**Known debt, carried forward. None of it blocks anything queued:**
 
 - **`ThemePicker` has the same `overflow-hidden` clipping bug** `AccountMenu`
   had, just narrower so it has not bitten. The fix mechanism now exists in
@@ -276,13 +331,14 @@ cheapest to fold into it:
   reuse. Documented honestly in the code and in `server/README.md`.
 - **The default database password is still `markflowing`**, left because
   changing it breaks the existing volume.
-- **Two intermittent e2e tests** in `appearance.spec.ts`, each passing in
-  isolation. Playwright retries them; Vitest does not retry, so a flaky *unit*
-  test turns main red where a flaky e2e test is merely reported.
-
-**The old warning here — "do not start by writing the MariaDB schema" — has
-been served.** D1 built the service, the migration runner and the account
-schema, and the database was indeed the small half. D2's own version of that
-warning: do not start by writing `/sync`. Start by settling what a revision is
-on the client — when `syncState.dirty` is set and cleared — because the
-endpoint's shape falls out of that, not the other way round.
+- **Three intermittent e2e tests**, not two: `appearance.spec.ts:893`,
+  `appearance.spec.ts:1021`, and now `smoke.spec.ts:102`, each passing in
+  isolation. Playwright retries them; Vitest does not retry, so a flaky
+  *unit* test turns main red where a flaky e2e test is merely reported —
+  which is exactly the class of bug the `NoteEditor.test.tsx` fix above
+  addressed for the one place D2 could see it.
+- **Giving the API server a launchd service and a non-watcher start
+  command** — named at D1, restated at D2, still not built.
+- The "known gaps" list in `docs/rulings/sync.md` — none block anything
+  queued, all are named there rather than here so they stay next to the
+  constraints they qualify.

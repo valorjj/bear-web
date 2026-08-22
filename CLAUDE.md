@@ -42,23 +42,30 @@ feature and is not yet scheduled.
 | B collapsible headings + level badge       | complete |
 | B2 drag-to-reorder headings                | queued   |
 | D1 server: hosting, accounts, Google login | complete |
-| D2 server: the sync protocol               | queued   |
+| D2 server: the sync protocol               | complete |
 | C code block language + highlighting       | queued   |
 | M9b callout blocks                         | deferred |
 
-1364 unit tests (plus 33 server integration tests that skip when
-`TEST_DATABASE_URL` is unset), 74 end-to-end tests. `main` is always green and
-auto-deploys.
+1399 unit tests (plus 82 server tests, 53 of which are integration tests that
+skip when `TEST_DATABASE_URL` is unset), 78 end-to-end tests. `main` is
+always green and auto-deploys.
 
 **D reverses the "no backend, no account" premise above.** D1 shipped
 `server/`: a Hono service on Node against its own MariaDB container on the Mac
 Mini, with Google OAuth2 accounts (Authorization Code + PKCE) and an opaque,
 revocable session cookie. GitHub and Naver were part of the original idea but
-were not built in D1 — only Google exists today. D1 is accounts only: **no
-note data crosses the network yet**; that is D2. The UI offers sign-in, the
-signed-in identity, and sign-out and nothing else — `DELETE /account` exists as
-an endpoint with no client affordance, deliberately: it is the spec's day-one
-requirement, but a wrapper reachable only from its own tests was removed.
+were not built in D1 — only Google exists today. **D2 shipped the sync
+protocol: note and tag data now crosses the network**, encrypted in transit,
+to the account the signed-in user controls — a per-account revision counter,
+`GET`/`POST /sync` with tombstones and a 90-day sweep, and a `(conflict)` note
+holding the losing edit of a last-write-wins collision. Local-first is
+unchanged: IndexedDB stays the source of truth, sync is automatic and quiet,
+and the app works exactly as well offline as it did before D2. See
+`docs/rulings/sync.md` for the constraints no test enforces. The UI offers
+sign-in, the signed-in identity, sync status, and sign-out and nothing
+else — `DELETE /account` exists as an endpoint with no client affordance,
+deliberately: it is the spec's day-one requirement, but a wrapper reachable
+only from its own tests was removed.
 The boot `GET /me` is gated on a locally stored "has signed in before" hint
 (`bear-web:account:hasSession`), so a visitor who never signed in makes no
 cross-origin request at all — without the gate `e2e/smoke.spec.ts` was red on
@@ -67,10 +74,13 @@ server binds `127.0.0.1` and the database publishes `127.0.0.1:3308`: the
 rate limiter trusts `cf-connecting-ip` verbatim, so the tunnel must be the only
 path in. D is NOT in the A/B/C queue.
 Decisions already taken: local-first is KEPT (IndexedDB stays the source of
-truth, the server is a sync target for D2), identity is per-provider with no
+truth, the server is a sync target), identity is per-provider with no
 email-based auto-linking, and A shipped first. Constraints and the reasoning
-are in `NEXT.md`; a browser cannot speak the MySQL wire protocol, so the
-server is the project. See `server/README.md` for how to run it.
+are in `docs/superpowers/NEXT.md`; a browser cannot speak the MySQL wire
+protocol, so the server is the project. See `server/README.md` for how to run
+it — including `server/.env.local` and `npm run server:dev:local` for local
+development, since `server/.env` holds the production origins the live tunnel
+depends on and the two servers cannot run at once.
 
 **The last five rows are not numbered milestones yet**, and the lettering is
 `docs/superpowers/NEXT.md`'s, which holds the order and the reasoning for it.
@@ -362,6 +372,7 @@ at the top; the rows here are abridged.
 | `TagPill.ts` (`tagDecorations`, `tagRangeAt`, the `mousedown` handler), `blockText.ts` (`maskedBlockText`), `RichEditor`'s `activateRef` / `data-mod-held`, `AppShell.handleActivateTag`, `--bear-tag-fill*`, `tagAgreement.test.ts`                                                                     | [tag-pills.md](docs/rulings/tag-pills.md)                                           |
 | `src/features/export/` — `html.ts`, `exportNote.ts`, `print.ts`, `filename.ts`, `ExportMenu.tsx`; `NoteEditor.handleExport`; the `export.*` i18n keys and `ALLOWED_IDENTICAL`                                                                                                                            | [export.md](docs/rulings/export.md)                                                 |
 | `src/styles/*.css`, `themes.ts`, `app/theme.ts`, `index.html`'s inline script, `Pane.tsx`, `Resizer.tsx`, `Button.tsx`, `ThemePicker.tsx`, `RichEditor.tsx`; a new `--bear-*` property, `[data-theme]` block, spacing / radius / shadow / `outline-none` utility                                         | [design-tokens-and-layout.md](docs/rulings/design-tokens-and-layout.md)             |
+| `src/data/sync/` (`config.ts`, `transport.ts`, `engine.ts`, `markDirty.ts`), `syncState` in `db.ts`, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`, `server/migrations/002_sync.sql`, `LAST_PULLED_REV_KEY`, `SYNCED_ACCOUNT_KEY`, `useSync.ts`, `markAllDirty`, `reindexNote`          | [sync.md](docs/rulings/sync.md)                                                     |
 | any `aria-*` attribute or accessible-name assertion; `Icon.tsx`, `SidebarRow.tsx`'s explicit space, `NoteListItem.tsx`'s label, `preview.ts`'s `snippetLines`, `Button.tsx`'s variants and its `ariaHasPopup`/`ariaExpanded`, `NoteList.tsx`'s header, `ScopeMenu.tsx`'s roles, `ConfirmDialog`'s Cancel | [accessibility.md](docs/rulings/accessibility.md)                                   |
 | `e2e/appearance.spec.ts`, `smoke.spec.ts`, `contrast.spec.ts`, `scripts/*.test.ts`, the tsconfig `include`/`types`; a `lucide-react` import outside `Icon.tsx`; a `[role="…"]` selector or `.closest()` inside `page.evaluate`; **any test you are about to edit because a restyle made it fail**        | [testing-and-tooling.md](docs/rulings/testing-and-tooling.md)                       |
 | planning a milestone, or touching pane widths, `NoteEditor`'s seed/discard, `AppShell`'s confirm handlers, the tag tree, the note-list header, the editor typography tokens, or the Playwright pointer-drag tests                                                                                        | [deferred.md](docs/rulings/deferred.md) — deliberately deferred items, with rulings |

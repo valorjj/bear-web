@@ -542,7 +542,18 @@ describe('seeded notes', () => {
 
     unmount();
 
-    await waitFor(() => expect(purge).toHaveBeenCalledWith(note.id));
+    // The ceiling is raised past testing-library's 1000ms default because
+    // this path measured a real failure at ~1077ms on a loaded runner (once
+    // in ~15 full-suite runs) but never in isolation. Lowering it to 200ms
+    // reproduces that same failure reliably under load (three parallel full
+    // `vitest run` invocations), which identifies it as a timing ceiling
+    // rather than `purge` never being called — confirmed correct behaviour
+    // under Playwright and in every unloaded run. Task 5 added a `syncState`
+    // get+put inside `notes.purge`, which is exactly this path, and plausibly
+    // narrowed the margin. Vitest has no retries in CI, so one such flake
+    // turns `main` red; see commit ca40a16 for the same fix applied to
+    // AppShell.test.tsx.
+    await waitFor(() => expect(purge).toHaveBeenCalledWith(note.id), { timeout: 5000 });
   });
 
   it('still purges a genuinely blank new note', async () => {
