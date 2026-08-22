@@ -249,6 +249,15 @@ table, never on `Note`, because `Note` is what `BackupBundle` serialises.
   `docs-api` and `yjs` were deliberately deleted — those projects are retired.
 - MariaDB is `markflowing-mariadb` on **127.0.0.1**:3308 (loopback, not all
   interfaces). Dev database `markflowing`, test database `markflowing_test`.
+- **The API server is NOT a service.** It runs as `npm run server:dev`, which
+  is `tsx watch` — a development watcher started by hand in a shell. It does
+  not survive a closed terminal, a reboot, or the Mini sleeping, and it has
+  already gone down once that way: the tunnel stayed up and
+  `api.markflowing.com` answered **502** while the apex kept serving the app
+  perfectly, which is exactly the shape this failure takes. Local-first means
+  the app is fine either way, so nothing shouts. **Before relying on sign-in
+  from another device, give it a launchd service and a production start
+  command that is not a file watcher.**
 
 **Known debt, carried deliberately out of D1.** None blocks D2; several are
 cheapest to fold into it:
