@@ -154,6 +154,16 @@ export const en = {
   // the next person can read these notes — which is why it is stated rather
   // than tucked into a footnote.
   'account.notesLocal': 'Notes stay on this device.',
+
+  'sync.idle': 'Notes are backed up',
+  'sync.syncing': 'Backing up…',
+  // "Offline" is the NORMAL state for a machine that sleeps. This reads as
+  // information, not as a failure — a copy requirement of the spec, not
+  // decoration.
+  'sync.offline': 'Offline — your notes are safe on this device',
+  'sync.error': 'Backup paused',
+  'sync.quota': 'Your account is full. Delete some notes to back up again.',
+  'sync.never': 'Not backed up yet',
 } as const;
 
 export type TranslationKey = keyof typeof en;

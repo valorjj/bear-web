@@ -1,62 +1,17 @@
-import {
-  type CSSProperties,
-  type ReactElement,
-  type ReactNode,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type CSSProperties, type ReactElement, useLayoutEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n';
 import { Icon, UserRound } from '@/ui/Icon';
 import { Popover } from '@/ui/Popover';
 
+import { Status, SyncStatus } from './SyncStatus';
 import { useSession } from './useSession';
+import { useSync } from './useSync';
 
 /** Matches the previous `w-64`, kept so the visual size is unchanged. */
 const MENU_WIDTH = 256;
 /** Breathing room from the trigger and from the viewport edge. */
 const GAP = 8;
-
-/**
- * A status line: a dot, then a short state in the app's UI face.
- *
- * The dot is the menu's only ornament. It takes the accent only when a session
- * exists, so the one saturated pixel in the surface means something rather than
- * decorating it; every other state leaves it quiet.
- */
-function Status({
-  label,
-  live,
-  children,
-}: {
-  label: string;
-  live: boolean;
-  children?: ReactNode;
-}): ReactElement {
-  return (
-    <div className="flex items-start gap-2 px-2">
-      <span
-        aria-hidden="true"
-        className={`mt-1 size-1.5 shrink-0 rounded-full ${live ? 'bg-accent' : 'bg-faint'}`}
-      />
-      {/*
-        The address hangs under the label from inside this column rather than
-        from a hand-computed left padding. An arbitrary indent matching the dot
-        plus the gap was the first attempt, and the spacing-scale guard in
-        `sourceLint` rejected it — correctly, because a number that must be
-        recomputed whenever the dot size or the gap changes is a misalignment
-        waiting to happen. Flex keeps the two in one column by construction.
-        (The guard scans comments too, so this one describes the utility
-        rather than quoting it.)
-      */}
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <p className="text-ui-sm text-muted truncate">{label}</p>
-        {children}
-      </div>
-    </div>
-  );
-}
 
 /**
  * The sidebar footer's account control, beside the theme picker.
@@ -71,6 +26,7 @@ function Status({
 export function AccountMenu(): ReactElement {
   const t = useT();
   const { state, signIn, signOut } = useSession();
+  const sync = useSync(state);
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [placement, setPlacement] = useState<CSSProperties | null>(null);
@@ -110,7 +66,7 @@ export function AccountMenu(): ReactElement {
     if (state.status === 'loading') {
       // No spinner and no skeleton: the fetch resolves in milliseconds on a
       // reachable server, and a flash of chrome is worse than a still frame.
-      return <Status label={t('account.menu')} live={false} />;
+      return <Status label={t('account.menu')} tone="faint" />;
     }
 
     const status =
@@ -122,13 +78,17 @@ export function AccountMenu(): ReactElement {
 
     return (
       <div className="flex flex-col gap-2 pt-1">
-        <Status label={status} live={state.status === 'signedIn'}>
+        <Status label={status} tone={state.status === 'signedIn' ? 'accent' : 'faint'}>
           {state.status === 'signedIn' ? (
             <p className="text-ui-sm text-muted truncate font-mono">
               {state.account.email ?? state.account.userId}
             </p>
           ) : null}
         </Status>
+
+        {state.status === 'signedIn' ? (
+          <SyncStatus status={sync.status} message={sync.message} />
+        ) : null}
 
         <p className="text-ui text-text px-2">{t('account.notesLocal')}</p>
 

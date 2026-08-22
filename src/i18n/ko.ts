@@ -147,4 +147,11 @@ export const ko: Record<TranslationKey, string> = {
   'account.signIn.google': 'Google로 로그인',
   'account.signOut': '로그아웃',
   'account.notesLocal': '메모는 이 기기에 그대로 남습니다.',
+
+  'sync.idle': '메모가 백업되었습니다',
+  'sync.syncing': '백업하는 중…',
+  'sync.offline': '오프라인 — 메모는 이 기기에 안전하게 있습니다',
+  'sync.error': '백업이 중단되었습니다',
+  'sync.quota': '계정 저장 공간이 가득 찼습니다. 메모를 삭제한 뒤 다시 백업하세요.',
+  'sync.never': '아직 백업되지 않음',
 };
