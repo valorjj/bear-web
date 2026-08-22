@@ -1,10 +1,62 @@
-import { type CSSProperties, type ReactElement, useLayoutEffect, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { useT } from '@/i18n';
 import { Icon, UserRound } from '@/ui/Icon';
 import { Popover } from '@/ui/Popover';
 
 import { useSession } from './useSession';
+
+/** Matches the previous `w-64`, kept so the visual size is unchanged. */
+const MENU_WIDTH = 256;
+/** Breathing room from the trigger and from the viewport edge. */
+const GAP = 8;
+
+/**
+ * A status line: a dot, then a short state in the app's UI face.
+ *
+ * The dot is the menu's only ornament. It takes the accent only when a session
+ * exists, so the one saturated pixel in the surface means something rather than
+ * decorating it; every other state leaves it quiet.
+ */
+function Status({
+  label,
+  live,
+  children,
+}: {
+  label: string;
+  live: boolean;
+  children?: ReactNode;
+}): ReactElement {
+  return (
+    <div className="flex items-start gap-2 px-2">
+      <span
+        aria-hidden="true"
+        className={`mt-1 size-1.5 shrink-0 rounded-full ${live ? 'bg-accent' : 'bg-faint'}`}
+      />
+      {/*
+        The address hangs under the label from inside this column rather than
+        from a hand-computed left padding. An arbitrary indent matching the dot
+        plus the gap was the first attempt, and the spacing-scale guard in
+        `sourceLint` rejected it — correctly, because a number that must be
+        recomputed whenever the dot size or the gap changes is a misalignment
+        waiting to happen. Flex keeps the two in one column by construction.
+        (The guard scans comments too, so this one describes the utility
+        rather than quoting it.)
+      */}
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className="text-ui-sm text-muted truncate">{label}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 /**
  * The sidebar footer's account control, beside the theme picker.
@@ -16,11 +68,6 @@ import { useSession } from './useSession';
  * No colour is written here. Every value is a token utility, so a palette edit
  * updates this menu for free.
  */
-/** Matches the previous `w-64`, kept so the visual size is unchanged by the fix. */
-const MENU_WIDTH = 256;
-/** Breathing room from the trigger and from the viewport edge. */
-const GAP = 8;
-
 export function AccountMenu(): ReactElement {
   const t = useT();
   const { state, signIn, signOut } = useSession();
@@ -44,37 +91,55 @@ export function AccountMenu(): ReactElement {
     );
   }
 
+  /**
+   * Identity, then the statement, then the action — and the STATEMENT is the
+   * largest, highest-contrast line, not the address.
+   *
+   * That inversion is the design. Before it, the email, the action and the
+   * disclosure were all `text-ui` in three greys: only one was clickable and
+   * nothing said so, the address looked tappable, and the disclosure read as a
+   * disabled row. Making "where your notes are" the headline is also the only
+   * honest hierarchy here — in D1 signing in moves no note off this device, so
+   * the address is a receipt and the statement is the answer.
+   *
+   * The address is set in the mono face: it is an identifier, not prose, mono
+   * already carries code in this app, and truncating a monospaced string reads
+   * as deliberate rather than broken.
+   */
   function body(): ReactElement {
     if (state.status === 'loading') {
-      return <p className="text-ui text-muted px-2 py-1">{t('account.menu')}</p>;
+      // No spinner and no skeleton: the fetch resolves in milliseconds on a
+      // reachable server, and a flash of chrome is worse than a still frame.
+      return <Status label={t('account.menu')} live={false} />;
     }
 
-    if (state.status === 'unavailable') {
-      return (
-        <div className="px-2 py-1">
-          <p className="text-ui text-text">{t('account.unavailable')}</p>
-          <p className="text-ui text-muted mt-1">{t('account.unavailable.body')}</p>
-        </div>
-      );
-    }
-
-    if (state.status === 'signedOut') {
-      return (
-        <>
-          <p className="text-ui text-muted px-2 py-1">{t('account.signedOut')}</p>
-          {row(t('account.signIn.google'), signIn)}
-        </>
-      );
-    }
+    const status =
+      state.status === 'unavailable'
+        ? t('account.unavailable')
+        : state.status === 'signedOut'
+          ? t('account.signedOut')
+          : t('account.signedIn');
 
     return (
-      <>
-        <p className="text-ui text-muted truncate px-2 py-1">
-          {state.account.email ?? state.account.userId}
-        </p>
-        {row(t('account.signOut'), () => void signOut())}
-        <p className="text-ui text-faint px-2 py-1">{t('account.signOut.note')}</p>
-      </>
+      <div className="flex flex-col gap-2 pt-1">
+        <Status label={status} live={state.status === 'signedIn'}>
+          {state.status === 'signedIn' ? (
+            <p className="text-ui-sm text-muted truncate font-mono">
+              {state.account.email ?? state.account.userId}
+            </p>
+          ) : null}
+        </Status>
+
+        <p className="text-ui text-text px-2">{t('account.notesLocal')}</p>
+
+        {state.status === 'unavailable' ? null : (
+          <div className="border-border border-t pt-1">
+            {state.status === 'signedIn'
+              ? row(t('account.signOut'), () => void signOut())
+              : row(t('account.signIn.google'), signIn)}
+          </div>
+        )}
+      </div>
     );
   }
 

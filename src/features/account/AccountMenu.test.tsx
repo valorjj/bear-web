@@ -56,6 +56,20 @@ describe('AccountMenu', () => {
     expect(screen.getByRole('menuitem', { name: /sign out/i })).toBeInTheDocument();
   });
 
+  it('states where the notes are in every state, not only when signed in', async () => {
+    // The statement is the menu's headline and is deliberately identical in
+    // all states: in D1 signing in moves no note off this device, so a menu
+    // that changed its answer here would be claiming a sync that does not
+    // exist. Asserted on the signed-OUT state, because that is the one a
+    // signed-in-only check would let regress.
+    mount(() => new Response('{}', { status: 401 }));
+
+    await userEvent.click(await screen.findByRole('button', { name: /account/i }));
+
+    expect(screen.getByText(/stay on this device/i)).toBeInTheDocument();
+    expect(screen.getByText(/not signed in/i)).toBeInTheDocument();
+  });
+
   it('discloses that notes stay on the device', async () => {
     // Required by the spec, not decoration: the ruling that logout leaves
     // notes behind is only defensible if the user is told.

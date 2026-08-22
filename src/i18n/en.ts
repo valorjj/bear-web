@@ -139,19 +139,21 @@ export const en = {
   'editor.fold.headingLevel': 'Heading',
 
   'account.menu': 'Account',
+  // Three states, one grammar: each is a short status the dot annotates, so the
+  // menu reads as one sentence about where things stand rather than three
+  // unrelated fragments.
+  'account.signedIn': 'Signed in',
   'account.signedOut': 'Not signed in',
+  'account.unavailable': 'Sync server unreachable',
   'account.signIn.google': 'Sign in with Google',
   'account.signOut': 'Sign out',
-  'account.unavailable': 'Sync server unreachable',
-  // Says only what D1 does: nothing syncs yet, so promising that sync "resumes"
-  // was copy for a feature that does not exist. Unreachable is the NORMAL state
-  // for a machine that sleeps, so this reads as information, not failure.
-  'account.unavailable.body':
-    'Your notes are safe on this device. The server answers when it wakes.',
-  // Stated plainly because it is the honest consequence of the ruling that
-  // logout does not clear this device: on a shared browser the next person can
-  // read these notes. Disclosure is the mitigation.
-  'account.signOut.note': 'Your notes stay on this device.',
+  // The largest, highest-contrast line in the menu, and deliberately the same
+  // in every state: in D1 signing in does NOT move a single note off this
+  // device, so a menu that changed its answer here would be lying. It also
+  // carries the disclosure the logout ruling requires — on a shared browser
+  // the next person can read these notes — which is why it is stated rather
+  // than tucked into a footnote.
+  'account.notesLocal': 'Notes stay on this device.',
 } as const;
 
 export type TranslationKey = keyof typeof en;
