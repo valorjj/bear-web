@@ -1,9 +1,11 @@
 import { type CSSProperties, type ReactElement, useLayoutEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n';
+import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { Icon, UserRound } from '@/ui/Icon';
 import { Popover } from '@/ui/Popover';
 
+import { AdoptNotesDialog } from './AdoptNotesDialog';
 import { Status, SyncStatus } from './SyncStatus';
 import { useSession } from './useSession';
 import { useSync } from './useSync';
@@ -28,6 +30,7 @@ export function AccountMenu(): ReactElement {
   const { state, signIn, signOut } = useSession();
   const sync = useSync(state);
   const [open, setOpen] = useState(false);
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [placement, setPlacement] = useState<CSSProperties | null>(null);
 
@@ -95,7 +98,7 @@ export function AccountMenu(): ReactElement {
         {state.status === 'unavailable' ? null : (
           <div className="border-border border-t pt-1">
             {state.status === 'signedIn'
-              ? row(t('account.signOut'), () => void signOut())
+              ? row(t('account.signOut'), () => setConfirmingSignOut(true))
               : row(t('account.signIn.google'), signIn)}
           </div>
         )}
@@ -168,6 +171,32 @@ export function AccountMenu(): ReactElement {
         >
           {body()}
         </Popover>
+      ) : null}
+
+      <ConfirmDialog
+        open={confirmingSignOut}
+        title={t('account.signOut.title')}
+        body={t('account.signOut.body')}
+        confirmLabel={t('account.signOut.confirm')}
+        cancelLabel={t('account.signOut.cancel')}
+        onConfirm={() => {
+          setConfirmingSignOut(false);
+          void signOut();
+        }}
+        onCancel={() => setConfirmingSignOut(false)}
+      />
+
+      {/*
+        Mounted independent of the popover: it must block sync — and be
+        visible — even if the user closed the menu before answering.
+      */}
+      {sync.adoption !== null ? (
+        <AdoptNotesDialog
+          open
+          count={sync.adoption.count}
+          onAdopt={sync.onAdopt}
+          onDiscard={sync.onDiscard}
+        />
       ) : null}
     </div>
   );

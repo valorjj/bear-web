@@ -154,6 +154,14 @@ export const en = {
   // the next person can read these notes — which is why it is stated rather
   // than tucked into a footnote.
   'account.notesLocal': 'Notes stay on this device.',
+  // The spec makes this sentence a requirement, not decoration: on a shared
+  // browser the next person opens the app and reads these notes. The
+  // mitigation is disclosure, so the user's choice is an informed one.
+  'account.signOut.title': 'Sign out?',
+  'account.signOut.body':
+    'Your notes stay on this device after you sign out. Anyone using this browser can read them.',
+  'account.signOut.confirm': 'Sign out',
+  'account.signOut.cancel': 'Cancel',
 
   'sync.idle': 'Notes are backed up',
   'sync.syncing': 'Backing up…',
@@ -163,7 +171,20 @@ export const en = {
   'sync.offline': 'Offline — your notes are safe on this device',
   'sync.error': 'Backup paused',
   'sync.quota': 'Your account is full. Delete some notes to back up again.',
-  'sync.never': 'Not backed up yet',
+
+  'sync.adopt.title': 'Add your notes to this account?',
+  // `useT()` takes no arguments — there is no interpolation mechanism in this
+  // app (verified against `src/i18n` in Task 8). The count is composed in
+  // `AdoptNotesDialog` as `bodyBefore + count + bodyAfter`, plain string
+  // concatenation, not a template a translator fills in. Each half carries
+  // its OWN surrounding whitespace so the seam reads naturally in its own
+  // language; see `ko.ts`, where the count is followed directly by a
+  // counter word with no space at all.
+  'sync.adopt.bodyBefore': 'You have ',
+  'sync.adopt.bodyAfter':
+    ' notes on this device. Adding them puts a copy in your account and on your other devices. Discarding removes them from this device.',
+  'sync.adopt.confirm': 'Add them',
+  'sync.adopt.discard': 'Discard them',
 } as const;
 
 export type TranslationKey = keyof typeof en;

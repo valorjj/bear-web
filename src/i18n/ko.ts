@@ -147,11 +147,25 @@ export const ko: Record<TranslationKey, string> = {
   'account.signIn.google': 'Google로 로그인',
   'account.signOut': '로그아웃',
   'account.notesLocal': '메모는 이 기기에 그대로 남습니다.',
+  'account.signOut.title': '로그아웃할까요?',
+  'account.signOut.body':
+    '로그아웃해도 메모는 이 기기에 그대로 남습니다. 이 브라우저를 사용하는 다른 사람이 메모를 볼 수 있습니다.',
+  'account.signOut.confirm': '로그아웃',
+  'account.signOut.cancel': '취소',
 
   'sync.idle': '메모가 백업되었습니다',
   'sync.syncing': '백업하는 중…',
   'sync.offline': '오프라인 — 메모는 이 기기에 안전하게 있습니다',
   'sync.error': '백업이 중단되었습니다',
   'sync.quota': '계정 저장 공간이 가득 찼습니다. 메모를 삭제한 뒤 다시 백업하세요.',
-  'sync.never': '아직 백업되지 않음',
+
+  'sync.adopt.title': '이 계정에 메모를 추가할까요?',
+  // 영어 쪽과 마찬가지로 카운트는 컴포넌트에서 문자열을 이어붙여 만든다
+  // (`bodyBefore + count + bodyAfter`). 한국어는 숫자 뒤에 조사/단위가 바로
+  // 붙는 것이 자연스러우므로 `bodyAfter`의 앞머리에는 공백을 두지 않았다.
+  'sync.adopt.bodyBefore': '이 기기에 메모가 ',
+  'sync.adopt.bodyAfter':
+    '개 있습니다. 추가하면 계정과 다른 기기에도 사본이 만들어집니다. 삭제하면 이 기기에서 없어집니다.',
+  'sync.adopt.confirm': '추가하기',
+  'sync.adopt.discard': '삭제하기',
 };
