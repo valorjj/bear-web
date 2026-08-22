@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { BearDatabase } from '../db';
+import { deriveTitle } from '../derive';
 import { parseTags } from '../tags';
 import type { PullResponse, PushResponse, Transport } from './transport';
-import { createEngine, LAST_PULLED_REV_KEY, SYNCED_ACCOUNT_KEY } from './engine';
+import { createEngine, LAST_PULLED_REV_KEY, markConflictText, SYNCED_ACCOUNT_KEY } from './engine';
 
 /** A transport whose two answers the test sets directly. No HTTP, no server. */
 function fakeTransport(): Transport & {
@@ -30,6 +31,19 @@ function fakeTransport(): Transport & {
 }
 
 const ACCOUNT = 'user-1';
+
+describe('markConflictText', () => {
+  it('marks the first non-empty line and leaves the rest verbatim', () => {
+    expect(markConflictText('\n# Mine\nbody  \ntail')).toBe('\n# Mine (conflict)\nbody  \ntail');
+  });
+
+  it('gives a blank note a marked title without discarding its whitespace', () => {
+    // A blank note still needs a title a user can pick out of the list, and
+    // the marker becomes a new FIRST line rather than replacing anything.
+    expect(markConflictText('')).toBe('(conflict)');
+    expect(markConflictText('  \n\t')).toBe('(conflict)\n  \n\t');
+  });
+});
 
 describe('sync engine', () => {
   let db: BearDatabase;
@@ -335,10 +349,88 @@ describe('sync engine', () => {
     expect((await db.notes.get('n1'))?.text).toBe('# Theirs\nremote edit');
 
     const copy = await db.notes.get('generated');
-    expect(copy?.text).toBe('# Mine\nlocal edit');
+    // The marker lives in the TEXT. A title hand-assigned onto the row is a
+    // derived cache that `notes.save` re-derives on the user's next edit and
+    // `toNote` re-derives on the next device — either way the marker vanishes
+    // and the user is left with two identically-titled notes.
+    expect(copy?.text).toBe('# Mine (conflict)\nlocal edit');
     expect(copy?.title).toBe('Mine (conflict)');
+    expect(deriveTitle(copy!.text)).toBe(copy?.title);
+    // The rest of the losing edit is verbatim.
+    expect(copy?.text).toContain('local edit');
     // The copy is a real, pushable note, not a local curiosity.
     expect((await db.syncState.get(['note', 'generated']))?.dirty).toBe(1);
+  });
+
+  it('keeps the (conflict) marker when the copy round-trips through a pull', async () => {
+    await db.notes.add({
+      id: 'n1',
+      title: 'Mine',
+      text: '# Mine\nlocal edit',
+      createdAt: 1,
+      updatedAt: 7,
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    });
+    await db.syncState.put({
+      kind: 'note',
+      key: 'n1',
+      syncedRev: 4,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 7,
+    });
+    transport.nextPush = {
+      accepted: [],
+      conflicts: {
+        notes: [
+          {
+            id: 'n1',
+            text: '# Theirs\nremote edit',
+            createdAt: 1,
+            updatedAt: 8,
+            pinned: false,
+            trashedAt: null,
+            archivedAt: null,
+            deleted: false,
+            rev: 6,
+          },
+        ],
+        tags: [],
+      },
+      rev: 6,
+    };
+
+    await engine().syncOnce(ACCOUNT);
+    const copy = (await db.notes.get('generated'))!;
+
+    // Now the second device: the copy comes back down as a pulled note, and
+    // the engine derives its title from the text the server stored. The server
+    // holds no title, so this is the ONLY place the marker can come from.
+    transport.nextPull = {
+      notes: [
+        {
+          id: copy.id,
+          text: copy.text,
+          createdAt: copy.createdAt,
+          updatedAt: copy.updatedAt + 1,
+          pinned: false,
+          trashedAt: null,
+          archivedAt: null,
+          deleted: false,
+          rev: 7,
+        },
+      ],
+      tags: [],
+      rev: 7,
+    };
+    transport.nextPush = { accepted: [], conflicts: { notes: [], tags: [] }, rev: 7 };
+    await db.syncState.update(['note', copy.id], { dirty: 0 });
+
+    await engine().syncOnce(ACCOUNT);
+
+    expect((await db.notes.get(copy.id))?.title).toBe('Mine (conflict)');
   });
 
   it('advances the cursor and records the account', async () => {

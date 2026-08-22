@@ -47,6 +47,35 @@ function toNote(remote: RemoteNote): Note {
   };
 }
 
+/**
+ * The local text, with ` (conflict)` appended to its FIRST non-empty line.
+ *
+ * The marker has to live in the TEXT, not on the row's `title`. `title` is a
+ * derived cache whose single author is `deriveTitle`, so a hand-assigned title
+ * survives only until something re-derives it — `notes.save` does that on the
+ * user's very next edit of the copy, on this same device, and `toNote` does it
+ * again the moment the copy is pulled onto a second one. Either way the marker
+ * evaporates and the user is left with two identically-titled notes and no way
+ * to tell the losing edit from the winning one, which is precisely the outcome
+ * the conflict copy exists to prevent.
+ *
+ * Every other line is left untouched: this is the user's losing edit, and the
+ * copy is only useful if it is that edit verbatim.
+ *
+ * Text with no non-empty line at all gets the marker as a new FIRST line
+ * rather than replacing anything, so a blank note's copy still has a title a
+ * user can see in the list, and whatever whitespace was there is preserved.
+ */
+export function markConflictText(text: string): string {
+  const lines = text.split('\n');
+  const index = lines.findIndex((line) => line.trim() !== '');
+
+  if (index === -1) return text === '' ? '(conflict)' : `(conflict)\n${text}`;
+
+  lines[index] = `${lines[index]!.replace(/\s+$/, '')} (conflict)`;
+  return lines.join('\n');
+}
+
 function toTagMeta(remote: RemoteTag): TagMeta {
   return {
     tag: remote.tag,
@@ -260,16 +289,22 @@ export function createEngine(deps: EngineDeps) {
    */
   async function resolveConflicts(remotes: RemoteNote[]): Promise<void> {
     for (const remote of remotes) {
-      const local = await db.notes.get(remote.id);
-
       await db.transaction('rw', db.notes, db.noteTags, db.syncState, async () => {
+        // Read INSIDE the transaction that then writes from it: this decides
+        // whether a copy is needed and is immediately followed by the write
+        // that overwrites the same row with the server's version.
+        const local = await db.notes.get(remote.id);
+
         if (local !== undefined && local.text !== remote.text) {
           const copyId = generateId();
           const timestamp = now();
+          const copyText = markConflictText(local.text);
           const copy: Note = {
             id: copyId,
-            title: `${local.title} (conflict)`,
-            text: local.text,
+            // Derived from the marked text, like every other title in the app.
+            // A title that disagrees with its text IS the bug this fixes.
+            title: deriveTitle(copyText),
+            text: copyText,
             createdAt: timestamp,
             updatedAt: timestamp,
             pinned: false,
@@ -371,6 +406,10 @@ export function createEngine(deps: EngineDeps) {
       const cursor = Math.max(remote.rev, result.rev);
       await db.settings.put({ key: LAST_PULLED_REV_KEY, value: cursor });
 
+      // `rev` below is deliberately the SAME number, not `result.rev`. The
+      // stored cursor and the reported revision are one value with two
+      // audiences, and a status line reporting a revision lower than the one
+      // this client actually holds is the same rewind wearing a different hat.
       return {
         pulled,
         pushed: result.accepted.length,
