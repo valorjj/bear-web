@@ -615,7 +615,16 @@ describe('activating a tag from the editor', () => {
     // retries in CI, so one such flake turns main red.
     const nested = await screen.findByRole('button', { name: /^urgent\b/ }, { timeout: 5000 });
     expect(nested).toHaveAttribute('aria-current', 'page');
-  });
+    // The 15000ms belongs to the TEST, not the assertion above, and the two
+    // numbers are not redundant. Vitest's default `testTimeout` is also
+    // 5000ms, so the raised ceiling could never fire: this test was still
+    // failing under load with `Test timed out in 5000ms`, which names no
+    // assertion and reads like a hang. Observed once in a 20-run full-suite
+    // sweep on 2026-08-23, five months after ca40a16 raised the ceiling that
+    // could not fire. With the test's own budget above the ceiling, an
+    // overrun now fails as "Unable to find … /^urgent/", at the line that
+    // waited.
+  }, 15000);
 
   it('does nothing for a tag that is not in the index', async () => {
     await notes.create('alpha #work');

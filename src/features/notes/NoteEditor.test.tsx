@@ -538,23 +538,51 @@ describe('seeded notes', () => {
     // there revert the text exactly as expected. The assertion this test
     // makes is unchanged.
     await userEvent.type(el, 'x');
+    // Wait for the insert to LAND before sending the backspace. Splitting
+    // into two `type` calls was not enough on its own: under load the
+    // decoration rebuild can still be in flight when the second keystroke is
+    // dispatched, the backspace then deletes nothing, and the editor unmounts
+    // holding text that is not the seed. `useAutosave` correctly takes its
+    // `flush` branch instead of `discard`, so `purge` is never called and the
+    // test hangs until Vitest's 5000ms `testTimeout` kills it — with a
+    // message naming no assertion at all. That was this file's flake: a
+    // keystroke that had not landed, NOT a slow database. Measured directly:
+    // in an instrumented failing run `save` completed in 3-10ms and a 250ms
+    // heartbeat ticked undisturbed for the whole five seconds, and simply
+    // deleting the backspace from this test reproduces that trace byte for
+    // byte.
+    //
+    // Both waits are deliberately about the ROUND TRIP, not about a position.
+    // `userEvent.click` cannot place a caret reliably here — jsdom has no
+    // layout, `document.elementFromPoint` is stubbed to null and every Range
+    // rect is zero, so ProseMirror's `posAtCoords` has nothing to resolve and
+    // the insert can land at either end. An earlier version of this wait
+    // asserted the text became "#workx" and caught the editor holding
+    // "x#work" instead. What the test actually needs is only that the insert
+    // happened and that the backspace undid it — which holds wherever the
+    // caret was, because ProseMirror always leaves it directly after the
+    // character it just inserted.
+    await waitFor(() => expect(el.textContent).not.toBe('#work'));
+
     await userEvent.type(el, '{Backspace}');
+    // Fails HERE, in one second and naming the text it found, if the
+    // backspace lands wrong again — rather than surfacing five seconds later
+    // as an unexplained timeout on an assertion about `purge`.
+    await waitFor(() => expect(el.textContent).toBe('#work'));
 
     unmount();
 
     // The ceiling is raised past testing-library's 1000ms default because
-    // this path measured a real failure at ~1077ms on a loaded runner (once
-    // in ~15 full-suite runs) but never in isolation. Lowering it to 200ms
-    // reproduces that same failure reliably under load (three parallel full
-    // `vitest run` invocations), which identifies it as a timing ceiling
-    // rather than `purge` never being called — confirmed correct behaviour
-    // under Playwright and in every unloaded run. Task 5 added a `syncState`
-    // get+put inside `notes.purge`, which is exactly this path, and plausibly
-    // narrowed the margin. Vitest has no retries in CI, so one such flake
-    // turns `main` red; see commit ca40a16 for the same fix applied to
-    // AppShell.test.tsx.
+    // this path measured a real failure at ~1077ms on a loaded runner.
+    //
+    // 5000ms is ALSO Vitest's default `testTimeout`, so a per-assertion
+    // ceiling of exactly 5000 can never fire — the test is killed first and
+    // the failure reads `Test timed out in 5000ms`, naming no assertion at
+    // all. That is why this `it` carries its own 15000ms timeout below: the
+    // ceiling is now reachable, so an overrun fails as "purge was not
+    // called", which is the sentence a reader needs.
     await waitFor(() => expect(purge).toHaveBeenCalledWith(note.id), { timeout: 5000 });
-  });
+  }, 15000);
 
   it('still purges a genuinely blank new note', async () => {
     const purge = vi.spyOn(notes, 'purge').mockResolvedValue(undefined);
