@@ -20,8 +20,8 @@ import type { Corpus } from './corpus.ts';
  *   schema against the one it finds and throws `SchemaError` on a mismatch, so
  *   a drift fails loudly on the first shot rather than silently.
  * - **The IndexedDB version is Dexie's version times ten.** Dexie's
- *   `version(2)` (added in b1 for fold state) is IndexedDB version 20, not 2.
- *   Seeding at the wrong number leaves Dexie wanting to upgrade further while
+ *   `version(3)` (added in D2 for sync bookkeeping) is IndexedDB version 30,
+ *   not 3. Seeding at the wrong number leaves Dexie wanting to upgrade further while
  *   this script still holds a connection open, which blocks the upgrade
  *   forever: `openDatabase` never settles, so `main.tsx` never calls
  *   `createRoot` and the page stays a blank `#root` with one console warning
@@ -38,9 +38,9 @@ import type { Corpus } from './corpus.ts';
  */
 export async function seedDatabase(page: Page, corpus: Corpus): Promise<void> {
   await page.addInitScript((data: Corpus) => {
-    // Mirrors `src/data/db.ts`'s `version(1)` and `version(2)` stores
-    // together; 20 is how Dexie encodes version 2. See the docblock.
-    const request = indexedDB.open('bear-web', 20);
+    // Mirrors `src/data/db.ts`'s `version(1)`, `version(2)` and `version(3)`
+    // stores together; 30 is how Dexie encodes version 3. See the docblock.
+    const request = indexedDB.open('bear-web', 30);
 
     request.onupgradeneeded = () => {
       const database = request.result;
@@ -68,12 +68,23 @@ export async function seedDatabase(page: Page, corpus: Corpus): Promise<void> {
       // state is view state, not part of the seeded corpus.
       database.createObjectStore('noteFolds', { keyPath: 'noteId' });
 
+      // Added at version 3. Created empty here, exactly as Dexie would: an
+      // absent row means "never synced, not dirty", and no fixture is signed
+      // in. Key path and index names must match src/data/db.ts exactly or
+      // Dexie throws SchemaError on the first shot.
+      const syncState = database.createObjectStore('syncState', {
+        keyPath: ['kind', 'key'],
+      });
+      syncState.createIndex('dirty', 'dirty');
+      syncState.createIndex('kind', 'kind');
+      syncState.createIndex('deleted', 'deleted');
+
       for (const note of data.notes) notes.put(note);
       for (const setting of data.settings) settings.put(setting);
     };
 
     // Held open, this connection blocks any later upgrade — including a
-    // future Dexie version 3.
+    // future Dexie version 4.
     request.onsuccess = () => request.result.close();
   }, corpus);
 }

@@ -59,6 +59,43 @@ export interface SerializedFile {
   data: string;
 }
 
+export type SyncKind = 'note' | 'tag';
+
+/**
+ * Per-row sync bookkeeping.
+ *
+ * Deliberately NOT fields on `Note`: `Note` is the shape `BackupBundle`
+ * serialises, so sync state added to it would leak server bookkeeping into
+ * every exported backup and every import would carry another account's
+ * revision numbers.
+ *
+ * Keyed by `[kind, key]` rather than by note id, because tag metadata syncs
+ * too and a second bookkeeping table would mean a second engine.
+ */
+export interface SyncState {
+  kind: SyncKind;
+  /** A note id when `kind` is `'note'`; the tag string when `'tag'`. */
+  key: string;
+  /** The server revision this row was last confirmed at. 0 means never synced. */
+  syncedRev: number;
+  /** `0 | 1`, not boolean: this is indexed, and IndexedDB rejects boolean keys. */
+  dirty: 0 | 1;
+  /**
+   * `0 | 1`. Set when the local row is purged, and the reason this table
+   * outlives the note: once the note is gone there is nothing else left to
+   * tell the server to write a tombstone.
+   */
+  deleted: 0 | 1;
+  /**
+   * The note's `updatedAt` at the moment `dirty` was last set.
+   *
+   * Push carries it and the accept path clears `dirty` only if the stored note
+   * still matches — so an edit that lands while a push is in flight leaves the
+   * row dirty and re-pushes, instead of being silently stranded on one device.
+   */
+  markedAt: number;
+}
+
 export interface BackupBundle {
   format: 'bear-web-backup';
   schemaVersion: number;

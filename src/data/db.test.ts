@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
+import { BearDatabase } from './db';
 import { createTestDatabase } from './testing';
 
 describe('BearDatabase', () => {
-  it('opens at schema version 2', async () => {
+  it('opens at schema version 3', async () => {
     const db = createTestDatabase();
     await db.open();
 
-    expect(db.verno).toBe(2);
+    expect(db.verno).toBe(3);
 
     db.close();
   });
 
-  it('declares all six tables', async () => {
+  it('declares all seven tables', async () => {
     const db = createTestDatabase();
     await db.open();
 
@@ -22,6 +23,7 @@ describe('BearDatabase', () => {
       'noteTags',
       'notes',
       'settings',
+      'syncState',
       'tags',
     ]);
 
@@ -61,5 +63,39 @@ describe('BearDatabase', () => {
     expect(found?.text).toBe('# Hello\n\nbody');
 
     db.close();
+  });
+
+  it('carries a syncState table keyed by kind and key', async () => {
+    const database = new BearDatabase(`test-${crypto.randomUUID()}`);
+    await database.open();
+
+    await database.syncState.put({
+      kind: 'note',
+      key: 'note-1',
+      syncedRev: 0,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 42,
+    });
+
+    const found = await database.syncState.get(['note', 'note-1']);
+    expect(found?.markedAt).toBe(42);
+
+    // The dirty index is what the push loop queries. It must be a NUMBER:
+    // IndexedDB rejects boolean keys outright, exactly as it does for `pinned`.
+    const dirty = await database.syncState.where('dirty').equals(1).toArray();
+    expect(dirty).toHaveLength(1);
+
+    database.close();
+  });
+
+  it('declares version 3, which is IndexedDB version 30', async () => {
+    // e2e/fixtures/seed.ts opens at the RAW IndexedDB number and must move with
+    // this. Seeding at the wrong number leaves a connection blocking the
+    // upgrade forever and the app boots to a bare <div id="root"> with no error.
+    const database = new BearDatabase(`test-${crypto.randomUUID()}`);
+    await database.open();
+    expect(database.verno).toBe(3);
+    database.close();
   });
 });

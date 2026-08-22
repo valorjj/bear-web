@@ -1,6 +1,15 @@
 import Dexie, { type EntityTable, type Table } from 'dexie';
 
-import type { FileRecord, Note, NoteFolds, NoteTag, SettingRecord, TagMeta } from './types';
+import type {
+  FileRecord,
+  Note,
+  NoteFolds,
+  NoteTag,
+  SettingRecord,
+  SyncKind,
+  SyncState,
+  TagMeta,
+} from './types';
 
 export class BearDatabase extends Dexie {
   notes!: EntityTable<Note, 'id'>;
@@ -15,6 +24,12 @@ export class BearDatabase extends Dexie {
   files!: EntityTable<FileRecord, 'id'>;
   settings!: EntityTable<SettingRecord, 'key'>;
   noteFolds!: EntityTable<NoteFolds, 'noteId'>;
+  /**
+   * Compound primary key `[kind+key]`, so this is a plain `Table` keyed by a
+   * tuple — the same reason `noteTags` is, and for the same reason
+   * `EntityTable` would be wrong here.
+   */
+  syncState!: Table<SyncState, [SyncKind, string]>;
 
   constructor(name: string) {
     super(name);
@@ -39,6 +54,19 @@ export class BearDatabase extends Dexie {
     // error at all.
     this.version(2).stores({
       noteFolds: 'noteId',
+    });
+
+    // Version 3 adds sync bookkeeping. No `.upgrade()` hook: an absent row
+    // already means "never synced, not dirty", which is exactly right for a
+    // database that predates sync — the first sync after signing in treats
+    // every note as new, which is what adoption does anyway.
+    //
+    // Dexie multiplies declared versions by ten, so this is IndexedDB version
+    // 30, and `e2e/fixtures/seed.ts` MUST move with it in the same commit.
+    // `dirty` and `deleted` are indexed and therefore stored as 0 | 1;
+    // IndexedDB rejects boolean keys.
+    this.version(3).stores({
+      syncState: '[kind+key], dirty, kind, deleted',
     });
   }
 }
