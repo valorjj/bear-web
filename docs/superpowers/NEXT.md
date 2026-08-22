@@ -142,7 +142,7 @@ Blobs in IndexedDB, an image node in the editor schema, Markdown round-trip,
 embedding in HTML and PDF export, backup and import, and a story for eviction
 and quota. Bigger than A, B and C together; none of them block it.
 
-## D. Server sync and OAuth login — **SPECCED 2026-08-21**
+## D. Server sync and OAuth login — **D1 SHIPPED & DEPLOYED, D2 QUEUED**
 
 Spec: `docs/superpowers/specs/2026-08-21-d-server-sync-and-oauth-design.md`.
 It supersedes this section; the notes below are kept only where the spec cites
@@ -202,42 +202,78 @@ Constraints established when it was raised, each of which shapes the spec:
 - **"Runs every day" is not "always."** Availability gaps are the normal case,
   which is exactly why local-first is kept.
 
-### Start here next session
+### Start here next session — D2, the sync protocol
 
-D is **unspecced**. It is architectural, so it begins with brainstorm → spec →
-plan, not with code. The decisions above are settled and should NOT be
-re-litigated; what follows is what is genuinely still open.
+**D1 shipped, merged, deployed and was verified live on 2026-08-21.** Real
+Google sign-in works on `https://markflowing.com`; the session row, the
+`__Host-` cookie, and the 401/403 paths were all confirmed against the running
+deployment, not only against tests. Everything below is about **D2**.
 
-**Run the spike first.** Its output is an answer and a recommendation, not code
-that is kept:
+Read the spec first — `docs/superpowers/specs/2026-08-21-d-server-sync-and-oauth-design.md`
+— and in particular its "What this reverses" section. **Single user was
+STRUCK**: D is multi-tenant with open signup. Do not re-derive tenancy from
+this file.
 
-1. Can the Mac Mini expose a stable public HTTPS endpoint (Cloudflare Tunnel or
-   equivalent), and what is its hostname? Everything else depends on this: a
-   Pages-hosted `https://` page cannot call `http://` or a LAN name at all.
-2. What does Naver's OAuth2 registration actually require for this account —
-   redirect URIs, review, and which scopes need a business entity? Google and
-   GitHub are well-trodden; Naver is the one that can block.
-3. How should the app behave when the server is unreachable, which is the
-   normal case for a machine that sleeps? Local-first means it must keep
-   working, so this is about what the UI says, not whether it functions.
+**What D2 is.** The revision counter, `GET`/`POST /sync`, tombstones, Dexie
+version 3 plus `syncState`, the conflict copy, the sync status indicator, the
+guest-note adoption dialog, and the per-user quota. The quota was deferred out
+of D1 for a reason that expires the moment D2 starts: it is a byte cap on note
+text, and until D2 there is no note text on the server.
 
-**RULED 2026-08-21 — conflict resolution.** The spec settles this: LWW with
-the losing edit kept as a `(conflict)` note. The paragraph below is the
-reasoning that led there, kept for provenance.
+**Already settled — do not re-litigate.** Last-write-wins with the losing edit
+kept as a `(conflict)` note. One monotonic revision counter per user, so pull
+is a single indexed query and no clock comparison between devices is ever
+needed. Tombstones for purges, retained 90 days. `noteTags` is derived locally
+by `parseTags` and never synced; `noteFolds` and `settings` are not synced
+either. Sync is automatic and quiet. Sync state lives in a new `syncState`
+table, never on `Note`, because `Note` is what `BackupBundle` serialises.
 
-**The open design question, and the hard part: conflict resolution.** Two
-devices edit one note while the Mini is asleep; both sync later. The candidates
-are last-write-wins on `updatedAt` (trivial, silently loses one edit),
-per-note versioning with an explicit conflict copy (Bear-like, honest, more
-UI), and a CRDT (correct, and a large dependency for an app whose first two
-adjectives are *lightweight* and *fast*). **Nobody has ruled on this.** It
-drives the schema, so it is the first thing the spec must settle.
+**Two things D1 built that D2 depends on, and should not rediscover:**
 
-**Also unsettled, and smaller:** whether sync is manual or automatic; whether
-trashed notes and `noteFolds` sync at all (fold rows are view state and are
-already discarded on import); and what the server does about `settings`.
+- `pool.transaction()` exists. It was added during D1's final review because
+  `findOrCreateUserByIdentity` could leave an orphan `users` row — and because
+  the spec requires `rev_counter` to be incremented *in the same transaction as
+  every write*, which the plain `Query` interface cannot express.
+- `users.rev_counter` already exists in `001_init.sql`, unread. D2 needs no
+  migration to start using it.
 
-**Do not start by writing the MariaDB schema.** A browser cannot speak the
-MySQL wire protocol, so the deliverable is an HTTP API service plus the client
-that talks to it — the database is the small half, and its shape falls out of
-the conflict-resolution decision above.
+**Live environment facts that are not recoverable from the repo:**
+
+- `server/.env` currently holds PRODUCTION origins. Local development needs
+  `APP_ORIGIN=http://localhost:5173` and `API_ORIGIN=http://localhost:8787`
+  swapped back, which also drops the `__Host-` cookie prefix — correct, since a
+  `Secure` cookie cannot be set over plain http. A timestamped backup of the
+  dev values sits beside it, gitignored.
+- The `markflowing` tunnel is the machine's **single** cloudflared connector;
+  the tool allows only one system service per machine. `lunch-api`,
+  `docs-api` and `yjs` were deliberately deleted — those projects are retired.
+- MariaDB is `markflowing-mariadb` on **127.0.0.1**:3308 (loopback, not all
+  interfaces). Dev database `markflowing`, test database `markflowing_test`.
+
+**Known debt, carried deliberately out of D1.** None blocks D2; several are
+cheapest to fold into it:
+
+- **`ThemePicker` has the same `overflow-hidden` clipping bug** `AccountMenu`
+  had, just narrower so it has not bitten. The fix mechanism now exists in
+  `AccountMenu` — viewport-coordinate placement — and is a small change.
+- **The rate limiter's window `Map` is never pruned.** One stale entry per
+  distinct key, forever. Wants a TTL sweep before the service is left
+  unattended for long stretches.
+- **Sessions roll forever with no absolute cap.** A stolen token that keeps
+  being used renews indefinitely. A rolling-vs-absolute design tradeoff, not a
+  bug.
+- **The OAuth transaction is replayable within its 600s lifetime.** Stateless
+  by design; single-use enforcement comes from the provider rejecting code
+  reuse. Documented honestly in the code and in `server/README.md`.
+- **The default database password is still `markflowing`**, left because
+  changing it breaks the existing volume.
+- **Two intermittent e2e tests** in `appearance.spec.ts`, each passing in
+  isolation. Playwright retries them; Vitest does not retry, so a flaky *unit*
+  test turns main red where a flaky e2e test is merely reported.
+
+**The old warning here — "do not start by writing the MariaDB schema" — has
+been served.** D1 built the service, the migration runner and the account
+schema, and the database was indeed the small half. D2's own version of that
+warning: do not start by writing `/sync`. Start by settling what a revision is
+on the client — when `syncState.dirty` is set and cleared — because the
+endpoint's shape falls out of that, not the other way round.
