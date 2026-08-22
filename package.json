@@ -21,6 +21,7 @@
     "shots": "PW_HARNESS=1 playwright test --grep @shots",
     "measure": "PW_HARNESS=1 playwright test --grep @measure",
     "server:dev": "tsx watch --env-file=server/.env server/src/index.ts",
+    "server:dev:local": "tsx watch --env-file=server/.env.local server/src/index.ts",
     "server:migrate": "tsx --env-file=server/.env server/src/db/migrate.ts"
   },
   "dependencies": {

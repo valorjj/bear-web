@@ -18,4 +18,5 @@ docs/design/shots/
 # backup of a secrets file is still a secrets file, and it is untracked rather
 # than ignored unless it is named here.
 server/.env
+server/.env.local
 server/.env.bak.*
