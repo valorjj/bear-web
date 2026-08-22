@@ -5,6 +5,7 @@ import type { Env } from './env.ts';
 import { originGuard } from './middleware/origin.ts';
 import { clientIp, rateLimit } from './middleware/rateLimit.ts';
 import { accountRoutes } from './routes/account.ts';
+import { syncRoutes } from './routes/sync.ts';
 
 /** A parameterised SQL call. The only shape route code may use. */
 export type Query = (sql: string, params?: readonly unknown[]) => Promise<unknown[]>;
@@ -73,11 +74,25 @@ export function createApp(deps: AppDeps): Hono {
   // Auth is limited by IP, because an unauthenticated caller has no user id to
   // limit by — and the login endpoints are the ones reachable without a session.
   app.use('/auth/*', rateLimit({ limit: 20, windowMs: 60_000, key: clientIp }));
+
+  // Per-session rather than per-IP, per the spec's "per-user on /sync". The
+  // session cookie is the only per-user handle available before the route
+  // resolves it, and an unauthenticated caller falls back to its IP bucket —
+  // which is correct, since it is about to get a 401 anyway.
+  app.use(
+    '/sync',
+    rateLimit({
+      limit: 120,
+      windowMs: 60_000,
+      key: (c) => c.req.header('cookie') ?? clientIp(c),
+    }),
+  );
   app.use('*', rateLimit({ limit: 300, windowMs: 60_000, key: clientIp }));
 
   app.get('/health', (c) => c.json({ ok: true }));
   app.route('/', authRoutes(deps));
   app.route('/', accountRoutes(deps));
+  app.route('/', syncRoutes(deps));
 
   return app;
 }

@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 
 import type { AppDeps } from '../app.ts';
-import { clearedSessionCookie, cookieName, readCookie, SESSION_COOKIE } from '../auth/cookies.ts';
-import { findSession } from '../repositories/sessions.ts';
+import { authenticator } from '../auth/authenticate.ts';
+import { clearedSessionCookie } from '../auth/cookies.ts';
 import { deleteUser } from '../repositories/users.ts';
 
 interface EmailRow {
@@ -11,13 +11,7 @@ interface EmailRow {
 
 export function accountRoutes(deps: AppDeps): Hono {
   const app = new Hono();
-  const sessionName = cookieName(SESSION_COOKIE, deps.secureCookies);
-
-  async function authenticate(cookieHeader: string | undefined): Promise<string | null> {
-    const token = readCookie(cookieHeader, sessionName);
-    if (token === null) return null;
-    return findSession(deps.query, token);
-  }
+  const authenticate = authenticator(deps);
 
   app.get('/me', async (c) => {
     const userId = await authenticate(c.req.header('cookie'));
