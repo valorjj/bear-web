@@ -1,4 +1,4 @@
-import { API_ORIGIN } from './config';
+import { API_ORIGIN } from '@/data';
 
 export interface Account {
   userId: string;

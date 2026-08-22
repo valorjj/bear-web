@@ -18,6 +18,23 @@ export type { PersistDeps, PersistOutcome } from './persist';
 export { reindexNote } from './reindex';
 export { runStartupSweep, sweepBlankNotes } from './sweep';
 export type { SweepDeps } from './sweep';
+export { API_ORIGIN } from './sync/config';
+export { markAllDirty, markDeleted, markDirty } from './sync/markDirty';
+export {
+  createTransport,
+  SyncQuotaError,
+  SyncUnauthorizedError,
+  SyncUnavailableError,
+} from './sync/transport';
+export type {
+  PullResponse,
+  PushNote,
+  PushResponse,
+  PushTag,
+  RemoteNote,
+  RemoteTag,
+  Transport,
+} from './sync/transport';
 export { findTagRanges, parseTags } from './tags';
 export type { TagRange } from './tags';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
@@ -38,5 +55,7 @@ export type {
   NoteTag,
   SerializedFile,
   SettingRecord,
+  SyncKind,
+  SyncState,
   TagMeta,
 } from './types';
