@@ -4,13 +4,16 @@ Governs where tests live, which suite is allowed to see "renders wrong", and the
 selector and assertion traps that have already let defects through a green suite.
 
 **Trigger:** any edit to `e2e/appearance.spec.ts`, `e2e/smoke.spec.ts`,
-`e2e/contrast.spec.ts`, `scripts/sourceLint.test.ts`, `scripts/fonts.test.ts`,
-`scripts/contrast.test.ts`, `tsconfig.app.json` / `tsconfig.node.json`
-`include`/`types`; any new test file under `scripts/`; a new `import ... from
-'lucide-react'` outside `src/ui/Icon.tsx`; any `page.evaluate` containing
-`querySelectorAll`, `.closest(`, or a `[role="..."]` selector; any assertion
-comparing a computed `backgroundColor`; and any test whose expectation you are
-about to edit because a restyle made it fail.
+`e2e/contrast.spec.ts`, `e2e/account.spec.ts`, `scripts/sourceLint.test.ts`,
+`scripts/fonts.test.ts`, `scripts/contrast.test.ts`, `tsconfig.app.json` /
+`tsconfig.node.json` `include`/`types`; any new test file under `scripts/`; a
+new `import ... from 'lucide-react'` outside `src/ui/Icon.tsx`; any
+`page.evaluate` containing `querySelectorAll`, `.closest(`, or a
+`[role="..."]` selector; any assertion comparing a computed `backgroundColor`;
+any Playwright keyboard shortcut aimed at a Tiptap/ProseMirror binding; any
+`addInitScript` writing `localStorage` to seed app state; a push to `main`
+after any local merge; and any test whose expectation you are about to edit
+because a restyle made it fail.
 
 - **Source-scanning tests live in `scripts/`, not `src/`.** `tsconfig.app.json`
   deliberately omits Node types (`"types": ["vite/client", "vitest/globals"]`,
@@ -97,3 +100,45 @@ about to edit because a restyle made it fail.
   not-transparent, and not-equal-to-canvas. The same pair is now repeated for
   the tag pill, the floating toolbar fills and the theme swatches, each with
   its own comment pointing back at the card test.
+
+- **`Mod-` is platform-resolved; a hardcoded `Meta` press is a macOS-only
+  test.** Tiptap binds headings to `` `Mod-Alt-${level}` `` in
+  `@tiptap/extension-heading`, and ProseMirror resolves `Mod-` to **Cmd on
+  macOS, Ctrl everywhere else**. `e2e/noteListHeader.spec.ts` pressed
+  `Alt+Meta+Digit4`, which makes an `h4` on a developer's Mac and **silently
+  makes nothing on `ubuntu-latest`**, where Meta is Super — the assertion
+  failed with "0 elements" and no hint as to why. The app's OWN shortcuts
+  (`src/app/useScopeShortcuts.ts`) check `event.metaKey || event.ctrlKey`
+  directly, so they already work on both platforms; that asymmetry is why
+  this was the only spec to fail, and why it read as an unrelated
+  regression. Every other spec already pressed Playwright's `ControlOrMeta`
+  (`ControlOrMeta+Alt+f` for the fold toggle is the identical shape) — this
+  one was the lone holdout, fixed in `f7eafde`. **Reusable rule: any
+  keystroke aimed at a Tiptap/ProseMirror binding must be pressed as
+  `ControlOrMeta`, because the binding itself is platform-resolved; a press
+  aimed at the app's own handlers may use either, since those accept both.**
+
+- **Local CI green is not CI green, when the remote is behind.** `origin/main`
+  was once 40 commits behind local `main` — three sub-projects had been
+  merged locally and never pushed, so GitHub Actions had never run their
+  tests at all. The next push ran CI on all three at once, and the failure it
+  surfaced belonged to the OLDEST of them, not the change being pushed. A red
+  CI run immediately after a merge is therefore not evidence the merge caused
+  it: check `git rev-list --count origin/main..main` and what CI last
+  actually ran before attributing a failure. This is also why the `Mod-`
+  bullet above survived undetected as long as it did — the suite passed on
+  every local (macOS) run, and nothing had pushed to make CI (Linux) say
+  otherwise.
+
+- **Pane widths live in IndexedDB, not `localStorage` — a `localStorage` seed
+  silently no-ops.** Pane widths are a `settings` row read by `useSetting`. A
+  Playwright `addInitScript` writing
+  `window.localStorage.setItem('bear-web:pane.sidebarWidth', …)` looks exactly
+  right, throws nothing, and does nothing. A first draft of the account-menu
+  clipping test (`e2e/account.spec.ts`) did this, so it measured a
+  default-width sidebar while its own comment claimed 160px — the assertion
+  still passed, for the wrong reason. Seed through `e2e/fixtures/seed.ts`'s
+  `seedDatabase(page, { settings: [...] })` instead, as
+  `e2e/account.spec.ts` and `e2e/smoke.spec.ts` do. Same family as the
+  `[role="..."]`/`.closest()` bullets above: a setup that throws nothing and
+  covers nothing.

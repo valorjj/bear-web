@@ -233,6 +233,15 @@ connection holding version 0.1`. `e2e/fixtures/seed.ts` opens at 10 and closes
   which locally is convenient and in CI would be a green suite that ran
   nothing. `server/src/db/migrate.test.ts` asserts the variable is present
   whenever `CI` is set, so removing it from `ci.yml` fails loudly instead.
+- **The integration tests truncate whatever database `TEST_DATABASE_URL`
+  names, on every run.** Dev is `markflowing`; tests are
+  `markflowing_test`. Before the split, running `npm test` locally ran the
+  suite's `DELETE FROM users` against the same database a developer was
+  signed into, deleting a real account with no warning.
+  `server/src/db/testDatabaseIsolation.test.ts` now fails if `DATABASE_URL`
+  and `TEST_DATABASE_URL` ever name the same database — never widen
+  `TEST_DATABASE_URL` to point at a real environment's database to work
+  around a connection issue.
 - **A `Domain=` attribute on the session cookie is a cross-project leak, not a
   convenience.** `lunch-api.markflowing.com` and `docs-api.markflowing.com`
   are unrelated projects on the same registrable domain, so the cookie is

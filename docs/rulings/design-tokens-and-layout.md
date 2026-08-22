@@ -9,6 +9,7 @@ chrome and prose column are positioned.
 `src/styles/editor.css`, `src/styles/themes.ts` (`THEMES`, `DEFAULT_THEME_ID`,
 `SYSTEM_DARK_ID`), `src/app/theme.ts` (`applyTheme`, `readMirror`,
 `MIRROR_KEY`), the inline `<script>` in `index.html`, `src/ui/Pane.tsx`,
+`src/ui/Popover.tsx`, `src/features/account/AccountMenu.tsx`,
 `src/ui/Resizer.tsx`, `src/ui/Button.tsx`, `src/features/appearance/ThemePicker.tsx`,
 `src/features/editor/RichEditor.tsx`, `src/features/editor/BottomToolbar.tsx`,
 `src/features/notes/SearchField.tsx`, `<main>`'s class list in
@@ -452,3 +453,29 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   folded" cue inline instead means it never overlaps anything: it is ordinary
   flowed content, sized and coloured (`--bear-faint`) like the rest of the
   heading.
+
+- **`overflow-hidden` on the sidebar `Pane` clips popovers; it is not a
+  z-index problem.** The sidebar `Pane` (`src/app/AppShell.tsx`) is given
+  `overflow-hidden` via its `className` prop so the tag tree scrolls under a
+  pinned footer. That clips any absolutely-positioned descendant wider than
+  the pane — at the 240px default sidebar, a 256px `AccountMenu` lost 56px
+  and cut its disclosure line mid-sentence. It presents exactly like a
+  stacking-order bug and is not one: nothing is painted over the missing
+  edge, so **raising `z-index` changes nothing.** The fix
+  (`src/features/account/AccountMenu.tsx`) is `position: fixed` with
+  viewport coordinates computed in `useLayoutEffect`, which escapes the clip
+  **only because no ancestor establishes a containing block** — there is no
+  `transform`, `filter` or `will-change` anywhere in the layout today.
+  **Adding one above a popover would silently re-clip it**, which is the
+  part worth writing down; `src/ui/Popover.tsx`'s own `style` prop exists
+  specifically because a computed fixed placement cannot be expressed as a
+  static class. `ThemePicker` (`className="... w-44"` on its `Popover`, i.e.
+  176px) has the same latent bug — `absolute`, not `fixed` — and fits only
+  because it stays inside the pane at the 240px default sidebar; it would
+  clip at the `MIN_PANE_WIDTH` (160px, `src/app/paneWidths.ts`) floor. It is
+  currently unfixed — record it as known, not as resolved.
+  A clipped element still reports its full, unclipped layout rect, so a
+  bounding-box assertion cannot see this at all. `e2e/account.spec.ts`
+  probes with `document.elementFromPoint` at the menu's far edge instead,
+  and the test was verified by injection to fail with "the menu is clipped:
+  its right edge is not painted" when the `position: fixed` fix is reverted.
