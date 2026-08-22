@@ -1,4 +1,4 @@
-import { type ReactElement, type ReactNode, useEffect, useRef } from 'react';
+import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useRef } from 'react';
 
 export interface PopoverProps {
   open: boolean;
@@ -7,6 +7,17 @@ export interface PopoverProps {
   label: string;
   children: ReactNode;
   className?: string;
+  /**
+   * Computed placement, for a caller that cannot express its position in
+   * classes alone.
+   *
+   * `AccountMenu` needs this: it lives in the sidebar footer, and the sidebar
+   * `Pane` carries `overflow-hidden` so the tag tree scrolls under a pinned
+   * footer. An absolutely-positioned surface wider than the pane is therefore
+   * CLIPPED by it, not merely overlapping. Escaping that means `position:
+   * fixed` with viewport coordinates, which cannot be a static class.
+   */
+  style?: CSSProperties;
 }
 
 /**
@@ -35,6 +46,7 @@ export function Popover({
   label,
   children,
   className = '',
+  style,
 }: PopoverProps): ReactElement | null {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -82,6 +94,7 @@ export function Popover({
       role="dialog"
       aria-label={label}
       className={`border-border bg-surface shadow-popover rounded-lg border p-1 ${className}`}
+      style={style}
     >
       {children}
     </div>

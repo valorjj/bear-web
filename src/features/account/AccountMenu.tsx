@@ -1,4 +1,4 @@
-import { type ReactElement, useState } from 'react';
+import { type CSSProperties, type ReactElement, useLayoutEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n';
 import { Icon, UserRound } from '@/ui/Icon';
@@ -16,10 +16,17 @@ import { useSession } from './useSession';
  * No colour is written here. Every value is a token utility, so a palette edit
  * updates this menu for free.
  */
+/** Matches the previous `w-64`, kept so the visual size is unchanged by the fix. */
+const MENU_WIDTH = 256;
+/** Breathing room from the trigger and from the viewport edge. */
+const GAP = 8;
+
 export function AccountMenu(): ReactElement {
   const t = useT();
   const { state, signIn, signOut } = useSession();
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [placement, setPlacement] = useState<CSSProperties | null>(null);
 
   function row(label: string, onClick: () => void): ReactElement {
     return (
@@ -71,9 +78,51 @@ export function AccountMenu(): ReactElement {
     );
   }
 
+  /**
+   * Places the surface in VIEWPORT coordinates, above the trigger.
+   *
+   * It cannot be `absolute`. The sidebar `Pane` carries `overflow-hidden` so
+   * the tag tree scrolls under a pinned footer, and that clips any descendant
+   * wider than the pane — at a 240px sidebar a 256px menu loses its right
+   * edge, and the disclosure line is cut mid-sentence. `position: fixed`
+   * escapes the clip because no ancestor establishes a containing block (no
+   * `transform`, `filter` or `will-change` anywhere in the layout — verified,
+   * and the reason this works at all). Introducing one above this menu would
+   * silently re-clip it.
+   *
+   * Read in `useLayoutEffect` so the measurement happens before paint; a
+   * `useEffect` here would show the surface at the wrong place for one frame.
+   */
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    function place(): void {
+      const trigger = triggerRef.current;
+      if (trigger === null) return;
+
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(MENU_WIDTH, window.innerWidth - GAP * 2);
+      // Clamped so a narrow window pushes the surface inward rather than off
+      // the right edge, which `fixed` would otherwise happily allow.
+      const left = Math.max(GAP, Math.min(rect.left, window.innerWidth - width - GAP));
+
+      setPlacement({
+        position: 'fixed',
+        left,
+        bottom: window.innerHeight - rect.top + GAP,
+        width,
+      });
+    }
+
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open]);
+
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -84,12 +133,13 @@ export function AccountMenu(): ReactElement {
         <Icon glyph={UserRound} size="md" />
       </button>
 
-      {open ? (
+      {open && placement !== null ? (
         <Popover
           open
           onClose={() => setOpen(false)}
           label={t('account.menu')}
-          className="absolute bottom-full left-0 z-10 mb-2 w-64"
+          className="z-20"
+          style={placement}
         >
           {body()}
         </Popover>
