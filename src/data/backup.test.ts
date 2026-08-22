@@ -154,10 +154,13 @@ describe('importDatabase', () => {
     expect(await target.syncState.get(['tag', 'food'])).toMatchObject({ dirty: 1, deleted: 0 });
   });
 
-  it('clears stale sync bookkeeping left over from before the import', async () => {
+  it('preserves syncedRev for a note id that survives the import, so it pushes at the right base', async () => {
+    // The seeded source note is 'n1', so the target already has a synced
+    // row for the SAME id the import will re-add — the ordinary case of a
+    // signed-in user re-importing their own backup.
     await target.syncState.put({
       kind: 'note',
-      key: 'pre-existing',
+      key: 'n1',
       syncedRev: 3,
       dirty: 0,
       deleted: 0,
@@ -170,7 +173,13 @@ describe('importDatabase', () => {
       noRebuild,
     );
 
-    expect(await target.syncState.get(['note', 'pre-existing'])).toBeUndefined();
+    // Losing syncedRev here is how an import always loses to the server: the
+    // next push would go out with baseRev 0 against a server row already at
+    // rev 3, the server rejects it as stale, and the just-imported text
+    // comes back as a (conflict) copy instead of replacing the server copy.
+    const state = await target.syncState.get(['note', 'n1']);
+    expect(state?.syncedRev).toBe(3);
+    expect(state?.dirty).toBe(1);
   });
 
   it('rejects a bundle with the wrong format marker', async () => {

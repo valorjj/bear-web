@@ -145,12 +145,6 @@ export async function importDatabase(
         db.files.clear(),
         db.settings.clear(),
         db.noteFolds.clear(),
-        // Cleared here too, not just repopulated by markAllDirty below: a
-        // stale row surviving from before the import could reference a note
-        // or tag id that the replace just removed, and `markAllDirty` only
-        // ever ADDS rows for what exists now — it never removes what no
-        // longer does.
-        db.syncState.clear(),
       ]);
 
       await Promise.all([
@@ -166,10 +160,23 @@ export async function importDatabase(
       // index.
       rebuiltRows = await deps.rebuildTagIndex();
 
-      // An imported database is entirely new to the server, whatever the
-      // account already holds. Marking it dirty is what makes an import
-      // reach the other devices instead of sitting locally until each note
-      // happens to be edited.
+      // `syncState` is deliberately NOT cleared above. A note or tag id
+      // that survives the import (the ordinary case: a signed-in user
+      // re-importing their own backup) must keep its existing `syncedRev`,
+      // because `markAllDirty` only ever raises `dirty` — it preserves
+      // `syncedRev` on a row that already exists (see markDirty). Clearing
+      // `syncState` first would reset that survivor to `syncedRev: 0`, and
+      // the next push would then go out with `baseRev: 0` against a server
+      // row already at rev N; the server's "reject if stored rev > baseRev"
+      // rule means the import always loses, and the freshly imported text
+      // comes back as a `(conflict)` copy while the server's older copy
+      // wins. A row left over for an id the import removed is harmless: the
+      // push path looks up the note behind a dirty row, and deletes the
+      // bookkeeping row instead of pushing when the note is gone.
+      //
+      // An imported database is otherwise entirely new to the server: this
+      // is what makes an import reach the other devices instead of sitting
+      // locally until each note happens to be edited again.
       await markAllDirty(db, Date.now());
     },
   );
