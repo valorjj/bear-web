@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
+import { markAllDirty, markDeleted } from './markDirty';
 import { parseTags } from '../tags';
 import type { PullResponse, PushResponse, Transport } from './transport';
 import { createEngine, LAST_PULLED_REV_KEY, markConflictText, SYNCED_ACCOUNT_KEY } from './engine';
@@ -35,6 +36,12 @@ const ACCOUNT = 'user-1';
 describe('markConflictText', () => {
   it('marks the first non-empty line and leaves the rest verbatim', () => {
     expect(markConflictText('\n# Mine\nbody  \ntail')).toBe('\n# Mine (conflict)\nbody  \ntail');
+  });
+
+  it('keeps CRLF line endings intact', () => {
+    // A trailing `\r` is the line's ENDING, not trailing whitespace: stripping
+    // it rewrites the line endings of exactly one line in a CRLF document.
+    expect(markConflictText('# Mine\r\nbody\r\n')).toBe('# Mine (conflict)\r\nbody\r\n');
   });
 
   it('gives a blank note a marked title without discarding its whitespace', () => {
@@ -454,6 +461,170 @@ describe('sync engine', () => {
     // `rev > 99` from a counter that is at 3 — nothing, forever, silently.
     expect(transport.pulls).toHaveLength(1);
     expect(await db.settings.get(LAST_PULLED_REV_KEY)).toMatchObject({ value: 3 });
+  });
+
+  it('does not drop a purge that lands while the push is in flight', async () => {
+    await db.notes.add({
+      id: 'n1',
+      title: 'a',
+      text: 'a',
+      createdAt: 1,
+      updatedAt: 7,
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    });
+    await db.syncState.put({
+      kind: 'note',
+      key: 'n1',
+      syncedRev: 4,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 7,
+    });
+    transport.nextPush = {
+      accepted: [{ id: 'n1', kind: 'note' }],
+      conflicts: { notes: [], tags: [] },
+      rev: 9,
+    };
+    // The purge lands after `collect` ran, so what the server accepted is the
+    // EDIT, not the deletion.
+    const push = transport.push;
+    transport.push = async (batch) => {
+      await db.notes.delete('n1');
+      await markDeleted(db, 'note', 'n1', 8);
+      return push(batch);
+    };
+
+    await engine().syncOnce(ACCOUNT);
+
+    // Dropping the row here would leave the note gone locally, alive on the
+    // server, and past the cursor: nothing dirty to push a tombstone, nothing
+    // in range to pull it back. Permanent divergence with no error anywhere.
+    expect(await db.syncState.get(['note', 'n1'])).toMatchObject({ dirty: 1, deleted: 1 });
+  });
+
+  it('owes a tombstone when a never-synced note is purged mid-push', async () => {
+    await db.notes.add({
+      id: 'n1',
+      title: 'a',
+      text: 'a',
+      createdAt: 1,
+      updatedAt: 7,
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    });
+    await db.syncState.put({
+      kind: 'note',
+      key: 'n1',
+      syncedRev: 0,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 7,
+    });
+    transport.nextPush = {
+      accepted: [{ id: 'n1', kind: 'note' }],
+      conflicts: { notes: [], tags: [] },
+      rev: 9,
+    };
+    const push = transport.push;
+    transport.push = async (batch) => {
+      await db.notes.delete('n1');
+      // `syncedRev` is still 0, so `markDeleted` drops the row outright.
+      await markDeleted(db, 'note', 'n1', 8);
+      return push(batch);
+    };
+
+    await engine().syncOnce(ACCOUNT);
+
+    // The server was just handed a note the user deleted, and the only thing
+    // that could ever ask for it back is a bookkeeping row.
+    expect(await db.syncState.get(['note', 'n1'])).toMatchObject({
+      dirty: 1,
+      deleted: 1,
+      syncedRev: 9,
+    });
+  });
+
+  it('clears dirty for a note that markAllDirty marked', async () => {
+    await db.notes.add({
+      id: 'n1',
+      title: 'a',
+      text: 'a',
+      createdAt: 1,
+      updatedAt: 7,
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    });
+    // Adoption and import both go through here, at the first sync a new user
+    // ever performs. `now` deliberately differs from the note's `updatedAt`.
+    await markAllDirty(db, 5000);
+    transport.nextPush = {
+      accepted: [{ id: 'n1', kind: 'note' }],
+      conflicts: { notes: [], tags: [] },
+      rev: 9,
+    };
+
+    await engine().syncOnce(ACCOUNT);
+
+    // Left dirty, the whole library re-pushes on every sync forever.
+    expect((await db.syncState.get(['note', 'n1']))?.dirty).toBe(0);
+  });
+
+  it('keeps a conflict copy when only metadata differs', async () => {
+    await db.notes.add({
+      id: 'n1',
+      title: 'Mine',
+      text: '# Mine\nbody',
+      createdAt: 1,
+      updatedAt: 7,
+      pinned: false,
+      trashedAt: 6,
+      archivedAt: null,
+    });
+    await db.syncState.put({
+      kind: 'note',
+      key: 'n1',
+      syncedRev: 4,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 7,
+    });
+    transport.nextPush = {
+      accepted: [],
+      conflicts: {
+        notes: [
+          {
+            id: 'n1',
+            text: '# Mine\nbody',
+            createdAt: 1,
+            updatedAt: 8,
+            pinned: false,
+            trashedAt: null,
+            archivedAt: null,
+            deleted: false,
+            rev: 6,
+          },
+        ],
+        tags: [],
+      },
+      rev: 6,
+    };
+
+    await engine().syncOnce(ACCOUNT);
+
+    // Comparing text alone would silently un-trash the note and keep nothing.
+    // The server still wins, but the local side survives as a copy.
+    expect(await db.notes.get('n1')).toMatchObject({ trashedAt: null });
+    // The copy is deliberately VISIBLE — never trashed, never pinned — because
+    // a conflict copy the user cannot find in the list is not a copy at all.
+    expect(await db.notes.get('generated')).toMatchObject({
+      text: '# Mine (conflict)\nbody',
+      trashedAt: null,
+      pinned: false,
+    });
   });
 
   it('syncs tag metadata both ways', async () => {

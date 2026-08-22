@@ -24,6 +24,12 @@ export interface SyncOutcome {
   rev: number;
 }
 
+/** A dirty row as `collect` found it, kept so accept can tell what it pushed. */
+interface PushSnapshot {
+  markedAt: number;
+  deleted: 0 | 1;
+}
+
 export interface EngineDeps {
   db: BearDatabase;
   transport: Transport;
@@ -72,8 +78,32 @@ export function markConflictText(text: string): string {
 
   if (index === -1) return text === '' ? '(conflict)' : `(conflict)\n${text}`;
 
-  lines[index] = `${lines[index]!.replace(/\s+$/, '')} (conflict)`;
+  const line = lines[index]!;
+  // A trailing `\r` is this line's ENDING, not trailing whitespace. Stripping
+  // it would rewrite CRLF text's line endings on exactly one line, and
+  // appending after it would put the marker beyond the end of the line.
+  const ending = line.endsWith('\r') ? '\r' : '';
+  const body = line.slice(0, line.length - ending.length).replace(/[ \t]+$/, '');
+
+  lines[index] = `${body} (conflict)${ending}`;
   return lines.join('\n');
+}
+
+/**
+ * Whether the local note differs from the server's copy in anything the push
+ * actually carries.
+ *
+ * Text alone is not enough: a conflicting push can differ only in `pinned`,
+ * `trashedAt` or `archivedAt`, and comparing text alone would silently
+ * un-trash a note the user trashed with no copy kept anywhere.
+ */
+function differs(local: Note, remote: RemoteNote): boolean {
+  return (
+    local.text !== remote.text ||
+    local.pinned !== remote.pinned ||
+    local.trashedAt !== remote.trashedAt ||
+    local.archivedAt !== remote.archivedAt
+  );
 }
 
 function toTagMeta(remote: RemoteTag): TagMeta {
@@ -200,18 +230,20 @@ export function createEngine(deps: EngineDeps) {
   async function collect(): Promise<{
     notes: PushNote[];
     tags: PushTag[];
-    snapshots: Map<string, number>;
+    snapshots: Map<string, PushSnapshot>;
   }> {
     const dirty = await db.syncState.where('dirty').equals(1).toArray();
     const notes: PushNote[] = [];
     const tags: PushTag[] = [];
-    // `markedAt` at the moment of collection, per note id. Compared against the
-    // stored note on accept, so an edit landing mid-flight cannot be cleared.
-    const snapshots = new Map<string, number>();
+    // What the bookkeeping row looked like at the moment of collection, per
+    // note id. Compared against the CURRENT row on accept, so neither an edit
+    // nor a purge landing mid-flight can be cleared as though the server had
+    // already heard about it.
+    const snapshots = new Map<string, PushSnapshot>();
 
     for (const row of dirty) {
       if (row.kind === 'note') {
-        snapshots.set(row.key, row.markedAt);
+        snapshots.set(row.key, { markedAt: row.markedAt, deleted: row.deleted });
 
         if (row.deleted === 1) {
           notes.push({
@@ -295,7 +327,7 @@ export function createEngine(deps: EngineDeps) {
         // that overwrites the same row with the server's version.
         const local = await db.notes.get(remote.id);
 
-        if (local !== undefined && local.text !== remote.text) {
+        if (local !== undefined && differs(local, remote)) {
           const copyId = generateId();
           const timestamp = now();
           const copyText = markConflictText(local.text);
@@ -307,6 +339,10 @@ export function createEngine(deps: EngineDeps) {
             text: copyText,
             createdAt: timestamp,
             updatedAt: timestamp,
+            // Deliberately visible: never trashed, never pinned, whatever the
+            // local row was. A copy the user cannot find in the note list is
+            // not a copy at all — and a conflict whose only difference WAS a
+            // local trash would otherwise produce an invisible one.
             pinned: false,
             trashedAt: null,
             archivedAt: null,
@@ -373,22 +409,49 @@ export function createEngine(deps: EngineDeps) {
         }
 
         const row = await db.syncState.get(['note', item.id]);
-        if (row === undefined) continue;
+        const snapshot = snapshots.get(item.id);
+
+        if (row === undefined) {
+          // The tombstone this run pushed did its job and something already
+          // tidied the row away. Nothing is owed.
+          if (snapshot?.deleted === 1) continue;
+
+          // Otherwise the note was purged while the push was in flight, and
+          // `markDeleted` dropped the row outright because `syncedRev` was 0.
+          // The server has just been handed a note the user deleted, and the
+          // only thing that could ever ask for it back is a bookkeeping row —
+          // so put one back, owing a tombstone.
+          await db.syncState.put({
+            kind: 'note',
+            key: item.id,
+            syncedRev: result.rev,
+            dirty: 1,
+            deleted: 1,
+            markedAt: now(),
+          });
+          continue;
+        }
 
         if (row.deleted === 1) {
-          // The tombstone is on the server now; the bookkeeping row has done
-          // its whole job and can go.
-          await db.syncState.delete(['note', item.id]);
+          // Only when the row this run actually PUSHED was itself a tombstone,
+          // and nothing has touched it since. Otherwise what the server
+          // accepted was the EDIT and the purge landed mid-flight: dropping
+          // the row here would leave the note gone locally, alive on the
+          // server, and past the cursor — permanent divergence with no error.
+          if (snapshot?.deleted === 1 && row.markedAt === snapshot.markedAt) {
+            await db.syncState.delete(['note', item.id]);
+          } else {
+            await db.syncState.put({ ...row, syncedRev: result.rev, dirty: 1 });
+          }
           continue;
         }
 
         const stored = await db.notes.get(item.id);
-        const snapshot = snapshots.get(item.id);
 
         // The dirty-clearing rule. An edit that landed while the push was in
         // flight moved `updatedAt` past the snapshot; clearing here would
         // strand that edit on this device forever, looking perfectly saved.
-        if (stored !== undefined && stored.updatedAt !== snapshot) {
+        if (stored !== undefined && stored.updatedAt !== snapshot?.markedAt) {
           await db.syncState.put({ ...row, syncedRev: result.rev, dirty: 1 });
           continue;
         }

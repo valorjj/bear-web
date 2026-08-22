@@ -98,4 +98,41 @@ describe('markDirty', () => {
     expect(await markAllDirty(db, 500)).toBe(3);
     expect(await db.syncState.where('dirty').equals(1).count()).toBe(3);
   });
+
+  it('stamps each note with its own updatedAt, not the wall clock', async () => {
+    await db.notes.bulkAdd([
+      {
+        id: 'n1',
+        title: '',
+        text: '',
+        createdAt: 1,
+        updatedAt: 41,
+        pinned: false,
+        trashedAt: null,
+        archivedAt: null,
+      },
+      {
+        id: 'n2',
+        title: '',
+        text: '',
+        createdAt: 1,
+        updatedAt: 77,
+        pinned: false,
+        trashedAt: null,
+        archivedAt: null,
+      },
+    ]);
+    await db.tags.add({ tag: 'work', collapsed: false, iconKey: null, sortOrder: 0 });
+
+    await markAllDirty(db, 500);
+
+    // The engine clears `dirty` only while the stored note still matches the
+    // `markedAt` it pushed. Stamping `now` here pins dirty at 1 forever and
+    // re-pushes the whole library on every sync.
+    expect((await db.syncState.get(['note', 'n1']))?.markedAt).toBe(41);
+    expect((await db.syncState.get(['note', 'n2']))?.markedAt).toBe(77);
+    // Tags have no `updatedAt`, and the engine's tag accept branch clears
+    // unconditionally, so the wall clock is right for them.
+    expect((await db.syncState.get(['tag', 'work']))?.markedAt).toBe(500);
+  });
 });

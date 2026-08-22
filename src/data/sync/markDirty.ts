@@ -65,13 +65,22 @@ export async function markDeleted(
  * your account" from the same number the engine will push.
  */
 export async function markAllDirty(db: BearDatabase, now: number): Promise<number> {
-  const [noteIds, tagRows] = await Promise.all([
-    db.notes.toCollection().primaryKeys(),
-    db.tags.toArray(),
-  ]);
+  const [notes, tagRows] = await Promise.all([db.notes.toArray(), db.tags.toArray()]);
 
-  for (const id of noteIds) await markDirty(db, 'note', id as string, now);
+  // Each note is stamped with its OWN `updatedAt`, never with `now`. The engine
+  // clears `dirty` on accept only while the stored note still matches the
+  // `markedAt` it pushed, so stamping the wall clock here would make that
+  // comparison false on the first accept and on every accept after — dirty
+  // pinned at 1, the whole library re-pushed every run, the server's rev
+  // counter climbing without bound, and every other device re-pulling
+  // everything each time. Both callers of this function (import, and guest
+  // adoption) run at the FIRST sync a new user ever performs.
+  for (const note of notes) await markDirty(db, 'note', note.id, note.updatedAt);
+
+  // Tags have no `updatedAt` to preserve, and the engine's tag accept branch
+  // clears unconditionally rather than comparing, so the wall clock is the
+  // right and only stamp available for them.
   for (const row of tagRows) await markDirty(db, 'tag', row.tag, now);
 
-  return noteIds.length + tagRows.length;
+  return notes.length + tagRows.length;
 }
