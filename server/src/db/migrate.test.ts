@@ -21,10 +21,26 @@ describe.skipIf(!url)('migrate', () => {
 
   beforeAll(async () => {
     pool = createPool(url!);
-    await pool.query('DROP TABLE IF EXISTS sessions');
-    await pool.query('DROP TABLE IF EXISTS identities');
-    await pool.query('DROP TABLE IF EXISTS users');
-    await pool.query('DROP TABLE IF EXISTS schema_migrations');
+    // Derived, not listed: a hardcoded drop list here is exactly the trap
+    // scripts/serverBoundaries.test.ts avoids for its own table list. D2's
+    // `002_sync.sql` added `notes` and `tag_meta` after this list was
+    // written, and a stale list left them behind: `schema_migrations` was
+    // dropped while `notes`/`tag_meta` survived, so `migrate()` treated
+    // `002_sync.sql` as pending and its `CREATE TABLE notes` hit an existing
+    // table mid-migration, leaving `identities`/`sessions` never created for
+    // every later test file in the project. Wrapping in FOREIGN_KEY_CHECKS=0
+    // means parent/child drop order never matters either, so a future
+    // migration's tables are covered the moment they exist.
+    const rows = (await pool.query(
+      `SELECT table_name AS name FROM information_schema.tables
+       WHERE table_schema = DATABASE()`,
+    )) as Array<{ name: string }>;
+
+    await pool.query('SET FOREIGN_KEY_CHECKS = 0');
+    for (const { name } of rows) {
+      await pool.query(`DROP TABLE IF EXISTS \`${name}\``);
+    }
+    await pool.query('SET FOREIGN_KEY_CHECKS = 1');
   });
 
   afterAll(async () => {
