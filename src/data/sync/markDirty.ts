@@ -77,9 +77,15 @@ export async function markAllDirty(db: BearDatabase, now: number): Promise<numbe
   // adoption) run at the FIRST sync a new user ever performs.
   for (const note of notes) await markDirty(db, 'note', note.id, note.updatedAt);
 
-  // Tags have no `updatedAt` to preserve, and the engine's tag accept branch
-  // clears unconditionally rather than comparing, so the wall clock is the
-  // right and only stamp available for them.
+  // Tags have no `updatedAt` to preserve, so the wall clock is the only stamp
+  // available for them — and the engine's tag accept branch DOES compare, so
+  // this stamp matters. That branch guards against an edit landing mid-push
+  // exactly as the note branch does, but with `markedAt` as its only witness:
+  // it clears `dirty` only while the row's CURRENT `markedAt` still equals
+  // the one `collect` snapshotted, and leaves the row dirty otherwise.
+  // `TagMeta` carries no `updatedAt` to compare against, so if this stamp
+  // ever stops being a faithful record of when the row was last marked, that
+  // guard loses the only thing it can see.
   for (const row of tagRows) await markDirty(db, 'tag', row.tag, now);
 
   return notes.length + tagRows.length;

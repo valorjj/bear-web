@@ -46,7 +46,17 @@ it, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`,
   every sync. Tags are keyed by NAME, so this is the ORDINARY case, not a
   race: on guest adoption `markAllDirty` marks every tag dirty at
   `syncedRev: 0`, and on a second device every tag the account already holds
-  (`#work`, `#todo`) conflicts on the very first sync.
+  (`#work`, `#todo`) conflicts on the very first sync. **This path
+  deliberately does NOT carry the in-flight-edit guard the tag accept branch
+  has, and the asymmetry must not be "fixed" by making the two match.** The
+  accept branch keeps a row dirty when a local edit landed mid-push, because
+  the server took that row's push and a cleared flag would strand the later
+  edit. A CONFLICT means the server REJECTED this device's push and its own
+  copy is newer; parking the row dirty there re-pushes the same losing
+  `baseRev` on the next sync and conflicts again, which is the
+  never-converging loop this ruling exists to close. Overwriting a mid-push
+  tag edit costs at most the order, icon or collapsed state of one tag,
+  recoverable by touching it again — the loop costs convergence permanently.
 
 - **`syncState` must never appear in `BackupBundle`, and neither must any
   `sync:`-prefixed `settings` key.** `sync:lastPulledRev` and
