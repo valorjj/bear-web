@@ -104,6 +104,48 @@ describe('notesRepository', () => {
     expect(await notes.get(note.id)).toBeUndefined();
   });
 
+  it('marks a saved note dirty with markedAt equal to its updatedAt', async () => {
+    const created = await notes.create('hello');
+    clock = 2000;
+    const saved = await notes.save(created.id, 'hello again');
+
+    const state = await db.syncState.get(['note', created.id]);
+    // These two numbers being equal is the entire dirty-clearing mechanism: the
+    // push snapshot is compared against the stored note's updatedAt on accept.
+    expect(state?.markedAt).toBe(saved.updatedAt);
+    expect(state?.dirty).toBe(1);
+  });
+
+  it('leaves a tombstone row behind when a synced note is purged', async () => {
+    const created = await notes.create('hello');
+    await db.syncState.put({
+      kind: 'note',
+      key: created.id,
+      syncedRev: 5,
+      dirty: 0,
+      deleted: 0,
+      markedAt: 1,
+    });
+
+    await notes.purge(created.id);
+
+    expect(await db.notes.get(created.id)).toBeUndefined();
+    expect(await db.syncState.get(['note', created.id])).toMatchObject({
+      deleted: 1,
+      dirty: 1,
+    });
+  });
+
+  it('bumps updatedAt when pinning, so the change can reach another device', async () => {
+    const created = await notes.create('hello');
+    clock = 2000;
+    await notes.setPinned(created.id, true);
+
+    const after = await notes.get(created.id);
+    expect(after!.updatedAt).toBeGreaterThanOrEqual(created.updatedAt);
+    expect((await db.syncState.get(['note', created.id]))?.markedAt).toBe(after!.updatedAt);
+  });
+
   it('empties the trash and leaves active notes alone', async () => {
     const kept = await notes.create('kept');
     const a = await notes.create('a');

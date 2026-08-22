@@ -1,4 +1,5 @@
 import type { BearDatabase } from '../db';
+import { markDeleted, markDirty } from '../sync/markDirty';
 import type { TagMeta } from '../types';
 
 export interface TagsRepository {
@@ -22,9 +23,19 @@ const defaults = (tag: string): TagMeta => ({
  * and derived from note text — never from this table.
  */
 export function createTagsRepository(db: BearDatabase): TagsRepository {
+  /**
+   * `TagMeta` carries no `updatedAt` of its own, so `markedAt` here is a wall
+   * clock rather than a mirror of a stored field, unlike notes' `markDirty`
+   * calls. That is fine: the accept path (Task 7) compares `markedAt` against
+   * a note's stored `updatedAt`, but clears tag rows on acceptance
+   * unconditionally.
+   */
   async function patch(tag: string, changes: Partial<TagMeta>): Promise<void> {
-    const existing = (await db.tags.get(tag)) ?? defaults(tag);
-    await db.tags.put({ ...existing, ...changes, tag });
+    await db.transaction('rw', db.tags, db.syncState, async () => {
+      const existing = (await db.tags.get(tag)) ?? defaults(tag);
+      await db.tags.put({ ...existing, ...changes, tag });
+      await markDirty(db, 'tag', tag, Date.now());
+    });
   }
 
   return {
@@ -44,7 +55,10 @@ export function createTagsRepository(db: BearDatabase): TagsRepository {
       return db.tags.orderBy('sortOrder').toArray();
     },
     async removeMeta(tag) {
-      await db.tags.delete(tag);
+      await db.transaction('rw', db.tags, db.syncState, async () => {
+        await db.tags.delete(tag);
+        await markDeleted(db, 'tag', tag, Date.now());
+      });
     },
   };
 }

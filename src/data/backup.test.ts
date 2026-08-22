@@ -75,6 +75,11 @@ describe('exportDatabase', () => {
     expect(reparsed.files[0].data).toBe(bundle.files[0].data);
     expect(reparsed.files[0].data.length).toBeGreaterThan(0);
   });
+
+  it('never puts sync bookkeeping in the bundle', async () => {
+    const bundle = await exportDatabase(db);
+    expect(Object.keys(bundle)).not.toContain('syncState');
+  });
 });
 
 describe('importDatabase', () => {
@@ -136,6 +141,36 @@ describe('importDatabase', () => {
 
     expect(await target.notes.get('pre-existing')).toBeUndefined();
     expect(await target.notes.count()).toBe(1);
+  });
+
+  it('marks every imported note and tag dirty, since the server has never seen this database', async () => {
+    await importDatabase(
+      target,
+      JSON.parse(JSON.stringify(await exportDatabase(source))),
+      noRebuild,
+    );
+
+    expect(await target.syncState.get(['note', 'n1'])).toMatchObject({ dirty: 1, deleted: 0 });
+    expect(await target.syncState.get(['tag', 'food'])).toMatchObject({ dirty: 1, deleted: 0 });
+  });
+
+  it('clears stale sync bookkeeping left over from before the import', async () => {
+    await target.syncState.put({
+      kind: 'note',
+      key: 'pre-existing',
+      syncedRev: 3,
+      dirty: 0,
+      deleted: 0,
+      markedAt: 1,
+    });
+
+    await importDatabase(
+      target,
+      JSON.parse(JSON.stringify(await exportDatabase(source))),
+      noRebuild,
+    );
+
+    expect(await target.syncState.get(['note', 'pre-existing'])).toBeUndefined();
   });
 
   it('rejects a bundle with the wrong format marker', async () => {

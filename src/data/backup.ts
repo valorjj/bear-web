@@ -1,5 +1,6 @@
 import type { BearDatabase } from './db';
 import { deriveTitle } from './derive';
+import { markAllDirty } from './sync/markDirty';
 import type { BackupBundle, SerializedFile } from './types';
 
 export const BACKUP_FORMAT = 'bear-web-backup';
@@ -135,7 +136,7 @@ export async function importDatabase(
   // overloads, which stop at five.
   await db.transaction(
     'rw',
-    [db.notes, db.noteTags, db.tags, db.files, db.settings, db.noteFolds],
+    [db.notes, db.noteTags, db.tags, db.files, db.settings, db.noteFolds, db.syncState],
     async () => {
       await Promise.all([
         db.notes.clear(),
@@ -144,6 +145,12 @@ export async function importDatabase(
         db.files.clear(),
         db.settings.clear(),
         db.noteFolds.clear(),
+        // Cleared here too, not just repopulated by markAllDirty below: a
+        // stale row surviving from before the import could reference a note
+        // or tag id that the replace just removed, and `markAllDirty` only
+        // ever ADDS rows for what exists now — it never removes what no
+        // longer does.
+        db.syncState.clear(),
       ]);
 
       await Promise.all([
@@ -158,6 +165,12 @@ export async function importDatabase(
       // authoritative, and it is what made a pre-M5 backup restore an empty
       // index.
       rebuiltRows = await deps.rebuildTagIndex();
+
+      // An imported database is entirely new to the server, whatever the
+      // account already holds. Marking it dirty is what makes an import
+      // reach the other devices instead of sitting locally until each note
+      // happens to be edited.
+      await markAllDirty(db, Date.now());
     },
   );
 

@@ -15,6 +15,7 @@ export type { MigrationDeps } from './migrations';
 export { openDatabase, resolveDatabase } from './open';
 export { persistStorage, requestPersistentStorage } from './persist';
 export type { PersistDeps, PersistOutcome } from './persist';
+export { reindexNote } from './reindex';
 export { runStartupSweep, sweepBlankNotes } from './sweep';
 export type { SweepDeps } from './sweep';
 export { findTagRanges, parseTags } from './tags';
