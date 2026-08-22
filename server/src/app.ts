@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 
+import { cookieName, readCookie, SESSION_COOKIE } from './auth/cookies.ts';
 import { authRoutes } from './auth/routes.ts';
 import type { Env } from './env.ts';
 import { originGuard } from './middleware/origin.ts';
@@ -75,16 +76,23 @@ export function createApp(deps: AppDeps): Hono {
   // limit by — and the login endpoints are the ones reachable without a session.
   app.use('/auth/*', rateLimit({ limit: 20, windowMs: 60_000, key: clientIp }));
 
-  // Per-session rather than per-IP, per the spec's "per-user on /sync". The
-  // session cookie is the only per-user handle available before the route
-  // resolves it, and an unauthenticated caller falls back to its IP bucket —
-  // which is correct, since it is about to get a 401 anyway.
+  // Per-session rather than per-IP, per the spec's "per-user on /sync". Keys
+  // on the extracted session TOKEN, not the raw `Cookie` header — a client
+  // controls its own header verbatim, so keying on the whole string lets any
+  // caller dodge the limit by appending junk (`; x=1`, `; x=2`, ...) to a
+  // cookie it already owns, which both defeats the limit and grows the
+  // unbounded window Map faster than intended. Falls back to the IP bucket
+  // only when the named cookie is absent, which is correct: that caller is
+  // about to get a 401 anyway. The cookie name itself depends on
+  // `secureCookies` (the `__Host-` prefix), so it must be resolved through
+  // `cookieName`, not hardcoded.
+  const sessionCookieName = cookieName(SESSION_COOKIE, deps.secureCookies);
   app.use(
     '/sync',
     rateLimit({
       limit: 120,
       windowMs: 60_000,
-      key: (c) => c.req.header('cookie') ?? clientIp(c),
+      key: (c) => readCookie(c.req.header('cookie'), sessionCookieName) ?? clientIp(c),
     }),
   );
   app.use('*', rateLimit({ limit: 300, windowMs: 60_000, key: clientIp }));

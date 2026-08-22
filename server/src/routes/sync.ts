@@ -29,12 +29,25 @@ function readBatch(body: unknown): { notes: PushNote[]; tags: PushTag[] } | null
     const n = note as Partial<PushNote>;
     if (typeof n.id !== 'string' || typeof n.text !== 'string') return null;
     if (typeof n.baseRev !== 'number' || typeof n.updatedAt !== 'number') return null;
+    if (typeof n.createdAt !== 'number') return null;
+    if (typeof n.pinned !== 'boolean' || typeof n.deleted !== 'boolean') return null;
+    // `undefined` (a field omitted entirely) is not `null`: both would pass a
+    // `typeof x === 'number' || x === null` check only if `undefined` were
+    // also excluded here, and an omitted field reaching `push()` binds
+    // `undefined` straight into a mysql2 parameter list, which throws
+    // "Bind parameters must not contain undefined" from inside a
+    // transaction — a 500, not the 400 this function exists to produce.
+    if (n.trashedAt !== null && typeof n.trashedAt !== 'number') return null;
+    if (n.archivedAt !== null && typeof n.archivedAt !== 'number') return null;
   }
 
   for (const tag of tags) {
     if (typeof tag !== 'object' || tag === null) return null;
     const t = tag as Partial<PushTag>;
     if (typeof t.tag !== 'string' || typeof t.baseRev !== 'number') return null;
+    if (typeof t.collapsed !== 'boolean' || typeof t.deleted !== 'boolean') return null;
+    if (typeof t.sortOrder !== 'number') return null;
+    if (t.iconKey !== null && typeof t.iconKey !== 'string') return null;
   }
 
   return { notes: notes as PushNote[], tags: tags as PushTag[] };

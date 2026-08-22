@@ -121,4 +121,54 @@ describe.skipIf(!url)('/sync', () => {
     const response = await request('/sync?since=banana');
     expect(response.status).toBe(200);
   });
+
+  it('rejects a note with an omitted trashedAt with 400 rather than a 500', async () => {
+    const body = JSON.stringify({
+      notes: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          text: 'hello',
+          createdAt: 1,
+          updatedAt: 1,
+          pinned: false,
+          // trashedAt omitted entirely: undefined, not null.
+          archivedAt: null,
+          deleted: false,
+          baseRev: 0,
+        },
+      ],
+      tags: [],
+    });
+
+    const response = await request('/sync', { method: 'POST', body });
+    expect(response.status).toBe(400);
+  });
+
+  it('shares a rate-limit bucket for the same session token regardless of surrounding cookie junk', async () => {
+    const name = cookieName(SESSION_COOKIE, false);
+    const token = cookie.split('=')[1];
+    const cookieA = `${name}=${token}; a=1`;
+    const cookieB = `${name}=${token}; a=2`;
+
+    // Both cookie strings carry the SAME session token under different
+    // surrounding text. If the limiter keyed on the raw `Cookie` header
+    // (the bug), each string would land in its own bucket and neither
+    // would ever see a 429 no matter how many requests were sent — a fresh
+    // bucket is available on every request just by appending junk. Proving
+    // they SHARE a bucket: exhaust the limit sending only cookieA, then
+    // confirm a request under cookieB's differing junk is throttled too.
+    let lastStatus = 200;
+    for (let i = 0; i < 121; i += 1) {
+      const response = await app.request('/sync?since=0', {
+        headers: { origin: APP_ORIGIN, cookie: cookieA },
+      });
+      lastStatus = response.status;
+    }
+    expect(lastStatus).toBe(429);
+
+    const throttled = await app.request('/sync?since=0', {
+      headers: { origin: APP_ORIGIN, cookie: cookieB },
+    });
+    expect(throttled.status).toBe(429);
+  });
 });
