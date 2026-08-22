@@ -19,6 +19,8 @@ export { reindexNote } from './reindex';
 export { runStartupSweep, sweepBlankNotes } from './sweep';
 export type { SweepDeps } from './sweep';
 export { API_ORIGIN } from './sync/config';
+export { createEngine, LAST_PULLED_REV_KEY, SYNCED_ACCOUNT_KEY } from './sync/engine';
+export type { EngineDeps, SyncOutcome } from './sync/engine';
 export { markAllDirty, markDeleted, markDirty } from './sync/markDirty';
 export {
   createTransport,
