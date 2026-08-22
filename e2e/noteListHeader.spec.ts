@@ -209,6 +209,15 @@ test.describe('note list header', () => {
     // this ever stops making a heading, the reason ⇧⌘ was chosen has gone
     // away and the ruling should be revisited — and if scope ALSO changed
     // here, one keystroke would be doing two unrelated things.
+    //
+    // The press is `ControlOrMeta+Alt`, not `Alt+Meta`. Tiptap binds headings
+    // to `Mod-Alt-<level>`, and ProseMirror resolves `Mod-` to Cmd on macOS
+    // but Ctrl everywhere else — so a hardcoded Meta press makes the heading
+    // on a developer's Mac and silently makes nothing on a Linux CI runner,
+    // where Meta is Super. The app's own scope shortcuts accept
+    // `metaKey || ctrlKey` (useScopeShortcuts.ts) and are unaffected, which is
+    // why this was the only test to fail there. Every other spec in this
+    // directory already presses `ControlOrMeta`; this one did not.
     await seedDatabase(page, {
       notes: [note({ id: 'draft', title: 'Draft', text: 'Draft\n\nsome body text' })],
       settings: [],
@@ -224,7 +233,7 @@ test.describe('note list header', () => {
     // editor, since the note-list row shows the same text as its snippet.
     await editor.getByText('some body text').click();
 
-    await page.keyboard.press('Alt+Meta+Digit4');
+    await page.keyboard.press('ControlOrMeta+Alt+Digit4');
 
     await expect(editor.locator('h4')).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'List options: Notes' })).toBeVisible();
