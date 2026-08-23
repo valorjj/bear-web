@@ -892,6 +892,13 @@ test('the editor typography tokens reach the rendered prose', async ({ page }) =
  */
 test('every border consumes the theme width token', async ({ page }) => {
   await page.goto('/');
+  // Waits for the shell before walking the DOM. `goto` resolves on the
+  // document, not on React, so without this the walk below runs against a
+  // bare `<div id="root">`, finds zero bordered elements, and fails as "no
+  // borders rendered at all" — which reads as a regression in the border
+  // token and is a race. Third instance of this shape in this file's
+  // history; see the pane-elevation test.
+  await expect(page.locator('section[aria-label]')).toHaveCount(3);
 
   async function renderedWidths(theme: string): Promise<string[]> {
     return page.evaluate((value) => {

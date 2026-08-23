@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
 import { parseColour } from '../scripts/contrast.ts';
+import { readThemeTokens } from './fixtures/tokens.ts';
 
 /**
  * The five themes that shipped before F must render byte-identically after it.
@@ -80,18 +81,7 @@ for (const id of SHIPPED) {
     // otherwise run against a bare `<div id="root">`.
     await expect(page.locator('section[aria-label]')).toHaveCount(3);
 
-    const actual = await page.evaluate(
-      ({ theme, names }) => {
-        // Setting the attribute makes the real cascade pick a winner among
-        // every theme block, which is the thing being verified.
-        document.documentElement.setAttribute('data-theme', theme);
-        const style = getComputedStyle(document.documentElement);
-        return Object.fromEntries(
-          names.map((name) => [name, style.getPropertyValue(`--bear-${name}`).trim()]),
-        ) as Record<string, string>;
-      },
-      { theme: id, names: TOKENS },
-    );
+    const actual = await readThemeTokens(page, id, TOKENS);
 
     // Collected rather than asserted one at a time: a theme whose derivation
     // drifted four tokens should report four, not hide three behind the first.
@@ -103,9 +93,8 @@ for (const id of SHIPPED) {
 
       expect(now, `--bear-${name} resolved to nothing in ${id}`).toBeTruthy();
 
-      // An exact string match needs no parsing — and `transparent` is a
-      // keyword rather than a colour function, so this branch is the only one
-      // that can handle `high-contrast`'s shadow at all.
+      // Both sides come through `readThemeTokens`, so both are resolved
+      // colours in the same notation and an exact match is the common case.
       if (now === before) continue;
 
       const a = parseColour(now!);

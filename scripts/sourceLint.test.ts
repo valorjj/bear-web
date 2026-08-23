@@ -59,10 +59,34 @@ function resolveImport(fromFile: string, specifier: string): string | null {
   return null;
 }
 
-/** `--name: value` pairs inside the first `{ … }` following `selector`. */
+/**
+ * `--name: value` pairs inside the first `{ … }` following `selector`.
+ *
+ * `selector` is matched as raw TEXT, so **leading indentation is
+ * significant** and is how two blocks with the same selector are told apart.
+ * F introduced exactly that case: `:root:not([data-theme])` appears both at
+ * the top level (the default light theme) and indented inside
+ * `@media (prefers-color-scheme: dark)`. Passing the bare selector finds the
+ * FIRST, which silently made the system-dark assertion compare a light theme
+ * against a dark one. Callers must pass `'\n:root:not([data-theme])'` or
+ * `'\n  :root:not([data-theme])'` to disambiguate.
+ *
+ * It also cannot read a grouped `a, b { … }` selector at all, which is why
+ * this file forbids merging blocks.
+ */
 function blockTokens(css: string, selector: string): Map<string, string> {
-  const start = css.indexOf(selector);
+  // Anchored on the block opening, so a selector NAMED IN PROSE inside a
+  // comment is not mistaken for a second definition of it. The ambiguity
+  // check below caught exactly that on its first run: a comment reading
+  // "must stay identical to `[data-theme='indigo-light']` below" made the
+  // selector look duplicated.
+  const opening = `${selector} {`;
+  const start = css.indexOf(opening);
   expect(start, `selector not found: ${selector}`).toBeGreaterThanOrEqual(0);
+  expect(
+    css.indexOf(opening, start + 1),
+    `selector is ambiguous, it appears more than once: ${selector}`,
+  ).toBe(-1);
 
   const open = css.indexOf('{', start);
   const close = css.indexOf('}', open);
@@ -216,12 +240,47 @@ describe('theme tokens', () => {
     expect(ids.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('gives every theme in the roster a CSS block defining all 26 tokens', () => {
+  /*
+   * The eight colours a theme must choose for itself, plus the scheme scalar.
+   * Everything else has a derived default in `:root` — see the "derived theme
+   * defaults" section of `tokens.css`.
+   */
+  const BASE = ['bg', 'surface', 'sidebar', 'canvas', 'text', 'accent', 'danger', 'shadow'];
+
+  /*
+   * Split from a single "every theme defines all 26" assertion when F made
+   * that impossible. The pair is strictly stronger than weakening the
+   * original: a theme must still declare its own identity, AND every token a
+   * component consumes must still resolve for every theme.
+   */
+  it('gives every theme in the roster a CSS block defining all 8 base tokens', () => {
     for (const id of ids) {
       const block = blockTokens(css, `[data-theme='${id}']`);
-      for (const token of REQUIRED) {
+      for (const token of BASE) {
         expect(block.has(`--bear-${token}`), `--bear-${token} missing from ${id}`).toBe(true);
       }
+      expect(block.has('--bear-dark'), `--bear-dark missing from ${id}`).toBe(true);
+    }
+  });
+
+  /*
+   * The other half of the pair above. A theme declares BASE and may omit
+   * everything else, so everything else has to resolve from `:root` — a token
+   * defined in neither place renders as nothing at all, with no error.
+   *
+   * BASE is excluded deliberately: those are per-theme by definition and
+   * `:root` must NOT carry them. Putting the default palette in `:root` is
+   * precisely the bug F had to fix — a literal there applies to every theme
+   * that does not override it, which silently killed the derived defaults.
+   */
+  it('defines every non-base token in :root, so a theme may omit them', () => {
+    const root = blockTokens(css, '\n:root');
+    for (const token of REQUIRED) {
+      if (BASE.includes(token)) {
+        expect(root.has(`--bear-${token}`), `${token} must NOT be in :root`).toBe(false);
+        continue;
+      }
+      expect(root.has(`--bear-${token}`), `--bear-${token} missing from :root`).toBe(true);
     }
   });
 
@@ -234,15 +293,24 @@ describe('theme tokens', () => {
     }
   });
 
-  // `:root` and the default theme's own block must not drift apart: a user on
-  // System and a user who explicitly picked the default must see one app.
-  //
-  // `:root` deliberately carries the tier-3 globals AND the default palette, so
-  // only the 22 required tokens are compared. Do not "tidy" the two into one
-  // grouped selector — `blockTokens` finds a block by `indexOf` plus the next
-  // brace, so it cannot read a grouped selector at all.
-  it('keeps :root identical to the default theme block', () => {
-    const fallback = blockTokens(css, ':root {');
+  /*
+   * The no-choice block and the default theme's own block must not drift
+   * apart: a user on System and a user who explicitly picked the default must
+   * see one app.
+   *
+   * The palette moved OUT of `:root` into `:root:not([data-theme])` during F,
+   * and that was not tidying. A literal in `:root` beats the derived defaults
+   * AND applies to every theme that does not override the same token, so a
+   * new theme declaring only its eight base colours silently inherited the
+   * default's `muted`, `faint`, `border` and `focus` — the entire derived
+   * section was dead while every test passed. `:not([data-theme])` cannot
+   * match a themed root, so the conflict disappears rather than being won.
+   *
+   * Compared over every token the two blocks declare, not just BASE: this
+   * pair are both full palettes and both must stay complete.
+   */
+  it('keeps the no-choice block identical to the default theme block', () => {
+    const fallback = blockTokens(css, '\n:root:not([data-theme])');
     const defaultId = roster.match(/DEFAULT_THEME_ID: ThemeId = '([a-z-]+)'/)![1]!;
     const explicit = blockTokens(css, `[data-theme='${defaultId}']`);
     for (const token of REQUIRED) {
@@ -255,7 +323,9 @@ describe('theme tokens', () => {
   // The M2-era hazard, generalised: a token right for someone who picked dark
   // and wrong for someone whose OS is dark. Nothing else in the suite sees it.
   it('keeps the system-dark block identical to its named theme', () => {
-    const system = blockTokens(css, ':root:not([data-theme])');
+    // Indented: the media-query copy, not the top-level default block. See
+    // `blockTokens`' docblock — the bare selector now matches both.
+    const system = blockTokens(css, '\n  :root:not([data-theme])');
     const darkId = roster.match(/SYSTEM_DARK_ID: ThemeId = '([a-z-]+)'/)![1]!;
     const named = blockTokens(css, `[data-theme='${darkId}']`);
     expect([...system.keys()].sort()).toEqual([...named.keys()].sort());

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
 import { composite, contrastRatio, parseColour } from '../scripts/contrast';
+import { readThemeTokens } from './fixtures/tokens.ts';
 
 /**
  * The theme roster, read from disk rather than imported.
@@ -109,36 +110,20 @@ test.describe('contrast', () => {
     test(`${id} clears its contrast floors`, async ({ page }) => {
       await page.goto('/');
 
-      const tokens = await page.evaluate((theme) => {
-        // Setting the attribute makes the real cascade pick a winner among
-        // every theme block and the prefers-color-scheme block — which is the
-        // thing being verified. Reading through getComputedStyle is what
-        // substitutes `var()` and applies that winner.
-        document.documentElement.setAttribute('data-theme', theme);
-        const style = getComputedStyle(document.documentElement);
-        const names = [
-          'bg',
-          'surface',
-          'sidebar',
-          'canvas',
-          'text',
-          'muted',
-          'faint',
-          'border',
-          'accent',
-          'danger',
-          'hover',
-          'selected',
-          'tag-fill',
-          'hl-blue',
-          'hl-green',
-          'hl-pink',
-          'hl-purple',
-        ];
-        return Object.fromEntries(
-          names.map((name) => [name, style.getPropertyValue(`--bear-${name}`).trim()]),
-        ) as Record<string, string>;
-      }, id);
+      // Waits for the shell: `goto` resolves on the document, not on React,
+      // and under load the read below would otherwise run against a bare
+      // `<div id="root">`.
+      await expect(page.locator('section[aria-label]')).toHaveCount(3);
+
+      // `readThemeTokens` PAINTS each token onto a probe element rather than
+      // reading the custom property back. That is not a refactor for tidiness:
+      // a custom property's value is substituted lazily, so reading
+      // `--bear-muted` on a derived theme returns the literal string
+      // `color-mix(in oklab, #e8e8f5 68%, #202030)`, not a colour. Fed to
+      // `parseColour` that throws or yields NaN — and `NaN < min` is false, so
+      // every derived theme would have reported a clean pass. Painting forces
+      // the cascade to resolve it.
+      const tokens = await readThemeTokens(page, id, READ);
 
       for (const name of READ) {
         expect(tokens[name], `--bear-${name} resolved to nothing in ${id}`).toBeTruthy();
