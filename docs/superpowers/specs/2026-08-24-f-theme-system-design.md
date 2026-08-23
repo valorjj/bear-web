@@ -23,8 +23,9 @@ contrast floor can be missed.
 
 F does three things:
 
-1. **Derives most of a theme from a few chosen colours**, so a new theme block
-   is about eight declarations rather than twenty-six.
+1. **Gives a new theme sensible derived defaults**, so a new theme block is
+   about eight declarations rather than twenty-six. It does not re-derive the
+   existing five; see below for the measurement that ruled that out.
 2. **Grows the roster from five to sixteen.**
 3. **Replaces the picker** with a scrollable card grid, because a 16px swatch
    told the user nothing useful even at five themes and tells them less at
@@ -70,40 +71,68 @@ letting the cascade colour it, so no colour ever enters TypeScript.
 | `rgb(from #literal …)`                                | evaluated at build time down to plain hex         |
 | Computed value format of a derived token              | `color(srgb 0.36 0.29 0.84 / 0.12)`               |
 
-### The derived split, measured from the five existing themes
+### The derived split — and what measurement disproved
 
-Not chosen by taste. Every ratio below was computed from the shipped palettes:
+The first draft of this section claimed `muted`, `faint` and `border` were
+`text` mixed toward `bg` at a near-constant ratio, and derived them. **That is
+wrong, and the plan was written only after checking it.** Recorded here rather
+than quietly dropped, because the wrong version is convincing:
 
-| theme         | muted | faint | border | selected α | tag α | tagStrong α | hover α | focus == accent |
-| ------------- | ----- | ----- | ------ | ---------- | ----- | ----------- | ------- | --------------- |
-| paper         | 66.6% | 54.2% | 13.0%  | .11        | .16   | .32         | .05     | yes             |
-| indigo-light  | 71.8% | 55.6% | 13.2%  | .09        | .12   | .26         | .05     | yes             |
-| indigo-dark   | 68.1% | 50.5% | 11.3%  | .20        | .22   | .38         | .06     | yes             |
-| ink           | 62.4% | 44.2% | 11.9%  | .18        | .18   | .32         | .06     | yes             |
-| high-contrast | 90.2% | 78.8% | 100%   | opaque     | opaque| opaque      | opaque  | yes             |
+| theme        | muted (sRGB / oklab) | faint         | border        |
+| ------------ | -------------------- | ------------- | ------------- |
+| paper        | 66.6% / 62.0%        | 54.2% / 49.3% | 13.0% / 11.1% |
+| indigo-light | 71.8% / 69.4%        | 55.6% / 53.2% | 13.2% / 13.2% |
+| indigo-dark  | 68.1% / 69.6%        | 50.5% / 52.7% | 11.3% / 12.9% |
+| ink          | 62.4% / 66.4%        | 44.2% / 48.9% | 11.9% / 14.6% |
 
-`muted`, `faint` and `border` are all `text` mixed toward `bg` at a
-near-constant ratio, and **`focus` is literally `accent` in all five themes**.
+The *lightness* fits a constant ratio well, which is what made the theory look
+right. The **chroma does not**. `indigo-dark`'s `muted` is `(169, 163, 189)` —
+visibly violet — where a `text`→`bg` mix at the fitted ratio gives
+`(165, 162, 173)`, a near-grey. Reproducing all four themes at any single
+ratio is off by up to 17/255 per channel. These are hand-tuned tinted greys,
+not mixes.
 
-**Chosen per theme (7):** `bg`, `surface`, `sidebar`, `canvas`, `text`,
-`accent`, `danger`.
+The same check on the alpha tokens:
 
-The four surfaces stay chosen rather than derived because their stepping is
-genuinely per-theme: light themes step *down* in lightness from `bg`, dark
-themes step *up*, and `ink` steps its sidebar up where `indigo-dark` steps its
-own down. They also carry the theme's tint (paper's are warm, indigo's
-violet), which a mix with `bg` alone would lose.
+- **`focus` is exactly `accent` in all five themes.** Genuinely derivable.
+- **`selected`, `tag-fill` and `tag-fill-strong` are exactly `accent`** at an
+  alpha — the colour derives perfectly, but the alphas are hand-tuned
+  (`selected` is .09, .11, .18, .20 across four themes) and their ratios to
+  one another are not constant either.
+- **`hover` has no single base.** It is `text` in `paper`, plain white in both
+  dark themes, and a third colour close to but not equal to `text` in
+  `indigo-light`.
 
-**Derived once in `:root` (12):**
+**So derivation does not reproduce the shipped themes, and this spec no longer
+claims it does.** What it provides is *defaults for new themes*:
+
+- **`:root` derives sensible defaults** for `muted`, `faint`, `border`,
+  `hover`, `selected`, `tag-fill`, `tag-fill-strong`, the four highlight
+  fills, and `focus`.
+- **The five existing themes keep every hand-tuned value explicitly** and
+  therefore render byte-identically. That guarantee now holds trivially: they
+  override, so nothing about them changes.
+- **The eleven new themes take the defaults**, and override only where the
+  contrast harness objects.
+
+A new theme is therefore about eight declarations; the existing five stay
+roughly as long as they are today. The win is entirely in what F adds, which
+is the right place for it — and it is a real win, because eleven themes at
+eight values is eighty-eight decisions instead of two hundred and eighty-six.
+
+**Chosen per new theme (7 + 1):** `bg`, `surface`, `sidebar`, `canvas`,
+`text`, `accent`, `danger`, `shadow`.
+
+**Derived in `:root` (12):**
 
 ```
-/* opaque mixes: in oklab */
+/* opaque mixes, in oklab: perceptually even, so one ratio serves every palette */
 muted           = color-mix(in oklab, text 68%, bg)
 faint           = color-mix(in oklab, text 51%, bg)
-border          = color-mix(in oklab, text 12%, bg)
+border          = color-mix(in oklab, text 13%, bg)
 focus           = accent
 
-/* alpha tints: in srgb */
+/* alpha tints, in srgb: mixing with transparent in oklab shifts hue as it fades */
 hover           = color-mix(in srgb, text   calc(var(--bear-hover-a) * 100%), transparent)
 selected        = color-mix(in srgb, accent calc(var(--bear-tint) * 100%), transparent)
 tag-fill        = color-mix(in srgb, accent calc(var(--bear-tint-mid) * 100%), transparent)
@@ -111,51 +140,34 @@ tag-fill-strong = color-mix(in srgb, accent calc(var(--bear-tint-strong) * 100%)
 hl-blue|green|pink|purple = color-mix(in srgb, <fixed hue> calc(var(--bear-hl-a) * 100%), transparent)
 ```
 
-**Two colour spaces, deliberately, and the split is not arbitrary.** The three
-opaque mixes use `oklab`, because perceptual evenness is the entire reason one
-ratio can serve sixteen palettes: an sRGB midpoint between a dark text and a
-light background lands visibly darker in some hues than others, which would
-make `muted` inconsistent across the roster. The alpha tints use `srgb`,
-because mixing a colour with `transparent` in `oklab` interpolates through a
-premultiplied space and shifts hue as it fades — the result is not the plain
-alpha these tokens have always been. Do not "tidy" the two into one space.
+**Two colour spaces, deliberately.** The opaque mixes use `oklab` because
+perceptual evenness is why one ratio can serve sixteen palettes: an sRGB
+midpoint lands visibly darker in some hues than others. The alpha tints use
+`srgb`, because mixing a colour with `transparent` in `oklab` interpolates
+through a premultiplied space and shifts hue as it fades, which is not the
+plain alpha these tokens have always been. Do not "tidy" the two into one.
 
-**Scheme scalars (5, all new):** `--bear-tint`, `--bear-tint-mid`,
-`--bear-tint-strong`, `--bear-hover-a`, `--bear-hl-a`. Light values live in
-`:root`; a dark theme overrides them.
+### One scalar per theme, not five
 
-`shadow` is the twentieth colour token and belongs to neither group: it is
-chosen per theme, because light themes use a dark tint of their own at 7–14%
-alpha — near their `text` but not equal to it — while dark themes use plain
-black at 40–50%, and no single rule covers both. That
-accounts for all twenty colour tokens: 7 chosen + 12 derived + `shadow`.
+The five alpha scalars (`--bear-tint`, `--bear-tint-mid`,
+`--bear-tint-strong`, `--bear-hover-a`, `--bear-hl-a`) differ only between
+light and dark. Rather than repeating five declarations in every dark theme,
+each theme declares a single **`--bear-dark: 0` or `1`** and `:root`
+interpolates:
 
-**The six non-colour tokens get defaults in `:root`, but they genuinely vary
-and are NOT unified.** An earlier draft of this spec claimed they were
-identical except in `high-contrast`. That was wrong, and checking it is what
-found the error — there are three distinct radius families across five themes
-(`paper` and `ink` at 4/6/10, the two indigo themes at 6/8/12,
-`high-contrast` at 2/4/6) and three distinct shadow treatments (`paper`/`ink`
-a single layer over `var(--bear-shadow)`, indigo a two-layer literal,
-`high-contrast` a ring rather than a shadow at all).
+```
+--bear-tint:        calc(0.10 + 0.09 * var(--bear-dark));
+--bear-tint-mid:    calc(0.13 + 0.08 * var(--bear-dark));
+--bear-tint-strong: calc(0.28 + 0.07 * var(--bear-dark));
+--bear-hover-a:     calc(0.05 + 0.01 * var(--bear-dark));
+--bear-hl-a:        calc(0.20 + 0.08 * var(--bear-dark));
+```
 
-So `:root` carries **one default geometry family** — indigo's 6/8/12 radii,
-the two-layer shadow, `border-width: 1px` — and any theme that wants a
-different one overrides it, exactly as today. The two-layer shadow is the
-default because `tokens.css`'s own comment records why it was chosen: "Two
-layers, which is what reads as depth rather than as a drop shadow."
-
-**Unifying them was considered and rejected**, even though it would have made
-every theme shorter. `paper` and `ink` would visibly change, which
-contradicts this spec's own guarantee that the five shipped themes render
-identically after the refactor. A silent restyle of two themes is not a
-refactor.
-
-Counting honestly, then: a **new** theme adopting the default geometry
-declares about eight properties if light and thirteen if dark, against
-twenty-six today — and that is the number that matters, because it is the cost
-of the eleven themes F adds. The existing five keep their overrides and land
-at eight to eighteen, all of them rendering byte-identically.
+The endpoints are the measured light and dark medians. `--bear-dark` is a
+number, not a keyword, precisely so `calc()` can use it — and it is
+independent of `themes.ts`'s `group`, which stays hand-declared for the
+picker. A theme wanting a value between the two can say `0.5`, which no
+grouped selector could express.
 
 ### No second attribute, and no grouped selector
 
@@ -305,27 +317,44 @@ Two further harness changes:
 ## Testing
 
 **`scripts/sourceLint.test.ts` changes shape, and its guard must not weaken.**
-Today it asserts every roster id has a block defining all 26 tokens. After F a
-block defines about eight, so the assertion becomes: every roster id has a
-block defining all **base** tokens, and `:root` defines every **derived**
-token. Both directions still hold — a CSS block with no roster entry, and a
-roster entry with no block, both still fail. The "finds themes in the roster
-at all" floor stays, because a roster regex matching nothing would make every
-assertion vacuous.
+Today it asserts every roster id has a block defining all 26 tokens. That
+assertion cannot survive: a new theme block defines eight and inherits the
+rest. It becomes two assertions that together are strictly stronger than one
+weakened one:
 
-**The two `:root` agreement tests keep their jobs.** `:root` must still match
-`DEFAULT_THEME_ID`'s block, and `:root:not([data-theme])` must still match
-`SYSTEM_DARK_ID`'s — now over base tokens rather than all 26. The M2-era
-hazard they guard is unchanged: a token right for someone who picked dark and
-wrong for someone whose OS is dark.
+1. Every roster id has a block defining all eight **base** tokens
+   (`bg`, `surface`, `sidebar`, `canvas`, `text`, `accent`, `danger`,
+   `shadow`) plus `--bear-dark`.
+2. **`:root` defines all 26**, so every token a component consumes resolves
+   for every theme whether or not that theme declares it.
+
+Both directions of the roster/CSS agreement still hold: a CSS block with no
+roster entry, and a roster entry with no block, both still fail. The "finds
+themes in the roster at all" floor stays, because a roster regex matching
+nothing would make every assertion vacuous.
+
+**The `:root` agreement tests narrow to base tokens, and this is a real loss
+of coverage that must be stated.** `:root` must still match
+`DEFAULT_THEME_ID`'s block and `:root:not([data-theme])` must still match
+`SYSTEM_DARK_ID`'s — but only over the tokens the theme actually declares,
+because `:root` now legitimately holds derived values the theme block does
+not repeat. The M2-era hazard they guard (a token right for someone who
+picked dark and wrong for someone whose OS is dark) is still covered for
+every declared token, which is where it can actually occur.
 
 **A regression test that the five existing themes are unchanged.** This is the
-one test that makes the refactor safe to review. Every one of the 26 computed
-tokens, for each of the five shipped themes, must resolve to the same colour
-after derivation as before it — modulo format, since a derived token now
-computes to `color(srgb …)` where it used to be `rgb()`. Comparison is by
-parsed RGBA with a tolerance of one 8-bit step, not by string. Without this,
-"derivation changed a colour slightly" is invisible.
+one test that makes the refactor safe to review, and it is a *computed-value*
+test, so it belongs in Playwright rather than in the source lint. Every one of
+the 26 computed tokens, for each of the five shipped themes, must resolve to
+the same colour after the refactor as before it. Comparison is by parsed RGBA
+against a fixture captured from `main` **before** any derivation lands, with a
+tolerance of one 8-bit step — not by string, because a value that used to read
+`rgb(…)` may now read `color(srgb …)` while denoting the same colour.
+
+Capturing that fixture is therefore task two, before the refactor, and the
+plan orders it that way. Without it, "derivation changed a colour slightly" is
+invisible — and the measurement above proves that is not a hypothetical: a
+plausible-looking derivation was off by up to 17/255 per channel.
 
 **Contrast for all sixteen.** The existing floors, unchanged. This is the
 gate that decides whether a palette ships faithful or adjusted.
