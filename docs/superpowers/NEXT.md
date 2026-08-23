@@ -177,6 +177,38 @@ Language autocomplete on the fence (typing ` ```java ` suggests `java`,
   deliberately, not to discover afterwards.
 - Last, so the bundle decision is made with the other two already banked.
 
+**The bundle cost is now MEASURED, on 2026-08-24, and both earlier estimates
+were wrong.** Spiked on a throwaway branch with `lowlight` +
+`@tiptap/extension-code-block-lowlight` and a twelve-language roster (bash,
+css, java, javascript, json, kotlin, markdown, python, sql, typescript, xml,
+yaml), then fully reverted — `main`'s bundle is byte-identical at 278,028
+gzipped.
+
+| approach                     | main bundle          | on demand                      |
+| ---------------------------- | -------------------- | ------------------------------ |
+| today                        | 278,028 gz           | —                              |
+| curated set, **eager**       | 301,244 gz (+23,216) | nothing                        |
+| curated set, **lazy**        | 286,630 gz (+8,602)  | 12 chunks, 431 B – 4,324 B each |
+
+The user chose lazy when the options were labelled "~5 KB" and "60–90 KB".
+Both figures were guesses and both were wrong: the real gap is **8.6 KB
+versus 23.2 KB**, or 3.1% versus 8.3% of the current bundle. Lazy is still
+the smaller number, but it buys 14.6 KB at the cost of an async registry, a
+flash of unhighlighted code on first paint of a block, and a loader that
+tree-shakes to nothing if it is ever left unreferenced — which happened
+during the spike and silently produced a "lazy" build containing no
+languages at all. **Worth re-confirming with the user before building.**
+
+Three further facts from the spike:
+
+- **`@tiptap/extension-code-block-lowlight` must be version-pinned.**
+  `npm i` unpinned fails `ERESOLVE` against `@tiptap/core@3.29.2`;
+  `@3.29.2` installs cleanly.
+- **`highlight.js` arrives as a transitive dependency of `lowlight`**, so
+  both appear in `node_modules` from one install.
+- **CSS is the largest grammar at 4,324 B gzipped**, an order of magnitude
+  above JSON's 431 B — a per-language budget is not uniform.
+
 ## Cut, with a reason
 
 - **"여기로 링크 복사" (copy link to here)**, from Bear's heading dropdown. It
