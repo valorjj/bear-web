@@ -1,9 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { type ReactElement, useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Button } from './Button';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Dialog } from './Dialog';
 import { EmptyState } from './EmptyState';
 import { Pane } from './Pane';
 import { Popover } from './Popover';
@@ -434,5 +436,141 @@ describe('Popover', () => {
     expect(document.activeElement).toBe(screen.getByRole('textbox'));
     await userEvent.tab();
     expect(document.activeElement).toBe(screen.getByText('first'));
+  });
+});
+
+describe('Dialog', () => {
+  it('is a modal dialog carrying the caller name', () => {
+    render(
+      <Dialog open onClose={vi.fn()} label="Appearance">
+        <button>one</button>
+      </Dialog>,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: 'Appearance' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+  });
+
+  it('renders nothing when closed', () => {
+    render(
+      <Dialog open={false} onClose={vi.fn()} label="Appearance">
+        <button>one</button>
+      </Dialog>,
+    );
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // Not decoration: `alertdialog` is the role for a confirmation guarding a
+  // destructive action, which is why it is a deliberate prop rather than the
+  // default. `ConfirmDialog` depends on it.
+  it('takes alertdialog when the caller asks for it', () => {
+    render(
+      <Dialog open onClose={vi.fn()} role="alertdialog" label="Delete">
+        <button>one</button>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('alertdialog', { name: 'Delete' })).toBeInTheDocument();
+  });
+
+  it('closes on Escape', async () => {
+    const onClose = vi.fn();
+    render(
+      <Dialog open onClose={onClose} label="Appearance">
+        <button>one</button>
+      </Dialog>,
+    );
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes on a backdrop click', async () => {
+    const onClose = vi.fn();
+    const { container } = render(
+      <Dialog open onClose={onClose} label="Appearance">
+        <button>one</button>
+      </Dialog>,
+    );
+
+    await userEvent.click(container.querySelector('[aria-hidden="true"]')!);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves focus to the first focusable on open', async () => {
+    render(
+      <Dialog open onClose={vi.fn()} label="Appearance">
+        <button>one</button>
+        <button>two</button>
+      </Dialog>,
+    );
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText('one')));
+  });
+
+  /*
+   * The gap this extraction exists to close. `ConfirmDialog` queried
+   * `'button'` and its own comments called that a documented gap, harmless
+   * only because it held exactly two buttons. A trap that skips a focusable
+   * does not hold it at the modal's edge — it lets Tab walk out into the page
+   * behind, where the user cannot see where focus went.
+   */
+  it('traps Tab across every focusable kind, not only buttons', async () => {
+    render(
+      <Dialog open onClose={vi.fn()} label="Appearance">
+        <button>one</button>
+        <a href="#x">link</a>
+        <input aria-label="field" />
+      </Dialog>,
+    );
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText('one')));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByRole('link'));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByRole('textbox'));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByText('one'));
+  });
+
+  it('wraps backwards too, so Shift+Tab cannot escape either', async () => {
+    render(
+      <Dialog open onClose={vi.fn()} label="Appearance">
+        <button>one</button>
+        <button>two</button>
+      </Dialog>,
+    );
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText('one')));
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(screen.getByText('two'));
+  });
+
+  // Without this the opener — an icon-only trigger in every current caller —
+  // is lost on close and Tab resumes from the top of the document.
+  it('restores focus to whatever opened it', async () => {
+    function Harness(): ReactElement {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>open</button>
+          <Dialog open={open} onClose={() => setOpen(false)} label="Appearance">
+            <button onClick={() => setOpen(false)}>inside</button>
+          </Dialog>
+        </>
+      );
+    }
+
+    render(<Harness />);
+    const opener = screen.getByText('open');
+    await userEvent.click(opener);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText('inside')));
+
+    await userEvent.keyboard('{Escape}');
+
+    await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 });

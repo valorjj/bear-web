@@ -1,6 +1,7 @@
-import { type ReactElement, useEffect, useId, useRef } from 'react';
+import { type ReactElement, useId } from 'react';
 
 import { Button } from './Button';
+import { Dialog } from './Dialog';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -22,13 +23,18 @@ export interface ConfirmDialogProps {
  *
  * **Focus starts on Cancel, deliberately.** These dialogs guard irreversible
  * deletion with no server copy, and an Enter keypress already in flight when
- * the dialog opens must not destroy anything.
+ * the dialog opens must not destroy anything. `Dialog` focuses the first
+ * focusable in DOM order, and Cancel is first — see the comment on the button
+ * row below, which is load-bearing rather than stylistic.
  *
- * The focus trap cycles on keydown rather than using `inert`, which jsdom does
- * not implement. That is enough to test tab order and Escape here; behaviour
- * that depends on real focus semantics across the backdrop belongs in
- * Playwright, alongside the pointer-drag tests that are there for the same
- * reason.
+ * The backdrop, the trap, Escape and focus restoration all come from
+ * `Dialog`. Extracting them fixed a gap this component documented and lived
+ * with: its own trap queried `'button'`, so a link or input inside it would
+ * have been skipped rather than held at the modal's edge.
+ *
+ * `alertdialog` rather than `dialog` is not decoration — it is the role for a
+ * confirmation guarding a destructive action, and this app's confirmations
+ * guard note deletion.
  */
 export function ConfirmDialog({
   open,
@@ -42,94 +48,35 @@ export function ConfirmDialog({
 }: ConfirmDialogProps): ReactElement | null {
   const titleId = useId();
   const bodyId = useId();
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    // The cancel button is the first `button` in DOM order, which is also what
-    // makes the Tab-wrap arithmetic below correct. Queried through `dialogRef`
-    // rather than held in its own ref because `Button` does not forward refs,
-    // and widening its API for this is more than this task needs.
-    dialogRef.current?.querySelector<HTMLElement>('button')?.focus();
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onCancel();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-
-      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>('button');
-      if (focusable === undefined || focusable.length === 0) return;
-
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      const active = document.activeElement;
-
-      // Wrapping in both directions is what makes this a trap rather than a
-      // suggestion: without it, Tab walks out into the page behind the modal.
-      if (event.shiftKey && active === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, onCancel]);
-
-  if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <Dialog
+      open={open}
+      onClose={onCancel}
+      role="alertdialog"
+      labelledBy={titleId}
+      describedBy={bodyId}
+      className="w-full max-w-sm gap-4 p-6"
+    >
+      <h2 id={titleId} className="text-ui-lg text-text font-semibold">
+        {title}
+      </h2>
+      <p id={bodyId} className="text-ui text-muted">
+        {body}
+      </p>
+
       {/*
-        The backdrop cancels on click. It carries no accessible role: the
-        dialog below is `aria-modal`, so assistive tech already treats
-        everything outside it as inert, and a second interactive element
-        announcing itself would be noise.
+        Cancel comes FIRST in DOM order, deliberately. It is what `Dialog`'s
+        mount effect focuses, and what the Tab-wrap arithmetic treats as
+        `first`. Reordering these two swaps which button an in-flight Enter
+        press activates, on a dialog guarding irreversible deletion.
       */}
-      <div
-        aria-hidden="true"
-        onClick={onCancel}
-        className="absolute inset-0 bg-text opacity-20 transition-opacity duration-[var(--bear-duration)] ease-bear"
-      />
-
-      <div
-        ref={dialogRef}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={bodyId}
-        className="relative z-10 mx-4 flex w-full max-w-sm flex-col gap-4 rounded-lg bg-bg p-6 shadow-dialog"
-      >
-        <h2 id={titleId} className="text-ui-lg font-semibold text-text">
-          {title}
-        </h2>
-        <p id={bodyId} className="text-ui text-muted">
-          {body}
-        </p>
-
-        {/*
-          Cancel comes FIRST in DOM order, deliberately. It is what the mount
-          effect focuses, and what the Tab-wrap arithmetic treats as `first`.
-          Reordering these two swaps which button an in-flight Enter press
-          activates, on a dialog guarding irreversible deletion.
-        */}
-        <div className="flex justify-end gap-2">
-          <Button onClick={onCancel}>{cancelLabel}</Button>
-          <Button onClick={onConfirm} variant={destructive ? 'danger' : 'primary'}>
-            {confirmLabel}
-          </Button>
-        </div>
+      <div className="flex justify-end gap-2">
+        <Button onClick={onCancel}>{cancelLabel}</Button>
+        <Button onClick={onConfirm} variant={destructive ? 'danger' : 'primary'}>
+          {confirmLabel}
+        </Button>
       </div>
-    </div>
+    </Dialog>
   );
 }
