@@ -121,30 +121,35 @@ test('a highlight colour chosen from the menu survives a reload', async ({ page 
   await page.keyboard.type('Title');
   await page.keyboard.press('Enter');
   await page.keyboard.type('highlight me');
-  // The typed text has to have LANDED before the arrow keys select over it.
-  // Without this the selection was still collapsed under worker contention,
-  // and a mark command on a collapsed selection sets stored marks rather than
-  // marking anything — so no `<mark>` appeared and the failure read as the
-  // colour not working at all.
   await expect(editor).toContainText('highlight me');
 
-  // Two Shift+ArrowLefts, not Shift+Home: Home in ProseMirror walked to the
-  // start of the DOCUMENT here, so the title line got highlighted too.
-  await page.keyboard.press('Shift+ArrowLeft');
-  await page.keyboard.press('Shift+ArrowLeft');
-
-  // Asserts the SELECTION, not just the text. A mark command against a
-  // collapsed selection sets stored marks rather than marking anything, so
-  // it produces no `<mark>` and the failure reads as "colours are broken".
-  // Waiting for the text to appear was not enough: the two arrow presses can
-  // still be in flight when the menu opens.
-  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('me');
+  /*
+   * Triple-click selects the paragraph outright, rather than steering the
+   * caret with Shift+ArrowLeft from wherever it happens to be.
+   *
+   * Two earlier attempts failed intermittently for two different reasons:
+   * Shift+Home walked to the start of the DOCUMENT and swept up the title
+   * line, and Shift+ArrowLeft produced an EMPTY selection whenever the editor
+   * had lost focus between typing and the keypress — this component is keyed
+   * and remounts when a seeded note first acquires an id. A pointer selection
+   * depends on neither the caret's history nor on focus surviving.
+   *
+   * The selection is then asserted before the menu opens, because a mark
+   * command against a collapsed selection sets stored marks rather than
+   * marking anything, and the resulting failure looks like "colours are
+   * broken" several steps later.
+   */
+  const paragraph = page.locator('.ProseMirror > p').last();
+  await paragraph.click({ clickCount: 3 });
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ''))
+    .toBe('highlight me');
 
   await page.getByRole('button', { name: 'Highlight colour' }).click();
   await page.getByRole('menuitemradio', { name: 'Green' }).click();
 
   const mark = page.locator('.ProseMirror mark.hl-green');
-  await expect(mark).toHaveText('me');
+  await expect(mark).toHaveText('highlight me');
 
   // The colour is note DATA, not view state: it has to come back through
   // IndexedDB and the Markdown round-trip, not just through React.
@@ -168,12 +173,12 @@ test('a highlight colour chosen from the menu survives a reload', async ({ page 
         });
       }),
     )
-    .toContain('<mark class="hl-green">me</mark>');
+    .toContain('<mark class="hl-green">highlight me</mark>');
 
   await page.reload();
   // Nothing is selected on a cold boot, so the note has to be reopened from
   // the list — which is also the stronger assertion: the colour is coming
   // back out of IndexedDB and through `parseMarkdown`, not out of React.
   await page.getByRole('button', { name: /Title/ }).first().click();
-  await expect(page.locator('.ProseMirror mark.hl-green')).toHaveText('me');
+  await expect(page.locator('.ProseMirror mark.hl-green')).toHaveText('highlight me');
 });

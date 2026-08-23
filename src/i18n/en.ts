@@ -153,6 +153,8 @@ export const en = {
   'appearance.label': 'Appearance',
   'appearance.open': 'Change theme',
   'appearance.system': 'System',
+  'appearance.sample': 'The quick brown fox jumps over the lazy dog.',
+  'appearance.sampleAccent': 'a link, and a tag',
   'appearance.group.light': 'Light',
   'appearance.group.dark': 'Dark',
 

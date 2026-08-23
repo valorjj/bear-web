@@ -155,6 +155,8 @@ export const ko: Record<TranslationKey, string> = {
   'appearance.label': '모양',
   'appearance.open': '테마 변경',
   'appearance.system': '시스템',
+  'appearance.sample': '다람쥐 헌 쳇바퀴에 타고파.',
+  'appearance.sampleAccent': '링크와 태그',
   'appearance.group.light': '밝은 테마',
   'appearance.group.dark': '어두운 테마',
 

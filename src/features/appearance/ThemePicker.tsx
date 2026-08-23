@@ -3,23 +3,21 @@ import { type ReactElement, useState } from 'react';
 import type { ThemeChoice } from '@/app/theme';
 import { useTheme } from '@/app/useTheme';
 import { useT } from '@/i18n';
-import { THEMES } from '@/styles/themes';
 import { Icon, Palette } from '@/ui/Icon';
-import { Popover } from '@/ui/Popover';
 
-const GROUPS = [
-  { group: 'light', labelKey: 'appearance.group.light' },
-  { group: 'dark', labelKey: 'appearance.group.dark' },
-] as const;
+import { ThemeDialog } from './ThemeDialog';
 
 /**
- * The theme picker: a trigger in the sidebar footer and a grouped list.
+ * The theme picker: a trigger in the sidebar footer, opening a modal grid.
  *
- * The whole runtime is one attribute on `<html>`; every colour follows through
- * the cascade. That is why this component contains no colour of its own, and
- * why each row's swatch carries `data-theme` on ITSELF — the swatch previews
- * its theme by being rendered inside it, so a palette edit updates the picker
- * for free and no colour is ever duplicated into TypeScript.
+ * It was a `Popover` holding a flat list of rows with a sixteen-pixel swatch
+ * each. That read acceptably at five themes and not at all at sixteen — a
+ * swatch that small conveys almost nothing about a palette, so the name was
+ * doing all the work. See `ThemeDialog` for why the replacement is modal
+ * rather than a wider popover; the short version is that the sidebar `Pane`
+ * is `overflow-hidden` and would clip it.
+ *
+ * This component contains no colour of its own, and neither does the dialog.
  */
 export function ThemePicker(): ReactElement {
   const t = useT();
@@ -29,34 +27,6 @@ export function ThemePicker(): ReactElement {
   function pick(next: ThemeChoice): void {
     setChoice(next);
     setOpen(false);
-  }
-
-  function row(value: ThemeChoice, label: string): ReactElement {
-    const active = choice === value;
-    return (
-      <button
-        key={value}
-        type="button"
-        role="menuitemradio"
-        aria-checked={active}
-        onClick={() => pick(value)}
-        className={`text-ui ease-bear flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-[var(--bear-duration-fast)] ${
-          active ? 'bg-selected text-text font-medium' : 'text-text hover:bg-hover'
-        }`}
-      >
-        <span
-          aria-hidden="true"
-          // `system` deliberately carries no attribute, so its swatch inherits
-          // whatever the document is currently showing — which is exactly what
-          // choosing System means.
-          data-theme={value === 'system' ? undefined : value}
-          className="border-border bg-canvas flex size-4 shrink-0 items-center justify-center rounded-sm border"
-        >
-          <span className="bg-accent size-2 rounded-[1px]" />
-        </span>
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-      </button>
-    );
   }
 
   return (
@@ -72,22 +42,7 @@ export function ThemePicker(): ReactElement {
       </button>
 
       {open ? (
-        <Popover
-          open
-          onClose={() => setOpen(false)}
-          label={t('appearance.label')}
-          className="absolute bottom-full left-0 z-10 mb-2 w-44"
-        >
-          {row('system', t('appearance.system'))}
-          {GROUPS.map(({ group, labelKey }) => (
-            <div key={group} role="group" aria-label={t(labelKey)}>
-              <p className="text-ui-xs text-faint px-2 pt-2 pb-0.5">{t(labelKey)}</p>
-              {THEMES.filter((theme) => theme.group === group).map((theme) =>
-                row(theme.id, t(theme.labelKey)),
-              )}
-            </div>
-          ))}
-        </Popover>
+        <ThemeDialog choice={choice} onChoose={pick} onDismiss={() => setOpen(false)} />
       ) : null}
     </div>
   );

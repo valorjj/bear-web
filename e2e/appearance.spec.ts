@@ -941,27 +941,45 @@ test('every border consumes the theme width token', async ({ page }) => {
  * showing the ACTIVE theme's accent — six identical dots, and an app that
  * still works perfectly. No structural test can see that.
  */
-test('each theme swatch previews its own palette', async ({ page }) => {
+test('each theme card previews its own palette', async ({ page }) => {
   await page.goto('/');
+  await expect(page.locator('section[aria-label]')).toHaveCount(3);
   await page.getByRole('button', { name: /theme|테마/i }).click();
 
-  async function accentOf(name: RegExp): Promise<string> {
-    return page
-      .getByRole('menuitemradio', { name })
-      .locator('span span')
-      .evaluate((element) => getComputedStyle(element).backgroundColor);
+  /*
+   * The property under test is the one the whole picker rests on: a card
+   * paints ITSELF, by carrying `data-theme` on its own element and letting
+   * the cascade colour it. No colour reaches TypeScript, so a palette edit
+   * updates the picker for free — and if that ever stopped working, every
+   * card would render in the document's theme and look identical.
+   *
+   * Reads both the card's own background and its accent line, because a
+   * background-only check would pass for two themes that differ solely in
+   * accent.
+   */
+  async function paletteOf(name: RegExp): Promise<{ bg: string; accent: string }> {
+    const card = page.getByRole('radio', { name });
+    return {
+      bg: await card.evaluate((element) => getComputedStyle(element).backgroundColor),
+      accent: await card
+        .locator('span')
+        .last()
+        .evaluate((element) => getComputedStyle(element).color),
+    };
   }
 
-  const indigo = await accentOf(/Indigo Light|인디고 라이트/);
-  const paper = await accentOf(/^(Paper|페이퍼)$/);
-  const high = await accentOf(/High Contrast|고대비/);
+  const indigo = await paletteOf(/^(Indigo Light|인디고 라이트)$/);
+  const ink = await paletteOf(/^(Ink|잉크)$/);
+  const high = await paletteOf(/^(High Contrast|고대비)$/);
 
-  for (const value of [indigo, paper, high]) {
-    expect(value).not.toBe('rgba(0, 0, 0, 0)');
+  for (const { bg, accent } of [indigo, ink, high]) {
+    expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+    expect(accent).not.toBe('rgba(0, 0, 0, 0)');
   }
-  expect(indigo).not.toBe(paper);
-  expect(paper).not.toBe(high);
-  expect(indigo).not.toBe(high);
+
+  // Three distinct palettes, so three distinct pairs.
+  const pairs = [indigo, ink, high].map(({ bg, accent }) => `${bg}|${accent}`);
+  expect(new Set(pairs).size).toBe(3);
 });
 
 /*
@@ -1072,7 +1090,7 @@ test('only the content panes are elevated, and their elevation is themed', async
 test('a chosen theme survives a reload', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /theme|테마/i }).click();
-  await page.getByRole('menuitemradio', { name: /^(Ink|잉크)$/ }).click();
+  await page.getByRole('radio', { name: /^(Ink|잉크)$/ }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'ink');
 
   await page.reload();
@@ -1097,7 +1115,7 @@ test('a chosen theme survives a reload', async ({ page }) => {
 test('the theme is stamped before first paint', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /theme|테마/i }).click();
-  await page.getByRole('menuitemradio', { name: /^(Ink|잉크)$/ }).click();
+  await page.getByRole('radio', { name: /^(Ink|잉크)$/ }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'ink');
 
   await page.addInitScript(() => {
