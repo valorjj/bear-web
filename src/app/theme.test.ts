@@ -21,7 +21,10 @@ describe('the paint-time mirror', () => {
   // predates it too. A value that is not a known theme must not reach
   // `data-theme`, or an entry left by an older build paints an unstyled app.
   it('falls back to system when the stored value is not a known theme', () => {
-    localStorage.setItem(MIRROR_KEY, 'dracula');
+    // Deliberately not a plausible theme name. This read 'dracula' until F
+    // shipped an actual Dracula theme and the test started asserting that a
+    // real theme was unknown.
+    localStorage.setItem(MIRROR_KEY, 'not-a-theme');
     expect(readMirror()).toBe('system');
   });
 

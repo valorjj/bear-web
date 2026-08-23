@@ -570,6 +570,86 @@
   --bear-shadow-dialog: 0 12px 32px var(--bear-shadow);
 }
 
+/* Nord — arcticicestudio's scheme (MIT). */
+[data-theme='nord'] {
+  --bear-dark: 1;
+  --bear-bg: #2e3440;
+  --bear-surface: #3b4252;
+  --bear-sidebar: #272c36;
+  --bear-canvas: #242933;
+  --bear-text: #eceff4;
+  --bear-accent: #88c0d0;
+  /* Nord's aurora red does not clear 4.5:1 on this theme's nord1 surface (2.46); lightened to the computed minimum. */
+  --bear-danger: #d9a0a6;
+  --bear-shadow: rgb(0 0 0 / 0.4);
+}
+
+/* Dracula — Zeno Rocha's scheme (MIT). */
+[data-theme='dracula'] {
+  --bear-dark: 1;
+  --bear-bg: #282a36;
+  --bear-surface: #343746;
+  --bear-sidebar: #21222c;
+  --bear-canvas: #1a1b23;
+  --bear-text: #f8f8f2;
+  --bear-accent: #bd93f9;
+  /* #ff5555 upstream; lightened to clear 4.5:1 on surface. */
+  --bear-danger: #ff7777;
+  --bear-shadow: rgb(0 0 0 / 0.45);
+}
+
+/*
+ * Solarized Dark — Ethan Schoonover's scheme (MIT).
+ *
+ * `text` is base1 (#93a1a1) rather than the scheme's body base0, for the
+ * same legibility reason Solarized Light raises its own.
+ */
+[data-theme='solarized-dark'] {
+  --bear-dark: 1;
+  --bear-bg: #002b36;
+  --bear-surface: #073642;
+  --bear-sidebar: #00212b;
+  --bear-canvas: #001b22;
+  /*
+   * base1 (#93a1a1) lightened. Solarized Dark's own tones do not clear our
+   * floors either: base1 measures 3.70 through the green highlight fill and
+   * 3.82 on a selected row. Same conflict as Solarized Light, same outcome.
+   */
+  --bear-text: #abb6b6;
+  /* #268bd2 upstream; lightened to clear 4.5:1 on bg and surface. */
+  --bear-accent: #4da0da;
+  /* #dc322f upstream; lightened to clear 4.5:1 on bg and surface. */
+  --bear-danger: #e87876;
+  --bear-shadow: rgb(0 0 0 / 0.45);
+}
+
+/* Tokyo Night — enkia's scheme (MIT). */
+[data-theme='tokyo-night'] {
+  --bear-dark: 1;
+  --bear-bg: #1a1b26;
+  --bear-surface: #24283b;
+  --bear-sidebar: #16161e;
+  --bear-canvas: #101014;
+  --bear-text: #c0caf5;
+  --bear-accent: #7aa2f7;
+  --bear-danger: #f7768e;
+  --bear-shadow: rgb(0 0 0 / 0.5);
+}
+
+/* Gruvbox Dark — morhetz's scheme (MIT). */
+[data-theme='gruvbox-dark'] {
+  --bear-dark: 1;
+  --bear-bg: #282828;
+  --bear-surface: #3c3836;
+  --bear-sidebar: #1d2021;
+  --bear-canvas: #171717;
+  --bear-text: #ebdbb2;
+  --bear-accent: #fe8019;
+  /* #fb4934 upstream; lightened to clear 4.5:1 on bg and surface. */
+  --bear-danger: #fc7c6d;
+  --bear-shadow: rgb(0 0 0 / 0.5);
+}
+
 /*
  * High Contrast — the one theme that stresses the SURFACE tier rather than the
  * palette tier, which is why it is in the roster at all.

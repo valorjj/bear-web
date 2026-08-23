@@ -20,11 +20,19 @@ async function openNoteWithTable(page: import('@playwright/test').Page): Promise
   // Typed, never filled: the table comes from the toolbar, but the title line
   // above it has to exist first or the table is the note's first block.
   await page.keyboard.type('Title');
+  // Each step asserts its own result before the next begins. Under
+  // full-suite contention these actions can still be in flight when the next
+  // one runs, and the resulting failure surfaces several steps later as
+  // "the table bar never appeared" — which reads as a product bug.
+  await expect(editor).toContainText('Title');
+
   await page.keyboard.press('Enter');
   await page
     .getByRole('toolbar', { name: 'Formatting toolbar' })
     .getByRole('button', { name: 'Table' })
     .click();
+
+  await expect(page.locator('.ProseMirror table')).toHaveCount(1);
 }
 
 test('the table bar sits above the table it belongs to', async ({ page }) => {
@@ -50,7 +58,13 @@ test('the bar goes away when the caret leaves the table', async ({ page }) => {
   await openNoteWithTable(page);
   await expect(page.getByRole('toolbar', { name: 'Table' })).toBeVisible();
 
-  await page.locator('.ProseMirror p').first().click();
+  // The title paragraph, which is outside the table. `.first()` is the note
+  // title rather than a cell's paragraph — cells contain paragraphs too, and
+  // clicking one of those would leave the caret inside the table and the bar
+  // correctly visible.
+  const title = page.locator('.ProseMirror > p').first();
+  await expect(title).toContainText('Title');
+  await title.click();
 
   await expect(page.getByRole('toolbar', { name: 'Table' })).toBeHidden();
 });

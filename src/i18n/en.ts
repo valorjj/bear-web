@@ -144,6 +144,11 @@ export const en = {
   'theme.gruvboxLight': 'Gruvbox Light',
   'theme.snow': 'Snow',
   'theme.sepia': 'Sepia',
+  'theme.nord': 'Nord',
+  'theme.dracula': 'Dracula',
+  'theme.solarizedDark': 'Solarized Dark',
+  'theme.tokyoNight': 'Tokyo Night',
+  'theme.gruvboxDark': 'Gruvbox Dark',
 
   'appearance.label': 'Appearance',
   'appearance.open': 'Change theme',

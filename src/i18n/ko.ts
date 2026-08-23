@@ -146,6 +146,11 @@ export const ko: Record<TranslationKey, string> = {
   'theme.gruvboxLight': '그루브박스 라이트',
   'theme.snow': '스노우',
   'theme.sepia': '세피아',
+  'theme.nord': '노르드',
+  'theme.dracula': '드라큘라',
+  'theme.solarizedDark': '솔라라이즈드 다크',
+  'theme.tokyoNight': '도쿄 나이트',
+  'theme.gruvboxDark': '그루브박스 다크',
 
   'appearance.label': '모양',
   'appearance.open': '테마 변경',

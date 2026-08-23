@@ -11,7 +11,12 @@ export type ThemeId =
   | 'latte'
   | 'gruvbox-light'
   | 'snow'
-  | 'sepia';
+  | 'sepia'
+  | 'nord'
+  | 'dracula'
+  | 'solarized-dark'
+  | 'tokyo-night'
+  | 'gruvbox-dark';
 
 export interface Theme {
   id: ThemeId;
@@ -46,6 +51,11 @@ export const THEMES: readonly Theme[] = [
   { id: 'sepia', labelKey: 'theme.sepia', group: 'light' },
   { id: 'indigo-dark', labelKey: 'theme.indigoDark', group: 'dark' },
   { id: 'ink', labelKey: 'theme.ink', group: 'dark' },
+  { id: 'nord', labelKey: 'theme.nord', group: 'dark' },
+  { id: 'dracula', labelKey: 'theme.dracula', group: 'dark' },
+  { id: 'solarized-dark', labelKey: 'theme.solarizedDark', group: 'dark' },
+  { id: 'tokyo-night', labelKey: 'theme.tokyoNight', group: 'dark' },
+  { id: 'gruvbox-dark', labelKey: 'theme.gruvboxDark', group: 'dark' },
   { id: 'high-contrast', labelKey: 'theme.highContrast', group: 'dark' },
 ];
 

@@ -300,26 +300,30 @@ export function RichEditor({
                   : highlightColor
               }
               onChoose={(color) => {
-                setHighlightColor(color);
-                setColorMenuOpen(false);
+                // The document mutation runs FIRST, before any React state
+                // change. Closing the menu unmounts `HighlightMenu`, which
+                // moves focus off the item it focused on open; doing that
+                // before the command left the edit dependent on render timing
+                // and the mark intermittently never landed.
+                //
                 // SETS rather than toggles when the mark is already there.
                 // `toggleMark(type, attrs)` decides by `isActive(type, attrs)`,
                 // so picking a DIFFERENT colour would already replace — but
                 // picking the colour that is already checked would REMOVE the
-                // highlight, which contradicts the `menuitemradio` the user
-                // just clicked. Same reasoning as the heading level menu,
-                // which sets while its shortcut toggles.
-                if (editor === null) return;
-                if (editor.isActive('highlight')) {
-                  editor
-                    .chain()
-                    .command(pinAllSelectionStep)
-                    .focus()
-                    .setHighlightColor(color)
-                    .run();
-                } else {
-                  editor.chain().command(pinAllSelectionStep).focus().toggleHighlight(color).run();
+                // highlight, contradicting the `menuitemradio` the user just
+                // clicked. Same reasoning as the heading level menu, which
+                // sets while its shortcut toggles.
+                if (editor !== null) {
+                  const chain = editor.chain().command(pinAllSelectionStep).focus();
+                  if (editor.isActive('highlight')) {
+                    chain.setHighlightColor(color).run();
+                  } else {
+                    chain.toggleHighlight(color).run();
+                  }
                 }
+
+                setHighlightColor(color);
+                setColorMenuOpen(false);
               }}
               onDismiss={() => setColorMenuOpen(false)}
             />
