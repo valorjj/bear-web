@@ -22,9 +22,77 @@ describe('parseColour', () => {
   it('reads an opaque rgb() with no alpha at all', () => {
     expect(parseColour('rgb(18, 18, 17)')).toEqual({ r: 18, g: 18, b: 17, a: 1 });
   });
+
+  /*
+   * `color(srgb …)` is what every `color-mix()`-derived token computes to,
+   * and this parser was silently blind to it before F.
+   *
+   * The blindness mattered more than a normal parser bug because of how the
+   * harness consumes the result: `e2e/contrast.spec.ts` collects a failure
+   * when `ratio < min`, and `NaN < min` is **false**. An unparseable colour
+   * therefore did not throw and did not fail — it passed. The one harness
+   * that exists to catch an unreadable theme would have reported every theme
+   * green.
+   */
+  it('reads color(srgb …), whose components are 0–1 rather than 0–255', () => {
+    const parsed = parseColour('color(srgb 0.356863 0.290196 0.839216)');
+
+    expect(parsed.r).toBeCloseTo(91, 0);
+    expect(parsed.g).toBeCloseTo(74, 0);
+    expect(parsed.b).toBeCloseTo(214, 0);
+    expect(parsed.a).toBe(1);
+  });
+
+  it('reads color(srgb …) with a slash alpha', () => {
+    expect(parseColour('color(srgb 0 0 0 / 0.4)').a).toBeCloseTo(0.4, 5);
+  });
+
+  /**
+   * The guard that gives the two cases above their teeth.
+   *
+   * A per-format assertion only covers the formats someone thought to list.
+   * This states the property the harness actually depends on — no input the
+   * cascade can hand it may produce a NaN channel — so a future colour
+   * function that slips through fails here instead of passing downstream.
+   */
+  it('never yields NaN for any format the cascade can hand it', () => {
+    for (const css of [
+      '#fff',
+      '#ffffff',
+      '#ffffff80',
+      'rgb(255 255 255)',
+      'rgb(255 255 255 / 0.5)',
+      'rgba(255, 255, 255, 0.5)',
+      'color(srgb 1 1 1)',
+      'color(srgb 1 1 1 / 0.5)',
+      'color(srgb 0.356863 0.290196 0.839216 / 0.12)',
+    ]) {
+      const { r, g, b, a } = parseColour(css);
+      expect(Number.isNaN(r + g + b + a), `${css} produced a NaN channel`).toBe(false);
+    }
+  });
+
+  /**
+   * Refuses rather than guesses. `color(display-p3 …)` has an identical shape
+   * and wider primaries, so reading its components as sRGB would return a
+   * plausible but wrong colour — and a wrong colour here is a wrong contrast
+   * verdict, which is worse than a crash. Nothing emits p3 today; this exists
+   * so that if anything ever does, it fails loudly.
+   */
+  it('throws on a colour space it cannot honestly interpret', () => {
+    expect(() => parseColour('color(display-p3 1 0 0)')).toThrow(/display-p3/);
+  });
 });
 
 describe('contrastRatio', () => {
+  // End to end through the function the harness actually calls, in the new
+  // format: a ratio, not just a parse.
+  it('scores two color(srgb …) values, not just rgb() ones', () => {
+    const ratio = contrastRatio(parseColour('color(srgb 1 1 1)'), parseColour('color(srgb 0 0 0)'));
+
+    expect(ratio).toBeCloseTo(21, 1);
+  });
+
   // Published values. Black on white is exactly 21:1 by definition; the
   // mid-grey case is the one that catches a linearisation mistake, which a
   // black/white-only test cannot see.

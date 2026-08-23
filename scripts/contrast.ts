@@ -41,6 +41,32 @@ export function parseColour(css: string): Rgba {
     };
   }
 
+  /*
+   * `color(srgb r g b / a)` — what every `color-mix()`-derived token computes
+   * to, and the format this function was silently blind to until F.
+   *
+   * Its components are 0–1 floats, unlike `rgb()`'s 0–255, so they are scaled
+   * here. Without this branch the fallback below strips an `rgb(` prefix that
+   * is not present, `Number()`s the string "color(srgb", and returns NaN
+   * channels — and `e2e/contrast.spec.ts` collects a failure on
+   * `ratio < min`, which is FALSE for NaN. An unreadable theme would have
+   * passed rather than thrown.
+   *
+   * Any other colour space throws. `color(display-p3 …)` has an identical
+   * shape and wider primaries, so reading its components as sRGB would yield
+   * a plausible but wrong colour — and a wrong colour here is a wrong
+   * contrast verdict, which is worse than a crash.
+   */
+  if (text.startsWith('color(')) {
+    const inner = text.slice(text.indexOf('(') + 1, text.lastIndexOf(')'));
+    const [space, ...rest] = inner.split(/[\s,/]+/).filter(Boolean);
+    if (space !== 'srgb') {
+      throw new Error(`parseColour: unsupported colour space ${String(space)}`);
+    }
+    const [r = 0, g = 0, b = 0, a] = rest.map(Number);
+    return { r: r * 255, g: g * 255, b: b * 255, a: a === undefined ? 1 : a };
+  }
+
   const parts = text
     .replace(/^rgba?\(/, '')
     .replace(/\)$/, '')

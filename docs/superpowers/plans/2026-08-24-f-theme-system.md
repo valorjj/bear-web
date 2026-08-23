@@ -28,7 +28,7 @@
 | File | Responsibility |
 | --- | --- |
 | `scripts/contrast.ts` | Modify: `parseColour` learns `color(srgb …)`. |
-| `scripts/contrast.test.ts` | Create: unit tests for the parser (does not exist today). |
+| `scripts/contrast.test.ts` | Modify: **this file already exists with 15 tests.** Add cases to its `parseColour` and `contrastRatio` blocks; do not replace it. |
 | `e2e/fixtures/themeBaseline.json` | Create: computed values of all 26 tokens × 5 shipped themes, captured before the refactor. |
 | `e2e/themeBaseline.spec.ts` | Create: asserts the five shipped themes still match the fixture. |
 | `src/styles/tokens.css` | Modify: `:root` gains derived defaults and scalar interpolation; eleven new theme blocks. |
@@ -49,7 +49,7 @@ Every derived token computes to `color(srgb 0.36 0.29 0.84 / 0.12)`. `parseColou
 
 **Files:**
 - Modify: `scripts/contrast.ts:30-53`
-- Create: `scripts/contrast.test.ts`
+- Modify: `scripts/contrast.test.ts` — **it already exists and holds 15 tests**, including recorded historical ratios (`reproduces the rejected 2.51:1 that motivated darkening faint`). ADD to it. An earlier draft of this plan said "create", and following that literally destroyed all 15; the loss showed up only as a total test count that went DOWN by five while a new file was added. Note also that it imports `'./contrast.ts'` **with the extension**, which this tsconfig requires.
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
@@ -57,7 +57,7 @@ Every derived token computes to `color(srgb 0.36 0.29 0.84 / 0.12)`. `parseColou
 
 - [ ] **Step 1: Write the failing test**
 
-Create `scripts/contrast.test.ts`:
+Add these to the existing `describe('parseColour', …)` block in `scripts/contrast.test.ts`, after `reads an opaque rgb() with no alpha at all`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -292,10 +292,15 @@ Expected: 6 tests PASS. It must pass now — it is capturing the status quo.
 
 - [ ] **Step 4: Prove it can fail**
 
-Temporarily change one value in `src/styles/tokens.css` — e.g. `[data-theme='ink']`'s `--bear-accent` from `#ff6f5e` to `#ff6f5f` — and re-run.
+Temporarily change one value in `src/styles/tokens.css` — `[data-theme='ink']`'s `--bear-accent` from `#ff6f5e` to `#ff6f6**0**` — and re-run.
+
+**Use a TWO-step change, not one.** The tolerance is `delta > 1`, so a
+one-step edit (`#ff6f5f`) is Δ1 and passes — an earlier draft of this plan
+specified exactly that and the injection silently proved nothing. A tolerance
+at the boundary of the fault you inject to test it is not a test.
 
 Run: `lsof -ti:4173 | xargs -r kill -9 && npx playwright test themeBaseline --reporter=line`
-Expected: the `ink` test FAILS naming `--bear-accent`. A one-step change must be caught, since the tolerance is one 8-bit step. **Revert the edit** and re-run to confirm green.
+Expected: the `ink` test FAILS with `--bear-accent: #ff6f5e -> #ff6f60 (Δ2.0)`. **Revert the edit** and re-run to confirm green.
 
 - [ ] **Step 5: Commit**
 
