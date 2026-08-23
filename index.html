@@ -25,7 +25,19 @@
       (function () {
         try {
           var stored = localStorage.getItem('bear-web:theme');
-          var known = ['indigo-light', 'indigo-dark', 'paper', 'ink', 'high-contrast'];
+          var known = [
+            'indigo-light',
+            'indigo-dark',
+            'paper',
+            'ink',
+            'high-contrast',
+            'solarized-light',
+            'rose-dawn',
+            'latte',
+            'gruvbox-light',
+            'snow',
+            'sepia',
+          ];
           if (stored && known.indexOf(stored) !== -1) {
             document.documentElement.setAttribute('data-theme', stored);
           }

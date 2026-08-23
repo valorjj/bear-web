@@ -7,6 +7,8 @@ import { I18nProvider } from '@/i18n';
 
 import { THEME_KEY } from '@/app/theme';
 
+import { THEMES } from '@/styles/themes';
+
 import { ThemePicker } from './ThemePicker';
 
 function setup() {
@@ -38,7 +40,10 @@ describe('ThemePicker', () => {
     await openPicker();
     expect(screen.getByRole('group', { name: 'Light' })).toBeTruthy();
     expect(screen.getByRole('group', { name: 'Dark' })).toBeTruthy();
-    expect(screen.getAllByRole('menuitemradio')).toHaveLength(6);
+    // Derived from the roster, not hardcoded: this read `6` and broke the
+    // moment F grew the roster from five themes to eleven. The count that
+    // matters is "every theme, plus System", which is what this says.
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(THEMES.length + 1);
   });
 
   // The group is a property of the roster, not of the palette's luminance.

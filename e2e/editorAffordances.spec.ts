@@ -119,6 +119,13 @@ test('a highlight colour chosen from the menu survives a reload', async ({ page 
   await page.keyboard.press('Shift+ArrowLeft');
   await page.keyboard.press('Shift+ArrowLeft');
 
+  // Asserts the SELECTION, not just the text. A mark command against a
+  // collapsed selection sets stored marks rather than marking anything, so
+  // it produces no `<mark>` and the failure reads as "colours are broken".
+  // Waiting for the text to appear was not enough: the two arrow presses can
+  // still be in flight when the menu opens.
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('me');
+
   await page.getByRole('button', { name: 'Highlight colour' }).click();
   await page.getByRole('menuitemradio', { name: 'Green' }).click();
 

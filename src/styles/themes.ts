@@ -1,6 +1,17 @@
 import type { TranslationKey } from '@/i18n/en';
 
-export type ThemeId = 'indigo-light' | 'indigo-dark' | 'paper' | 'ink' | 'high-contrast';
+export type ThemeId =
+  | 'indigo-light'
+  | 'indigo-dark'
+  | 'paper'
+  | 'ink'
+  | 'high-contrast'
+  | 'solarized-light'
+  | 'rose-dawn'
+  | 'latte'
+  | 'gruvbox-light'
+  | 'snow'
+  | 'sepia';
 
 export interface Theme {
   id: ThemeId;
@@ -15,9 +26,10 @@ export interface Theme {
 }
 
 /**
- * The roster. Adding a theme is a row here plus a CSS block in `tokens.css`;
- * `scripts/sourceLint.test.ts` asserts the two agree in both directions, and
- * that every block defines all 22 themeable tokens.
+ * The roster. Adding a theme is a row here, a CSS block in `tokens.css`
+ * declaring its eight base colours and `--bear-dark`, a label in both
+ * locales, and its id in `index.html`'s pre-paint `known` list.
+ * `scripts/sourceLint.test.ts` asserts all four agree.
  *
  * This file carries no colours. Colours live only in `tokens.css`, so a theme
  * is a name here and a cascade there — which is what keeps first paint free of
@@ -26,6 +38,12 @@ export interface Theme {
 export const THEMES: readonly Theme[] = [
   { id: 'indigo-light', labelKey: 'theme.indigoLight', group: 'light' },
   { id: 'paper', labelKey: 'theme.paper', group: 'light' },
+  { id: 'solarized-light', labelKey: 'theme.solarizedLight', group: 'light' },
+  { id: 'rose-dawn', labelKey: 'theme.roseDawn', group: 'light' },
+  { id: 'latte', labelKey: 'theme.latte', group: 'light' },
+  { id: 'gruvbox-light', labelKey: 'theme.gruvboxLight', group: 'light' },
+  { id: 'snow', labelKey: 'theme.snow', group: 'light' },
+  { id: 'sepia', labelKey: 'theme.sepia', group: 'light' },
   { id: 'indigo-dark', labelKey: 'theme.indigoDark', group: 'dark' },
   { id: 'ink', labelKey: 'theme.ink', group: 'dark' },
   { id: 'high-contrast', labelKey: 'theme.highContrast', group: 'dark' },

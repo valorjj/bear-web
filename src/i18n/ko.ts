@@ -140,6 +140,12 @@ export const ko: Record<TranslationKey, string> = {
   'theme.paper': '페이퍼',
   'theme.ink': '잉크',
   'theme.highContrast': '고대비',
+  'theme.solarizedLight': '솔라라이즈드 라이트',
+  'theme.roseDawn': '로즈 던',
+  'theme.latte': '라떼',
+  'theme.gruvboxLight': '그루브박스 라이트',
+  'theme.snow': '스노우',
+  'theme.sepia': '세피아',
 
   'appearance.label': '모양',
   'appearance.open': '테마 변경',

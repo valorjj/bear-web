@@ -138,6 +138,12 @@ export const en = {
   'theme.paper': 'Paper',
   'theme.ink': 'Ink',
   'theme.highContrast': 'High Contrast',
+  'theme.solarizedLight': 'Solarized Light',
+  'theme.roseDawn': 'Rosé Dawn',
+  'theme.latte': 'Latte',
+  'theme.gruvboxLight': 'Gruvbox Light',
+  'theme.snow': 'Snow',
+  'theme.sepia': 'Sepia',
 
   'appearance.label': 'Appearance',
   'appearance.open': 'Change theme',

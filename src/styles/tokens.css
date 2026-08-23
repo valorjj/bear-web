@@ -389,6 +389,110 @@
   --bear-shadow-dialog: 0 12px 40px rgb(40 34 66 / 0.18);
 }
 
+/*
+ * Solarized Light — Ethan Schoonover's scheme (MIT).
+ *
+ * `text` is base01 (#586e75) rather than the scheme's body base00 (#657b83):
+ * base00 does not clear 4.5:1 on base3, and the contrast harness rejects it.
+ * Fidelity loses to legibility where the two conflict.
+ */
+[data-theme='solarized-light'] {
+  --bear-dark: 0;
+  --bear-bg: #fdf6e3;
+  --bear-surface: #f7f0d8;
+  --bear-sidebar: #eee8d5;
+  --bear-canvas: #e4ddc8;
+  /*
+   * Between base01 (#586e75) and base02. Solarized Light's own emphasized
+   * text is base01, and it does not clear 4.5:1 on this theme's sidebar
+   * (4.39) or through any highlight fill (3.71 on purple). Solarized's base
+   * tones are famously low-contrast; this is the conflict the spec predicted,
+   * and legibility wins.
+   */
+  --bear-text: #4a5d63;
+  /* #268bd2 upstream; darkened to clear 4.5:1 on bg and surface. */
+  --bear-accent: #1f71aa;
+  /* #dc322f upstream; darkened to clear 4.5:1 on bg and surface. */
+  --bear-danger: #cd2e2c;
+  --bear-shadow: rgb(88 110 117 / 0.14);
+}
+
+/* Rosé Dawn — the Rosé Pine Dawn variant (MIT). */
+[data-theme='rose-dawn'] {
+  --bear-dark: 0;
+  --bear-bg: #faf4ed;
+  --bear-surface: #fffaf3;
+  --bear-sidebar: #f2e9e1;
+  --bear-canvas: #e9e0d6;
+  --bear-text: #575279;
+  /* #907aa9 upstream; darkened to clear 4.5:1 on bg and surface. */
+  --bear-accent: #7a6890;
+  /* #b4637a upstream; darkened to clear 4.5:1 on bg and surface. */
+  --bear-danger: #a2596e;
+  --bear-shadow: rgb(87 82 121 / 0.12);
+}
+
+/* Latte — the Catppuccin Latte flavour (MIT). */
+[data-theme='latte'] {
+  --bear-dark: 0;
+  --bear-bg: #eff1f5;
+  --bear-surface: #e6e9ef;
+  --bear-sidebar: #dce0e8;
+  --bear-canvas: #ccd0da;
+  --bear-text: #4c4f69;
+  /* #8839ef upstream; darkened to clear 4.5:1 on bg and surface. */
+  --bear-accent: #8538ea;
+  /* #d20f39 upstream; darkened to clear 4.5:1 on bg and surface. */
+  --bear-danger: #ce0f38;
+  --bear-shadow: rgb(76 79 105 / 0.12);
+}
+
+/* Gruvbox Light — morhetz's scheme (MIT). */
+[data-theme='gruvbox-light'] {
+  --bear-dark: 0;
+  --bear-bg: #fbf1c7;
+  --bear-surface: #f2e5bc;
+  --bear-sidebar: #ebdbb2;
+  --bear-canvas: #d5c4a1;
+  --bear-text: #3c3836;
+  --bear-accent: #af3a03;
+  --bear-danger: #9d0006;
+  --bear-shadow: rgb(60 56 54 / 0.14);
+}
+
+/*
+ * Snow — built from Nord's own Snow Storm range (MIT).
+ *
+ * Nord ships no official light theme. This is ours, named honestly rather
+ * than implying an upstream that does not exist.
+ */
+[data-theme='snow'] {
+  --bear-dark: 0;
+  --bear-bg: #eceff4;
+  --bear-surface: #e5e9f0;
+  --bear-sidebar: #d8dee9;
+  --bear-canvas: #cfd6e0;
+  --bear-text: #2e3440;
+  /* #5e81ac upstream; darkened to clear 4.5:1 on bg and surface. */
+  --bear-accent: #4d6a8d;
+  /* #bf616a upstream; darkened to clear 4.5:1 on bg and surface. */
+  --bear-danger: #9d5057;
+  --bear-shadow: rgb(46 52 64 / 0.12);
+}
+
+/* Sepia — ours. A warm reading theme, the light counterpart to Ink. */
+[data-theme='sepia'] {
+  --bear-dark: 0;
+  --bear-bg: #f4ecd8;
+  --bear-surface: #efe6d0;
+  --bear-sidebar: #e8dcc0;
+  --bear-canvas: #ded0b0;
+  --bear-text: #3a2f1e;
+  --bear-accent: #8b5a2b;
+  --bear-danger: #9c3327;
+  --bear-shadow: rgb(58 47 30 / 0.14);
+}
+
 /* Indigo Dark — the violet carried into the ground, so switching themes reads
    as a dimmer on one app rather than as a different product. */
 [data-theme='indigo-dark'] {

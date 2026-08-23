@@ -410,7 +410,16 @@ describe('the pre-paint theme script', () => {
     for (const id of ids) {
       expect(listed, `${id} missing from the pre-paint script`).toContain(`'${id}'`);
     }
-    expect(listed.split(',')).toHaveLength(ids.length);
+    // Parsed as quoted ids rather than `split(',')`. Prettier rewraps the
+    // array onto one line per entry once it grows past the print width and
+    // adds a trailing comma, which made a naive split report one phantom
+    // extra element. The count assertion is the half that catches a STALE id
+    // left behind after a rename, so it has to survive reformatting.
+    // Sorted: `known` is a membership set, while the roster is in picker
+    // order (light group, then dark), so their orders legitimately differ.
+    expect([...listed.matchAll(/'([a-z-]+)'/g)].map((match) => match[1]!).sort()).toEqual(
+      [...ids].sort(),
+    );
   });
 
   it('reads the same storage key the app writes', () => {
