@@ -370,6 +370,32 @@
 }
 
 /*
+ * The named highlight colours. `--bear-selected` above stays the DEFAULT fill,
+ * which is what every `==text==` in every existing note renders as.
+ *
+ * These win by specificity (0,2,1 against 0,1,1), not by appearing later — the
+ * distinction matters, because this project has already shipped a bug where an
+ * appended utility silently lost to an equally-specific one emitted later. Each
+ * fill is translucent, so `--bear-text` reads through it without any of these
+ * needing a matching foreground colour.
+ */
+.ProseMirror mark.hl-blue {
+  background-color: var(--bear-hl-blue);
+}
+
+.ProseMirror mark.hl-green {
+  background-color: var(--bear-hl-green);
+}
+
+.ProseMirror mark.hl-pink {
+  background-color: var(--bear-hl-pink);
+}
+
+.ProseMirror mark.hl-purple {
+  background-color: var(--bear-hl-purple);
+}
+
+/*
  * The placeholder ProseMirror leaves on an empty document. Without a height
  * the editor collapses and there is nothing to click into.
  */
@@ -512,6 +538,67 @@
 @media (prefers-reduced-motion: reduce) {
   .bear-fold-toggle,
   .bear-fold-badge {
+    transition: none;
+  }
+}
+
+/*
+ * The table bar — a `Decoration.widget` placed just before the table the
+ * caret is in (see `TableControls.ts`). It lives inside the scrolling content
+ * on purpose, so it tracks the table with no geometry code at all.
+ *
+ * `position: relative` plus a negative bottom margin, NOT `absolute`: the
+ * editor's own `overflow-auto` clips left-side and top overflow (the same
+ * constraint that made the fold gutter a reserved column rather than an
+ * overlay), so a bar hanging outside the flow would be cut off above a table
+ * at the top of a note.
+ */
+.bear-table-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.375rem;
+  user-select: none;
+}
+
+.bear-table-control {
+  padding: 0.125rem 0.5rem;
+  border: var(--bear-border-width) solid var(--bear-border);
+  border-radius: var(--bear-radius-sm);
+  background: var(--bear-surface);
+  color: var(--bear-muted);
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-xs);
+  line-height: 1.6;
+  cursor: pointer;
+  transition:
+    background-color var(--bear-duration-fast),
+    color var(--bear-duration-fast);
+}
+
+.bear-table-control:hover {
+  background: var(--bear-hover);
+  color: var(--bear-text);
+}
+
+/*
+ * Destructive controls read as destructive at REST, not only on hover — the
+ * bar sits inline with the user's prose and a row-deleting button that looks
+ * exactly like a row-adding one is a mis-click waiting to happen. The fill
+ * stays quiet; only the word takes the danger colour, which is the same
+ * treatment the note list gives "Move to trash".
+ */
+.bear-table-control[data-destructive] {
+  color: var(--bear-danger);
+}
+
+.bear-table-control[data-destructive]:hover {
+  background: var(--bear-hover);
+  color: var(--bear-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bear-table-control {
     transition: none;
   }
 }

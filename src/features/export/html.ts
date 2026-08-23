@@ -29,6 +29,10 @@ export const EXPORT_TOKEN_NAMES = [
   '--bear-hover',
   '--bear-selected',
   '--bear-tag-fill',
+  '--bear-hl-blue',
+  '--bear-hl-green',
+  '--bear-hl-pink',
+  '--bear-hl-purple',
   '--bear-radius-sm',
   '--bear-radius-md',
   '--bear-font-sans',
@@ -62,6 +66,14 @@ const FALLBACKS: Record<ExportTokenName, string> = {
   '--bear-hover': 'buttonface',
   '--bear-selected': 'buttonface',
   '--bear-tag-fill': 'buttonface',
+  // No system colour names a highlight tint, so all four degrade to the same
+  // neutral the DEFAULT highlight degrades to. A colour lost to a plain
+  // highlight is exactly what every other Markdown reader already does with
+  // the `<mark class>` form; an invisible or illegible one would not be.
+  '--bear-hl-blue': 'buttonface',
+  '--bear-hl-green': 'buttonface',
+  '--bear-hl-pink': 'buttonface',
+  '--bear-hl-purple': 'buttonface',
   '--bear-radius-sm': '4px',
   '--bear-radius-md': '6px',
   '--bear-font-sans': 'system-ui, sans-serif',
@@ -338,6 +350,18 @@ ${declarations}
       border-radius: var(--bear-radius-sm);
       padding: 0.05em 0.15em;
     }
+
+    /*
+     * The class survives export because the document is serialized by
+     * ProseMirror's own DOMSerializer, which renders the mark's own
+     * renderHTML. Without these four rules every colour would silently
+     * export as the default tint. (No backticks in this comment: it lives
+     * inside a template literal.)
+     */
+    mark.hl-blue { background: var(--bear-hl-blue); }
+    mark.hl-green { background: var(--bear-hl-green); }
+    mark.hl-pink { background: var(--bear-hl-pink); }
+    mark.hl-purple { background: var(--bear-hl-purple); }
 
     /*
      * A construct with no node in the editor's schema, exported as its own

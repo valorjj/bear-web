@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
+import { HIGHLIGHT_COLORS } from './Highlight';
 import { normalizeMarkdown, parseMarkdown, serializeMarkdown } from './markdown';
 
 /**
@@ -73,6 +74,17 @@ const CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   { name: 'highlight', markdown: 'Some ==highlighted== text.' },
   { name: 'highlight at line start', markdown: '==Highlighted== opening.' },
   { name: 'highlight with bold inside', markdown: 'Some ==**bold** highlight== text.' },
+  // A non-default highlight colour has no `==` form to serialize to — the
+  // convention carries no colour slot — so it round-trips as inline HTML.
+  // See `docs/rulings/markdown-and-schema.md`.
+  {
+    name: 'highlight, blue',
+    markdown: 'Some <mark class="hl-blue">blue</mark> text.',
+  },
+  {
+    name: 'highlight, colour with inline markup inside',
+    markdown: 'Some <mark class="hl-green">**bold** green</mark> text.',
+  },
 ];
 
 describe.each(CANONICAL)('fidelity: $name', ({ markdown }) => {
@@ -120,6 +132,67 @@ describe('highlight mark structure', () => {
     const doc = parseMarkdown('Some plain text.');
     const marked = findMarkedTextNode(doc, 'highlight');
     expect(marked).toBeUndefined();
+  });
+
+  // The colour attribute needs structural assertions for exactly the reason
+  // the mark itself does: `<mark class="hl-blue">x</mark>` and
+  // `<mark>x</mark>` both round-trip through a serializer that ignores the
+  // attribute entirely, so only the parsed document can tell them apart.
+  it('carries no colour for the plain == form', () => {
+    const doc = parseMarkdown('Some ==highlighted== text.');
+    const marked = findMarkedTextNode(doc, 'highlight');
+    expect(marked?.marks?.find((m) => m.type === 'highlight')?.attrs?.color).toBeNull();
+  });
+
+  it.each(HIGHLIGHT_COLORS)('reads the %s colour off the class attribute', (color) => {
+    const doc = parseMarkdown(`Some <mark class="hl-${color}">x</mark> text.`);
+    const marked = findMarkedTextNode(doc, 'highlight');
+    expect(marked?.marks?.find((m) => m.type === 'highlight')?.attrs?.color).toBe(color);
+  });
+
+  // A class outside the roster is not our syntax. It parses as an uncoloured
+  // highlight and its class is lost — which is exactly what happens TODAY to
+  // every class including our own, so this is a strict improvement rather
+  // than a new lossy path. Recorded in `docs/rulings/markdown-and-schema.md`
+  // alongside the other known stable-but-lossy transformations.
+  it('drops a class outside the roster rather than inventing a colour', () => {
+    const doc = parseMarkdown('Some <mark class="hl-chartreuse">x</mark> text.');
+    const marked = findMarkedTextNode(doc, 'highlight');
+    expect(marked).toBeDefined();
+    expect(marked?.marks?.find((m) => m.type === 'highlight')?.attrs?.color).toBeNull();
+  });
+
+  it('serializes an uncoloured highlight as == , never as HTML', () => {
+    expect(normalizeMarkdown('Some ==x== text.')).toBe('Some ==x== text.');
+  });
+
+  // The `<mark>` form has to lex its own contents. Left to marked's built-in
+  // inline-HTML handling it passed them through as literal text, so a
+  // colour-highlighted bold run came back as a literal `\*\*bold\*\*`. That is
+  // not an exotic input — it is what this app writes as soon as a user colours
+  // a highlight over text that is already bold.
+  //
+  // The byte-for-byte fixture above cannot see this on its own: literal
+  // `**bold**` text also round-trips byte-for-byte. Only the parsed document
+  // distinguishes "bold survived as a mark" from "bold survived as characters".
+  it('parses inline markup INSIDE a coloured highlight as marks, not as text', () => {
+    const doc = parseMarkdown('Some <mark class="hl-green">**bold** green</mark> text.');
+    const bold = findMarkedTextNode(doc, 'bold');
+
+    expect(bold?.text).toBe('bold');
+    expect(bold?.marks?.map((m) => m.type).sort()).toEqual(['bold', 'highlight']);
+    expect(bold?.marks?.find((m) => m.type === 'highlight')?.attrs?.color).toBe('green');
+  });
+
+  // The two spellings must land on the same document, or the app has two
+  // different highlights that merely look alike.
+  it('reads <mark> with no class as the same thing as ==', () => {
+    expect(parseMarkdown('a <mark>x</mark> b')).toEqual(parseMarkdown('a ==x== b'));
+  });
+
+  it('declines an unclosed <mark> rather than guessing where it ends', () => {
+    const doc = parseMarkdown('Some <mark class="hl-blue">unterminated text.');
+    expect(findMarkedTextNode(doc, 'highlight')).toBeUndefined();
   });
 });
 

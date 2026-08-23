@@ -352,3 +352,144 @@ describe('the info panel', () => {
     expect(screen.getByText('13')).toBeInTheDocument();
   });
 });
+
+describe('the highlight colour menu', () => {
+  async function openColourMenu(): Promise<HTMLElement> {
+    await userEvent.click(
+      within(bottomToolbar()).getByRole('button', { name: 'Highlight colour' }),
+    );
+    return screen.getByRole('menu', { name: 'Highlight colour' });
+  }
+
+  it('opens from a chevron that reports its own state', async () => {
+    renderEditor('word');
+    await screen.findByLabelText('Note text');
+
+    const chevron = within(bottomToolbar()).getByRole('button', { name: 'Highlight colour' });
+    expect(chevron).toHaveAttribute('aria-haspopup', 'menu');
+    expect(chevron).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.click(chevron);
+    expect(chevron).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('writes the chosen colour into the document as inline HTML', async () => {
+    const { handleRef } = renderEditor('word');
+    await screen.findByLabelText('Note text');
+
+    handleRef.current?.editor?.commands.selectAll();
+    await userEvent.click(
+      within(await openColourMenu()).getByRole('menuitemradio', { name: 'Blue' }),
+    );
+
+    expect(handleRef.current?.getMarkdown()).toBe('<mark class="hl-blue">word</mark>');
+  });
+
+  it('leaves the plain == form for the default choice', async () => {
+    const { handleRef } = renderEditor('word');
+    await screen.findByLabelText('Note text');
+
+    handleRef.current?.editor?.commands.selectAll();
+    await userEvent.click(
+      within(await openColourMenu()).getByRole('menuitemradio', { name: 'Default' }),
+    );
+
+    expect(handleRef.current?.getMarkdown()).toBe('==word==');
+  });
+
+  it('recolours an existing highlight rather than stacking a second mark', async () => {
+    const { handleRef } = renderEditor('==word==');
+    await screen.findByLabelText('Note text');
+
+    handleRef.current?.editor?.commands.selectAll();
+    await userEvent.click(
+      within(await openColourMenu()).getByRole('menuitemradio', { name: 'Pink' }),
+    );
+
+    expect(handleRef.current?.getMarkdown()).toBe('<mark class="hl-pink">word</mark>');
+  });
+
+  // The case that actually separates `setHighlightColor` from `toggleHighlight`,
+  // and the reason the menu does not simply call the toggle.
+  //
+  // `toggleMark(type, attrs)` decides by `isActive(type, attrs)`. Picking a
+  // DIFFERENT colour is therefore already a replace, and a test that only did
+  // that passed with the toggle wired in — verified by injecting exactly that
+  // fault. Picking the colour that is ALREADY CHECKED is where they diverge:
+  // the toggle removes the highlight entirely.
+  //
+  // Setting is the correct semantics here for the same reason the heading
+  // level menu SETS while `Mod-Alt-N` TOGGLES (`markdown-and-schema.md`):
+  // these are `menuitemradio`s, and toggling off from a checked radio
+  // contradicts the check mark the user is looking at.
+  it('leaves the highlight alone when the checked colour is chosen again', async () => {
+    const { handleRef } = renderEditor('<mark class="hl-pink">word</mark>');
+    await screen.findByLabelText('Note text');
+
+    handleRef.current?.editor?.commands.selectAll();
+    await userEvent.click(
+      within(await openColourMenu()).getByRole('menuitemradio', { name: 'Pink' }),
+    );
+
+    expect(handleRef.current?.getMarkdown()).toBe('<mark class="hl-pink">word</mark>');
+  });
+
+  it('leaves a default highlight alone when Default is chosen again', async () => {
+    const { handleRef } = renderEditor('==word==');
+    await screen.findByLabelText('Note text');
+
+    handleRef.current?.editor?.commands.selectAll();
+    await userEvent.click(
+      within(await openColourMenu()).getByRole('menuitemradio', { name: 'Default' }),
+    );
+
+    expect(handleRef.current?.getMarkdown()).toBe('==word==');
+  });
+
+  it('checks the colour the cursor is actually sitting in', async () => {
+    const { handleRef } = renderEditor('<mark class="hl-green">word</mark>');
+    await screen.findByLabelText('Note text');
+
+    handleRef.current?.editor?.commands.selectAll();
+    const menu = await openColourMenu();
+
+    expect(within(menu).getByRole('menuitemradio', { name: 'Green' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(within(menu).getByRole('menuitemradio', { name: 'Default' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+  });
+
+  // The whole point of the split control: picking a colour once must not cost
+  // a trip through the menu on every subsequent highlight.
+  it('makes the Highlight button reuse the last colour chosen', async () => {
+    const { handleRef } = renderEditor('one two');
+    await screen.findByLabelText('Note text');
+
+    handleRef.current?.editor?.commands.setTextSelection({ from: 1, to: 4 });
+    await userEvent.click(
+      within(await openColourMenu()).getByRole('menuitemradio', { name: 'Purple' }),
+    );
+
+    handleRef.current?.editor?.commands.setTextSelection({ from: 5, to: 8 });
+    await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Highlight' }));
+
+    expect(handleRef.current?.getMarkdown()).toBe(
+      '<mark class="hl-purple">one</mark> <mark class="hl-purple">two</mark>',
+    );
+  });
+
+  it('closes on Escape without changing the document', async () => {
+    const { handleRef } = renderEditor('word');
+    await screen.findByLabelText('Note text');
+
+    await openColourMenu();
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('menu', { name: 'Highlight colour' })).toBeNull();
+    expect(handleRef.current?.getMarkdown()).toBe('word');
+  });
+});

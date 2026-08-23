@@ -117,6 +117,30 @@ test('a resized pane keeps its width across a reload', async ({ page }) => {
   // make the reload assertion below pass trivially.
   expect(widthAfterResize).toBeGreaterThan(DEFAULT_SIDEBAR_WIDTH);
 
+  // Waits for the WRITE, not just for the DOM. `usePaneWidths` commits the
+  // width fire-and-forget (`void settings.set(...)`), so reloading straight
+  // after the keypress races it — under load the reload won and the pane came
+  // back at its default, which reads as "persistence is broken" and is a test
+  // racing an in-flight write. The assertion below is unchanged.
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open('bear-web');
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        return await new Promise<unknown>((resolve) => {
+          const read = database
+            .transaction('settings')
+            .objectStore('settings')
+            .get('pane.sidebarWidth');
+          read.onsuccess = () => resolve(read.result?.value);
+        });
+      }),
+    )
+    .toBe(widthAfterResize);
+
   await page.reload();
   await expect(page.getByRole('region')).toHaveCount(3);
 

@@ -2,7 +2,17 @@ import { Extension, isMacOS } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
-import { ChevronDown, ChevronRight, renderIconMarkup } from '@/ui/Icon';
+import {
+  ChevronDown,
+  ChevronRight,
+  Heading1,
+  Heading2,
+  Heading3,
+  Heading4,
+  Heading5,
+  Heading6,
+  renderIconMarkup,
+} from '@/ui/Icon';
 
 import {
   foldKeyOf,
@@ -77,6 +87,25 @@ function nextKeysToggling(state: EditorState, section: HeadingSection): string[]
 const CHEVRON_DOWN_MARKUP = renderIconMarkup(ChevronDown);
 const CHEVRON_RIGHT_MARKUP = renderIconMarkup(ChevronRight);
 
+/**
+ * One glyph per heading level, indexed 1-6, built ONCE at module load for the
+ * same reason the two chevrons above are: `decorations(state)` rebuilds any
+ * widget it cannot reuse, and `renderIconMarkup` touches the DOM on every call.
+ *
+ * Six glyphs rather than one generic `Heading`, because the badge's whole job
+ * is to say WHICH level this heading is — that is what the digit it replaced
+ * conveyed, and losing it would trade a legibility complaint for an
+ * information loss.
+ */
+const HEADING_MARKUP: Readonly<Record<number, string>> = {
+  1: renderIconMarkup(Heading1),
+  2: renderIconMarkup(Heading2),
+  3: renderIconMarkup(Heading3),
+  4: renderIconMarkup(Heading4),
+  5: renderIconMarkup(Heading5),
+  6: renderIconMarkup(Heading6),
+};
+
 // The heading's own accessible name is pinned separately, by a
 // `Decoration.node` carrying an explicit `aria-label` — see the
 // `headingNameDecorations` loop below — so nothing here needs to hide the
@@ -140,13 +169,23 @@ function toggleElement(folded: boolean, hint: string | null): HTMLElement {
 function badgeElement(level: number): HTMLElement {
   const el = button('bear-fold-badge', null);
   el.setAttribute('data-fold-badge', '');
+  // `data-level` is now the only machine-readable record of the level here.
+  // It used to be redundant with the badge's text; the text is gone.
   el.setAttribute('data-level', String(level));
-  el.textContent = String(level);
-  // The one element whose text actually pollutes the heading's accessible
-  // name (see the block comment above) — its digit is redundant with the
-  // toggle's own action and is already visible information, so it stays
-  // hidden. `tabIndex = -1` keeps a real `<button>` from being reachable by
-  // Tab while `aria-hidden`, which would otherwise be its own violation.
+  // A `Heading1`-`Heading6` glyph, not the bare digit this shipped with. The
+  // digit read as a stray number floating beside the heading rather than as a
+  // control — reported from the live app — while its sibling two gutter slots
+  // to the left was already an icon. `HEADING_MARKUP` is module-level for the
+  // same reason the chevrons are; see above.
+  el.innerHTML = HEADING_MARKUP[level] ?? '';
+  // Historically this was hidden because its digit was the measured pollution
+  // source for the heading's accessible name (see the block comment above).
+  // The glyph contributes no text, so that specific hazard is gone — but the
+  // badge stays hidden and out of tab order regardless: it is a mouse-only
+  // duplicate of the level menu that `Mod-Alt-1`-`6` already reaches, and an
+  // unnamed `<button>` announcing as "button" is worse than no button at all.
+  // `tabIndex = -1` keeps a real `<button>` from being reachable by Tab while
+  // `aria-hidden`, which would otherwise be its own violation.
   el.setAttribute('aria-hidden', 'true');
   el.tabIndex = -1;
   return el;

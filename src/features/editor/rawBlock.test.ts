@@ -269,7 +269,10 @@ describe('inline HTML: constructs this editor upgrades must keep upgrading', () 
     const [paragraph] = doc.content ?? [];
     const [node] = paragraph?.content ?? [];
     expect(node?.type).toBe('text');
-    expect(node?.marks).toEqual([{ type: 'highlight' }]);
+    // `color: null` is the DEFAULT highlight, and `==x==` is how it
+    // serializes — a classless `<mark>` is still the plain form, not a
+    // colour this app failed to name.
+    expect(node?.marks).toEqual([{ type: 'highlight', attrs: { color: null } }]);
     expect(normalizeMarkdown('<mark>x</mark>')).toBe('==x==');
   });
 

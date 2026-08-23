@@ -172,3 +172,38 @@ Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
   spread.** A button that opens a menu has to say so, and those two are the
   only ARIA a presentation primitive can own without knowing what the menu
   contains.
+
+- **The Chromium widget-focus finding is about HEADINGS, and does NOT
+  generalise to every `Decoration.widget`.** The seven experiments above
+  establish that a heading containing a widget becomes a subtree Chromium
+  refuses `.focus()` to. A button inside the table bar's widget — also a
+  `Decoration.widget`, also `contenteditable="false"`, also inside the
+  ProseMirror DOM — takes focus normally. Measured, not assumed:
+  `e2e/editorAffordances.spec.ts` calls `.focus()` on a bar button and asserts
+  `document.activeElement`. That is why the table bar needs no keyboard escape
+  hatch of its own while the fold gutter needed `Mod-Alt-F`. If Chromium ever
+  widens the heading behaviour, that test fails and the bar needs the same
+  treatment.
+
+- **The table bar's buttons are WORDS, not glyphs, and that follows the
+  existing destructive-control rule rather than making a new one.** Three of
+  the five delete content. An icon-only "delete column" asks the user to
+  recall a glyph before throwing data away, which is the same objection that
+  keeps "Delete forever" and "Empty trash" as text. Only the WORD takes
+  `--bear-danger`; the fill stays quiet, matching "Move to trash" in the note
+  list. It also happens to avoid copying five more glyph paths into
+  `Icon.tsx`, but that is a convenience, not the reason.
+
+- **The fold badge's level is now a `Heading1`–`Heading6` glyph, and the
+  accessible-name test it broke had to be REWRITTEN, not merely kept green.**
+  The badge's digit was the measured pollution source for the heading's
+  accessible name; a glyph contributes no text, so simply un-hiding the badge
+  no longer pollutes anything and that test would have passed with the
+  `Decoration.node` aria-label DELETED — a vacuous assertion in the exact
+  place the file exists to prevent one. It now un-hides the badge AND gives it
+  text, simulating any future widget that forgets to hide itself, because what
+  is being pinned is the decoration, not the badge's current markup.
+
+- **Six level glyphs, not one generic `Heading`.** The badge's whole job is to
+  say which level this heading is, which is what the digit conveyed. Trading a
+  legibility complaint for an information loss would not be a fix.

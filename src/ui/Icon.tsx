@@ -1,4 +1,13 @@
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Heading1,
+  Heading2,
+  Heading3,
+  Heading4,
+  Heading5,
+  Heading6,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactElement } from 'react';
 
@@ -73,31 +82,90 @@ export function Icon({ glyph: Glyph, size = 'md', className = '' }: IconProps): 
  * which is exactly the weight this whole function exists to avoid.
  *
  * The duplication is checked, not merely hoped to stay correct:
- * `Icon.test.tsx` renders the REAL `ChevronDown`/`ChevronRight` components
+ * `Icon.test.tsx` renders each REAL lucide component listed below
  * through `@testing-library/react` — a dev/test dependency that never
- * reaches the shipped bundle — and asserts their rendered `d` attribute
- * still matches these constants, so a future `lucide-react` version bump
- * that changes either glyph's path fails a test instead of silently
- * drawing the wrong shape.
+ * reaches the shipped bundle — and asserts the whole rendered shape (every
+ * child element's tag and attributes, in order) still matches these
+ * constants, so a future `lucide-react` version bump that changes any glyph
+ * fails a test instead of silently drawing the wrong shape.
+ *
+ * The entries are lucide's own `__iconNode` arrays, copied verbatim from
+ * `node_modules/lucide-react/dist/esm/icons/*.mjs` minus their render `key`s.
+ * A glyph is a LIST of shapes, not one path: `Heading6` draws its numeral
+ * with a `<circle>`, and an earlier single-`d` registry could not have
+ * represented it at all.
  */
-const CHEVRON_PATHS = new Map<LucideIcon, string>([
-  [ChevronDown, 'm6 9 6 6 6-6'],
-  [ChevronRight, 'm9 18 6-6-6-6'],
+type IconNode = readonly (readonly [tag: string, attrs: Readonly<Record<string, string>>])[];
+
+const ICON_NODES = new Map<LucideIcon, IconNode>([
+  [ChevronDown, [['path', { d: 'm6 9 6 6 6-6' }]]],
+  [ChevronRight, [['path', { d: 'm9 18 6-6-6-6' }]]],
+  // The six below draw the fold gutter's level indicator. Their shared first
+  // three paths are the `H`; only the trailing numeral differs. `Heading6`
+  // is the only entry that is not paths alone.
+  [
+    Heading1,
+    [
+      ['path', { d: 'M4 12h8' }],
+      ['path', { d: 'M4 18V6' }],
+      ['path', { d: 'M12 18V6' }],
+      ['path', { d: 'm17 12 3-2v8' }],
+    ],
+  ],
+  [
+    Heading2,
+    [
+      ['path', { d: 'M4 12h8' }],
+      ['path', { d: 'M4 18V6' }],
+      ['path', { d: 'M12 18V6' }],
+      ['path', { d: 'M21 18h-4c0-4 4-3 4-6 0-1.5-2-2.5-4-1' }],
+    ],
+  ],
+  [
+    Heading3,
+    [
+      ['path', { d: 'M4 12h8' }],
+      ['path', { d: 'M4 18V6' }],
+      ['path', { d: 'M12 18V6' }],
+      ['path', { d: 'M17.5 10.5c1.7-1 3.5 0 3.5 1.5a2 2 0 0 1-2 2' }],
+      ['path', { d: 'M17 17.5c2 1.5 4 .3 4-1.5a2 2 0 0 0-2-2' }],
+    ],
+  ],
+  [
+    Heading4,
+    [
+      ['path', { d: 'M12 18V6' }],
+      ['path', { d: 'M17 10v3a1 1 0 0 0 1 1h3' }],
+      ['path', { d: 'M21 10v8' }],
+      ['path', { d: 'M4 12h8' }],
+      ['path', { d: 'M4 18V6' }],
+    ],
+  ],
+  [
+    Heading5,
+    [
+      ['path', { d: 'M4 12h8' }],
+      ['path', { d: 'M4 18V6' }],
+      ['path', { d: 'M12 18V6' }],
+      ['path', { d: 'M17 13v-3h4' }],
+      ['path', { d: 'M17 17.7c.4.2.8.3 1.3.3 1.5 0 2.7-1.1 2.7-2.5S19.8 13 18.3 13H17' }],
+    ],
+  ],
+  [
+    Heading6,
+    [
+      ['path', { d: 'M4 12h8' }],
+      ['path', { d: 'M4 18V6' }],
+      ['path', { d: 'M12 18V6' }],
+      ['circle', { cx: '19', cy: '16', r: '2' }],
+      ['path', { d: 'M20 10c-2 2-3 3.5-3 6' }],
+    ],
+  ],
 ]);
 
-/**
- * Renders a glyph to a static SVG markup string, for the one place in the app
- * that needs an icon OUTSIDE React's tree: `HeadingFold.ts`'s widget builders
- * are plain DOM (ProseMirror decorations, not React), so they cannot render
- * `<Icon />` directly. Builds the `<svg>` element with `document.createElementNS`
- * rather than going through any React renderer — see `CHEVRON_PATHS` above for
- * why. Restricted to the glyphs actually needed here; a glyph with no entry
- * throws rather than silently rendering nothing, so a future call site adding
- * a third glyph fails loudly instead of shipping an invisible button.
- */
 export function renderIconMarkup(glyph: LucideIcon, size: IconProps['size'] = 'md'): string {
-  const d = CHEVRON_PATHS.get(glyph);
-  if (d === undefined) {
+  const shapes = ICON_NODES.get(glyph);
+  if (shapes === undefined) {
     throw new Error('renderIconMarkup: no path data registered for this glyph');
   }
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -113,9 +181,13 @@ export function renderIconMarkup(glyph: LucideIcon, size: IconProps['size'] = 'm
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('focusable', 'false');
 
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', d);
-  svg.appendChild(path);
+  for (const [tag, attrs] of shapes) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [name, value] of Object.entries(attrs)) {
+      el.setAttribute(name, value);
+    }
+    svg.appendChild(el);
+  }
 
   return svg.outerHTML;
 }
@@ -158,5 +230,11 @@ export {
   FileCode,
   Printer,
   Table as TableGlyph,
+  Heading1,
+  Heading2,
+  Heading3,
+  Heading4,
+  Heading5,
+  Heading6,
   UserRound,
 } from 'lucide-react';

@@ -8,6 +8,9 @@ import { useT } from '@/i18n';
 import { BottomToolbar } from './BottomToolbar';
 import { buildEditorExtensions } from './extensions';
 import { HeadingMenu } from './HeadingMenu';
+import { HighlightMenu } from './HighlightMenu';
+import type { HighlightColor } from './Highlight';
+import { pinAllSelectionStep } from './toolbarSelection';
 import type { HeadingMenuRequest } from './HeadingFold';
 import { InfoPanel } from './InfoPanel';
 import { parseMarkdown, serializeMarkdown } from './markdown';
@@ -75,6 +78,15 @@ export function RichEditor({
   const [infoOpen, setInfoOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [menu, setMenu] = useState<HeadingMenuRequest | null>(null);
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  /**
+   * The colour the toolbar's Highlight button applies. Sticky across clicks so
+   * highlighting in one colour stays a single click; it is a session
+   * preference, not note data, so it is deliberately NOT persisted — a colour
+   * chosen once and silently reapplied on a later visit would be a surprise,
+   * and the menu is one click away.
+   */
+  const [highlightColor, setHighlightColor] = useState<HighlightColor | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
 
   // The plugin reads its callback once, at construction, and `useEditor` reads
@@ -124,6 +136,17 @@ export function RichEditor({
       // there is no "nobody is listening" state to represent with `null` here.
       onOpenMenu: (request) => openMenuRef.current(request),
       foldHint: t('editor.fold.toggle'),
+      // Read once at mount, like every option above it — the editor is keyed
+      // by note id and rebuilt on a language change, so there is no live
+      // language switch for these to miss.
+      labels: {
+        toolbar: t('editor.table.controls'),
+        addRow: t('editor.table.addRow'),
+        deleteRow: t('editor.table.deleteRow'),
+        addColumn: t('editor.table.addColumn'),
+        deleteColumn: t('editor.table.deleteColumn'),
+        deleteTable: t('editor.table.deleteTable'),
+      },
     }),
   );
 
@@ -258,8 +281,55 @@ export function RichEditor({
       </div>
 
       <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10 flex justify-center">
-        <div className="pointer-events-auto flex max-w-full">
-          <BottomToolbar editor={editor} />
+        {/*
+         * The colour menu is a SIBLING of the toolbar, not a child of it. The
+         * pill is `overflow-x-auto`, which clips in both axes, so a popover
+         * placed inside it would be cut off at its top edge with nothing to
+         * show for it. Same reason `ExportMenu` sits beside `TopControls`
+         * rather than within it.
+         */}
+        <div className="pointer-events-auto flex max-w-full flex-col items-center gap-2">
+          {colorMenuOpen && (
+            <HighlightMenu
+              // What the cursor is actually sitting in wins over the sticky
+              // button colour: with the caret inside a green highlight, the
+              // menu that opens must say green.
+              current={
+                editor?.isActive('highlight') === true
+                  ? ((editor.getAttributes('highlight').color as HighlightColor | null) ?? null)
+                  : highlightColor
+              }
+              onChoose={(color) => {
+                setHighlightColor(color);
+                setColorMenuOpen(false);
+                // SETS rather than toggles when the mark is already there.
+                // `toggleMark(type, attrs)` decides by `isActive(type, attrs)`,
+                // so picking a DIFFERENT colour would already replace — but
+                // picking the colour that is already checked would REMOVE the
+                // highlight, which contradicts the `menuitemradio` the user
+                // just clicked. Same reasoning as the heading level menu,
+                // which sets while its shortcut toggles.
+                if (editor === null) return;
+                if (editor.isActive('highlight')) {
+                  editor
+                    .chain()
+                    .command(pinAllSelectionStep)
+                    .focus()
+                    .setHighlightColor(color)
+                    .run();
+                } else {
+                  editor.chain().command(pinAllSelectionStep).focus().toggleHighlight(color).run();
+                }
+              }}
+              onDismiss={() => setColorMenuOpen(false)}
+            />
+          )}
+          <BottomToolbar
+            editor={editor}
+            highlightColor={highlightColor}
+            colorMenuOpen={colorMenuOpen}
+            onToggleColorMenu={() => setColorMenuOpen((open) => !open)}
+          />
         </div>
       </div>
 

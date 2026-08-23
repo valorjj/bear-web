@@ -129,6 +129,15 @@
   --bear-shadow: rgb(40 34 66 / 0.07);
   --bear-tag-fill: rgb(91 74 214 / 0.12);
   --bear-tag-fill-strong: rgb(91 74 214 / 0.26);
+  /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
+     not repeated here; these four are the `==`-less `<mark class="hl-*">`
+     colours. Translucent over the page rather than opaque, the same trick
+     `--bear-selected` uses, so `--bear-text` keeps reading through them in
+     every theme instead of needing a per-colour foreground. */
+  --bear-hl-blue: rgb(37 99 235 / 0.2);
+  --bear-hl-green: rgb(22 163 74 / 0.22);
+  --bear-hl-pink: rgb(219 39 119 / 0.18);
+  --bear-hl-purple: rgb(147 51 234 / 0.18);
 
   --bear-radius-sm: 6px;
   --bear-radius-md: 8px;
@@ -158,6 +167,15 @@
   --bear-canvas: #e8e4de;
   --bear-tag-fill: rgb(207 59 44 / 0.16);
   --bear-tag-fill-strong: rgb(207 59 44 / 0.32);
+  /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
+     not repeated here; these four are the `==`-less `<mark class="hl-*">`
+     colours. Translucent over the page rather than opaque, the same trick
+     `--bear-selected` uses, so `--bear-text` keeps reading through them in
+     every theme instead of needing a per-colour foreground. */
+  --bear-hl-blue: rgb(30 108 196 / 0.2);
+  --bear-hl-green: rgb(58 138 62 / 0.22);
+  --bear-hl-pink: rgb(200 58 118 / 0.2);
+  --bear-hl-purple: rgb(132 74 200 / 0.2);
 
   --bear-radius-sm: 4px;
   --bear-radius-md: 6px;
@@ -204,6 +222,15 @@
   --bear-shadow: rgb(40 34 66 / 0.07);
   --bear-tag-fill: rgb(91 74 214 / 0.12);
   --bear-tag-fill-strong: rgb(91 74 214 / 0.26);
+  /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
+     not repeated here; these four are the `==`-less `<mark class="hl-*">`
+     colours. Translucent over the page rather than opaque, the same trick
+     `--bear-selected` uses, so `--bear-text` keeps reading through them in
+     every theme instead of needing a per-colour foreground. */
+  --bear-hl-blue: rgb(37 99 235 / 0.2);
+  --bear-hl-green: rgb(22 163 74 / 0.22);
+  --bear-hl-pink: rgb(219 39 119 / 0.18);
+  --bear-hl-purple: rgb(147 51 234 / 0.18);
 
   --bear-radius-sm: 6px;
   --bear-radius-md: 8px;
@@ -236,6 +263,15 @@
   --bear-shadow: rgb(0 0 0 / 0.4);
   --bear-tag-fill: rgb(155 140 255 / 0.22);
   --bear-tag-fill-strong: rgb(155 140 255 / 0.38);
+  /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
+     not repeated here; these four are the `==`-less `<mark class="hl-*">`
+     colours. Translucent over the page rather than opaque, the same trick
+     `--bear-selected` uses, so `--bear-text` keeps reading through them in
+     every theme instead of needing a per-colour foreground. */
+  --bear-hl-blue: rgb(96 165 250 / 0.3);
+  --bear-hl-green: rgb(74 222 128 / 0.26);
+  --bear-hl-pink: rgb(244 114 182 / 0.28);
+  --bear-hl-purple: rgb(192 132 252 / 0.3);
 
   --bear-radius-sm: 6px;
   --bear-radius-md: 8px;
@@ -263,6 +299,15 @@
   --bear-canvas: #121211;
   --bear-tag-fill: rgb(255 111 94 / 0.18);
   --bear-tag-fill-strong: rgb(255 111 94 / 0.32);
+  /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
+     not repeated here; these four are the `==`-less `<mark class="hl-*">`
+     colours. Translucent over the page rather than opaque, the same trick
+     `--bear-selected` uses, so `--bear-text` keeps reading through them in
+     every theme instead of needing a per-colour foreground. */
+  --bear-hl-blue: rgb(120 170 255 / 0.28);
+  --bear-hl-green: rgb(120 214 130 / 0.26);
+  --bear-hl-pink: rgb(255 130 170 / 0.26);
+  --bear-hl-purple: rgb(200 150 255 / 0.28);
 
   --bear-radius-sm: 4px;
   --bear-radius-md: 6px;
@@ -305,6 +350,15 @@
   --bear-shadow: transparent;
   --bear-tag-fill: #4a3d00;
   --bear-tag-fill-strong: #6b5800;
+  /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
+     not repeated here; these four are the `==`-less `<mark class="hl-*">`
+     colours. Translucent over the page rather than opaque, the same trick
+     `--bear-selected` uses, so `--bear-text` keeps reading through them in
+     every theme instead of needing a per-colour foreground. */
+  --bear-hl-blue: #00337a;
+  --bear-hl-green: #0d4a17;
+  --bear-hl-pink: #6b0035;
+  --bear-hl-purple: #3d1a6b;
 
   --bear-radius-sm: 2px;
   --bear-radius-md: 4px;
@@ -344,6 +398,15 @@
     --bear-shadow: rgb(0 0 0 / 0.4);
     --bear-tag-fill: rgb(155 140 255 / 0.22);
     --bear-tag-fill-strong: rgb(155 140 255 / 0.38);
+    /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
+       not repeated here; these four are the `==`-less `<mark class="hl-*">`
+       colours. Translucent over the page rather than opaque, the same trick
+       `--bear-selected` uses, so `--bear-text` keeps reading through them in
+       every theme instead of needing a per-colour foreground. */
+    --bear-hl-blue: rgb(96 165 250 / 0.3);
+    --bear-hl-green: rgb(74 222 128 / 0.26);
+    --bear-hl-pink: rgb(244 114 182 / 0.28);
+    --bear-hl-purple: rgb(192 132 252 / 0.3);
 
     --bear-radius-sm: 6px;
     --bear-radius-md: 8px;

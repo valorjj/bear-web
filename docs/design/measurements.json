@@ -428,7 +428,7 @@
     "surface": "editor: bottom toolbar",
     "note": "Currently welded to the window edge; Bear floats a centred rounded bar.",
     "box": {
-      "width": 422,
+      "width": 442,
       "height": 36
     },
     "style": {

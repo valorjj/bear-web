@@ -20,34 +20,35 @@ feature and is not yet scheduled.
 
 ## Status
 
-| Milestone                                  | State    |
-| ------------------------------------------ | -------- |
-| M0 scaffold, CI, Pages deploy              | complete |
-| M1 data layer (Dexie)                      | complete |
-| M2 application shell                       | complete |
-| M3 notes CRUD, textarea editor             | complete |
-| M4 editor                                  | complete |
-| M5 tags                                    | complete |
-| M5.5 design language                       | complete |
-| M6 smart lists, trash management           | complete |
-| M7 search                                  | complete |
-| M7.5 visual design pass                    | complete |
-| M7.6 tag pills                             | complete |
-| M7.7 tag pill activation                   | complete |
-| M8 visual pass (chrome, density, prose)    | complete |
-| M8b export: Markdown, HTML, PDF            | complete |
-| M8c tables as real nodes                   | complete |
-| M9a visual system: themes, scale, picker   | complete |
-| A note-list header (scope, sort, preview)  | complete |
-| B collapsible headings + level badge       | complete |
-| B2 drag-to-reorder headings                | queued   |
-| D1 server: hosting, accounts, Google login | complete |
-| D2 server: the sync protocol               | complete |
-| C code block language + highlighting       | queued   |
-| M9b callout blocks                         | deferred |
+| Milestone                                                         | State    |
+| ----------------------------------------------------------------- | -------- |
+| M0 scaffold, CI, Pages deploy                                     | complete |
+| M1 data layer (Dexie)                                             | complete |
+| M2 application shell                                              | complete |
+| M3 notes CRUD, textarea editor                                    | complete |
+| M4 editor                                                         | complete |
+| M5 tags                                                           | complete |
+| M5.5 design language                                              | complete |
+| M6 smart lists, trash management                                  | complete |
+| M7 search                                                         | complete |
+| M7.5 visual design pass                                           | complete |
+| M7.6 tag pills                                                    | complete |
+| M7.7 tag pill activation                                          | complete |
+| M8 visual pass (chrome, density, prose)                           | complete |
+| M8b export: Markdown, HTML, PDF                                   | complete |
+| M8c tables as real nodes                                          | complete |
+| M9a visual system: themes, scale, picker                          | complete |
+| A note-list header (scope, sort, preview)                         | complete |
+| B collapsible headings + level badge                              | complete |
+| E editor affordances (heading icon, highlight colours, table bar) | complete |
+| B2 drag-to-reorder headings                                       | queued   |
+| D1 server: hosting, accounts, Google login                        | complete |
+| D2 server: the sync protocol                                      | complete |
+| C code block language + highlighting                              | queued   |
+| M9b callout blocks                                                | deferred |
 
-1407 unit tests (plus 84 server tests, 55 of which are integration tests that
-skip when `TEST_DATABASE_URL` is unset), 78 end-to-end tests. `main` is
+1455 unit tests (plus 84 server tests, 55 of which are integration tests that
+skip when `TEST_DATABASE_URL` is unset), 83 end-to-end tests. `main` is
 always green and auto-deploys.
 
 **D reverses the "no backend, no account" premise above.** D1 shipped
@@ -170,6 +171,17 @@ These bit us once already. They are not mistakes.
   belong in Playwright.
 - `erasableSyntaxOnly` forbids `enum`, parameter properties, and namespaces.
   `verbatimModuleSyntax` requires `import type` / `export type`.
+- **`renderIconMarkup` takes a LIST of shapes, not one path, and `Icon.tsx`
+  carries lucide's `__iconNode` arrays verbatim.** It draws the ProseMirror
+  widgets that cannot render React (`HeadingFold`'s gutter). Importing
+  `lucide-react` there instead was measured at **+187.89 kB raw / +57.20 kB
+  gzip** and rejected. The single-`d` form it started with could not represent
+  `Heading6` at all — that glyph draws its numeral with a `<circle>` — and the
+  test guarding the copies walked only `<path>` elements, so it would have
+  declared a glyph MISSING that shape identical to one that had it. Both are
+  generalised now; a new glyph is a verbatim entry in `ICON_NODES` plus a row
+  in `Icon.test.tsx`'s `it.each`.
+
 - **`--color-hover` did not exist until M5.5.** `hover:bg-hover` was written in
   `TopControls` and `BottomToolbar` from M4 onward, and Tailwind v4 silently
   emits nothing for a utility whose theme key is absent — no build warning, no
@@ -208,6 +220,24 @@ connection holding version 0.1`. `e2e/fixtures/seed.ts` opens at 10 and closes
   `e2e/`, which `tsc -b` also compiles — reports only `Exit code: 2`).
   **Before trusting any e2e result that follows a source change, and always
   before a fault injection:** `lsof -ti:4173 | xargs -r kill -9`.
+
+- **Several e2e tests fail under machine load, and the failures look like
+  regressions.** With `load average` well above the core count, different
+  timing-sensitive tests fail on each run — `smoke.spec.ts`'s pane-resize
+  persistence, `appearance.spec.ts`'s pane elevation — none of them related to
+  whatever was just changed. Two genuine races were found and fixed this way
+  (the elevation test read computed styles before React had mounted; a mark
+  command ran against a selection that had not landed yet), so the failures
+  are worth reading rather than dismissing — but **check `uptime` before
+  concluding a diff broke the suite**, and re-run once the machine is quiet.
+  Back-to-back full runs are themselves the usual cause.
+
+- **A backtick inside a CSS comment in `src/features/export/html.ts`
+  terminates the template literal holding the export stylesheet.** The whole
+  stylesheet is one template literal, so a comment written in this project's
+  usual `` `code` `` style produces a parse error whose message points at the
+  prose, not at the backtick — and because that module is imported widely, ten
+  unrelated test FILES fail to load at once. The real cause is one character.
 
 - **Class-attribute order does not decide the CSS cascade; stylesheet order
   does.** `Pane` had `shadow-popover` in its base classes, and appending
@@ -361,21 +391,23 @@ file paths and symbol names — rather than as topics. If your change touches a
 row's trigger, open that file first. Each file repeats its own trigger in full
 at the top; the rows here are abridged.
 
-| Before you touch…                                                                                                                                                                                                                                                                                        | Read first                                                                          |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `src/data/tags/` — `parseTags`, `findTagRanges`, `normalizeTag`, `MASK`, the fence and mask helpers; `TAG_INDEX_VERSION`; any prose introducing the mask character's escape sequence                                                                                                                     | [tag-grammar.md](docs/rulings/tag-grammar.md)                                       |
-| `src/data/migrations.ts`, `sweep.ts`, `persist.ts`, `backup.ts`, `db.ts`'s `stores({…})`; the `noteTags` writes in `repositories/notes.ts`; the boot sequence in `main.tsx`; a new `db.version(n).upgrade()`                                                                                             | [tag-index-and-startup.md](docs/rulings/tag-index-and-startup.md)                   |
-| `NoteEditor.tsx`, `useAutosave.ts`, `useNotes.ts`, `derive.ts`, `useFlushTriggers.ts`; `AppShell`'s `key={…}` / `seed`; any `useLiveQuery` whose deps are not `[]`; `notes.purge` / `notes.save` call sites                                                                                              | [notes-lifecycle.md](docs/rulings/notes-lifecycle.md)                               |
-| `scope.ts` (`NoteScope`, `SMART_LIST_IDS`, `scopeKey`, `ScopeQuery`, the capability functions), `src/data/order.ts`, `ScopeMenu.tsx`, `useSetting.ts`, `smartLists.ts`, `useSmartListCounts.ts`, `search.ts`, `HighlightedText.tsx`, `ConfirmDialog.tsx`, `AppShell`'s scope/query state                 | [scopes-and-search.md](docs/rulings/scopes-and-search.md)                           |
-| `src/features/editor/markdown.ts`, `extensions.ts`, `RawBlock.ts`, `toolbarSelection.ts`, `taskItemPromotion.ts`; the `CANONICAL` / `NON_CANONICAL` fixtures; a new import of `@tiptap/markdown`; a new extension, input rule, **or keyboard binding** (`useScopeShortcuts.ts` included)                 | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md)                       |
-| `tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` entries in `extensions.ts`, `RawTable`, `table.test.ts`, any table fixture                                                                                                                                  | [tables.md](docs/rulings/tables.md)                                                 |
-| `TagPill.ts` (`tagDecorations`, `tagRangeAt`, the `mousedown` handler), `blockText.ts` (`maskedBlockText`), `RichEditor`'s `activateRef` / `data-mod-held`, `AppShell.handleActivateTag`, `--bear-tag-fill*`, `tagAgreement.test.ts`                                                                     | [tag-pills.md](docs/rulings/tag-pills.md)                                           |
-| `src/features/export/` — `html.ts`, `exportNote.ts`, `print.ts`, `filename.ts`, `ExportMenu.tsx`; `NoteEditor.handleExport`; the `export.*` i18n keys and `ALLOWED_IDENTICAL`                                                                                                                            | [export.md](docs/rulings/export.md)                                                 |
-| `src/styles/*.css`, `themes.ts`, `app/theme.ts`, `index.html`'s inline script, `Pane.tsx`, `Resizer.tsx`, `Button.tsx`, `ThemePicker.tsx`, `RichEditor.tsx`; a new `--bear-*` property, `[data-theme]` block, spacing / radius / shadow / `outline-none` utility                                         | [design-tokens-and-layout.md](docs/rulings/design-tokens-and-layout.md)             |
-| `src/data/sync/` (`config.ts`, `transport.ts`, `engine.ts`, `markDirty.ts`), `syncState` in `db.ts`, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`, `server/migrations/002_sync.sql`, `LAST_PULLED_REV_KEY`, `SYNCED_ACCOUNT_KEY`, `useSync.ts`, `markAllDirty`, `reindexNote`          | [sync.md](docs/rulings/sync.md)                                                     |
-| any `aria-*` attribute or accessible-name assertion; `Icon.tsx`, `SidebarRow.tsx`'s explicit space, `NoteListItem.tsx`'s label, `preview.ts`'s `snippetLines`, `Button.tsx`'s variants and its `ariaHasPopup`/`ariaExpanded`, `NoteList.tsx`'s header, `ScopeMenu.tsx`'s roles, `ConfirmDialog`'s Cancel | [accessibility.md](docs/rulings/accessibility.md)                                   |
-| `e2e/appearance.spec.ts`, `smoke.spec.ts`, `contrast.spec.ts`, `scripts/*.test.ts`, the tsconfig `include`/`types`; a `lucide-react` import outside `Icon.tsx`; a `[role="…"]` selector or `.closest()` inside `page.evaluate`; **any test you are about to edit because a restyle made it fail**        | [testing-and-tooling.md](docs/rulings/testing-and-tooling.md)                       |
-| planning a milestone, or touching pane widths, `NoteEditor`'s seed/discard, `AppShell`'s confirm handlers, the tag tree, the note-list header, the editor typography tokens, or the Playwright pointer-drag tests                                                                                        | [deferred.md](docs/rulings/deferred.md) — deliberately deferred items, with rulings |
+| Before you touch…                                                                                                                                                                                                                                                                                        | Read first                                                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/data/tags/` — `parseTags`, `findTagRanges`, `normalizeTag`, `MASK`, the fence and mask helpers; `TAG_INDEX_VERSION`; any prose introducing the mask character's escape sequence                                                                                                                     | [tag-grammar.md](docs/rulings/tag-grammar.md)                                                                                          |
+| `src/data/migrations.ts`, `sweep.ts`, `persist.ts`, `backup.ts`, `db.ts`'s `stores({…})`; the `noteTags` writes in `repositories/notes.ts`; the boot sequence in `main.tsx`; a new `db.version(n).upgrade()`                                                                                             | [tag-index-and-startup.md](docs/rulings/tag-index-and-startup.md)                                                                      |
+| `NoteEditor.tsx`, `useAutosave.ts`, `useNotes.ts`, `derive.ts`, `useFlushTriggers.ts`; `AppShell`'s `key={…}` / `seed`; any `useLiveQuery` whose deps are not `[]`; `notes.purge` / `notes.save` call sites                                                                                              | [notes-lifecycle.md](docs/rulings/notes-lifecycle.md)                                                                                  |
+| `scope.ts` (`NoteScope`, `SMART_LIST_IDS`, `scopeKey`, `ScopeQuery`, the capability functions), `src/data/order.ts`, `ScopeMenu.tsx`, `useSetting.ts`, `smartLists.ts`, `useSmartListCounts.ts`, `search.ts`, `HighlightedText.tsx`, `ConfirmDialog.tsx`, `AppShell`'s scope/query state                 | [scopes-and-search.md](docs/rulings/scopes-and-search.md)                                                                              |
+| `src/features/editor/markdown.ts`, `extensions.ts`, `RawBlock.ts`, `toolbarSelection.ts`, `taskItemPromotion.ts`; the `CANONICAL` / `NON_CANONICAL` fixtures; a new import of `@tiptap/markdown`; a new extension, input rule, **or keyboard binding** (`useScopeShortcuts.ts` included)                 | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md)                                                                          |
+| `tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` entries in `extensions.ts`, `RawTable`, `table.test.ts`, any table fixture                                                                                                                                  | [tables.md](docs/rulings/tables.md)                                                                                                    |
+| `TagPill.ts` (`tagDecorations`, `tagRangeAt`, the `mousedown` handler), `blockText.ts` (`maskedBlockText`), `RichEditor`'s `activateRef` / `data-mod-held`, `AppShell.handleActivateTag`, `--bear-tag-fill*`, `tagAgreement.test.ts`                                                                     | [tag-pills.md](docs/rulings/tag-pills.md)                                                                                              |
+| `src/features/export/` — `html.ts`, `exportNote.ts`, `print.ts`, `filename.ts`, `ExportMenu.tsx`; `NoteEditor.handleExport`; the `export.*` i18n keys and `ALLOWED_IDENTICAL`                                                                                                                            | [export.md](docs/rulings/export.md)                                                                                                    |
+| `src/styles/*.css`, `themes.ts`, `app/theme.ts`, `index.html`'s inline script, `Pane.tsx`, `Resizer.tsx`, `Button.tsx`, `ThemePicker.tsx`, `RichEditor.tsx`; a new `--bear-*` property, `[data-theme]` block, spacing / radius / shadow / `outline-none` utility                                         | [design-tokens-and-layout.md](docs/rulings/design-tokens-and-layout.md)                                                                |
+| `src/data/sync/` (`config.ts`, `transport.ts`, `engine.ts`, `markDirty.ts`), `syncState` in `db.ts`, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`, `server/migrations/002_sync.sql`, `LAST_PULLED_REV_KEY`, `SYNCED_ACCOUNT_KEY`, `useSync.ts`, `markAllDirty`, `reindexNote`          | [sync.md](docs/rulings/sync.md)                                                                                                        |
+| `Highlight.ts` (`HIGHLIGHT_COLORS`, `highlightClass`, the `color` attribute, the tokenizer's two branches), `HighlightMenu.tsx`, `--bear-hl-*`, `BottomToolbar`'s colour chevron                                                                                                                         | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md), [design-tokens-and-layout.md](docs/rulings/design-tokens-and-layout.md) |
+| `TableControls.ts` (`TABLE_ACTIONS`, `tablePosAt`, `COMMANDS`, `labels`), `tableControls.test.ts`, `.bear-table-controls` in `editor.css`                                                                                                                                                                | [tables.md](docs/rulings/tables.md), [accessibility.md](docs/rulings/accessibility.md)                                                 |
+| any `aria-*` attribute or accessible-name assertion; `Icon.tsx`, `SidebarRow.tsx`'s explicit space, `NoteListItem.tsx`'s label, `preview.ts`'s `snippetLines`, `Button.tsx`'s variants and its `ariaHasPopup`/`ariaExpanded`, `NoteList.tsx`'s header, `ScopeMenu.tsx`'s roles, `ConfirmDialog`'s Cancel | [accessibility.md](docs/rulings/accessibility.md)                                                                                      |
+| `e2e/appearance.spec.ts`, `smoke.spec.ts`, `contrast.spec.ts`, `scripts/*.test.ts`, the tsconfig `include`/`types`; a `lucide-react` import outside `Icon.tsx`; a `[role="…"]` selector or `.closest()` inside `page.evaluate`; **any test you are about to edit because a restyle made it fail**        | [testing-and-tooling.md](docs/rulings/testing-and-tooling.md)                                                                          |
+| planning a milestone, or touching pane widths, `NoteEditor`'s seed/discard, `AppShell`'s confirm handlers, the tag tree, the note-list header, the editor typography tokens, or the Playwright pointer-drag tests                                                                                        | [deferred.md](docs/rulings/deferred.md) — deliberately deferred items, with rulings                                                    |
 
 **Provenance.** The whole set was re-audited on 2026-08-20, one agent per file,
 each verifying its bullets against the code. Result: **0 deleted, 3 merged, 1

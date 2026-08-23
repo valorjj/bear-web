@@ -20,3 +20,6 @@ docs/design/shots/
 server/.env
 server/.env.local
 server/.env.bak.*
+
+# JetBrains IDE settings — local, not project configuration.
+.idea/

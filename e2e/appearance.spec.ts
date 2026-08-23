@@ -1020,6 +1020,13 @@ test('the editor heading ratio reaches every heading', async ({ page }) => {
  */
 test('only the content panes are elevated, and their elevation is themed', async ({ page }) => {
   await page.goto('/');
+  // Waits for the shell to mount before reading computed styles. `goto`
+  // resolves on the document, not on React, so under worker contention the
+  // `page.evaluate` below used to run against a bare `<div id="root">` and
+  // find zero panes — the "guards the guard" assertion then failed with
+  // `Received: 0`, which reads as a regression and is a race. The expectation
+  // itself is unchanged.
+  await expect(page.locator('section[aria-label]')).toHaveCount(3);
 
   async function shadows(theme: string): Promise<Record<string, string>> {
     return page.evaluate((value) => {

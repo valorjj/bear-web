@@ -1,10 +1,11 @@
 import type { Editor } from '@tiptap/react';
-import type { ReactElement } from 'react';
+import { Fragment, type ReactElement } from 'react';
 
 import { useT } from '@/i18n';
 import type { TranslationKey } from '@/i18n';
 import {
   Bold,
+  ChevronDown,
   Code,
   Heading,
   Highlighter,
@@ -20,12 +21,22 @@ import {
 } from '@/ui/Icon';
 import type { LucideIcon } from '@/ui/Icon';
 
+import type { HighlightColor } from './Highlight';
 import { pinAllSelectionStep } from './toolbarSelection';
 
 type Translate = (key: TranslationKey) => string;
 
 export interface BottomToolbarProps {
   editor: Editor | null;
+  /**
+   * The colour the Highlight BUTTON applies. Owned by the parent alongside the
+   * menu's open state, so the button and the menu cannot disagree about which
+   * colour is current.
+   */
+  highlightColor: HighlightColor | null;
+  /** Whether the colour menu is open — drives `aria-expanded` on the chevron. */
+  colorMenuOpen: boolean;
+  onToggleColorMenu: () => void;
 }
 
 interface Action {
@@ -49,7 +60,14 @@ interface Action {
    * module-level constant. The link action needs a translated prompt, and no
    * user-facing string may be hardcoded in a component.
    */
-  run: (editor: Editor, t: Translate) => void;
+  /**
+   * Every action receives the current highlight colour, though only
+   * `highlight` reads it. The alternative — branching on `action.key` inside
+   * the render loop — would put one action's behaviour somewhere other than
+   * its own row in this table, which is the property that makes the table
+   * worth having.
+   */
+  run: (editor: Editor, t: Translate, highlightColor: HighlightColor | null) => void;
   active: (editor: Editor) => boolean;
 }
 
@@ -108,7 +126,10 @@ const ACTIONS: readonly Action[] = [
     key: 'highlight',
     label: 'editor.toolbar.highlight',
     glyph: Highlighter,
-    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleHighlight().run(),
+    // Toggles the LAST-CHOSEN colour, so highlighting stays one click. The
+    // chevron beside it is the route to a different one.
+    run: (editor, _t, color) =>
+      editor.chain().command(pinAllSelectionStep).focus().toggleHighlight(color).run(),
     active: (editor) => editor.isActive('highlight'),
   },
   {
@@ -175,7 +196,12 @@ const ACTIONS: readonly Action[] = [
  *
  * Placement is the parent's job; see `TopControls`.
  */
-export function BottomToolbar({ editor }: BottomToolbarProps): ReactElement {
+export function BottomToolbar({
+  editor,
+  highlightColor,
+  colorMenuOpen,
+  onToggleColorMenu,
+}: BottomToolbarProps): ReactElement {
   const t = useT();
 
   return (
@@ -185,17 +211,36 @@ export function BottomToolbar({ editor }: BottomToolbarProps): ReactElement {
       className="flex h-9 w-fit max-w-full shrink-0 items-center gap-0.5 overflow-x-auto rounded-full bg-surface px-2 shadow-popover"
     >
       {ACTIONS.map((action) => (
-        <button
-          key={action.key}
-          type="button"
-          aria-label={t(action.label)}
-          aria-pressed={editor !== null && action.active(editor)}
-          disabled={editor === null}
-          onClick={() => editor !== null && action.run(editor, t)}
-          className="h-7 shrink-0 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
-        >
-          <Icon glyph={action.glyph} />
-        </button>
+        <Fragment key={action.key}>
+          <button
+            type="button"
+            aria-label={t(action.label)}
+            aria-pressed={editor !== null && action.active(editor)}
+            disabled={editor === null}
+            onClick={() => editor !== null && action.run(editor, t, highlightColor)}
+            className={`h-7 shrink-0 rounded-sm text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40 ${
+              // The highlight pair reads as ONE control: the button loses its
+              // trailing inset so the chevron sits against it rather than a
+              // full gap away.
+              action.key === 'highlight' ? 'pr-0.5 pl-2' : 'px-2'
+            }`}
+          >
+            <Icon glyph={action.glyph} />
+          </button>
+          {action.key === 'highlight' && (
+            <button
+              type="button"
+              aria-label={t('editor.toolbar.highlightColor')}
+              aria-haspopup="menu"
+              aria-expanded={colorMenuOpen}
+              disabled={editor === null}
+              onClick={onToggleColorMenu}
+              className="h-7 shrink-0 rounded-sm pr-2 pl-0.5 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-expanded:bg-selected aria-expanded:text-text disabled:pointer-events-none disabled:opacity-40"
+            >
+              <Icon glyph={ChevronDown} size="sm" />
+            </button>
+          )}
+        </Fragment>
       ))}
     </div>
   );

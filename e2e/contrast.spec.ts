@@ -69,6 +69,13 @@ const OVERLAYS = [
   { overlay: 'selected', ground: 'surface', fg: 'text', min: 4.5 },
   { overlay: 'hover', ground: 'surface', fg: 'text', min: 4.5 },
   { overlay: 'tag-fill', ground: 'bg', fg: 'accent', min: 3.0 },
+  // A highlight is body text on a tinted page: the fill must not eat the text
+  // it exists to draw attention to. `bg` is the ground because a highlight is
+  // always inside the editor's own canvas, never on a sidebar or a popover.
+  { overlay: 'hl-blue', ground: 'bg', fg: 'text', min: 4.5 },
+  { overlay: 'hl-green', ground: 'bg', fg: 'text', min: 4.5 },
+  { overlay: 'hl-pink', ground: 'bg', fg: 'text', min: 4.5 },
+  { overlay: 'hl-purple', ground: 'bg', fg: 'text', min: 4.5 },
 ] as const;
 
 const READ = [
@@ -85,6 +92,10 @@ const READ = [
   'hover',
   'selected',
   'tag-fill',
+  'hl-blue',
+  'hl-green',
+  'hl-pink',
+  'hl-purple',
 ];
 
 test.describe('contrast', () => {
@@ -119,6 +130,10 @@ test.describe('contrast', () => {
           'hover',
           'selected',
           'tag-fill',
+          'hl-blue',
+          'hl-green',
+          'hl-pink',
+          'hl-purple',
         ];
         return Object.fromEntries(
           names.map((name) => [name, style.getPropertyValue(`--bear-${name}`).trim()]),

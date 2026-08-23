@@ -3,6 +3,16 @@ import type { DecorationSet } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import { describe, expect, it } from 'vitest';
 
+import {
+  Heading1,
+  Heading2,
+  Heading3,
+  Heading4,
+  Heading5,
+  Heading6,
+  renderIconMarkup,
+} from '@/ui/Icon';
+
 import { buildEditorExtensions, editorExtensions } from './extensions';
 import { HeadingFold, foldedKeys, type HeadingMenuRequest } from './HeadingFold';
 import { foldKeyOf, headingSections, serializeFoldKey } from './headingSections';
@@ -256,19 +266,24 @@ describe('the gutter affordance is accessible', () => {
   it("pins the heading's own accessible name, independent of any widget inside it", () => {
     const editor = docFor('<p>Title</p><h1>Hello</h1>');
 
-    // The badge's own `textContent` (its level digit) is the measured
-    // pollution source — verified with `dom-accessibility-api` (the engine
-    // `toHaveAccessibleName` uses): an un-hidden `<button>1</button>` sibling
-    // inside a heading is read as content and produces the name "1 Hello".
-    // The badge stays `aria-hidden` precisely because of this, but the
-    // `Decoration.node` aria-label is what makes the heading's name correct
-    // EVEN IF some future widget forgets to hide itself — simulated here by
-    // stripping the badge's own `aria-hidden` after render and asserting the
-    // heading's name is unaffected. Without the `Decoration.node` in
-    // `HeadingFold.ts`, this fails: the heading announces as "1 Hello".
+    // The badge USED to carry its level as a digit, and that digit was the
+    // measured pollution source — verified with `dom-accessibility-api` (the
+    // engine `toHaveAccessibleName` uses): an un-hidden `<button>1</button>`
+    // sibling inside a heading is read as content and produces the name
+    // "1 Hello". The badge now draws a `Heading1`-`Heading6` glyph instead and
+    // has no text at all, so simply un-hiding it would no longer pollute
+    // anything — this test would still pass with the `Decoration.node` DELETED,
+    // which is precisely the vacuous-assertion shape this file exists to avoid.
+    //
+    // So the text is put back deliberately: un-hide the badge AND give it
+    // content, simulating any future widget that forgets to hide itself. What
+    // is being pinned is the `Decoration.node` aria-label, not the badge's
+    // current markup. Without that decoration in `HeadingFold.ts`, this fails:
+    // the heading announces as "1 Hello".
     const badge = editor.view.dom.querySelector('[data-fold-badge]');
     expect(badge).not.toBeNull();
     badge!.removeAttribute('aria-hidden');
+    badge!.textContent = '1';
 
     const heading = editor.view.dom.querySelector('h1');
     expect(heading).not.toBeNull();
@@ -319,13 +334,46 @@ describe('the gutter affordance is accessible', () => {
     editor.destroy();
   });
 
-  it('the badge stays aria-hidden and out of tab order, since its digit is what polluted the name', () => {
+  it('the badge stays aria-hidden and out of tab order', () => {
     const editor = docFor('<p>Title</p><h3>C</h3>');
 
+    // A digit was the original reason (see the accessible-name test above).
+    // The glyph that replaced it contributes no text, but the badge stays
+    // hidden anyway: it is a mouse-only duplicate of the level menu, which
+    // `Mod-Alt-1`-`6` already reaches from the keyboard, and an un-named
+    // `<button>` announced as "button" is worse than no button at all.
     const badge = editor.view.dom.querySelector('[data-fold-badge]');
     expect(badge).toHaveAttribute('aria-hidden', 'true');
     expect(badge).toHaveAttribute('tabindex', '-1');
     editor.destroy();
+  });
+
+  it('draws the level as a glyph, not as a digit', () => {
+    // The user's report that opened this change: hovering a heading showed a
+    // number where an icon was expected. The level must still be legible from
+    // the badge alone, which is why it is `Heading1`-`Heading6` rather than one
+    // generic heading glyph.
+    for (const [level, glyph] of [
+      [1, Heading1],
+      [2, Heading2],
+      [3, Heading3],
+      [4, Heading4],
+      [5, Heading5],
+      [6, Heading6],
+    ] as const) {
+      const editor = docFor(`<p>Title</p><h${level}>C</h${level}>`);
+      const badge = editor.view.dom.querySelector('[data-fold-badge]');
+
+      expect(badge).not.toBeNull();
+      expect(badge!.textContent).toBe('');
+      expect(badge!.querySelector('svg')).not.toBeNull();
+      expect(badge!.innerHTML).toBe(renderIconMarkup(glyph));
+      // `data-level` is now the ONLY machine-readable record of the level on
+      // the badge — the digit that used to also carry it is gone.
+      expect(badge!.getAttribute('data-level')).toBe(String(level));
+
+      editor.destroy();
+    }
   });
 
   it('renders a visible glyph, not an empty box', () => {

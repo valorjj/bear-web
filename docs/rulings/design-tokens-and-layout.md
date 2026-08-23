@@ -67,10 +67,10 @@ spacing, `rounded-*`, `shadow-*` or `outline-none` utility; and the guards in
   keying:** `sourceLint`'s "has no CSS theme block that is absent from the
   roster" still matches on `/:root\[data-theme='…'\]/`, which the current
   spelling never produces, so that one direction of the roster/CSS agreement is
-  vacuous. The other direction — every roster id has a block with all 22
+  vacuous. The other direction — every roster id has a block with all 26
   tokens — is real and is what actually holds them together.
 
-- **`:root` carries the default theme's 22 tokens as well as the tier-3
+- **`:root` carries the default theme's 26 tokens as well as the tier-3
   globals, duplicating the default's named block.** Do not merge the two into a
   grouped selector: `blockTokens` in the source lint finds a block by `indexOf`
   plus the next brace and cannot read one, and a lookup for `:root {` would
@@ -479,3 +479,31 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   probes with `document.elementFromPoint` at the menu's far edge instead,
   and the test was verified by injection to fail with "the menu is clipped:
   its right edge is not painted" when the `position: fixed` fix is reverted.
+
+- **The four `--bear-hl-*` highlight fills are TRANSLUCENT on purpose, and
+  that is what keeps them out of the contrast budget.** A highlight is body
+  text on a tinted page. An opaque fill would need its own foreground token
+  per colour per theme — twenty more values, each a separate contrast pair —
+  whereas alpha over `--bear-bg` leaves `--bear-text` reading through it
+  unchanged. `--bear-selected` already worked this way and these follow it.
+  `high-contrast` is the deliberate exception: it uses opaque hex like every
+  other token in that block, chosen dark enough that white clears 4.5:1.
+  `e2e/contrast.spec.ts` composites all four over `bg` and asserts the floor,
+  so a "nicer" saturated fill fails there rather than shipping unreadable.
+
+- **The DEFAULT highlight has no token of its own and must not get one.** It
+  is `--bear-selected`, which is what every `==text==` in every existing note
+  has always rendered as. Giving it a `--bear-hl-yellow` would create two
+  spellings of one thing — `==x==` and `<mark class="hl-yellow">x</mark>`
+  render identically but serialize differently — and the plain form has to
+  win, because it is what the notes already contain.
+
+- **The table bar is `position: relative` with a negative margin, never
+  `absolute`.** `EditorContent`'s `overflow-auto` clips top and left overflow
+  — the same constraint that made B1's fold gutter a reserved column rather
+  than an overlay — so a bar hanging outside the flow is cut off above a table
+  at the top of a note. It also has to stay INSIDE the scrolling content:
+  `fixed` off a `getBoundingClientRect()` (how `HeadingMenu` is placed) is
+  right for a menu that closes on the next click and wrong for chrome that
+  stays up for as long as the caret is in the table, because it drifts on
+  scroll.

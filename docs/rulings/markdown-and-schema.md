@@ -8,6 +8,8 @@ not able to prove.
 `extensions.ts` (`buildEditorExtensions`, `editorExtensions`, `StarterKit.configure`),
 `RawBlock.ts` (`createRawBlock`, `RawDefinition`, `RawHtmlBlock`, `RawImage`,
 `createRawInlineHtmlNode`), `toolbarSelection.ts`, `taskItemPromotion.ts`,
+`Highlight.ts` (`HIGHLIGHT_COLORS`, `highlightClass`, the `color` attribute,
+the tokenizer's two branches), `TableControls.ts`,
 `HeadingFold.ts` (`headingFoldKey`, `foldedKeys`, `toggleElement`, `badgeElement`,
 `markerElement`), `headingSections.ts` (`foldKeyOf`, `headingSections`,
 `hiddenRangesFor`, `serializeFoldKey`), or `HeadingMenu.tsx`; any edit
@@ -265,3 +267,50 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   두벌식; `code` is the physical key regardless of layout or modifier.
   `useScopeShortcuts` also REJECTS `altKey` rather than merely not matching it,
   so `⌥⇧⌘1` cannot fire a scope switch and a heading toggle together.
+
+- **Highlight has TWO serialized forms, and the `<mark>` one must keep its own
+  tokenizer.** `==text==` carries no colour slot, so a non-default colour
+  round-trips as `<mark class="hl-blue">text</mark>`. Inventing `==blue|text==`
+  was rejected: it puts a literal `blue|` inside the highlight in every other
+  reader, while GFM renders `<mark>` as a highlight and merely ignores the
+  class.
+
+  The half that is easy to get wrong: **the mark's tokenizer has to claim the
+  `<mark>` form itself and lex the contents with `lexer.inlineTokens`.** Left
+  to marked's built-in inline-HTML handling, the tag was taken but its
+  contents passed through as literal text, so
+  `<mark class="hl-green">**bold** green</mark>` came back with a literal
+  `\*\*bold\*\*` inside it. That is not an exotic input — it is exactly what
+  this app writes the moment a user colours a highlight over text that is
+  already bold. **A byte-for-byte fidelity fixture cannot see this**, because
+  literal `**bold**` round-trips byte-for-byte too; only a structural
+  assertion on the parsed document separates "bold survived as a mark" from
+  "bold survived as characters".
+
+- **A `<mark>` class outside the roster is dropped, and that is not a new
+  lossy path.** `<mark class="anything">` has always parsed to a plain
+  highlight with its class discarded — `mark` is in the schema-derived
+  recognized-tag set, so the raw-inline fallback declines it. Recognising four
+  names is a strict improvement on discarding all of them. It belongs with the
+  other known stable-but-lossy transformations above, not on a list of things
+  to fix.
+
+- **The colour menu SETS; it does not toggle.** `toggleMark(type, attrs)`
+  decides by `isActive(type, attrs)`, so picking a DIFFERENT colour already
+  replaces — a test that only did that passed with the toggle wired in, and
+  was verified to by fault injection. Picking the colour that is ALREADY
+  CHECKED is where the two diverge: the toggle removes the highlight entirely.
+  Setting is correct for the same reason the heading level menu sets while
+  `Mod-Alt-N` toggles: these are `menuitemradio`s, and toggling off from a
+  checked radio contradicts the mark the user is looking at.
+
+- **`TableControls` is an `Extension`, like `HeadingFold`, and registers
+  nothing in the schema.** The bar is one `Decoration.widget` placed before
+  the table the selection is inside; the document is never mutated, so every
+  Markdown round-trip test in the suite is blind to whether the plugin runs at
+  all. `tableControls.test.ts` asserts on the decoration set and drives the
+  plugin's own `mousedown` handler, because nothing else in the suite can see
+  it. With no `labels` option it registers **no plugin at all** rather than a
+  bar of unlabelled buttons — the same "nobody is listening" shape as
+  `TagPill`'s `onActivate` and `HeadingFold`'s `foldHint`, and for the same
+  reason: no user-facing string may be hardcoded in this app.

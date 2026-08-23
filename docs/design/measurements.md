@@ -290,7 +290,7 @@ Currently welded to the window edge; Bear floats a centred rounded bar.
 
 | Property | Value |
 | --- | --- |
-| box | 422 x 36 |
+| box | 442 x 36 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |

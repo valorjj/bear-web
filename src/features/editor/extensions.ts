@@ -6,6 +6,7 @@ import { TaskList } from '@tiptap/extension-task-list';
 import StarterKit from '@tiptap/starter-kit';
 
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
+import { TableControls, type TableControlsOptions } from './TableControls';
 import { Highlight } from './Highlight';
 import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
 import type { TagPillOptions } from './TagPill';
@@ -23,7 +24,7 @@ import { TaskItemPromotion } from './taskItemPromotion';
  * change what that schema build sees.
  */
 function buildSupportedExtensions(
-  options: Partial<TagPillOptions & HeadingFoldOptions>,
+  options: Partial<TagPillOptions & HeadingFoldOptions & TableControlsOptions>,
 ): Extensions {
   return [
     // `underline: false` is load-bearing, not tidying. StarterKit registers
@@ -82,6 +83,11 @@ function buildSupportedExtensions(
     // the document and its Markdown are untouched. See `HeadingFold.ts` and
     // `headingFold.test.ts`.
     HeadingFold.configure(options),
+    // Decoration only, exactly like `HeadingFold` above: it adds nothing to
+    // the schema and mutates no document, so tables serialize identically
+    // whether or not this runs. Without `labels` it registers no plugin at
+    // all — see `TableControls.ts`.
+    TableControls.configure(options),
   ];
 }
 
@@ -131,7 +137,7 @@ function computeRecognizedHtmlTags(): Set<string> {
  * untouched, and only `RichEditor` ever passes anything.
  */
 export function buildEditorExtensions(
-  options: Partial<TagPillOptions & HeadingFoldOptions> = {},
+  options: Partial<TagPillOptions & HeadingFoldOptions & TableControlsOptions> = {},
 ): Extensions {
   return [
     ...buildSupportedExtensions(options),

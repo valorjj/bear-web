@@ -1,6 +1,16 @@
 import { render } from '@testing-library/react';
 import type { LucideIcon } from 'lucide-react';
-import { ChevronDown, ChevronRight, Search } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Heading1,
+  Heading2,
+  Heading3,
+  Heading4,
+  Heading5,
+  Heading6,
+  Search,
+} from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 
 import { Icon, renderIconMarkup } from './Icon';
@@ -51,24 +61,30 @@ describe('Icon', () => {
 });
 
 /**
- * The whole rendered shape, not just one attribute of one child: every
- * path's `d`, how many paths there are, and the two other attributes
- * `renderIconMarkup` also states as literals (`stroke-width`, `width`). A
- * comparison of only the first `<path>`'s `d` would false-pass a future
- * lucide version that splits a chevron into two paths, or adds a sibling
- * shape — the extra path would simply never be looked at.
+ * The whole rendered shape, not just one attribute of one child: every child
+ * element's tag AND all of its geometry attributes, in document order, plus
+ * the two attributes `renderIconMarkup` also states as literals
+ * (`stroke-width`, `width`).
+ *
+ * This deliberately walks EVERY child element rather than `querySelectorAll('path')`.
+ * An earlier version looked only at paths, which was sound while the registry
+ * held two chevrons — but `Heading6` draws its `6` with a `<circle>`, and a
+ * path-only comparison would have declared a glyph missing that shape
+ * identical to one that had it. The same blind spot would hide a future lucide
+ * version swapping a path for a `<rect>` or `<line>`.
  */
 function svgShape(container: HTMLElement): {
-  ds: (string | null)[];
-  pathCount: number;
+  shapes: { tag: string; attrs: Record<string, string> }[];
   strokeWidth: string | null | undefined;
   width: string | null | undefined;
 } {
   const svg = container.querySelector('svg');
-  const paths = Array.from(container.querySelectorAll('path'));
+  const shapes = Array.from(svg?.children ?? []).map((el) => ({
+    tag: el.tagName.toLowerCase(),
+    attrs: Object.fromEntries(Array.from(el.attributes).map((a) => [a.name, a.value] as const)),
+  }));
   return {
-    ds: paths.map((p) => p.getAttribute('d')),
-    pathCount: paths.length,
+    shapes,
     strokeWidth: svg?.getAttribute('stroke-width'),
     width: svg?.getAttribute('width'),
   };
@@ -102,6 +118,27 @@ describe('renderIconMarkup', () => {
 
     const built = document.createElement('div');
     built.innerHTML = renderIconMarkup(ChevronRight);
+
+    expect(svgShape(built)).toEqual(svgShape(real));
+  });
+
+  // The six heading glyphs are the fold badge's level indicator (`badgeElement`
+  // in `HeadingFold.ts`), which replaced a bare digit. They go through the same
+  // verbatim-copy mechanism as the chevrons and need the same drift guard.
+  // `Heading6` is the reason `svgShape` walks every child rather than every
+  // path: its `6` is drawn with a `<circle>`.
+  it.each([
+    ['Heading1', Heading1],
+    ['Heading2', Heading2],
+    ['Heading3', Heading3],
+    ['Heading4', Heading4],
+    ['Heading5', Heading5],
+    ['Heading6', Heading6],
+  ])('matches the real %s glyph', (_name, glyph) => {
+    const { container: real } = render(<Icon glyph={glyph} />);
+
+    const built = document.createElement('div');
+    built.innerHTML = renderIconMarkup(glyph);
 
     expect(svgShape(built)).toEqual(svgShape(real));
   });

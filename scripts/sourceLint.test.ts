@@ -188,6 +188,10 @@ describe('theme tokens', () => {
     'shadow',
     'tag-fill',
     'tag-fill-strong',
+    'hl-blue',
+    'hl-green',
+    'hl-pink',
+    'hl-purple',
   ];
   const SURFACE = [
     'radius-sm',
@@ -212,7 +216,7 @@ describe('theme tokens', () => {
     expect(ids.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('gives every theme in the roster a CSS block defining all 22 tokens', () => {
+  it('gives every theme in the roster a CSS block defining all 26 tokens', () => {
     for (const id of ids) {
       const block = blockTokens(css, `[data-theme='${id}']`);
       for (const token of REQUIRED) {

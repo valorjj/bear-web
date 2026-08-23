@@ -2,7 +2,9 @@
 
 Governs how Markdown tables are represented in the editor schema and how they are serialized back to Markdown.
 
-**Trigger:** `src/features/editor/tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` imports and `MarkdownTable`/`TableRow`/`TableHeader`/`TableCell` entries in `src/features/editor/extensions.ts`, `RawTable` in `src/features/editor/RawBlock.ts`, `src/features/editor/table.test.ts`, and any table fixture in `markdown.test.ts`'s `CANONICAL` or `stability.test.ts`'s `NON_CANONICAL`.
+**Trigger:** `src/features/editor/TableControls.ts` (`TABLE_ACTIONS`,
+`tablePosAt`, `COMMANDS`, `TableControlsOptions.labels`),
+`src/features/editor/tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` imports and `MarkdownTable`/`TableRow`/`TableHeader`/`TableCell` entries in `src/features/editor/extensions.ts`, `RawTable` in `src/features/editor/RawBlock.ts`, `src/features/editor/table.test.ts`, and any table fixture in `markdown.test.ts`'s `CANONICAL` or `stability.test.ts`'s `NON_CANONICAL`.
 
 - **Tables are real nodes, and the `RawTable` fallback is no longer registered.**
   M8c replaced it with `@tiptap/extension-table`, whose official node already
@@ -65,3 +67,30 @@ Governs how Markdown tables are represented in the editor schema and how they ar
   `tableCell`), that `rawTable` is absent, that a parsed table carries no
   `source` attribute, and that parsing yields header/body rows with
   paragraph-wrapped inline content and marks preserved inside a cell.
+
+- **The bar's commands are `prosemirror-tables`' own, not Tiptap's wrappers.**
+  A ProseMirror plugin has a `view`, and therefore a `state`/`dispatch` pair,
+  but no `Editor`. Reaching for one from inside the plugin would be the editor
+  learning about the layer above it — the boundary `TagPill`'s `onActivate`
+  and `HeadingFold`'s `onOpenMenu` both keep by having the app pass callbacks
+  down rather than the plugin reaching up.
+
+- **Adds land AFTER the current row/column, and there is deliberately no
+  "before" pair.** Ten buttons on a bar that floats over the user's prose is a
+  worse trade than one extra keystroke, and "after" matches a behaviour the
+  editor already had: `Tab` out of the last cell appends a row.
+
+- **`tablePosAt` walks OUTWARD from the cursor; it does not scan the
+  document.** A table nested in a blockquote or a list item must resolve to
+  itself, not to an ancestor, so `$from.node(depth)` is checked from the
+  deepest depth up and the innermost match wins. Pinned by a test using a
+  blockquote-wrapped table.
+
+- **The pinned strings in `tableControls.test.ts` are padded and use a
+  three-dash alignment row, and that is not a typo.** Every expectation there
+  is the serializer's real output, per the alignment-row bullet above. The
+  caret sits in the first BODY cell throughout, which is what makes each
+  expectation specific rather than merely "something changed": `deleteRow`
+  takes the body row and leaves the header, and `addColumn` inserts after
+  column 0 so the new column lands in the MIDDLE. A trailing blank line in
+  each is `TrailingNode`'s paragraph, not the table's.
