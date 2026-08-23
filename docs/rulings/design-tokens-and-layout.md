@@ -10,7 +10,9 @@ chrome and prose column are positioned.
 `SYSTEM_DARK_ID`), `src/app/theme.ts` (`applyTheme`, `readMirror`,
 `MIRROR_KEY`), the inline `<script>` in `index.html`, `src/ui/Pane.tsx`,
 `src/ui/Popover.tsx`, `src/features/account/AccountMenu.tsx`,
-`src/ui/Resizer.tsx`, `src/ui/Button.tsx`, `src/features/appearance/ThemePicker.tsx`,
+`src/ui/Resizer.tsx`, `src/ui/Button.tsx`, `src/ui/Dialog.tsx`,
+`src/features/appearance/ThemePicker.tsx`, `src/features/appearance/ThemeDialog.tsx`,
+`--bear-dark` and the derived-defaults section of `tokens.css`,
 `src/features/editor/RichEditor.tsx`, `src/features/editor/BottomToolbar.tsx`,
 `src/features/notes/SearchField.tsx`, `<main>`'s class list in
 `src/app/AppShell.tsx`; the `.bear-fold-toggle` / `.bear-fold-badge` /
@@ -507,3 +509,72 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   right for a menu that closes on the next click and wrong for chrome that
   stays up for as long as the caret is in the table, because it drifts on
   scroll.
+
+## F — derived theme defaults
+
+- **Derivation provides DEFAULTS for new themes; it does NOT reconstruct the
+  five that shipped before F, and measurement is why.** `muted`, `faint` and
+  `border` look like `text` mixed toward `bg` — their lightness fits a
+  constant ratio in both sRGB and oklab, which is what makes the theory
+  convincing — but their CHROMA does not. `indigo-dark`'s `muted` is
+  `(169, 163, 189)`, visibly violet, where the fitted mix gives a near-grey
+  `(165, 162, 173)`. No single ratio reproduces all four themes; the best fit
+  is off by up to 17/255 per channel. The alphas are hand-tuned too
+  (`selected` is .09, .11, .18, .20 across four themes) and their ratios to
+  one another are not constant either. Only `focus` derives exactly: it is
+  `accent` in all five. The five shipped themes therefore declare every value
+  explicitly, and `e2e/themeBaseline.spec.ts` pins them against a fixture
+  captured before derivation landed.
+
+- **The default palette lives in `:root:not([data-theme])`, NOT in `:root`,
+  and moving it back would silently kill the derived defaults.** A literal in
+  `:root` beats a derived value in the same block AND applies to every theme
+  that does not override that token. With the palette there, a theme
+  declaring only its eight base colours inherited the default's `muted`,
+  `faint`, `border` and `focus` — measured with a probe theme whose accent
+  `#7fd1c1` resolved `--bear-focus` to `#5b4ad6`. Every test passed, because
+  the five shipped themes override everything and never reach the derived
+  section. `:not([data-theme])` cannot match a themed root, so the conflict
+  disappears rather than being won on specificity. `sourceLint` now asserts
+  `:root` does NOT define a base token.
+
+- **`--bear-dark` is a NUMBER (0 or 1), and it is not `themes.ts`'s `group`.**
+  A number so `calc()` can interpolate the five alpha scalars from one
+  declaration per theme instead of five. Separate from `group` because `group`
+  decides how the PICKER files a theme and is deliberately hand-declared —
+  `high-contrast` is dark by intent, and deriving the grouping would make it a
+  side effect of a colour edit. A theme wanting something between the two
+  schemes may say `0.5`, which no grouped selector could express.
+
+- **Two colour spaces, and nothing enforces the split.** `oklab` for the
+  opaque mixes, because perceptual evenness is the only reason one ratio can
+  serve sixteen palettes — an sRGB midpoint lands visibly darker in some hues
+  than others. `srgb` for the alpha tints, because mixing with `transparent`
+  in `oklab` interpolates through a premultiplied space and shifts hue as it
+  fades, which is not the plain alpha these tokens have always been. A token
+  added in the wrong space compiles, renders, and looks subtly wrong in a way
+  no test can see.
+
+- **The geometry tokens are NOT unified, deliberately.** There are three
+  radius families in `tokens.css` (`paper`/`ink` at 4/6/10, the indigo pair at
+  6/8/12, `high-contrast` at 2/4/6) and three shadow treatments. `:root`
+  carries the indigo family as a default so a new theme inherits a complete
+  look from its eight colours; collapsing the others into it would silently
+  restyle two shipped themes, which is a restyle wearing a refactor's clothes.
+
+- **Adding a theme touches FOUR places, and one of them fails silently.** A
+  row in `themes.ts`, a block in `tokens.css`, a label in both locales, and
+  the id in `index.html`'s pre-paint `var known = [...]`. The script cannot
+  import the roster — a module import is async and the point is to run before
+  first paint — so the list is a deliberate duplicate. A theme missing from it
+  still works; it just flashes the default before React corrects it, which no
+  test but `sourceLint`'s "lists exactly the roster ids" can see.
+
+- **Fidelity to an upstream palette loses to legibility, and the harness
+  decides.** Nine of the eleven themes F added needed at least one value
+  moved to clear a contrast floor, in both directions — light themes fail by
+  having too-light accents, dark themes by having too-dark ones against their
+  own surfaces. Solarized fails at BOTH ends of its own range. Every
+  adjustment is the computed minimum and is recorded in the block beside the
+  upstream value it replaced. Do not lower a floor to keep a palette
+  faithful.

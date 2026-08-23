@@ -19,6 +19,58 @@ order is still undecided — nobody has ruled on whether either blocks the other
 A fourth sub-project, **D — server sync and OAuth**, was added the same day and
 is deliberately last; see its section below.
 
+**E and F both shipped on 2026-08-24**, raised by the user from five requests
+after using the live app. Neither was in this file's ordering.
+
+### E. Editor affordances — **SHIPPED 2026-08-24**
+
+Heading level glyphs replacing the fold badge's digit, four named highlight
+colours, and a floating add/delete bar for tables. No spec: three bounded
+changes, designed in chat and approved before implementation.
+
+Two findings worth carrying forward:
+
+- **A coloured highlight serializes as `<mark class="hl-blue">`, and the
+  mark's tokenizer has to claim that form itself.** Left to marked's
+  inline-HTML handling the tag was taken but its contents passed through as
+  literal text, so a coloured highlight over bold text came back as a literal
+  `\*\*bold\*\*` — which is what the app writes the moment a user colours a
+  bold run. A byte-for-byte fixture cannot see this; only a structural
+  assertion can.
+- **Chromium's refusal to focus inside a heading widget does NOT generalise.**
+  A button inside the table bar's `Decoration.widget` focuses normally, so
+  that bar needs no keyboard escape hatch while B1's fold gutter needed
+  `Mod-Alt-F`. Measured, and pinned by `e2e/editorAffordances.spec.ts`.
+
+### F. Theme system — **SHIPPED 2026-08-24**
+
+Spec: `docs/superpowers/specs/2026-08-24-f-theme-system-design.md`.
+Plan: `docs/superpowers/plans/2026-08-24-f-theme-system.md`.
+Rulings: `docs/rulings/design-tokens-and-layout.md`, `accessibility.md`.
+
+Sixteen themes, derived defaults so a new one costs eight values instead of
+twenty-six, and a modal card-grid picker built on a new `src/ui/Dialog.tsx`.
+
+Four things diverged from the spec or were only found by building it:
+
+- **The spec's central claim was wrong and was corrected mid-flight.**
+  `muted`/`faint`/`border` are not `text` mixed toward `bg`: their lightness
+  fits, their chroma does not, and no single ratio reproduces the shipped
+  themes. Derivation provides DEFAULTS for new themes; the old five keep
+  every hand-tuned value.
+- **The derivation was dead on first implementation**, because the default
+  palette sat in `:root` and a literal there applies to every theme that does
+  not override it. Found with a probe theme, not by a test — all of them
+  passed.
+- **`parseColour` was silently blind to `color(srgb …)`**, and `NaN < min` is
+  false, so the contrast harness would have passed every derived theme.
+- **Nine of the eleven new themes needed a value moved to clear a contrast
+  floor**, in both directions. Solarized fails at both ends of its own range.
+
+Still open, and deliberately not F: a custom-theme editor (letting a user
+supply their own eight colours), and per-theme syntax palettes, which **C
+will need** — that is why C is queued after F rather than before it.
+
 ## The three sub-projects, in order
 
 Chosen from four Bear screenshots the user supplied. All three are

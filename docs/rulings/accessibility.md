@@ -207,3 +207,33 @@ Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
 - **Six level glyphs, not one generic `Heading`.** The badge's whole job is to
   say which level this heading is, which is what the digit conveyed. Trading a
   legibility complaint for an information loss would not be a fix.
+
+- **A preview must not join the control's accessible name.** `ThemeDialog`'s
+  cards show a theme name, a pangram and an accent line; without an explicit
+  `aria-label` all three concatenate and every one of seventeen radios
+  announces as "Nord The quick brown fox jumps over the lazy dog. a link, and
+  a tag". Same defect class as `SidebarRow`'s lost space and
+  `NoteListItem`'s three concatenated spans, and found the same way — by
+  looking at the rendered result, not by a test failing. The preview exists to
+  be looked at, so it is `aria-hidden`; the card's name is the theme's name
+  and nothing else.
+
+- **`src/ui/Dialog.tsx`'s focus trap uses the WIDE focusable selector, and
+  `ConfirmDialog`'s old `'button'` query was the defect it fixed.** A trap
+  that skips a focusable does not hold it at the modal's edge — it lets Tab
+  walk out into the page behind, where the user cannot see where focus went,
+  which is worse than no trap at all. `ConfirmDialog` documented that gap in
+  its own comments and lived with it because it holds exactly two buttons.
+  Pinned by a test that fails if the selector narrows again.
+
+- **`ConfirmDialog`'s Cancel button must stay FIRST in DOM order.** `Dialog`
+  focuses the first focusable, and these dialogs guard irreversible deletion
+  with no server copy, so an Enter keypress already in flight when the dialog
+  opens must not destroy anything. Reordering the two buttons silently changes
+  which one it hits. `role="alertdialog"` rather than `dialog` is part of the
+  same rule and is not decoration.
+
+- **The theme picker is a `radiogroup` of `radio`s, not a menu.** One choice
+  is always in effect, which is what radio semantics carry. Its light/dark
+  separators are headings, NOT nested `role="group"` wrappers: a `group`
+  sitting between a `radiogroup` and its radios is not a shape ARIA defines.

@@ -41,14 +41,15 @@ feature and is not yet scheduled.
 | A note-list header (scope, sort, preview)                         | complete |
 | B collapsible headings + level badge                              | complete |
 | E editor affordances (heading icon, highlight colours, table bar) | complete |
+| F theme system: derivation, 16 themes, card picker                | complete |
 | B2 drag-to-reorder headings                                       | queued   |
 | D1 server: hosting, accounts, Google login                        | complete |
 | D2 server: the sync protocol                                      | complete |
 | C code block language + highlighting                              | queued   |
 | M9b callout blocks                                                | deferred |
 
-1455 unit tests (plus 84 server tests, 55 of which are integration tests that
-skip when `TEST_DATABASE_URL` is unset), 83 end-to-end tests. `main` is
+1472 unit tests (plus 84 server tests, 55 of which are integration tests that
+skip when `TEST_DATABASE_URL` is unset), 100 end-to-end tests. `main` is
 always green and auto-deploys.
 
 **D reverses the "no backend, no account" premise above.** D1 shipped
@@ -105,8 +106,12 @@ count, because they assert nothing.** Both drive the fixed corpus in
 - `npm run shots` → `e2e/shots.spec.ts` writes design reference screenshots to
   `docs/design/shots/` (gitignored) — three panes, search, trash, the empty
   state, a folded heading-dense note, the open note-list options menu and the
-  exported document, **in every theme in the roster** (12 shots × 5 themes = 60
-  files).
+  exported document, **in every theme in the roster** (12 shots × 16 themes =
+  192 files, and roughly three times the runtime it had at five). The theme
+  list is derived from `themes.ts` by a regex requiring `id`, `labelKey` and
+  `group` on ONE line in that order — a Prettier reflow would make it match
+  nothing, and an empty list renders the default theme sixteen times with no
+  error. Count the files, do not trust the exit code.
   Themes are selected through the paint-time mirror, the way a user selects
   one. Until M9a it drove `colorScheme` instead, i.e. the media query, and the
   shot labelled `paper` silently started rendering Indigo Light the moment the
@@ -220,6 +225,24 @@ connection holding version 0.1`. `e2e/fixtures/seed.ts` opens at 10 and closes
   `e2e/`, which `tsc -b` also compiles — reports only `Exit code: 2`).
   **Before trusting any e2e result that follows a source change, and always
   before a fault injection:** `lsof -ti:4173 | xargs -r kill -9`.
+
+- **A derived token computes to `color(srgb …)`, and `parseColour` was
+  silently blind to it.** Its fallback stripped an `rgb(` prefix that is not
+  there and produced `NaN` — and `e2e/contrast.spec.ts` collects a failure on
+  `ratio < min`, which is FALSE for `NaN`. An unreadable theme would have
+  passed rather than thrown. Any future colour function (`lab()`, `oklch()`)
+  reaching a computed value needs the same treatment, and the failure mode is
+  silence, not a crash.
+
+- **Reading a custom property back does NOT resolve it.** Custom property
+  values are substituted lazily, so `getPropertyValue('--bear-muted')` on a
+  derived theme returns the literal string
+  `color-mix(in oklab, #e8e8f5 68%, #202030)`, not a colour. A spike that read
+  a PAINTED property (`getComputedStyle(el).backgroundColor`) saw a resolved
+  `color(srgb …)` and hid this completely. `e2e/fixtures/tokens.ts` paints
+  each token onto a probe element for exactly this reason; every consumer must
+  go through it, or one side holds a keyword and the other a resolved colour
+  and they will not compare equal.
 
 - **Several e2e tests fail under machine load, and the failures look like
   regressions.** With `load average` well above the core count, different
