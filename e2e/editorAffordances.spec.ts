@@ -66,6 +66,20 @@ test('the bar goes away when the caret leaves the table', async ({ page }) => {
   await expect(title).toContainText('Title');
   await title.click();
 
+  // Asserts the CARET actually left before asserting the consequence. Without
+  // this, a click that did not take reads as "the bar refuses to hide", which
+  // points at the plugin rather than at the click. Observed roughly once in
+  // nine full runs under contention.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const node = window.getSelection()?.anchorNode ?? null;
+        const element = node instanceof Element ? node : node?.parentElement;
+        return element?.closest('table') === null || element?.closest('table') === undefined;
+      }),
+    )
+    .toBe(true);
+
   await expect(page.getByRole('toolbar', { name: 'Table' })).toBeHidden();
 });
 
