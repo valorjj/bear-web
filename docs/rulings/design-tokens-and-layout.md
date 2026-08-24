@@ -526,6 +526,30 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   explicitly, and `e2e/themeBaseline.spec.ts` pins them against a fixture
   captured before derivation landed.
 
+- **A change to a derivation ratio in `:root` changes ELEVEN themes at once,
+  and only the contrast floors will notice.** The five pre-F themes are pinned
+  per-token by `e2e/themeBaseline.spec.ts`; the eleven derived ones are not
+  pinned at all, because there is no "before" for them to drift from and a
+  ratio change is *supposed* to move them. So editing `68%`, `51%`, `13%` or
+  any of the five alpha scalars is a restyle of two thirds of the roster, and
+  the only thing standing between it and `main` is `e2e/contrast.spec.ts`
+  finding a floor violation — which a drifted-but-still-legible colour will
+  not produce. This is a deliberate choice, not a gap to fill: extending the
+  baseline fixture to all sixteen would make every intentional tweak a fixture
+  churn, and the floors are the right gate for a derived palette. Consequence:
+  run `npm run shots` and look at the light and dark grids before committing a
+  ratio change, because nothing else in the six gates can see it.
+
+- **The `:root` agreement tests in `sourceLint` compare the FULL token set,
+  and that depends on the default theme being a hand-written one.**
+  `DEFAULT_THEME_ID` is `indigo-light` and `SYSTEM_DARK_ID` is `indigo-dark` —
+  both pre-F, both declaring all 26 — which is why
+  `keeps the no-choice block identical to the default theme block` can iterate
+  `REQUIRED` rather than `BASE`. Point either constant at a derived theme and
+  most of that assertion compares `undefined` to `undefined` and passes
+  vacuously. The F spec predicted these tests would have to narrow to `BASE`;
+  they did not, and the spec has been corrected.
+
 - **The default palette lives in `:root:not([data-theme])`, NOT in `:root`,
   and moving it back would silently kill the derived defaults.** A literal in
   `:root` beats a derived value in the same block AND applies to every theme

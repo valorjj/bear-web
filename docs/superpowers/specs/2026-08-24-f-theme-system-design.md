@@ -333,14 +333,27 @@ roster entry, and a roster entry with no block, both still fail. The "finds
 themes in the roster at all" floor stays, because a roster regex matching
 nothing would make every assertion vacuous.
 
-**The `:root` agreement tests narrow to base tokens, and this is a real loss
-of coverage that must be stated.** `:root` must still match
-`DEFAULT_THEME_ID`'s block and `:root:not([data-theme])` must still match
-`SYSTEM_DARK_ID`'s — but only over the tokens the theme actually declares,
-because `:root` now legitimately holds derived values the theme block does
-not repeat. The M2-era hazard they guard (a token right for someone who
-picked dark and wrong for someone whose OS is dark) is still covered for
-every declared token, which is where it can actually occur.
+**The `:root` agreement tests keep their full scope. This paragraph predicted
+a narrowing that implementation did not need, and the prediction was wrong —
+corrected here rather than left to be re-derived.** The draft expected both
+tests to compare only the tokens a theme declares, because `:root` now holds
+derived values a theme block does not repeat, and called that a real loss of
+coverage. It is not what shipped:
+
+- `keeps the no-choice block identical to the default theme block` iterates
+  the full `REQUIRED = [...PALETTE, ...SURFACE]`, not `BASE`. It can, because
+  `DEFAULT_THEME_ID` is `indigo-light` — a pre-F theme that still declares
+  every value explicitly. **This holds only while the default theme is one of
+  the five.** Pointing `DEFAULT_THEME_ID` at a derived theme would make most
+  of this assertion compare `undefined` to `undefined` and pass vacuously; if
+  that ever happens, the test has to read the resolved cascade instead.
+- `keeps the system-dark block identical to its named theme` asserts exact
+  key-set equality in BOTH directions plus every value — strictly stronger
+  than the pre-F version, which only checked one direction over a fixed list.
+
+So the M2-era hazard (a token right for someone who picked dark and wrong for
+someone whose OS is dark) is covered exactly as well as before F, and no
+replacement test is owed.
 
 **A regression test that the five existing themes are unchanged.** This is the
 one test that makes the refactor safe to review, and it is a *computed-value*
@@ -390,8 +403,12 @@ a diff broke the suite — CLAUDE.md now carries this.
 ## Known limits
 
 - **Sixteen themes is sixteen contrast surfaces to keep green forever.** Every
-  future change to a derivation ratio is a change to fifteen themes at once.
-  That is the trade being made: cheaper to add, broader to break.
+  future change to a derivation ratio is a change to **eleven** themes at
+  once — not fifteen, as an earlier draft of this line said: the five pre-F
+  themes override every derived value and are immune. That is the trade being
+  made: cheaper to add, broader to break. And the eleven are pinned by nothing
+  but the contrast floors, so a drift that stays legible is invisible to the
+  gates; see `docs/rulings/design-tokens-and-layout.md`.
 - **A derived token cannot be inspected as a hex value in DevTools.** It shows
   as `color(srgb …)`. Anyone comparing against a palette's published hex will
   need to convert.
