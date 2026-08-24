@@ -6,6 +6,7 @@ import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
 import StarterKit from '@tiptap/starter-kit';
 
+import { CodeLanguageControls, type CodeLanguageControlsOptions } from './CodeLanguageControls';
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
 import { TableControls, type TableControlsOptions } from './TableControls';
 import { Highlight } from './Highlight';
@@ -26,7 +27,9 @@ import { TaskItemPromotion } from './taskItemPromotion';
  * change what that schema build sees.
  */
 function buildSupportedExtensions(
-  options: Partial<TagPillOptions & HeadingFoldOptions & TableControlsOptions>,
+  options: Partial<
+    TagPillOptions & HeadingFoldOptions & TableControlsOptions & CodeLanguageControlsOptions
+  >,
 ): Extensions {
   return [
     // `underline: false` is load-bearing, not tidying. StarterKit registers
@@ -104,6 +107,10 @@ function buildSupportedExtensions(
     // whether or not this runs. Without `labels` it registers no plugin at
     // all — see `TableControls.ts`.
     TableControls.configure(options),
+    // Same shape as `TableControls` immediately above: decoration only, no
+    // schema change, and no plugin registered at all without `codeLabels`.
+    // See `CodeLanguageControls.ts`.
+    CodeLanguageControls.configure(options),
   ];
 }
 
@@ -153,7 +160,9 @@ function computeRecognizedHtmlTags(): Set<string> {
  * untouched, and only `RichEditor` ever passes anything.
  */
 export function buildEditorExtensions(
-  options: Partial<TagPillOptions & HeadingFoldOptions & TableControlsOptions> = {},
+  options: Partial<
+    TagPillOptions & HeadingFoldOptions & TableControlsOptions & CodeLanguageControlsOptions
+  > = {},
 ): Extensions {
   return [
     ...buildSupportedExtensions(options),

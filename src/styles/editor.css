@@ -676,3 +676,114 @@
     transition: none;
   }
 }
+
+/*
+ * The code-block language picker — a `Decoration.widget` placed just before
+ * the code block the caret is in (see `CodeLanguageControls.ts`). Same
+ * `position` reasoning as `.bear-table-controls` immediately above: it lives
+ * inside the scrolling content so it tracks the block with no geometry code,
+ * and stays in flow rather than `absolute` because the editor's own
+ * `overflow-auto` clips anything hanging outside it.
+ */
+.bear-code-language {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 0.375rem;
+  user-select: none;
+}
+
+.bear-code-language-trigger {
+  padding: 0.125rem 0.5rem;
+  border: var(--bear-border-width) solid var(--bear-border);
+  border-radius: var(--bear-radius-sm);
+  background: var(--bear-surface);
+  color: var(--bear-muted);
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-xs);
+  line-height: 1.6;
+  cursor: pointer;
+  transition:
+    background-color var(--bear-duration-fast),
+    color var(--bear-duration-fast);
+}
+
+.bear-code-language-trigger:hover {
+  background: var(--bear-hover);
+  color: var(--bear-text);
+}
+
+.bear-code-language-trigger[aria-expanded='true'] {
+  background: var(--bear-hover);
+  color: var(--bear-text);
+}
+
+/*
+ * `position: absolute`, unlike the trigger above it: the list is not part
+ * of the block's own flow and must float over the prose beneath it rather
+ * than push it down.
+ */
+.bear-code-language-popover {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 12rem;
+  max-height: 16rem;
+  padding: 0.375rem;
+  border-radius: var(--bear-radius-sm);
+  background: var(--bear-surface);
+  box-shadow: var(--bear-shadow-popover);
+}
+
+.bear-code-language-filter {
+  padding: 0.125rem 0.375rem;
+  border: var(--bear-border-width) solid var(--bear-border);
+  border-radius: var(--bear-radius-sm);
+  background: var(--bear-bg);
+  color: var(--bear-text);
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-xs);
+}
+
+.bear-code-language-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.bear-code-language-list [role='option'] {
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--bear-radius-sm);
+  color: var(--bear-text);
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-xs);
+  cursor: pointer;
+}
+
+.bear-code-language-list [role='option']:hover {
+  background: var(--bear-hover);
+}
+
+.bear-code-language-list [role='option'][aria-selected='true'] {
+  background: var(--bear-selected);
+}
+
+.bear-code-language-empty {
+  padding: 0.125rem 0.375rem;
+  color: var(--bear-faint);
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bear-code-language-trigger {
+    transition: none;
+  }
+}

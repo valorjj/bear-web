@@ -147,6 +147,15 @@ export function RichEditor({
         deleteColumn: t('editor.table.deleteColumn'),
         deleteTable: t('editor.table.deleteTable'),
       },
+      // Read once at mount like every option above it — the editor is keyed
+      // by note id and rebuilt on a language change, so there is no live
+      // locale switch for these to miss.
+      codeLabels: {
+        trigger: t('editor.code.language'),
+        none: t('editor.code.none'),
+        filter: t('editor.code.filter'),
+        empty: t('editor.code.empty'),
+      },
     }),
   );
 
