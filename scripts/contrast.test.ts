@@ -48,6 +48,23 @@ describe('parseColour', () => {
   });
 
   /**
+   * `oklab(…)` — what `color-mix(in oklab, …)` computes to when its mixing
+   * percentage is a `calc()` rather than a literal, discovered while building
+   * Task 3's syntax palette: `--bear-muted`'s longstanding `color-mix(in
+   * oklab, …)` uses a literal percentage and folds to `rgb(…)` well before it
+   * reaches this function, so this format was unexercised until now. Known
+   * conversion: `oklab(1 0 0)` is white, `oklab(0 0 0)` is black.
+   */
+  it('reads oklab(L a b), the format a calc()-percentage color-mix(in oklab, …) resolves to', () => {
+    expect(parseColour('oklab(1 0 0)')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
+    expect(parseColour('oklab(0 0 0)')).toEqual({ r: 0, g: 0, b: 0, a: 1 });
+  });
+
+  it('reads oklab(…) with a slash alpha', () => {
+    expect(parseColour('oklab(1 0 0 / 0.4)').a).toBeCloseTo(0.4, 5);
+  });
+
+  /**
    * The guard that gives the two cases above their teeth.
    *
    * A per-format assertion only covers the formats someone thought to list.
@@ -66,6 +83,8 @@ describe('parseColour', () => {
       'color(srgb 1 1 1)',
       'color(srgb 1 1 1 / 0.5)',
       'color(srgb 0.356863 0.290196 0.839216 / 0.12)',
+      'oklab(0.523614 0.18045 -0.109351)',
+      'oklab(0.742742 0.0885881 -0.101648 / 0.5)',
     ]) {
       const { r, g, b, a } = parseColour(css);
       expect(Number.isNaN(r + g + b + a), `${css} produced a NaN channel`).toBe(false);

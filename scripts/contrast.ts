@@ -67,6 +67,59 @@ export function parseColour(css: string): Rgba {
     return { r: r * 255, g: g * 255, b: b * 255, a: a === undefined ? 1 : a };
   }
 
+  /*
+   * `oklab(L a b / alpha)` — what `color-mix(in oklab, …)` computes to when
+   * its mixing percentage is a `calc()` rather than a literal, which is
+   * exactly what Task 3's syntax palette uses (`calc((1 - var(--bear-dark))
+   * * 100%)`). `--bear-muted`'s longstanding `color-mix(in oklab, …)` uses a
+   * literal percentage and folds to `rgb(…)` before it ever reaches here, so
+   * this branch was unexercised until now. Without it, the fallback below
+   * strips an `rgb(` prefix that is not present and `Number()`s the string
+   * `"oklab(0.52"`, yielding NaN channels — the exact silent-pass failure
+   * mode the `color(srgb …)` branch above was added to close for a different
+   * format.
+   *
+   * `L` is 0–1 here (this function never receives the `%` spelling); `a` and
+   * `b` are signed and unbounded. The conversion is the CSS Color 4 matrix,
+   * oklab -> linear sRGB -> gamma-encoded sRGB, clamped to the sRGB gamut —
+   * out-of-gamut components are physically possible in oklab and must not be
+   * left as out-of-range or negative channel values.
+   */
+  if (text.startsWith('oklab(')) {
+    const inner = text.slice(text.indexOf('(') + 1, text.lastIndexOf(')'));
+    const [l = 0, a = 0, b = 0, alpha] = inner
+      .split(/[\s/]+/)
+      .filter(Boolean)
+      .map(Number);
+
+    const l_ = l + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = l - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = l - 0.0894841775 * a - 1.291485548 * b;
+
+    const lCubed = l_ ** 3;
+    const mCubed = m_ ** 3;
+    const sCubed = s_ ** 3;
+
+    const linear = {
+      r: 4.0767416621 * lCubed - 3.3077115913 * mCubed + 0.2309699292 * sCubed,
+      g: -1.2684380046 * lCubed + 2.6097574011 * mCubed - 0.3413193965 * sCubed,
+      b: -0.0041960863 * lCubed - 0.7034186147 * mCubed + 1.707614701 * sCubed,
+    };
+
+    const toSrgb = (value: number): number => {
+      const clamped = Math.min(1, Math.max(0, value));
+      const encoded = clamped <= 0.0031308 ? clamped * 12.92 : 1.055 * clamped ** (1 / 2.4) - 0.055;
+      return Math.round(encoded * 255);
+    };
+
+    return {
+      r: toSrgb(linear.r),
+      g: toSrgb(linear.g),
+      b: toSrgb(linear.b),
+      a: alpha === undefined ? 1 : alpha,
+    };
+  }
+
   const parts = text
     .replace(/^rgba?\(/, '')
     .replace(/\)$/, '')
