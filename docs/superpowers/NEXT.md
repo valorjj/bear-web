@@ -197,7 +197,20 @@ the smaller number, but it buys 14.6 KB at the cost of an async registry, a
 flash of unhighlighted code on first paint of a block, and a loader that
 tree-shakes to nothing if it is ever left unreferenced — which happened
 during the spike and silently produced a "lazy" build containing no
-languages at all. **Worth re-confirming with the user before building.**
+languages at all.
+
+**RULED 2026-08-24: EAGER. This reverses the earlier lazy choice, and the
+reversal is the whole point of having measured.** The user re-decided once the
+numbers were real. 14.6 KB gzipped does not buy an async registry whose
+failure mode is a build that succeeds, runs, and highlights nothing — the
+spike produced exactly that build. Eager is +23.2 KB on a 278 KB baseline,
+one number, no loader, no flash of unhighlighted code on first paint.
+
+Do not re-open this on bundle-size grounds alone; it was re-opened once
+already, with measurement, and settled. What WOULD justify re-opening it: the
+curated roster growing past twelve languages, since CSS alone is 4,324 B
+gzipped and the cost is not uniform per language. If the roster grows, measure
+again rather than assuming the ruling scales.
 
 Three further facts from the spike:
 
