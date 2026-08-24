@@ -241,6 +241,72 @@
     var(--bear-hl-hue-purple) calc(var(--bear-hl-a) * 100%),
     transparent
   );
+
+  /*
+   * The syntax palette. Twelve literals, six tokens.
+   *
+   * Authored as a light value and a dark value per role, interpolated on the
+   * theme's own `--bear-dark`. This is a NEW use of that scalar: until C it
+   * only ever scaled alphas inside `calc()`. It is preferred over a grouped
+   * `[data-theme='a'], [data-theme='b']` selector for the same reason F
+   * rejected one, and over six overrides in each of the seven dark blocks
+   * because that is forty-two declarations to say one thing.
+   *
+   * Punctuation, operators and plain identifiers get NO token and inherit
+   * `--bear-text`. That is what keeps this at six roles rather than twenty:
+   * the roles below carry meaning at a glance, and colouring punctuation is
+   * what makes a code block look like confetti.
+   *
+   * `-comment` is the only role held to 3.0 rather than 4.5 in
+   * `e2e/contrast.spec.ts`, borrowing the justification `--bear-faint`
+   * already carries there: secondary information a reader skims. 4.5 forbids
+   * a dim comment, which is the universal convention. Do NOT relax the other
+   * five to keep a palette faithful.
+   */
+  --bear-code-keyword-l: #a626a4;
+  --bear-code-string-l: #1f7a3d;
+  --bear-code-number-l: #b25000;
+  --bear-code-comment-l: #6f7480;
+  --bear-code-function-l: #2a5db0;
+  --bear-code-type-l: #00706b;
+
+  --bear-code-keyword-d: #c792ea;
+  --bear-code-string-d: #9ece6a;
+  --bear-code-number-d: #ffb86c;
+  --bear-code-comment-d: #8b93a7;
+  --bear-code-function-d: #82aaff;
+  --bear-code-type-d: #7fdbca;
+
+  --bear-code-keyword: color-mix(
+    in oklab,
+    var(--bear-code-keyword-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-keyword-d)
+  );
+  --bear-code-string: color-mix(
+    in oklab,
+    var(--bear-code-string-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-string-d)
+  );
+  --bear-code-number: color-mix(
+    in oklab,
+    var(--bear-code-number-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-number-d)
+  );
+  --bear-code-comment: color-mix(
+    in oklab,
+    var(--bear-code-comment-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-comment-d)
+  );
+  --bear-code-function: color-mix(
+    in oklab,
+    var(--bear-code-function-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-function-d)
+  );
+  --bear-code-type: color-mix(
+    in oklab,
+    var(--bear-code-type-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-type-d)
+  );
 }
 
 /*
@@ -696,6 +762,20 @@
   --bear-shadow: transparent;
   --bear-tag-fill: #4a3d00;
   --bear-tag-fill-strong: #6b5800;
+  /*
+   * The syntax palette, overridden rather than interpolated. This theme's
+   * surface is pure black, and the shared dark palette's saturated hues do not
+   * clear 4.5:1 against it — on the one theme whose entire purpose is
+   * contrast. These are bright and low-saturation on purpose, closer to the
+   * `accent`/`text` family than to a conventional syntax scheme, and that is
+   * the right trade here.
+   */
+  --bear-code-keyword: #ffd400;
+  --bear-code-string: #7dffb0;
+  --bear-code-number: #ffb3a7;
+  --bear-code-comment: #b8b8b8;
+  --bear-code-function: #8ecfff;
+  --bear-code-type: #d6b3ff;
   /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
      not repeated here; these four are the `==`-less `<mark class="hl-*">`
      colours. Translucent over the page rather than opaque, the same trick

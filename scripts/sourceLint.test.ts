@@ -216,6 +216,12 @@ describe('theme tokens', () => {
     'hl-green',
     'hl-pink',
     'hl-purple',
+    'code-keyword',
+    'code-string',
+    'code-number',
+    'code-comment',
+    'code-function',
+    'code-type',
   ];
   const SURFACE = [
     'radius-sm',
