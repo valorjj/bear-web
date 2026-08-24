@@ -484,6 +484,43 @@ ${declarations}
       color: var(--bear-code-number);
     }
 
+    /*
+     * Three more, found in Kotlin by a mechanical sweep and mirrored from
+     * src/styles/editor.css -- see that file's comment above the same three
+     * rules. Kept here for the same reason as the two above: export's real
+     * nested markup never combines these classes on one element, so none of
+     * the three is load-bearing today, but the three class lists this file,
+     * editor.css and highlightClasses.ts carry must stay identical.
+     */
+    .hljs-function.hljs-keyword {
+      color: var(--bear-code-keyword);
+    }
+
+    .hljs-function.hljs-type {
+      color: var(--bear-code-type);
+    }
+
+    .hljs-function.hljs-number {
+      color: var(--bear-code-number);
+    }
+
+    /*
+     * A fourth, mirrored from src/styles/editor.css: a parameter's string
+     * default value, exactly as inside hljs-function as its numeric
+     * counterpart.
+     */
+    .hljs-function.hljs-string {
+      color: var(--bear-code-string);
+    }
+
+    /*
+     * A fifth, mirrored from src/styles/editor.css: a parameter's boolean
+     * (or null) default value.
+     */
+    .hljs-function.hljs-literal {
+      color: var(--bear-code-keyword);
+    }
+
     /* Real tables since M8b; before that a table exported as a block of pipes. */
     table {
       width: 100%;

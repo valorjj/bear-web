@@ -402,6 +402,54 @@
 }
 
 /*
+ * Three more, found in Kotlin by a mechanical sweep rather than by hand
+ * ("fun f(a: Int = 1): String = ..." alone produces all three): a
+ * function-scope wrapper (`hljs-function`) surrounds its own `fun` keyword,
+ * its typed parameters, and their default values, so each of those leaves
+ * carries `hljs-function` PLUS its own, more specific, innermost class.
+ * `hljs-function.hljs-type` is the one worth naming: without this rule it
+ * resolved to `type` only by the ACCIDENT of which of the six single-class
+ * blocks above sits later in this file -- correct today, but for the wrong
+ * reason, and silently reversible by reordering those blocks. All three
+ * follow the same mechanical rule as every entry above: the role of the
+ * INNERMOST (last) class in the accumulated list wins, because that is the
+ * class export's real nested markup gives the leaf its own element.
+ * `KNOWN_FLATTENED_COLLISIONS` in `highlightClasses.ts` is the documented
+ * list this and the two blocks above implement; `highlightClasses.test.ts`
+ * sweeps a broad corpus and fails on any combination not covered here.
+ */
+.ProseMirror pre .hljs-function.hljs-keyword {
+  color: var(--bear-code-keyword);
+}
+
+.ProseMirror pre .hljs-function.hljs-type {
+  color: var(--bear-code-type);
+}
+
+.ProseMirror pre .hljs-function.hljs-number {
+  color: var(--bear-code-number);
+}
+
+/*
+ * A fourth, from the same Kotlin function-parameter nesting as the three
+ * above: a parameter's STRING default value ("d" in `b: String = "d"`) is
+ * exactly as much inside `hljs-function` as its numeric counterpart, so it
+ * needs the same treatment.
+ */
+.ProseMirror pre .hljs-function.hljs-string {
+  color: var(--bear-code-string);
+}
+
+/*
+ * A fifth: a parameter's BOOLEAN (or `null`) default value -- `hljs-literal`,
+ * same keyword role as `hljs-keyword` above but a different class, so it
+ * needs its own compound selector even though the target colour is the same.
+ */
+.ProseMirror pre .hljs-function.hljs-literal {
+  color: var(--bear-code-keyword);
+}
+
+/*
  * Tables. Real nodes since M8b, so this styles structure rather than a preserved
  * block of source. `table-layout: fixed` with `width: 100%` is what the official
  * extension's colgroup expects: without it a column resize writes widths the
