@@ -19,7 +19,10 @@ chrome and prose column are positioned.
 `.bear-fold-marker` / `.bear-fold-hidden` rules in `src/styles/editor.css` and
 `EditorContent`'s own class list in `src/features/editor/RichEditor.tsx`; a
 new `--bear-*` custom property or a new `[data-theme='…']` block; any Tailwind
-spacing, `rounded-*`, `shadow-*` or `outline-none` utility; and the guards in
+spacing, `rounded-*`, `shadow-*` or `outline-none` utility; a plain CSS
+`outline: none` under any `:focus`/`:focus-visible` selector; the six
+`--bear-code-*` tokens and their `-l`/`-d` literals in `tokens.css`;
+`src/features/editor/highlightClasses.ts` (`ROLE_CLASSES`); and the guards in
 `scripts/sourceLint.test.ts`, `scripts/contrast.ts`, `scripts/contrast.test.ts`,
 `scripts/fonts.test.ts`, `e2e/appearance.spec.ts`, `e2e/contrast.spec.ts` and
 `e2e/smoke.spec.ts`.
@@ -602,3 +605,90 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   adjustment is the computed minimum and is recorded in the block beside the
   upstream value it replaced. Do not lower a floor to keep a palette
   faithful.
+
+- **The syntax palette (sub-project C) is SIX roles — keyword, string,
+  number, comment, function, type — as twelve fixed literals (`-l`/`-d` per
+  role), interpolated on `--bear-dark` exactly like every other derived
+  token: `color-mix(in oklab, ROLE-l calc((1 - var(--bear-dark)) * 100%),
+  ROLE-d)`.** Unlike `muted`/`faint`, these are NOT derived from a theme's own
+  palette — they are the same twelve literals for all sixteen themes, only
+  the mix ratio moves. A change to any `--bear-code-*-l` or `-d` literal
+  therefore moves **fifteen** themes at once, not one — every theme except
+  `high-contrast`, which overrides the derivation entirely (below). Treat
+  `tokens.css`'s `:root` code-literal block the way `muted`/`faint`'s ratios
+  are treated: a shared value with a sixteen-theme blast radius, not a
+  per-theme constant.
+
+- **`code-comment` clears its contrast floor at `3.0`, not `4.5`, and this is
+  the only relaxed floor in the roster.** It borrows `--bear-faint`'s own
+  justification (`e2e/contrast.spec.ts`): a comment is decorative-tier text,
+  not content, the same reasoning that lets `faint` clear at 3.0 while `text`
+  and `muted` must clear 4.5. Do not tighten `code-comment` to 4.5 without
+  first re-litigating `faint`'s floor, since the two rest on the same
+  argument.
+
+- **`high-contrast` carries its OWN six `--bear-code-*` overrides
+  (`tokens.css`, its `[data-theme='high-contrast']` block) rather than
+  inheriting the derivation.** Its surface is literal `#000000`, and the
+  shared twelve-literal palette was tuned against every OTHER theme's
+  surfaces — none of them pure black. Reusing the derivation there under-
+  saturates against true black; the override block exists so this one theme
+  is not a hidden exception living inside a "works for all sixteen" formula.
+  A future syntax-palette change must check `high-contrast`'s six overrides
+  separately; they will not move with the shared literals and will not be
+  caught by a test that only samples the derived fifteen.
+
+- **Two contrast margins in the syntax-palette roster are hair-thin, known,
+  and not surprises.** `sepia`'s `faint` clears its 3.0 floor by **0.02**
+  (3.02); `gruvbox-light`'s `code-number` clears its 4.5 floor by **0.051**
+  (4.5512). Both are the tightest of their respective floor's roster
+  (`code-comment`'s tightest is nord at 3.272, a full order of magnitude
+  looser). Nudging either theme's `bg` or `text` will very likely turn
+  `e2e/contrast.spec.ts` red — that is correct, not a regression in the
+  guard, and this bullet exists so it is not mistaken for one.
+
+- **A major pre-existing defect: `parseColour` in `scripts/contrast.ts` was
+  blind to `oklab()`, and the harness had been silently PASSING nine themes
+  below WCAG AA since sub-project F shipped (2026-08-20).** The fallback
+  stripped an `rgb(` prefix that was never there and returned `NaN`;
+  `contrast.spec.ts` collects a failure on `ratio < min`, which is FALSE for
+  `NaN`, so an unreadable pair passed silently. Found only because proving
+  `--bear-dark`'s interpolation "genuinely mixes, not merely selects" (C's
+  own palette probe) required teaching `parseColour` to read `oklab()` —
+  Chromium's serialization for an out-of-gamut `color-mix(in oklab, …)`, which
+  every DERIVED `muted`/`faint` produces. With the fix, nine themes failed
+  outright (solarized-light, rose-dawn, latte, gruvbox-light, snow,
+  solarized-dark, gruvbox-dark, tokyo-night, sepia); worst case was `faint` on
+  sidebar at 2.05 against a 3.0 floor. Fixed two ways, both load-bearing:
+  `parseColour` now THROWS on any unrecognised colour notation instead of
+  returning a sentinel, and `contrast.spec.ts` treats a non-finite ratio as a
+  failure independently of the throw (belt and suspenders — either one alone
+  would have caught this class). Six themes' `--bear-text` moved to clear the
+  floors once the harness could see them (solarized-light, rose-dawn, latte,
+  gruvbox-light, snow, solarized-dark); the derivation ratios themselves
+  (`muted` 68%→72%, `faint` 51%→56%) also moved, inside the range F's own spec
+  measured, rather than distorting the design language to paper over marginal
+  base palettes. **This was predicted in writing and not acted on**: an
+  earlier entry in this project's toolchain notes, after a `color(srgb …)`
+  instance of the identical failure shape, says outright that "any future
+  colour function (`lab()`, `oklch()`) reaching a computed value needs the
+  same treatment, and the failure mode is silence, not a crash." The lesson
+  is not "fix `oklab()` too" — it is that a `parseColour`-shaped guard must
+  reject the unknown by default, not pass it by default, because the next
+  colour function is not enumerable in advance either.
+
+- **The focus-outline suppression guard (`scripts/sourceLint.test.ts`, "lets
+  only known files suppress the outline") walked `.tsx` files only, and a
+  plain CSS `outline: none` under a `:focus`/`:focus-visible` selector was
+  invisible to it.** This shipped once (`.bear-code-language-list:focus {
+  outline: none }`, sub-project C) past a fully green suite; the suppression
+  was later dropped rather than allowlisted, but the class of gap survived
+  until this task closed it. The guard now also walks `.css` files under
+  `src/` (excluding `tokens.css`), matching an `outline: none`/`0` declaration
+  whose enclosing selector carries `:focus`/`:focus-visible` — careful to
+  exclude `src/styles/index.css`'s global `:focus-visible` rule, which DEFINES
+  the ring rather than suppressing it. Any new CSS suppressor must be added to
+  `OUTLINE_SUPPRESSORS` with its own marker, exactly like the two `.tsx`
+  files already there. This is the same shape as the `parseColour`/`oklab()`
+  defect above: a guard that proves the property it was written for while a
+  defect walks one step around it.

@@ -379,8 +379,33 @@ describe('focus', () => {
     'src/features/editor/RichEditor.tsx': 'caret is the focus indicator',
   };
 
+  /**
+   * Whether `path` (a `.css` file) contains a rule whose selector carries
+   * `:focus` or `:focus-visible` and whose body sets `outline: none` /
+   * `outline: 0`.
+   *
+   * Matches innermost `selector { body }` blocks only — a `[^{}]+\{[^{}]*\}`
+   * pattern cannot span a brace, so a rule nested inside `@media { … }`
+   * still matches on its own inner block while the `@media` wrapper itself
+   * never does. That is sufficient for this codebase's CSS, which nests at
+   * most one level deep (a media/supports query wrapping plain rules).
+   *
+   * Deliberately does NOT match `src/styles/index.css`'s global
+   * `:focus-visible { outline: 2px solid var(--bear-focus); … }` — that rule
+   * DEFINES the ring, and its outline value is a colour, not `none`/`0`.
+   */
+  function cssSuppressesFocusOutline(path: string): boolean {
+    const css = readFileSync(path, 'utf8');
+    for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const [, selector, body] = match;
+      if (!/:focus(-visible)?\b/.test(selector!)) continue;
+      if (/\boutline\s*:\s*(none|0)\b/.test(body!)) return true;
+    }
+    return false;
+  }
+
   it('lets only known files suppress the outline, each with a replacement', () => {
-    const suppressors = walk('src', ['.tsx'])
+    const tsxSuppressors = walk('src', ['.tsx'])
       .filter((path) => !/\.test\.tsx$/.test(path))
       // A bare `outline-none` is dead: the unlayered global `:focus-visible`
       // rule in index.css beats it regardless of specificity (Task 3b, M7.5).
@@ -389,6 +414,18 @@ describe('focus', () => {
       // form here would let a file revert to the dead form and still satisfy
       // this test, which is exactly what shipped, undetected, until Task 3b.
       .filter((path) => /focus-visible:outline-none/.test(readFileSync(path, 'utf8')));
+
+    // CSS files can suppress the outline directly with `outline: none` under
+    // a `:focus`/`:focus-visible` selector — no Tailwind variant involved, so
+    // the `.tsx`-only scan above cannot see it. This shipped once already
+    // (Task 6, `.bear-code-language-list:focus { outline: none }`) with a
+    // fully green suite; `tokens.css` is excluded the way the colour-literal
+    // guard excludes it, since it carries no selectors at all.
+    const cssSuppressors = walk('src', ['.css'])
+      .filter((path) => path !== TOKENS)
+      .filter(cssSuppressesFocusOutline);
+
+    const suppressors = [...tsxSuppressors, ...cssSuppressors];
 
     expect(suppressors.sort()).toEqual(Object.keys(OUTLINE_SUPPRESSORS).sort());
 

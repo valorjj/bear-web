@@ -264,7 +264,7 @@ export function languageLabel(fence: string | null | undefined): string | null {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/features/editor/codeLanguages.test.ts`
-Expected: PASS, 8 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 5: Run the full gates and commit**
 

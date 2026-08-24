@@ -154,6 +154,15 @@ for (const theme of THEMES) {
       await openNote(page, /Old meeting notes/, 'Superseded by');
       await blur(page);
       await shot(page, `08-trash-${theme.name}`);
+
+      // C's own shot: three fenced blocks in three languages, one of which
+      // (`rust`) the roster does not register — so the same frame shows the
+      // six-role syntax palette alongside the plain, unhighlighted fallback
+      // it must fall back to.
+      await sidebar.getByRole('button', { name: /^Notes/ }).click();
+      await openNote(page, /Highlighting three languages/, 'unhighlighted text');
+      await blur(page);
+      await shot(editor, `13-editor-code-${theme.name}`);
     });
 
     test(`exported document @shots`, async ({ page }) => {
