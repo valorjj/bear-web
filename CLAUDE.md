@@ -83,6 +83,11 @@ protocol, so the server is the project. See `server/README.md` for how to run
 it — including `server/.env.local` and `npm run server:dev:local` for local
 development, since `server/.env` holds the production origins the live tunnel
 depends on and the two servers cannot run at once.
+**Production runs as a launchd service** (`com.markflowing.api`) as of
+2026-08-24, controlled by the `server:service:*` npm scripts. Its `KeepAlive`
+is unconditional, so **`lsof -ti:8787 | xargs kill` no longer stops it** —
+launchd restarts it within ~10s and your local server then cannot bind. Run
+`npm run server:service:stop` before `server:dev:local`.
 
 **The last five rows are not numbered milestones yet**, and the lettering is
 `docs/superpowers/NEXT.md`'s, which holds the order and the reasoning for it.
@@ -344,6 +349,27 @@ dev` stuck on "loading" forever while the production build and all six gates
   `I18nProvider`), and named `lucide-react` icons that do not exist in the
   package. Every one of those guesses was wrong. Check the real signature
   before writing code from a plan written from memory, not after.
+
+- **A launchd job cannot read `~/Documents`, and it HANGS rather than
+  failing.** This is why the repo lives at `~/WebstormProjects/bear-web` and
+  must not move back under `~/Documents`, `~/Desktop` or `~/Downloads`. The
+  API service was first built with the repo under `~/Documents`: the process
+  stayed alive forever with an empty log and nothing bound to 8787, blocked in
+  `node::Dotenv::ParsePath → uv_fs_open → open()`. It is not about `.env` or
+  `--env-file` — a three-line test agent read `/private/tmp` fine and then hung
+  on `package.json`. Those are TCC-protected locations and a headless agent
+  cannot answer the consent prompt, so `open()` never returns. **Nothing is
+  logged** — no TCC denial, no error — and because the process never exits,
+  `KeepAlive` sees a healthy job, so the supervisor is blind too. Diagnosed
+  with `sample <pid>`, which is the only tool that showed anything; a crash
+  loop would have been louder than this silence.
+
+- **`which node` here is a per-shell path that does not survive a reboot.**
+  fnm resolves it to
+  `~/.local/state/fnm_multishells/<pid>_<timestamp>/bin/node`. Any launchd
+  plist, cron entry or systemd-alike pointing there fails `ENOENT` after the
+  shell that made it exits. Use `~/.local/share/fnm/aliases/default/bin/node`,
+  the stable symlink `fnm default <version>` retargets.
 
 ## Architecture boundaries
 

@@ -14,34 +14,74 @@ test enforces.
     cp .env.example .env        # then fill in the Google credentials
     docker compose up -d
     npm run server:migrate
-    npm run server:dev
+    npm run server:service:install
+    npm run server:service:start
 
 `.env` is gitignored and must stay so. This is the **production** config: it
-carries the live origins, and `npm run server:dev` is the `tsx watch` process
-the Cloudflare tunnel points at as `api.markflowing.com`'s upstream. Killing
-or restarting it takes the live site's sign-in down until it comes back up.
+carries the live origins that the Cloudflare tunnel points at as
+`api.markflowing.com`'s upstream.
+
+### Production runs as a launchd service
+
+`com.markflowing.api`, a LaunchAgent. The plist is tracked at
+`server/launchd/com.markflowing.api.plist` and `install` copies it to
+`~/Library/LaunchAgents/`. Control it through npm, never launchctl directly:
+
+| command                  | what it does                                         |
+| ------------------------ | ---------------------------------------------------- |
+| `server:service:install` | copies the plist into `~/Library/LaunchAgents/`      |
+| `server:service:start`   | `launchctl bootstrap` — also survives reboot + crash |
+| `server:service:stop`    | `launchctl bootout` — the ONLY way to stop it        |
+| `server:service:status`  | state, pid, last exit code                           |
+| `server:service:log`     | tails `~/Library/Logs/markflowing-api.log`           |
+
+`KeepAlive` is unconditional, so **`kill` no longer stops the server** — launchd
+restarts it within ~10s. Verified by killing both the tsx parent and the child
+that actually holds the port: either way `/me` answers `401` again within 12s.
+
+`npm run server:dev` (`tsx watch`) is still there for watching production
+sources by hand, and `npm run server:start` is the same thing without the
+watcher — the command the service itself runs.
 
 ### Local development
 
 Local work needs its own config, not edits to `.env`:
 
-    cp .env.example .env.local  # point APP_ORIGIN/API_ORIGIN at localhost
+    npm run server:service:stop   # frees 8787; see below
+    cp .env.example .env.local    # point APP_ORIGIN/API_ORIGIN at localhost
     npm run server:dev:local
 
 `.env.local` is gitignored like `.env`. **The two servers cannot run at the
 same time.** Both want port 8787, because
 `http://localhost:8787/auth/google/callback` is the one redirect URI
-registered in the Google console — there is no dev/prod split there. Stop
-whichever is running first:
+registered in the Google console — there is no dev/prod split there.
 
-    lsof -ti:8787 | xargs -r kill -9
+**`lsof -ti:8787 | xargs kill -9` no longer works and this README used to tell
+you to do it.** Under `KeepAlive` launchd just restarts production, so the kill
+appears to succeed and then your local server cannot bind — or worse, races it.
+Use `server:service:stop`, and `server:service:start` when you are done. Then
+confirm `https://api.markflowing.com/me` answers `401` rather than `502` before
+walking away.
 
-and always restart production afterwards
-(`npm run server:dev`), then confirm `https://api.markflowing.com/me` answers
-`401` rather than `502` before walking away. **This is still `tsx watch`,
-started by hand** — it does not survive a closed terminal, a reboot, or the
-Mini sleeping, and has already gone down that way once. A launchd service and
-a non-watcher start command are named debt, not yet built.
+### Why the repo is not in `~/Documents`
+
+**A launchd job cannot read `~/Documents`, and it HANGS rather than failing.**
+The service was first built with the repo at `~/Documents/bear-web` and the
+process sat alive forever with an empty log and nothing bound to 8787.
+`sample` put it in `node::Dotenv::ParsePath → uv_fs_open → open()`, blocked.
+
+It is not about `.env` or `--env-file`: a three-line test agent read a file in
+`/private/tmp` fine and then hung on `package.json`. `~/Documents` is a
+TCC-protected location and a headless LaunchAgent has no way to answer the
+consent prompt, so `open()` never returns. Nothing is logged — no TCC denial,
+no error — and because the process never _exits_, `KeepAlive` sees a healthy
+job. A crash loop would have been louder.
+
+The repo therefore lives at `~/WebstormProjects/bear-web`. Do not move it back
+under `~/Documents`, `~/Desktop` or `~/Downloads`. Granting the node binary
+Full Disk Access would also work and was rejected: it hands every node process
+on the machine full disk access, including five GitHub Actions runners, to buy
+one service.
 
 ## Layout
 

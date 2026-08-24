@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The sync API as a real service, replacing `npm run server:dev` started by
+  hand in a terminal. Install and control it through the npm scripts, not
+  launchctl directly:
+
+      npm run server:service:install   # copy here -> ~/Library/LaunchAgents
+      npm run server:service:start
+      npm run server:service:stop
+      npm run server:service:log
+
+  A LaunchAgent, NOT a LaunchDaemon, and that is load-bearing. MariaDB runs in
+  Docker Desktop, which is a user-session application: a daemon starting before
+  login would find nothing listening on 127.0.0.1:3308 and crash-loop until
+  someone logged in. A reboot therefore still needs a login before the API
+  comes back — no worse than before, since Docker always needed one.
+
+  Absolute paths throughout, because launchd gives a job no shell, no login
+  profile and no useful PATH.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.markflowing.api</string>
+
+    <!--
+      node comes from fnm's `default` ALIAS, never from `which node`.
+
+      `which node` on this machine resolves to a per-shell multishell path:
+      /Users/jeongjin/.local/state/fnm_multishells/1620_1787461529136/bin/node
+      That contains a PID and a timestamp. It does not survive the shell that
+      made it, let alone a reboot, and a plist pointing there fails ENOENT —
+      which under KeepAlive means a silent retry every ThrottleInterval
+      forever, with the reason only in the log. The aliases/default symlink is
+      the stable indirection; `fnm default <version>` retargets it and the
+      service picks it up on its next restart.
+
+      tsx is invoked as `node .../tsx/dist/cli.mjs` rather than through
+      node_modules/.bin/tsx, because that symlink depends on a shebang and a
+      PATH lookup that launchd does not provide.
+    -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/jeongjin/.local/share/fnm/aliases/default/bin/node</string>
+        <string>/Users/jeongjin/WebstormProjects/bear-web/node_modules/tsx/dist/cli.mjs</string>
+        <string>--env-file=server/.env</string>
+        <string>server/src/index.ts</string>
+    </array>
+
+    <!-- Both argument paths above are relative to this. -->
+    <key>WorkingDirectory</key>
+    <string>/Users/jeongjin/WebstormProjects/bear-web</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!--
+      Unconditional: any exit for any reason should come back. `SuccessfulExit:
+      false` was considered and rejected — it leaves a clean-but-unintended
+      exit dead silently, which is exactly the failure this service exists to
+      prevent.
+
+      Consequence for local development: the service holds port 8787, so
+      `lsof -ti:8787 | xargs kill` no longer works — launchd restarts it within
+      ThrottleInterval. Use `npm run server:service:stop` first.
+    -->
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!--
+      ~/Library/Logs, not /tmp. The com.lunchselect.startup precedent on this
+      machine logs to /tmp, which macOS clears periodically — so the log is
+      missing precisely when someone goes looking for why the service died.
+      Not rotated: volume is one line per boot plus errors. Check its size
+      occasionally; see server/README.md.
+    -->
+    <key>StandardOutPath</key>
+    <string>/Users/jeongjin/Library/Logs/markflowing-api.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jeongjin/Library/Logs/markflowing-api.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!--
+          Every path in ProgramArguments is absolute, so this is only for
+          anything the process shells out to. The secrets do NOT live here:
+          they come from server/.env via node's --env-file, which keeps them in
+          one gitignored file rather than duplicated into a plist.
+        -->
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

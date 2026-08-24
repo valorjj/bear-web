@@ -391,13 +391,26 @@ was needed to start using either.
   `docs-api` and `yjs` were deliberately deleted — those projects are retired.
 - MariaDB is `markflowing-mariadb` on **127.0.0.1**:3308 (loopback, not all
   interfaces). Dev database `markflowing`, test database `markflowing_test`.
-- **The API server is STILL NOT a service**, and D2 did not change that. It
-  runs as `npm run server:dev`, `tsx watch` started by hand, and it has
-  already gone down once when the machine slept: the tunnel stayed up and
-  `api.markflowing.com` answered **502** while the apex kept serving the app
-  perfectly. Local-first means the app is fine either way, so nothing shouts.
-  **Giving it a launchd service and a non-watcher start command is the next
-  thing worth doing after D2** — it was named debt at D1 and remains so.
+- **The API server IS a service now, as of 2026-08-24.** `com.markflowing.api`,
+  a LaunchAgent with unconditional `KeepAlive`; plist tracked at
+  `server/launchd/com.markflowing.api.plist`, controlled by the
+  `server:service:*` npm scripts. Named debt at D1, restated at D2, built
+  after F. It was found **already down** when the work started — the tunnel up
+  and `api.markflowing.com` answering 502 — which is the third occurrence of
+  the failure it fixes. `kill` no longer stops the server; use
+  `npm run server:service:stop`.
+- **The repo moved to `~/WebstormProjects/bear-web` because of this**, and the
+  reason is not cosmetic: **a launchd job cannot read `~/Documents`, and it
+  hangs rather than failing.** The first working plist produced a process that
+  sat alive forever with an empty log and nothing bound, blocked in
+  `open()` on a TCC-protected path — no denial logged, and `KeepAlive` saw a
+  healthy job because it never exited. Full detail in `server/README.md`.
+  Do not move the repo back under `~/Documents`, `~/Desktop` or `~/Downloads`.
+- **Sleep behaviour is measured-not-assumed and still open.** A LaunchAgent
+  fixes a closed terminal, a crash and a reboot. Whether the Mini *sleeping*
+  kills it was deliberately left to a separate probe with evidence behind it,
+  rather than blanket-disabling sleep for a machine that also hosts five
+  Actions runners and ollama. Local-first means the app is fine either way.
 
 **Known debt, carried forward. None of it blocks anything queued:**
 
@@ -421,8 +434,8 @@ was needed to start using either.
   *unit* test turns main red where a flaky e2e test is merely reported —
   which is exactly the class of bug the `NoteEditor.test.tsx` fix above
   addressed for the one place D2 could see it.
-- **Giving the API server a launchd service and a non-watcher start
-  command** — named at D1, restated at D2, still not built.
+- ~~**Giving the API server a launchd service and a non-watcher start
+  command**~~ — **DONE 2026-08-24.** See the service entry above.
 - The "known gaps" list in `docs/rulings/sync.md` — none block anything
   queued, all are named there rather than here so they stay next to the
   constraints they qualify.

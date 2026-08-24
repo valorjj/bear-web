@@ -22,6 +22,12 @@
     "measure": "PW_HARNESS=1 playwright test --grep @measure",
     "server:dev": "tsx watch --env-file=server/.env server/src/index.ts",
     "server:dev:local": "tsx watch --env-file=server/.env.local server/src/index.ts",
+    "server:start": "tsx --env-file=server/.env server/src/index.ts",
+    "server:service:install": "cp server/launchd/com.markflowing.api.plist ~/Library/LaunchAgents/ && echo installed; echo \"now: npm run server:service:start\"",
+    "server:service:start": "launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.markflowing.api.plist && echo started",
+    "server:service:stop": "launchctl bootout gui/$(id -u)/com.markflowing.api && echo stopped",
+    "server:service:status": "launchctl print gui/$(id -u)/com.markflowing.api | grep -E \"state|pid|last exit\" || echo \"not loaded\"",
+    "server:service:log": "tail -f ~/Library/Logs/markflowing-api.log",
     "server:migrate": "tsx --env-file=server/.env server/src/db/migrate.ts"
   },
   "dependencies": {
