@@ -1,7 +1,9 @@
 import { Editor, getSchema, resolveExtensions } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
+import { CODE_LANGUAGES } from './codeLanguages';
 import { editorExtensions } from './extensions';
+import { lowlight } from './lowlight';
 import { normalizeMarkdown } from './markdown';
 
 /**
@@ -73,5 +75,37 @@ describe('the underline ruling', () => {
   it('keeps recognized inline HTML upgrading, so the fix is not a blanket opt-out', () => {
     expect(normalizeMarkdown('<em>hi</em>')).toBe('*hi*');
     expect(normalizeMarkdown('<mark>x</mark>')).toBe('==x==');
+  });
+});
+
+describe('code block highlighting', () => {
+  it('registers the lowlight code block, not StarterKit’s plain one', () => {
+    // The failure this catches is silent: if StarterKit’s `codeBlock` is left
+    // enabled AND CodeBlockLowlight is added, Tiptap’s reversed extension
+    // order means one of them wins with no warning, and the losing case is a
+    // fully working editor that simply never highlights. Asserting on a
+    // rendered colour would not see it either, because jsdom has no cascade.
+    const codeBlock = editorExtensions.find((extension) => extension.name === 'codeBlock');
+    expect(codeBlock).toBeDefined();
+    expect(codeBlock?.options).toHaveProperty('lowlight');
+  });
+
+  it('registers exactly one codeBlock in the schema', () => {
+    const names = editorExtensions.map((extension) => extension.name);
+    expect(names.filter((name) => name === 'codeBlock')).toHaveLength(1);
+  });
+
+  it('registers every roster language with lowlight and nothing else', () => {
+    expect(lowlight.listLanguages().sort()).toEqual(CODE_LANGUAGES.map((l) => l.id).sort());
+  });
+
+  it('leaves the recognized HTML tag set unchanged', () => {
+    // `computeRecognizedHtmlTags()` builds a schema from the supported set and
+    // decides which inline HTML the raw fallback must rescue. CodeBlockLowlight
+    // extends CodeBlock and should parse the same `pre` rule — "should" is not
+    // evidence, and a change here silently alters how existing notes round-trip.
+    const schema = getSchema(editorExtensions);
+    expect(schema.nodes.codeBlock).toBeDefined();
+    expect(Object.keys(schema.nodes)).toContain('codeBlock');
   });
 });

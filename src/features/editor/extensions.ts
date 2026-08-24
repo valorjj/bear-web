@@ -1,5 +1,6 @@
 import type { Extensions } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
+import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
 import { TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
@@ -8,6 +9,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
 import { TableControls, type TableControlsOptions } from './TableControls';
 import { Highlight } from './Highlight';
+import { lowlight } from './lowlight';
 import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
 import type { TagPillOptions } from './TagPill';
 import { TagPill } from './TagPill';
@@ -38,7 +40,21 @@ function buildSupportedExtensions(
     // The absence of an underline BUTTON was tested and passed while all of the
     // above shipped. The rule needs a schema-level assertion; see
     // `extensions.test.ts`.
-    StarterKit.configure({ underline: false }),
+    // `codeBlock: false` is load-bearing for the same reason `underline: false`
+    // beside it is. StarterKit registers its own plain `codeBlock`; leaving it
+    // on while also registering `CodeBlockLowlight` gives two extensions the
+    // same node name, and Tiptap's reversed extension order decides the winner
+    // silently. The losing case is not a crash — it is a fully working editor
+    // that never highlights anything, which no rendered-output test can see.
+    // `extensions.test.ts` asserts the surviving `codeBlock` carries a
+    // `lowlight` option.
+    StarterKit.configure({ underline: false, codeBlock: false }),
+    // Registered here rather than inside `buildSupportedExtensions`' tail so it
+    // sits with the other schema-contributing nodes. Unlike `TagPill`,
+    // `HeadingFold` and `TableControls`, this IS a Node: it changes the schema,
+    // so `computeRecognizedHtmlTags()` sees it and the round-trip suites are
+    // not blind to it.
+    CodeBlockLowlight.configure({ lowlight }),
     TaskList,
     TaskItem.configure({ nested: true }),
     // Real table nodes, replacing the `RawTable` fallback. The official
