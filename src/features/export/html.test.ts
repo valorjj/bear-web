@@ -1,6 +1,64 @@
+import { Editor } from '@tiptap/core';
+import type { Plugin } from '@tiptap/pm/state';
 import { describe, expect, it } from 'vitest';
 
-import { EXPORT_TOKEN_NAMES, readExportTokens, renderNoteHtml } from './html';
+import { editorExtensions, parseMarkdown } from '@/features/editor';
+
+import { EXPORT_TOKEN_NAMES, readExportTokens, renderNoteBody, renderNoteHtml } from './html';
+
+/**
+ * The `.hljs-*` (and unprefixed `function_`/`class_`/`inherited__`) classes
+ * the EDITOR would apply to the given source, read off the real
+ * `CodeBlockLowlight` decoration plugin rather than reimplemented from
+ * memory -- so this is the actual editor behaviour, not a guess at it.
+ *
+ * `PluginKey`'s name is only a prefix: ProseMirror suffixes every 'lowlight'
+ * key with an incrementing counter shared across the whole process
+ * ('lowlight$', 'lowlight$1', ...), so the plugin can only be found by
+ * prefix, never by an exact key a test could construct itself.
+ */
+function editorHljsClasses(markdownText: string): Set<string> {
+  const editor = new Editor({ extensions: editorExtensions, content: parseMarkdown(markdownText) });
+  const classes = new Set<string>();
+
+  try {
+    // `Plugin.key` exists at runtime (ProseMirror's own decoration lookup
+    // reads it directly) but is not part of the public `.d.ts`, hence the cast.
+    const plugin = editor.state.plugins.find((candidate) =>
+      (candidate as Plugin & { key: string }).key.startsWith('lowlight$'),
+    );
+    if (!plugin) return classes;
+
+    const decorations = plugin.getState(editor.state) as {
+      find: () => readonly { type: { attrs?: { class?: string } } }[];
+    };
+    for (const decoration of decorations.find()) {
+      for (const name of (decoration.type.attrs?.class ?? '').split(' ').filter(Boolean)) {
+        classes.add(name);
+      }
+    }
+  } finally {
+    editor.destroy();
+  }
+
+  return classes;
+}
+
+/** The same classes, read off what `renderNoteBody` actually serialized. */
+function exportHljsClasses(markdownText: string): Set<string> {
+  const host = document.createElement('div');
+  host.innerHTML = renderNoteBody(markdownText);
+  const classes = new Set<string>();
+
+  for (const element of host.querySelectorAll('[class]')) {
+    for (const name of element.classList) {
+      if (name === 'hljs' || name.startsWith('language-')) continue;
+      classes.add(name);
+    }
+  }
+
+  return classes;
+}
 
 const note = {
   title: 'US market daily',
@@ -128,6 +186,52 @@ describe('renderNoteHtml', () => {
     expect(html).toContain('class_');
     expect(html).toMatch(/\.hljs-title\.class_[^{]*\{[^}]*--bear-code-type/);
   });
+
+  it('keeps the language- class on the serialized <code>, the export sweep keys on it', () => {
+    // If `CodeBlockLowlight`'s own `renderHTML` ever stopped emitting this
+    // class, `highlightCodeBlocks` would silently stop finding any code
+    // block to highlight -- so its presence is asserted directly rather than
+    // assumed.
+    const html = renderNoteHtml({ ...note, text: '```ts\nconst x = 1;\n```\n' }, tokens);
+
+    expect(html).toContain('<code class="language-ts">');
+  });
+
+  it('leaves an unregistered language unhighlighted rather than guessing, matching the editor', () => {
+    // `renderNoteBody`, not `renderNoteHtml` -- the full document's <style>
+    // block always contains the literal string `.hljs-` for every export,
+    // regardless of this note's content, so only the body proves anything.
+    const body = renderNoteBody('```rust\nfn main() {}\n```\n');
+
+    expect(body).not.toContain('hljs-');
+    expect(body).toContain('fn main() {}');
+  });
+
+  it('leaves a fence with no language unhighlighted rather than guessing', () => {
+    const body = renderNoteBody('```\nplain text\n```\n');
+
+    expect(body).not.toContain('hljs-');
+    expect(body).toContain('plain text');
+  });
+});
+
+describe('the export and editor highlighting paths agree', () => {
+  // Highlighting happens twice, through two different mechanisms -- real
+  // ProseMirror decorations in the editor, a `pre > code` sweep at export --
+  // and nothing else ties them together. This is what would catch the two
+  // drifting apart.
+  const cases: { name: string; text: string }[] = [
+    { name: 'a registered language', text: '```ts\nconst x = 1;\n```\n' },
+    { name: 'an unregistered language', text: '```rust\nfn main() {}\n```\n' },
+    { name: 'no language at all', text: '```\nplain text\n```\n' },
+    { name: 'the compound-selector case', text: '```ts\nclass Foo extends Bar {}\n```\n' },
+  ];
+
+  for (const { name, text } of cases) {
+    it(`produces the same .hljs-* classes as the editor for ${name}`, () => {
+      expect(exportHljsClasses(text)).toEqual(editorHljsClasses(text));
+    });
+  }
 });
 
 describe('readExportTokens', () => {

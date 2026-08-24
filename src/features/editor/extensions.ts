@@ -10,7 +10,7 @@ import { CodeLanguageControls, type CodeLanguageControlsOptions } from './CodeLa
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
 import { TableControls, type TableControlsOptions } from './TableControls';
 import { Highlight } from './Highlight';
-import { lowlight } from './lowlight';
+import { lowlightForEditor } from './lowlight';
 import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
 import type { TagPillOptions } from './TagPill';
 import { TagPill } from './TagPill';
@@ -57,7 +57,7 @@ function buildSupportedExtensions(
     // `HeadingFold` and `TableControls`, this IS a Node: it changes the schema,
     // so `computeRecognizedHtmlTags()` sees it and the round-trip suites are
     // not blind to it.
-    CodeBlockLowlight.configure({ lowlight }),
+    CodeBlockLowlight.configure({ lowlight: lowlightForEditor }),
     TaskList,
     TaskItem.configure({ nested: true }),
     // Real table nodes, replacing the `RawTable` fallback. The official

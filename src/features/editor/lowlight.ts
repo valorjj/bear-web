@@ -45,3 +45,32 @@ export const lowlight = createLowlight({
   xml,
   yaml,
 });
+
+/**
+ * The same registry, but with auto-detection disabled -- the object
+ * `CodeBlockLowlight`'s decoration plugin actually reads.
+ *
+ * The plugin calls `highlightAuto` whenever a code block's fence names no
+ * language, or one this editor does not register, and highlight.js's own
+ * `highlightAuto` GUESSES a language rather than declining. That contradicts
+ * `resolveLanguage` in `codeLanguages.ts`, which is explicit that an unknown
+ * language "renders unhighlighted and keeps its fence text verbatim, and
+ * guessing would silently rewrite the user's document" -- and it was found
+ * only by typing a fenced rust block into the running app and reading the
+ * DOM: no unit test exercised an unregistered or absent language before this,
+ * so a plain block of prose fenced with an unknown language, or no language
+ * at all, was silently coloured as if it were code.
+ *
+ * `highlight` (for a genuinely registered language), `registered` and
+ * `listLanguages` are untouched -- only the guessing fallback is starved, by
+ * handing back the code as one unclassified text node, which yields zero
+ * decorations.
+ */
+export const lowlightForEditor: typeof lowlight = {
+  ...lowlight,
+  highlightAuto: (value: string) =>
+    ({
+      type: 'root',
+      children: [{ type: 'text', value }],
+    }) as ReturnType<typeof lowlight.highlightAuto>,
+};

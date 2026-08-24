@@ -163,6 +163,16 @@ const LANGUAGE_CLASS_PREFIX = 'language-';
  * Re-highlights every fenced code block under `host`, replacing its plain
  * text with the same `.hljs-*` spans the editor shows — see the note on
  * `HastChildNode` above for why this cannot be inherited from the document.
+ *
+ * Deliberately does NOT fall back to `lowlight.highlightAuto` for a fence
+ * with no language, or one naming a language this editor does not register.
+ * `codeLanguages.ts`'s `resolveLanguage` is explicit that an unknown language
+ * "renders unhighlighted and keeps its fence text verbatim, and guessing
+ * would silently rewrite the user's document" -- an export that guessed
+ * would colour a block of plain prose as if it were code, which is not a
+ * faithful rendering of what the user was looking at. Left untouched, such a
+ * block keeps its plain `pre code` text exactly as `renderNoteBody` produced
+ * it.
  */
 function highlightCodeBlocks(host: Element, doc: Document): void {
   for (const code of host.querySelectorAll('pre > code')) {
@@ -170,13 +180,10 @@ function highlightCodeBlocks(host: Element, doc: Document): void {
       name.startsWith(LANGUAGE_CLASS_PREFIX),
     );
     const language = languageClass?.slice(LANGUAGE_CLASS_PREFIX.length);
-    const text = code.textContent ?? '';
+    if (!language || !lowlight.registered(language)) continue;
 
-    const tree = (
-      language && lowlight.registered(language)
-        ? lowlight.highlight(language, text)
-        : lowlight.highlightAuto(text)
-    ) as { children: readonly HastChildNode[] };
+    const text = code.textContent ?? '';
+    const tree = lowlight.highlight(language, text) as { children: readonly HastChildNode[] };
 
     code.replaceChildren();
     appendHastChildren(tree.children, code, doc);
