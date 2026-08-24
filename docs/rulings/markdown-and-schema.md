@@ -17,8 +17,12 @@ to `markdown.test.ts`'s `CANONICAL`, `stability.test.ts`'s `NON_CANONICAL`,
 `rawBlock.test.ts`, `characterization.test.ts`, `extensions.test.ts` or
 `headingFold.test.ts`; a new import of `@tiptap/markdown` anywhere; a new or
 removed Tiptap extension, input rule or `markdownTokenName`; a new or changed
-`Mod-Alt-*` keymap entry; and any `normalizeMarkdown` / `parseMarkdown` /
-`serializeMarkdown` call site.
+`Mod-Alt-*` keymap entry; any `normalizeMarkdown` / `parseMarkdown` /
+`serializeMarkdown` call site; `src/features/editor/lowlight.ts` (`lowlight`,
+`lowlightForEditor`), `src/features/editor/codeLanguages.ts`
+(`resolveLanguage`), `src/features/editor/highlightClasses.ts`
+(`roleOfFlattenedClasses`, `KNOWN_FLATTENED_COLLISIONS`), and
+`src/features/editor/CodeLanguageControls.ts`.
 
 - **`markdown.ts` is the only importer of `@tiptap/markdown`.** The round-trip
   suite drives `MarkdownManager` standalone, with no `Editor` and no DOM, which
@@ -314,3 +318,95 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   bar of unlabelled buttons — the same "nobody is listening" shape as
   `TagPill`'s `onActivate` and `HeadingFold`'s `foldHint`, and for the same
   reason: no user-facing string may be hardcoded in this app.
+
+- **`codeBlock: false` on `StarterKit.configure` (`extensions.ts`) is
+  load-bearing beside `underline: false` next to it, for the identical
+  reason: StarterKit registers its own plain `codeBlock`, and leaving it
+  enabled while also registering `CodeBlockLowlight` gives the schema two
+  extensions claiming the same node type. Tiptap does not reject this loudly
+  — the failure mode is a silent double-registration, not a build error —
+  which is exactly why `underline: false` was already documented and why
+  `codeBlock: false` needed the same treatment rather than being assumed
+  obvious by proximity. `extensions.test.ts` asserts the surviving `codeBlock`
+  extension carries a `lowlight` option, which only holds if the StarterKit
+  copy lost the registration race.
+
+- **A fence's language string is never normalized.** `` ```ts `` stays `ts`
+  in the document and on round-trip; it is never rewritten to `typescript`.
+  `resolveLanguage` (`codeLanguages.ts`) maps `ts` to the TypeScript grammar
+  and label for the PICKER and for highlighting, but that resolution is a
+  read-time lookup, not a write. Writing the canonical id back would be a
+  silent document mutation on nothing more than opening a note — the exact
+  class of rewrite this app's Markdown layer treats as a defect everywhere
+  else (see `isNoOp` and the round-trip suite generally). An unrecognised
+  fence string (`rust`, or any language this app does not register) resolves
+  to nothing, renders unhighlighted, and — critically — keeps its fence text
+  exactly as written; it must never fall back to `highlightAuto`-style
+  guessing, which would silently colour a block of plain prose as if it were
+  code.
+
+- **There are TWO lowlight registries in `lowlight.ts`, and collapsing them
+  back into one silently reintroduces a shipped bug.** `lowlight` (full,
+  including a working `highlightAuto`) and `lowlightForEditor` (byte-identical
+  except `highlightAuto` is starved — it returns an empty text node instead of
+  guessing) exist because highlight.js's `highlightAuto` GUESSES a language,
+  and `@tiptap/extension-code-block-lowlight`'s decoration plugin calls it
+  automatically whenever a fence names no language or an unregistered one.
+  `CodeBlockLowlight` MUST be configured with `lowlightForEditor`: with the
+  guessing registry, a `` ```rust `` fence — or a bare unlabelled fence — gets
+  auto-detected and highlighted live in the editor, directly contradicting
+  the no-normalization rule above. This shipped and was invisible to every
+  test written for it, including the language-picker's own no-op test on
+  `` ```rust ``, until someone typed the fence into a running browser and read
+  the DOM. `src/features/editor/index.ts` re-exports the GUESSING `lowlight`
+  deliberately: `src/features/export/html.ts` consumes it, because an
+  exported document re-highlighting from scratch has no live editor state to
+  fall back to and export's own fallback path is guarded separately (see
+  `highlightCodeBlocks` in `html.ts`). Do not "simplify" the two back into
+  one; a future reader doing so restores exactly the bug this split fixed.
+
+- **Known, deliberately unfixed: the code-language picker acts on "wherever
+  the selection is," not on the block its widget is attached to.**
+  `CodeLanguageControls.ts`'s `choose` and its filter-input handler both
+  re-derive the target block via `codeBlockPosAt(view.state)` rather than
+  using the widget's own captured `pos`. Benign today, because the widget
+  only renders while the caret sits inside that exact code block — so
+  "wherever the selection is" and "the block this control is attached to"
+  are always the same block in practice — but the two are not the same
+  question, and a future change that lets the widget outlive the caret
+  leaving its block (e.g. a hover-triggered picker) would need `pos` wired
+  through instead.
+
+- **The `.hljs-*` → syntax-role class mapping exists in THREE places, kept in
+  step by comment and review rather than by a test (ruling R4), and the
+  compound selectors in two of them are load-bearing.**
+  `highlightClasses.ts`'s `ROLE_CLASSES`, `src/styles/editor.css`, and the
+  export stylesheet embedded in `src/features/export/html.ts` must all carry
+  the same classes for the same six roles — including the UNPREFIXED
+  `function_`, `class_` and `inherited__` highlight.js emits without an
+  `hljs-` prefix. Nothing mechanically enforces the three-way agreement; a
+  role coloured in the editor and not in export (or vice versa) is the
+  failure mode, and the mitigation is that a reviewer is told to diff the
+  three lists by hand. This ruling (R4) has been tested twice by real
+  defects and held both times only because a human review caught it; if a
+  third instance ships, replace comment-and-review discipline with a real
+  guard that parses the export stylesheet, rather than re-affirming R4 again.
+  The compound selectors are NOT stylistic: highlight.js nests scopes as
+  MULTIPLE classes on one leaf element (e.g. `class="hljs-title
+  class_"`), and the editor's decorations FLATTEN that onto one span while
+  export's `DOMSerializer` output NESTS real elements. On the flattened span,
+  equal-specificity single-class rules are decided by stylesheet order —
+  silently and differently from the nested case, where the innermost element
+  simply wins by DOM structure. `KNOWN_FLATTENED_COLLISIONS` in
+  `highlightClasses.ts` and its mirrored compound rules in both stylesheets
+  exist so the flattened case resolves identically to the nested one instead
+  of depending on which role's CSS block happens to sit last in the file.
+  **This list is proven NOT exhaustive by its own history** — four rounds of
+  widening the sweep corpus each found new combinations (2, then 4, then 9,
+  then 10) — so `highlightClasses.test.ts`'s mechanical enumeration test,
+  not the current count of entries, is the actual guard: it fails BY NAME on
+  any flattened combination the corpus produces with no matching compound
+  rule. Do not "tidy away" a compound selector, and do not reorder the
+  per-role CSS blocks in either stylesheet on the assumption that source
+  order no longer matters — it still decides every combination this list has
+  not yet been told about.

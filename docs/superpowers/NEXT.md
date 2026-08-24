@@ -163,7 +163,7 @@ Split out of B because it is a document mutation with its own coordinate math
 and undo semantics, and because jsdom has no `setPointerCapture`, so Playwright
 would be its only possible coverage. Ordering relative to C is undecided.
 
-### C. Code block language + syntax highlighting
+### C. Code block language + syntax highlighting — SHIPPED 2026-08-24
 
 Language autocomplete on the fence (typing ` ```java ` suggests `java`,
 `javadoc`, `javascript`, …), and the highlighting that motivates it.
@@ -186,31 +186,50 @@ gzipped.
 
 | approach                     | main bundle          | on demand                      |
 | ---------------------------- | -------------------- | ------------------------------ |
-| today                        | 278,028 gz           | —                              |
-| curated set, **eager**       | 301,244 gz (+23,216) | nothing                        |
+| today (pre-C baseline)       | 278,028 gz           | —                              |
+| curated set, **eager** (spike, WRONG — see below) | 301,244 gz (+23,216) | nothing |
 | curated set, **lazy**        | 286,630 gz (+8,602)  | 12 chunks, 431 B – 4,324 B each |
+| curated set, **eager** (shipped, MEASURED)        | **314,367 gz (+36,339)** | nothing |
 
 The user chose lazy when the options were labelled "~5 KB" and "60–90 KB".
-Both figures were guesses and both were wrong: the real gap is **8.6 KB
-versus 23.2 KB**, or 3.1% versus 8.3% of the current bundle. Lazy is still
-the smaller number, but it buys 14.6 KB at the cost of an async registry, a
-flash of unhighlighted code on first paint of a block, and a loader that
-tree-shakes to nothing if it is ever left unreferenced — which happened
-during the spike and silently produced a "lazy" build containing no
-languages at all.
+Both figures were guesses and both were wrong: the real gap, once C actually
+shipped, was **8.6 KB versus 36.3 KB**, or 3.1% versus 13.1% of the pre-C
+bundle. Lazy is still the smaller number, but it buys 27.7 KB at the cost of
+an async registry, a flash of unhighlighted code on first paint of a block,
+and a loader that tree-shakes to nothing if it is ever left unreferenced —
+which happened during the spike and silently produced a "lazy" build
+containing no languages at all.
 
 **RULED 2026-08-24: EAGER. This reverses the earlier lazy choice, and the
 reversal is the whole point of having measured.** The user re-decided once the
 numbers were real. 14.6 KB gzipped does not buy an async registry whose
 failure mode is a build that succeeds, runs, and highlights nothing — the
-spike produced exactly that build. Eager is +23.2 KB on a 278 KB baseline,
-one number, no loader, no flash of unhighlighted code on first paint.
+spike produced exactly that build. Eager was believed to be +23.2 KB on a
+278 KB baseline at ruling time; it stays the right call regardless, because
+the argument for it never rested on the byte count.
+
+**The `+23,216` spike figure above was wrong, and finding out took three more
+re-measurements after the ruling shipped.** Every one of them found the real
+number higher than the last: `+31,825` (Task 2, the picker not yet built),
+`+34,886` (Task 7, after export and the second lowlight registry), and the
+final shipped figure, `+36,339` — **57% above the spike's `+23,216`**, not the
+"37% off" it looked like partway through. The spike under-measured because it
+never built the picker, the export re-highlighting pass, or the
+guessing/declining lowlight split — real cost this ruling's argument did not
+depend on, but its own headline number should have reflected. The ruling
+itself is UNCHANGED by this: it rested on the lazy loader's silent-failure
+mode, not on any of these four numbers being right. `scripts/bundleSize.test.ts`
+now holds the final, real figure as an enforced ceiling (`324,000`, ~3%
+headroom over the measured `314,367`) specifically so a fifth wrong number
+is a compile-time fact instead of a comment someone has to remember to
+distrust.
 
 Do not re-open this on bundle-size grounds alone; it was re-opened once
 already, with measurement, and settled. What WOULD justify re-opening it: the
 curated roster growing past twelve languages, since CSS alone is 4,324 B
 gzipped and the cost is not uniform per language. If the roster grows, measure
-again rather than assuming the ruling scales.
+again — with a real build, not a spike — rather than assuming the ruling
+scales, and rather than trusting a recorded number without recomputing it.
 
 Three further facts from the spike:
 
@@ -221,6 +240,24 @@ Three further facts from the spike:
   both appear in `node_modules` from one install.
 - **CSS is the largest grammar at 4,324 B gzipped**, an order of magnitude
   above JSON's 431 B — a per-language budget is not uniform.
+
+**Follow-up, named but unscheduled: per-theme syntax-palette overrides.** The
+six-role syntax palette is twelve shared literals interpolated on
+`--bear-dark`, identical across fifteen of sixteen themes; `high-contrast`
+already has the one override that exists, because pure `#000000` defeats the
+shared values outright (see `docs/rulings/design-tokens-and-layout.md`). A
+visual review of all sixteen themes (`npm run shots`, the `13-editor-code-*`
+frame) found no other theme where the shared palette clashes or reads as
+illegible — `paper`, `ink`, `high-contrast`, `solarized-light` and `nord` were
+inspected directly and all six roles are legible and distinct in each. Two
+themes carry thin contrast margins worth watching rather than fixing now:
+`sepia`'s `faint` clears by 0.02 and `gruvbox-light`'s `code-number` by 0.051
+(both recorded in the rulings file). If a future theme addition or a palette
+tweak produces a clash the shared literals cannot fix without breaking a
+different theme, the mechanism is already shipped and proven
+(`high-contrast`'s override block) — the follow-up is deciding WHICH of the
+other fifteen themes, if any, need the same treatment, not building new
+infrastructure.
 
 ## Cut, with a reason
 

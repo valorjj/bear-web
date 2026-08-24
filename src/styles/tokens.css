@@ -156,8 +156,31 @@
    * and a light background lands visibly darker in some hues than others,
    * which would make `muted` inconsistent across the roster.
    */
-  --bear-muted: color-mix(in oklab, var(--bear-text) 68%, var(--bear-bg));
-  --bear-faint: color-mix(in oklab, var(--bear-text) 51%, var(--bear-bg));
+  /*
+   * F's spec measured `muted` at 62.0%-69.6% across the five hand-tuned
+   * themes (docs/superpowers/specs/2026-08-24-f-theme-system-design.md,
+   * lines 83-86). Pushing the shared ratio to 90%/71% cleared every floor
+   * but put `muted` within a hair of `text` on all eleven derived themes,
+   * collapsing the primary/secondary hierarchy the design language depends
+   * on — a defect no contrast test can see, because contrast floors prove
+   * legibility, not tier separation.
+   *
+   * 72%/56% is the ratio actually used: inside the sanctioned headroom
+   * above F's measured range, chosen at the top of that headroom because it
+   * minimises the fallout below — at 68%/51% (F's literal numbers) nine
+   * derived themes need a `--bear-text` correction and several by 30-44
+   * points; at 72%/56% only six do, by 6-32 points. The root cause was
+   * never the ratio: solarized-light, rose-dawn, latte, gruvbox-light, snow
+   * and solarized-dark have a `text` sitting too close to their `bg` for
+   * ANY reasonable ratio to derive an AA `muted`/`faint` from — the same
+   * conflict solarized-light's own `--bear-text` comment below already
+   * names for the tokens F's harness could see. Each of those six themes'
+   * `--bear-text` carries its own comment naming the ratio that forced the
+   * move. nord and dracula clear both floors at 72%/56% unmodified; sepia,
+   * tokyo-night and gruvbox-dark needed nothing beyond this ratio either.
+   */
+  --bear-muted: color-mix(in oklab, var(--bear-text) 72%, var(--bear-bg));
+  --bear-faint: color-mix(in oklab, var(--bear-text) 56%, var(--bear-bg));
   --bear-border: color-mix(in oklab, var(--bear-text) 13%, var(--bear-bg));
   --bear-focus: var(--bear-accent);
 
@@ -228,6 +251,80 @@
     in srgb,
     var(--bear-hl-hue-purple) calc(var(--bear-hl-a) * 100%),
     transparent
+  );
+
+  /*
+   * The syntax palette. Twelve literals, six tokens.
+   *
+   * Authored as a light value and a dark value per role, interpolated on the
+   * theme's own `--bear-dark`. This is a NEW use of that scalar: until C it
+   * only ever scaled alphas inside `calc()`. It is preferred over a grouped
+   * `[data-theme='a'], [data-theme='b']` selector for the same reason F
+   * rejected one, and over six overrides in each of the seven dark blocks
+   * because that is forty-two declarations to say one thing.
+   *
+   * Punctuation, operators and plain identifiers get NO token and inherit
+   * `--bear-text`. That is what keeps this at six roles rather than twenty:
+   * the roles below carry meaning at a glance, and colouring punctuation is
+   * what makes a code block look like confetti.
+   *
+   * `-comment` is the only role held to 3.0 rather than 4.5 in
+   * `e2e/contrast.spec.ts`, borrowing the justification `--bear-faint`
+   * already carries there: secondary information a reader skims. 4.5 forbids
+   * a dim comment, which is the universal convention. Do NOT relax the other
+   * five to keep a palette faithful.
+   */
+  --bear-code-keyword-l: #a626a4;
+  /* Darkened from #1f7a3d, which measured 4.27 on gruvbox-light's surface —
+     the worst-case light-theme surface for this hue. Now 4.56. */
+  --bear-code-string-l: #1e753b;
+  /* Darkened from #b25000, which measured 4.14 on gruvbox-light's surface —
+     the worst-case light-theme surface for this hue. Now 4.55. */
+  --bear-code-number-l: #a84b00;
+  --bear-code-comment-l: #6f7480;
+  --bear-code-function-l: #2a5db0;
+  --bear-code-type-l: #00706b;
+
+  /* Lightened from #c792ea, which measured 4.18 on nord's surface —
+     the worst-case dark-theme surface for this hue. Now 4.57. */
+  --bear-code-keyword-d: #cc9cec;
+  --bear-code-string-d: #9ece6a;
+  --bear-code-number-d: #ffb86c;
+  --bear-code-comment-d: #8b93a7;
+  /* Lightened from #82aaff, which measured 4.38 on nord's surface —
+     the worst-case dark-theme surface for this hue. Now 4.57. */
+  --bear-code-function-d: #87aeff;
+  --bear-code-type-d: #7fdbca;
+
+  --bear-code-keyword: color-mix(
+    in oklab,
+    var(--bear-code-keyword-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-keyword-d)
+  );
+  --bear-code-string: color-mix(
+    in oklab,
+    var(--bear-code-string-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-string-d)
+  );
+  --bear-code-number: color-mix(
+    in oklab,
+    var(--bear-code-number-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-number-d)
+  );
+  --bear-code-comment: color-mix(
+    in oklab,
+    var(--bear-code-comment-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-comment-d)
+  );
+  --bear-code-function: color-mix(
+    in oklab,
+    var(--bear-code-function-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-function-d)
+  );
+  --bear-code-type: color-mix(
+    in oklab,
+    var(--bear-code-type-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-code-type-d)
   );
 }
 
@@ -408,8 +505,14 @@
    * (4.39) or through any highlight fill (3.71 on purple). Solarized's base
    * tones are famously low-contrast; this is the conflict the spec predicted,
    * and legibility wins.
+   *
+   * Darkened further (29.3% toward black in oklab) so the derived `muted`
+   * (72%) and `faint` (56%) tokens also clear AA — this theme's original
+   * #4a5d63 could not, at any reasonable ratio, because it sat too close to
+   * `--bear-bg`. Same root cause as the paragraph above, applied to the two
+   * tokens F's own harness could not see.
    */
-  --bear-text: #4a5d63;
+  --bear-text: #2b373b;
   /* #268bd2 upstream; darkened to clear 4.5:1 on bg and surface. */
   --bear-accent: #1f71aa;
   /* #dc322f upstream; darkened to clear 4.5:1 on bg and surface. */
@@ -424,7 +527,13 @@
   --bear-surface: #fffaf3;
   --bear-sidebar: #f2e9e1;
   --bear-canvas: #e9e0d6;
-  --bear-text: #575279;
+  /*
+   * Darkened from Rosé Pine Dawn's own #575279 (24.8% toward black in
+   * oklab) so the derived `muted` (72%) and `faint` (56%) tokens clear AA —
+   * the upstream value sat too close to `--bear-bg` for any reasonable
+   * ratio to derive a legible secondary tier from it.
+   */
+  --bear-text: #393551;
   /* #907aa9 upstream; darkened to clear 4.5:1 on bg and surface. */
   --bear-accent: #7a6890;
   /* #b4637a upstream; darkened to clear 4.5:1 on bg and surface. */
@@ -439,7 +548,13 @@
   --bear-surface: #e6e9ef;
   --bear-sidebar: #dce0e8;
   --bear-canvas: #ccd0da;
-  --bear-text: #4c4f69;
+  /*
+   * Darkened from Catppuccin Latte's own #4c4f69 (28.8% toward black in
+   * oklab) so the derived `muted` (72%) and `faint` (56%) tokens clear AA —
+   * the upstream value sat too close to `--bear-bg` for any reasonable
+   * ratio to derive a legible secondary tier from it.
+   */
+  --bear-text: #2d2f40;
   /* #8839ef upstream; darkened to clear 4.5:1 on bg and surface. */
   --bear-accent: #8538ea;
   /* #d20f39 upstream; darkened to clear 4.5:1 on bg and surface. */
@@ -454,7 +569,13 @@
   --bear-surface: #f2e5bc;
   --bear-sidebar: #ebdbb2;
   --bear-canvas: #d5c4a1;
-  --bear-text: #3c3836;
+  /*
+   * Darkened from Gruvbox Light's own #3c3836 (14.4% toward black in
+   * oklab) so the derived `muted` (72%) and `faint` (56%) tokens clear AA —
+   * the upstream value sat too close to `--bear-bg` for any reasonable
+   * ratio to derive a legible secondary tier from it.
+   */
+  --bear-text: #2f2c2a;
   --bear-accent: #af3a03;
   --bear-danger: #9d0006;
   --bear-shadow: rgb(60 56 54 / 0.14);
@@ -472,7 +593,14 @@
   --bear-surface: #e5e9f0;
   --bear-sidebar: #d8dee9;
   --bear-canvas: #cfd6e0;
-  --bear-text: #2e3440;
+  /*
+   * Darkened from Nord's own #2e3440 (5.9% toward black in oklab) so the
+   * derived `muted` (72%) and `faint` (56%) tokens clear AA — a small move
+   * because this palette was already close; the barely-lighter upstream
+   * value still sat too close to `--bear-bg` to clear the floor at any
+   * reasonable ratio.
+   */
+  --bear-text: #2a2f3a;
   /* #5e81ac upstream; darkened to clear 4.5:1 on bg and surface. */
   --bear-accent: #4d6a8d;
   /* #bf616a upstream; darkened to clear 4.5:1 on bg and surface. */
@@ -614,8 +742,13 @@
    * base1 (#93a1a1) lightened. Solarized Dark's own tones do not clear our
    * floors either: base1 measures 3.70 through the green highlight fill and
    * 3.82 on a selected row. Same conflict as Solarized Light, same outcome.
+   *
+   * Lightened further (31.6% toward white in oklab, from the #abb6b6 above)
+   * so the derived `muted` (72%) and `faint` (56%) tokens also clear AA —
+   * same root cause as the paragraph above, applied to the two tokens F's
+   * own harness could not see.
    */
-  --bear-text: #abb6b6;
+  --bear-text: #c5cdcd;
   /* #268bd2 upstream; lightened to clear 4.5:1 on bg and surface. */
   --bear-accent: #4da0da;
   /* #dc322f upstream; lightened to clear 4.5:1 on bg and surface. */
@@ -684,6 +817,20 @@
   --bear-shadow: transparent;
   --bear-tag-fill: #4a3d00;
   --bear-tag-fill-strong: #6b5800;
+  /*
+   * The syntax palette, overridden rather than interpolated. This theme's
+   * surface is pure black, and the shared dark palette's saturated hues do not
+   * clear 4.5:1 against it — on the one theme whose entire purpose is
+   * contrast. These are bright and low-saturation on purpose, closer to the
+   * `accent`/`text` family than to a conventional syntax scheme, and that is
+   * the right trade here.
+   */
+  --bear-code-keyword: #ffd400;
+  --bear-code-string: #7dffb0;
+  --bear-code-number: #ffb3a7;
+  --bear-code-comment: #b8b8b8;
+  --bear-code-function: #8ecfff;
+  --bear-code-type: #d6b3ff;
   /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
      not repeated here; these four are the `==`-less `<mark class="hl-*">`
      colours. Translucent over the page rather than opaque, the same trick

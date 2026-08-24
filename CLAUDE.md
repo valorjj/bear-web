@@ -45,11 +45,11 @@ feature and is not yet scheduled.
 | B2 drag-to-reorder headings                                       | queued   |
 | D1 server: hosting, accounts, Google login                        | complete |
 | D2 server: the sync protocol                                      | complete |
-| C code block language + highlighting                              | queued   |
+| C code block language + highlighting                              | complete |
 | M9b callout blocks                                                | deferred |
 
-1472 unit tests (plus 84 server tests, 55 of which are integration tests that
-skip when `TEST_DATABASE_URL` is unset), 100 end-to-end tests. `main` is
+1614 unit tests (plus 84 server tests, 55 of which are integration tests that
+skip when `TEST_DATABASE_URL` is unset), 107 end-to-end tests. `main` is
 always green and auto-deploys.
 
 **D reverses the "no backend, no account" premise above.** D1 shipped
@@ -110,10 +110,11 @@ count, because they assert nothing.** Both drive the fixed corpus in
 
 - `npm run shots` → `e2e/shots.spec.ts` writes design reference screenshots to
   `docs/design/shots/` (gitignored) — three panes, search, trash, the empty
-  state, a folded heading-dense note, the open note-list options menu and the
-  exported document, **in every theme in the roster** (12 shots × 16 themes =
-  192 files, and roughly three times the runtime it had at five). The theme
-  list is derived from `themes.ts` by a regex requiring `id`, `labelKey` and
+  state, a folded heading-dense note, the open note-list options menu, a
+  three-language code note (one unregistered language, to keep the plain-
+  render fallback visible) and the exported document, **in every theme in the
+  roster** (13 shots × 16 themes = 208 files, up from 192 when C added its own
+  shot). The theme list is derived from `themes.ts` by a regex requiring `id`, `labelKey` and
   `group` on ONE line in that order — a Prettier reflow would make it match
   nothing, and an empty list renders the default theme sixteen times with no
   error. Count the files, do not trust the exit code.
@@ -370,6 +371,44 @@ dev` stuck on "loading" forever while the production build and all six gates
   plist, cron entry or systemd-alike pointing there fails `ENOENT` after the
   shell that made it exits. Use `~/.local/share/fnm/aliases/default/bin/node`,
   the stable symlink `fnm default <version>` retargets.
+
+- **An unmapped `.hljs-*` class renders as plain, uncoloured text with no
+  error anywhere.** `highlightClasses.ts`'s `ROLE_CLASSES` (and
+  `KNOWN_FLATTENED_COLLISIONS` for a class carrying two roles at once) is the
+  only thing standing between a highlight.js scope and a colour; a class not
+  listed there simply matches no CSS rule and the text renders in the
+  surrounding text colour. Nothing crashes, nothing logs, and the unit suite
+  passes — this is exactly the shape of failure `scripts/contrast.ts`'s
+  `parseColour` had for `oklab()`, and it is why the enumeration test in
+  `highlightClasses.test.ts` fails BY NAME on a corpus-produced combination
+  with no matching rule, rather than the guard silently passing.
+
+- **The editor FLATTENS a code block's highlight classes onto one span per
+  leaf; export NESTS them as real elements — so equal-specificity CSS rules
+  resolve differently between the two paths for the same source.**
+  `@tiptap/extension-code-block-lowlight`'s decoration plugin concatenates
+  every ancestor scope's class onto a leaf's single `<span>`
+  (`class="hljs-title class_"`); `src/features/export/html.ts`'s
+  `highlightCodeBlocks` re-highlights from the same lowlight instance but
+  produces genuine nested parent/child elements the way hast output normally
+  does. On the flattened span, two single-class rules of equal specificity
+  are decided by which role's CSS block sits later in the stylesheet; on the
+  nested markup, the innermost element simply wins by DOM structure.
+  `KNOWN_FLATTENED_COLLISIONS` plus its mirrored compound selectors in both
+  `editor.css` and the export stylesheet exist so the two paths agree despite
+  this — see `docs/rulings/markdown-and-schema.md`.
+
+- **`CodeBlockLowlight` applies its `.hljs-*` classes as ProseMirror
+  DECORATIONS, which live in the `EditorView` and are never part of the
+  document `DOMSerializer` walks.** Exporting a note by serializing the
+  document therefore produces `<pre><code>` with the raw text and ZERO
+  highlight classes — a stylesheet with every `.hljs-*` rule correctly
+  defined, applied to nothing. `src/features/export/html.ts` cannot inherit
+  highlighting "for free" the way it inherits everything else about the
+  rendered document; it re-highlights every `pre > code` itself
+  (`highlightCodeBlocks`) using the same lowlight instance the editor uses
+  (declining, not guessing — see the lowlight-registries ruling), specifically
+  because decorations are a view-layer concept with no serialized form.
 
 ## Architecture boundaries
 

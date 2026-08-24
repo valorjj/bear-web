@@ -1,7 +1,7 @@
 import { getSchema } from '@tiptap/core';
 import { DOMSerializer, Node as ProseMirrorNode } from '@tiptap/pm/model';
 
-import { editorExtensions, parseMarkdown } from '@/features/editor';
+import { editorExtensions, lowlight, parseMarkdown } from '@/features/editor';
 
 /** Just enough of a note to render it. */
 export interface RenderableNote {
@@ -33,6 +33,12 @@ export const EXPORT_TOKEN_NAMES = [
   '--bear-hl-green',
   '--bear-hl-pink',
   '--bear-hl-purple',
+  '--bear-code-keyword',
+  '--bear-code-string',
+  '--bear-code-number',
+  '--bear-code-comment',
+  '--bear-code-function',
+  '--bear-code-type',
   '--bear-radius-sm',
   '--bear-radius-md',
   '--bear-font-sans',
@@ -74,6 +80,15 @@ const FALLBACKS: Record<ExportTokenName, string> = {
   '--bear-hl-green': 'buttonface',
   '--bear-hl-pink': 'buttonface',
   '--bear-hl-purple': 'buttonface',
+  // The same degradation as the four highlight tints above and for the same
+  // reason: no system colour names a syntax role, so a renamed token reads as
+  // plain legible code rather than as a guessed palette.
+  '--bear-code-keyword': 'canvastext',
+  '--bear-code-string': 'canvastext',
+  '--bear-code-number': 'canvastext',
+  '--bear-code-comment': 'canvastext',
+  '--bear-code-function': 'canvastext',
+  '--bear-code-type': 'canvastext',
   '--bear-radius-sm': '4px',
   '--bear-radius-md': '6px',
   '--bear-font-sans': 'system-ui, sans-serif',
@@ -96,6 +111,83 @@ export function readExportTokens(root: Element): Record<string, string> {
   }
 
   return out;
+}
+
+/**
+ * Just enough of lowlight's hast output to walk it. `CodeBlockLowlight`
+ * applies its `.hljs-*` classes as ProseMirror decorations, which live
+ * outside the document and are never part of what `DOMSerializer` produces —
+ * so a static export has NONE of them unless this file re-highlights the
+ * code itself. This mirrors the walk `@tiptap/extension-code-block-lowlight`
+ * does internally to build its decorations, but builds real DOM nodes
+ * instead of decoration ranges.
+ */
+interface HastTextNode {
+  type: 'text';
+  value: string;
+}
+
+interface HastElementNode {
+  type: 'element';
+  tagName: string;
+  properties?: { className?: readonly string[] };
+  children: readonly HastChildNode[];
+}
+
+type HastChildNode = HastTextNode | HastElementNode;
+
+function appendHastChildren(
+  children: readonly HastChildNode[],
+  parent: Element,
+  doc: Document,
+): void {
+  for (const child of children) {
+    if (child.type === 'text') {
+      parent.append(doc.createTextNode(child.value));
+      continue;
+    }
+
+    const element = doc.createElement(child.tagName);
+    const classNames = child.properties?.className;
+    if (classNames && classNames.length > 0) {
+      element.className = classNames.join(' ');
+    }
+    appendHastChildren(child.children, element, doc);
+    parent.append(element);
+  }
+}
+
+const LANGUAGE_CLASS_PREFIX = 'language-';
+
+/**
+ * Re-highlights every fenced code block under `host`, replacing its plain
+ * text with the same `.hljs-*` spans the editor shows — see the note on
+ * `HastChildNode` above for why this cannot be inherited from the document.
+ *
+ * Deliberately does NOT fall back to `lowlight.highlightAuto` for a fence
+ * with no language, or one naming a language this editor does not register.
+ * `codeLanguages.ts`'s `resolveLanguage` is explicit that an unknown language
+ * "renders unhighlighted and keeps its fence text verbatim, and guessing
+ * would silently rewrite the user's document" -- an export that guessed
+ * would colour a block of plain prose as if it were code, which is not a
+ * faithful rendering of what the user was looking at. Left untouched, such a
+ * block keeps its plain `pre code` text exactly as `renderNoteBody` produced
+ * it.
+ */
+function highlightCodeBlocks(host: Element, doc: Document): void {
+  for (const code of host.querySelectorAll('pre > code')) {
+    const languageClass = [...code.classList].find((name) =>
+      name.startsWith(LANGUAGE_CLASS_PREFIX),
+    );
+    const language = languageClass?.slice(LANGUAGE_CLASS_PREFIX.length);
+    if (!language || !lowlight.registered(language)) continue;
+
+    const text = code.textContent ?? '';
+    const tree = lowlight.highlight(language, text) as { children: readonly HastChildNode[] };
+
+    code.replaceChildren();
+    appendHastChildren(tree.children, code, doc);
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -130,6 +222,7 @@ export function renderNoteBody(text: string): string {
 
   const host = document.createElement('div');
   host.append(fragment);
+  highlightCodeBlocks(host, document);
   return host.innerHTML;
 }
 
@@ -305,6 +398,138 @@ ${declarations}
       border-radius: 0;
       padding: 0;
       font-size: inherit;
+    }
+
+    /*
+     * Syntax highlighting. One selector per role, listing the classes that
+     * role claims -- kept in step with
+     * src/features/editor/highlightClasses.ts's ROLE_CLASSES and with the
+     * .hljs-* rules in src/styles/editor.css. Nothing enforces the three
+     * agree; a class added to one and not the others is a defect, checked by
+     * hand rather than by a test.
+     */
+    .hljs-keyword,
+    .hljs-literal,
+    .hljs-built_in,
+    .hljs-selector-tag {
+      color: var(--bear-code-keyword);
+    }
+
+    .hljs-string,
+    .hljs-regexp,
+    .hljs-char,
+    .hljs-meta-string {
+      color: var(--bear-code-string);
+    }
+
+    .hljs-number,
+    .hljs-symbol {
+      color: var(--bear-code-number);
+    }
+
+    .hljs-comment,
+    .hljs-quote {
+      color: var(--bear-code-comment);
+    }
+
+    .hljs-title,
+    .hljs-section,
+    .hljs-function,
+    .function_ {
+      color: var(--bear-code-function);
+    }
+
+    .hljs-type,
+    .hljs-attr,
+    .hljs-attribute,
+    .hljs-tag,
+    .hljs-name,
+    .hljs-selector-class,
+    .class_,
+    .inherited__ {
+      color: var(--bear-code-type);
+    }
+
+    /*
+     * class_ (a class name) and inherited__ (the parent named in an extends
+     * clause) land on the SAME span as hljs-title in java/javascript/
+     * typescript/kotlin/python's class declarations. Stylesheet order, not
+     * class-attribute order, decides the cascade between equal-specificity
+     * selectors, so a two-class compound selector is needed to make this role
+     * win deterministically rather than by which block sits later. Mirrors
+     * the compound selector in src/styles/editor.css exactly.
+     */
+    .hljs-title.class_,
+    .hljs-title.inherited__ {
+      color: var(--bear-code-type);
+    }
+
+    /*
+     * Two more flattening collisions, found by an empirical sweep of all
+     * twelve grammars and mirrored from src/styles/editor.css -- see that
+     * file's comment above the same two rules for the full reasoning. An
+     * xml/html/svg/xhtml attribute value or a number substituted into a
+     * template-literal string never actually gets BOTH classes on one
+     * exported element (lowlight nests them as separate elements, so this
+     * stylesheet never needs to break the tie on export's own DOM), but the
+     * rule is kept here anyway so the three class lists this file, editor.css
+     * and highlightClasses.ts carry stay identical rather than silently
+     * diverging on an entry that happens not to be load-bearing today.
+     */
+    .hljs-tag.hljs-string {
+      color: var(--bear-code-string);
+    }
+
+    .hljs-string.hljs-number {
+      color: var(--bear-code-number);
+    }
+
+    /*
+     * Three more, found in Kotlin by a mechanical sweep and mirrored from
+     * src/styles/editor.css -- see that file's comment above the same three
+     * rules. Kept here for the same reason as the two above: export's real
+     * nested markup never combines these classes on one element, so none of
+     * the three is load-bearing today, but the three class lists this file,
+     * editor.css and highlightClasses.ts carry must stay identical.
+     */
+    .hljs-function.hljs-keyword {
+      color: var(--bear-code-keyword);
+    }
+
+    .hljs-function.hljs-type {
+      color: var(--bear-code-type);
+    }
+
+    .hljs-function.hljs-number {
+      color: var(--bear-code-number);
+    }
+
+    /*
+     * A fourth, mirrored from src/styles/editor.css: a parameter's string
+     * default value, exactly as inside hljs-function as its numeric
+     * counterpart.
+     */
+    .hljs-function.hljs-string {
+      color: var(--bear-code-string);
+    }
+
+    /*
+     * A fifth, mirrored from src/styles/editor.css: a parameter's boolean
+     * (or null) default value.
+     */
+    .hljs-function.hljs-literal {
+      color: var(--bear-code-keyword);
+    }
+
+    /*
+     * A sixth, mirrored from src/styles/editor.css: Kotlin's reified
+     * modifier inside a generic type parameter list, nested in a function
+     * signature. A three-class compound selector, not two -- see that
+     * file's comment above the same rule for why. (No backticks in this
+     * comment: it lives inside a template literal.)
+     */
+    .hljs-function.hljs-type.hljs-keyword {
+      color: var(--bear-code-keyword);
     }
 
     /* Real tables since M8b; before that a table exported as a block of pipes. */

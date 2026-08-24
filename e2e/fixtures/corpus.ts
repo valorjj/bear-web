@@ -145,6 +145,43 @@ const PLAIN_NOTE = `Groceries
 milk, bread, coffee beans, a lemon
 `;
 
+/**
+ * Three fenced blocks in three languages, one of which the roster does not
+ * recognise. This is C's own shot: it exists so every theme's syntax palette
+ * — six roles, twelve grammars, and the plain-unhighlighted fallback — has one
+ * screen where all of it is visible at once, rather than only the single `ts`
+ * fence `n-code` above has carried since before C shipped.
+ */
+const SYNTAX_NOTE = `# Highlighting three languages
+
+Python for keywords, strings and numbers; SQL for a different keyword set and
+a comment; and \`rust\`, which this app does not register, so it must render
+as plain, unhighlighted text with its fence intact. #dev
+
+\`\`\`python
+def greet(name: str, times: int = 1) -> None:
+    # Repeat the greeting.
+    for i in range(times):
+        print(f"Hello, {name}!")
+\`\`\`
+
+\`\`\`sql
+-- Top five by revenue.
+SELECT customer_id, SUM(amount) AS total
+FROM orders
+WHERE amount > 0
+GROUP BY customer_id
+ORDER BY total DESC
+LIMIT 5;
+\`\`\`
+
+\`\`\`rust
+fn main() {
+    println!("unregistered language, unhighlighted");
+}
+\`\`\`
+`;
+
 const PERSONAL_NOTE = `Bookshelf
 
 Currently reading two at once, which never works. #personal
@@ -221,6 +258,16 @@ export const CORPUS: Corpus = {
       text: CODE_NOTE,
       createdAt: ago(7 * DAY),
       updatedAt: ago(6 * DAY),
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    },
+    {
+      id: 'n-syntax',
+      title: 'Highlighting three languages',
+      text: SYNTAX_NOTE,
+      createdAt: ago(6 * DAY),
+      updatedAt: ago(4 * HOUR),
       pinned: false,
       trashedAt: null,
       archivedAt: null,
