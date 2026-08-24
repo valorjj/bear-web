@@ -2,6 +2,7 @@ export { RichEditor } from './RichEditor';
 export type { RichEditorHandle, RichEditorProps } from './RichEditor';
 export { EMPTY_DOCUMENT_MARKDOWN, normalizeMarkdown, parseMarkdown } from './markdown';
 export { editorExtensions } from './extensions';
+export { lowlight } from './lowlight';
 export { foldedKeys } from './HeadingFold';
 export { headingSections } from './headingSections';
 export { BottomToolbar } from './BottomToolbar';

@@ -1,7 +1,7 @@
 import { getSchema } from '@tiptap/core';
 import { DOMSerializer, Node as ProseMirrorNode } from '@tiptap/pm/model';
 
-import { editorExtensions, parseMarkdown } from '@/features/editor';
+import { editorExtensions, lowlight, parseMarkdown } from '@/features/editor';
 
 /** Just enough of a note to render it. */
 export interface RenderableNote {
@@ -33,6 +33,12 @@ export const EXPORT_TOKEN_NAMES = [
   '--bear-hl-green',
   '--bear-hl-pink',
   '--bear-hl-purple',
+  '--bear-code-keyword',
+  '--bear-code-string',
+  '--bear-code-number',
+  '--bear-code-comment',
+  '--bear-code-function',
+  '--bear-code-type',
   '--bear-radius-sm',
   '--bear-radius-md',
   '--bear-font-sans',
@@ -74,6 +80,15 @@ const FALLBACKS: Record<ExportTokenName, string> = {
   '--bear-hl-green': 'buttonface',
   '--bear-hl-pink': 'buttonface',
   '--bear-hl-purple': 'buttonface',
+  // The same degradation as the four highlight tints above and for the same
+  // reason: no system colour names a syntax role, so a renamed token reads as
+  // plain legible code rather than as a guessed palette.
+  '--bear-code-keyword': 'canvastext',
+  '--bear-code-string': 'canvastext',
+  '--bear-code-number': 'canvastext',
+  '--bear-code-comment': 'canvastext',
+  '--bear-code-function': 'canvastext',
+  '--bear-code-type': 'canvastext',
   '--bear-radius-sm': '4px',
   '--bear-radius-md': '6px',
   '--bear-font-sans': 'system-ui, sans-serif',
@@ -96,6 +111,76 @@ export function readExportTokens(root: Element): Record<string, string> {
   }
 
   return out;
+}
+
+/**
+ * Just enough of lowlight's hast output to walk it. `CodeBlockLowlight`
+ * applies its `.hljs-*` classes as ProseMirror decorations, which live
+ * outside the document and are never part of what `DOMSerializer` produces —
+ * so a static export has NONE of them unless this file re-highlights the
+ * code itself. This mirrors the walk `@tiptap/extension-code-block-lowlight`
+ * does internally to build its decorations, but builds real DOM nodes
+ * instead of decoration ranges.
+ */
+interface HastTextNode {
+  type: 'text';
+  value: string;
+}
+
+interface HastElementNode {
+  type: 'element';
+  tagName: string;
+  properties?: { className?: readonly string[] };
+  children: readonly HastChildNode[];
+}
+
+type HastChildNode = HastTextNode | HastElementNode;
+
+function appendHastChildren(
+  children: readonly HastChildNode[],
+  parent: Element,
+  doc: Document,
+): void {
+  for (const child of children) {
+    if (child.type === 'text') {
+      parent.append(doc.createTextNode(child.value));
+      continue;
+    }
+
+    const element = doc.createElement(child.tagName);
+    const classNames = child.properties?.className;
+    if (classNames && classNames.length > 0) {
+      element.className = classNames.join(' ');
+    }
+    appendHastChildren(child.children, element, doc);
+    parent.append(element);
+  }
+}
+
+const LANGUAGE_CLASS_PREFIX = 'language-';
+
+/**
+ * Re-highlights every fenced code block under `host`, replacing its plain
+ * text with the same `.hljs-*` spans the editor shows — see the note on
+ * `HastChildNode` above for why this cannot be inherited from the document.
+ */
+function highlightCodeBlocks(host: Element, doc: Document): void {
+  for (const code of host.querySelectorAll('pre > code')) {
+    const languageClass = [...code.classList].find((name) =>
+      name.startsWith(LANGUAGE_CLASS_PREFIX),
+    );
+    const language = languageClass?.slice(LANGUAGE_CLASS_PREFIX.length);
+    const text = code.textContent ?? '';
+
+    const tree = (
+      language && lowlight.registered(language)
+        ? lowlight.highlight(language, text)
+        : lowlight.highlightAuto(text)
+    ) as { children: readonly HastChildNode[] };
+
+    code.replaceChildren();
+    appendHastChildren(tree.children, code, doc);
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -130,6 +215,7 @@ export function renderNoteBody(text: string): string {
 
   const host = document.createElement('div');
   host.append(fragment);
+  highlightCodeBlocks(host, document);
   return host.innerHTML;
 }
 
@@ -305,6 +391,70 @@ ${declarations}
       border-radius: 0;
       padding: 0;
       font-size: inherit;
+    }
+
+    /*
+     * Syntax highlighting. One selector per role, listing the classes that
+     * role claims -- kept in step with
+     * src/features/editor/highlightClasses.ts's ROLE_CLASSES and with the
+     * .hljs-* rules in src/styles/editor.css. Nothing enforces the three
+     * agree; a class added to one and not the others is a defect, checked by
+     * hand rather than by a test.
+     */
+    .hljs-keyword,
+    .hljs-literal,
+    .hljs-built_in,
+    .hljs-selector-tag {
+      color: var(--bear-code-keyword);
+    }
+
+    .hljs-string,
+    .hljs-regexp,
+    .hljs-char,
+    .hljs-meta-string {
+      color: var(--bear-code-string);
+    }
+
+    .hljs-number,
+    .hljs-symbol {
+      color: var(--bear-code-number);
+    }
+
+    .hljs-comment,
+    .hljs-quote {
+      color: var(--bear-code-comment);
+    }
+
+    .hljs-title,
+    .hljs-section,
+    .hljs-function,
+    .function_ {
+      color: var(--bear-code-function);
+    }
+
+    .hljs-type,
+    .hljs-attr,
+    .hljs-attribute,
+    .hljs-tag,
+    .hljs-name,
+    .hljs-selector-class,
+    .class_,
+    .inherited__ {
+      color: var(--bear-code-type);
+    }
+
+    /*
+     * class_ (a class name) and inherited__ (the parent named in an extends
+     * clause) land on the SAME span as hljs-title in java/javascript/
+     * typescript/kotlin/python's class declarations. Stylesheet order, not
+     * class-attribute order, decides the cascade between equal-specificity
+     * selectors, so a two-class compound selector is needed to make this role
+     * win deterministically rather than by which block sits later. Mirrors
+     * the compound selector in src/styles/editor.css exactly.
+     */
+    .hljs-title.class_,
+    .hljs-title.inherited__ {
+      color: var(--bear-code-type);
     }
 
     /* Real tables since M8b; before that a table exported as a block of pipes. */

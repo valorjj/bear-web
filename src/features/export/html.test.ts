@@ -101,6 +101,33 @@ describe('renderNoteHtml', () => {
     expect(html).toContain('data-raw-block="');
     expect(html).toContain('&lt;aside&gt;note&lt;/aside&gt;');
   });
+
+  it('carries the six syntax tokens into the exported stylesheet', () => {
+    const html = renderNoteHtml(note, tokens);
+
+    for (const role of ['keyword', 'string', 'number', 'comment', 'function', 'type']) {
+      expect(html).toContain(`--bear-code-${role}`);
+    }
+  });
+
+  it('colours highlighted code in the export, not just in the editor', () => {
+    const code = '```ts\nconst x = 1;\n```\n';
+    const html = renderNoteHtml({ ...note, text: code }, tokens);
+
+    expect(html).toContain('hljs-keyword');
+    expect(html).toMatch(/\.hljs-keyword[^{]*\{[^}]*--bear-code-keyword/);
+  });
+
+  it('gives a class name in an extends clause the type colour, not the function colour', () => {
+    // `hljs-title` alone is the function role; paired with `class_`/`inherited__`
+    // on the same span it means a class name instead — the compound-selector
+    // collision `editor.css` resolves and this stylesheet must reproduce.
+    const code = '```ts\nclass Foo extends Bar {}\n```\n';
+    const html = renderNoteHtml({ ...note, text: code }, tokens);
+
+    expect(html).toContain('class_');
+    expect(html).toMatch(/\.hljs-title\.class_[^{]*\{[^}]*--bear-code-type/);
+  });
 });
 
 describe('readExportTokens', () => {
