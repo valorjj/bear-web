@@ -346,7 +346,28 @@
 .ProseMirror pre .hljs-tag,
 .ProseMirror pre .hljs-name,
 .ProseMirror pre .hljs-selector-class,
-.ProseMirror pre .class_ {
+.ProseMirror pre .class_,
+.ProseMirror pre .inherited__ {
+  color: var(--bear-code-type);
+}
+
+/*
+ * `class_` (a class name) and `inherited__` (the parent named in an
+ * `extends`/inheritance clause) land on the SAME span as `hljs-title` in
+ * java/javascript/typescript/kotlin/python's class declarations —
+ * `hljs-title` alone is the `function` role above, but paired with either of
+ * these it means a class name, not a function name. Per this project's rule
+ * that stylesheet order, not class-attribute order, decides the cascade
+ * between equal-specificity selectors, a single-class `.hljs-title` rule and
+ * a single-class `.class_` rule would leave the winner decided by which
+ * block happens to sit later in this file — reordering the six blocks above,
+ * or inserting a new one between them, would silently flip this element's
+ * colour with no test failure. A two-class compound selector outranks a
+ * single-class one regardless of source order, so this rule wins
+ * deterministically rather than by file position.
+ */
+.ProseMirror pre .hljs-title.class_,
+.ProseMirror pre .hljs-title.inherited__ {
   color: var(--bear-code-type);
 }
 

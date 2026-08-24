@@ -22,6 +22,13 @@ export const ROLE_CLASSES = {
   // bare (no `hljs-` prefix) second class on the same span. They carry the
   // function/class-name meaning `hljs-title` alone does not distinguish.
   function: ['hljs-title', 'hljs-section', 'hljs-function', 'function_'],
+  // `inherited__` is highlight.js's class for the parent named in an
+  // `extends`/inheritance clause (`title.class.inherited`, e.g. the `B` in
+  // `class A extends B`). It is a type/class reference, same as `class_` —
+  // and empirically it always co-occurs with BOTH `hljs-title` and `class_`
+  // on one span, which is exactly the ['hljs-title', 'class_'] conflict
+  // `editor.css`'s `.hljs-title.class_` compound selector exists to resolve
+  // in favour of this role.
   type: [
     'hljs-type',
     'hljs-attr',
@@ -30,6 +37,7 @@ export const ROLE_CLASSES = {
     'hljs-name',
     'hljs-selector-class',
     'class_',
+    'inherited__',
   ],
 } as const satisfies Record<string, readonly string[]>;
 

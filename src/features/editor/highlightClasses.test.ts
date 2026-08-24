@@ -4,19 +4,29 @@ import { CODE_LANGUAGES } from './codeLanguages';
 import { INHERITS_TEXT, MAPPED_HLJS_CLASSES } from './highlightClasses';
 import { lowlight } from './lowlight';
 
-/** A snippet per language, chosen to exercise keywords, strings, numbers,
- *  comments, function names and type/attribute positions. */
+/**
+ * A snippet per language, chosen to exercise keywords, strings, numbers,
+ * comments, function names and type/attribute positions.
+ *
+ * The five class-supporting languages (java, javascript, typescript, kotlin,
+ * python) each also carry an `extends`/inheritance form. highlight.js gives
+ * the extended class name its OWN scope distinct from the class being
+ * declared (`title.class.inherited`, emitted as the class `inherited__`, in
+ * javascript/python/typescript's grammars) — a sample with only a plain
+ * `class A { ... }` never exercises that scope, and the empirical sweep
+ * cannot report what it never sees.
+ */
 const SAMPLES: Record<string, string> = {
   bash: '# note\nfoo() { echo "hi" 42; }',
   css: '/* note */\n.a { color: #fff; width: 42px; }',
-  java: '// note\nclass A { int f() { return 42; } }',
-  javascript: '// note\nfunction f(a) { return "s" + 42; }',
+  java: '// note\nclass A extends B { int f() { return 42; } }',
+  javascript: '// note\nfunction f(a) { return "s" + 42; }\nclass A extends B {}',
   json: '{ "a": 42, "b": "s", "c": true }',
-  kotlin: '// note\nfun f(a: Int): String = "s"',
+  kotlin: '// note\nclass A : B() { fun f(a: Int): String = "s" }',
   markdown: '# Title\n\n**bold** and `code`',
-  python: '# note\ndef f(a: int) -> str:\n    return "s"',
+  python: '# note\ndef f(a: int) -> str:\n    return "s"\n\nclass A(B):\n    pass',
   sql: '-- note\nSELECT a FROM t WHERE b = 42;',
-  typescript: '// note\nfunction f(a: number): string { return "s"; }',
+  typescript: '// note\nfunction f(a: number): string { return "s"; }\nclass A extends B {}',
   xml: '<!-- note --><a href="x">y</a>',
   yaml: '# note\na: 42\nb: "s"',
 };

@@ -88,3 +88,56 @@ test.describe('the syntax palette', () => {
     }
   });
 });
+
+test.describe('the class/function role conflict', () => {
+  // Task 4's review, round 1: highlight.js puts BOTH `hljs-title` (the
+  // `function` role) and `class_` (the `type` role) on one span for a class
+  // name, and `title.class.inherited__` adds a third class, `inherited__`
+  // (also `type`), for the parent named in an `extends` clause. Single-class
+  // selectors alone would leave the winner decided by which of
+  // `editor.css`'s six blocks happens to sit later in the file — this test
+  // is the OUTCOME check the class-set guard in `highlightClasses.test.ts`
+  // cannot provide: it renders real code in the real editor and asserts
+  // which colour actually painted, pinning `type` against `function` rather
+  // than trusting that a compound selector was written correctly.
+  test('a class name wins --bear-code-type over --bear-code-function, and a function name still gets --bear-code-function', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.locator('section[aria-label]')).toHaveCount(3);
+
+    // Fixes the theme so the resolved tokens below are deterministic.
+    const tokens = await readThemeTokens(page, 'paper', ['code-type', 'code-function']);
+
+    await page.getByRole('button', { name: 'New note' }).click();
+    const editor = page.getByRole('textbox', { name: 'Note text' });
+    await editor.click();
+
+    // The ``` + language + Enter sequence is CodeBlockLowlight's own input
+    // rule — the same mechanism `notes.spec.ts`'s task-list test exercises —
+    // so this is real Markdown input, not a programmatic node insertion.
+    // `class A extends B` puts `hljs-title` + `class_` + `inherited__` on
+    // `B` and `hljs-title` + `class_` (no `inherited__`) on `A`; `function f`
+    // puts `hljs-title` + `function_` on `f`, with no conflicting class.
+    await page.keyboard.type('```typescript\n');
+    await page.keyboard.type('function f() {}\n');
+    await page.keyboard.type('class A extends B {}');
+
+    const className = editor.locator('.hljs-title.class_', { hasText: 'A' }).first();
+    const functionName = editor.locator('.hljs-title.function_', { hasText: 'f' }).first();
+    await expect(className).toBeVisible();
+    await expect(functionName).toBeVisible();
+
+    const [classColour, functionColour] = await Promise.all([
+      className.evaluate((el) => getComputedStyle(el).color),
+      functionName.evaluate((el) => getComputedStyle(el).color),
+    ]);
+
+    expect(classColour).toBe(tokens['code-type']);
+    expect(functionColour).toBe(tokens['code-function']);
+    // The two roles must actually differ, or the assertions above could both
+    // pass by coincidence against a broken mapping that paints everything
+    // one colour.
+    expect(classColour).not.toBe(functionColour);
+  });
+});
