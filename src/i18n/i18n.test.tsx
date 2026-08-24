@@ -44,7 +44,20 @@ describe('translation bundles', () => {
     //   `HTML` is not written `에이치티엠엘`. `export.markdown` is NOT here,
     //   because Korean does render that as 마크다운 — so the list stays a list of
     //   deliberate exceptions rather than a blanket exemption for the group.
-    const ALLOWED_IDENTICAL = ['app.name', 'export.html', 'export.pdf'];
+    // - Every `theme.*` key is a THEME NAME, and a name is not translated. Half
+    //   the roster is a borrowed proper noun (Nord, Dracula, Solarized, Gruvbox,
+    //   Tokyo Night, Latte) whose transliteration — 노르드, 드라큘라 — names
+    //   nothing a reader can look up, and a picker that mixed 그루브박스 라이트
+    //   with Nord would be worse than one that mixes neither. The descriptive
+    //   ones (Paper, Ink, Snow, Sepia, High Contrast) go with them so the group
+    //   stays internally consistent; splitting it by etymology is a judgement
+    //   nobody can apply again later without re-deciding it.
+    const ALLOWED_IDENTICAL = [
+      'app.name',
+      'export.html',
+      'export.pdf',
+      ...Object.keys(en).filter((key) => key.startsWith('theme.')),
+    ];
 
     const identical = Object.keys(en).filter(
       (key) => ko[key as keyof typeof ko] === en[key as keyof typeof en],
