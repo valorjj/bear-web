@@ -259,6 +259,104 @@ test('a keyboard-only user can choose a code block language', async ({ page }) =
   expect(focusedAfterChoice).toBe(true);
 });
 
+test('arrowing to the last code language option scrolls it into view', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Title');
+  await expect(editor).toContainText('Title');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('```');
+  await page.keyboard.press('Enter');
+
+  const trigger = page.locator('[data-code-language="trigger"]');
+  await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+  const list = page.locator('[data-code-language="list"]');
+  // A single ArrowDown does not exercise the bug this test exists to catch:
+  // measured in a real browser, the active option went invisible starting
+  // around the 8th of thirteen rows, with `list.scrollTop` still `0` after
+  // `End`. Only a jump to the LAST row proves scrolling actually happens.
+  await page.keyboard.press('End');
+  await expect(list.locator('[role="option"].is-active')).toHaveText('YAML');
+
+  const active = page.locator('[role="option"].is-active');
+  const activeBox = await active.boundingBox();
+  const listBox = await list.boundingBox();
+  expect(activeBox).not.toBeNull();
+  expect(listBox).not.toBeNull();
+
+  // The active option's box must sit WITHIN the list's own visible box —
+  // not merely present in the DOM, which `toHaveText` above already
+  // tolerated even when it was scrolled fully out of view.
+  expect(activeBox!.y).toBeGreaterThanOrEqual(listBox!.y - 1);
+  expect(activeBox!.y + activeBox!.height).toBeLessThanOrEqual(listBox!.y + listBox!.height + 1);
+
+  const scrollTop = await list.evaluate((el) => el.scrollTop);
+  expect(scrollTop).toBeGreaterThan(0);
+});
+
+test('the code language list renders with no bullets and a real focus ring, and the active row reads distinct from hover', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Title');
+  await expect(editor).toContainText('Title');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('```');
+  await page.keyboard.press('Enter');
+
+  const trigger = page.locator('[data-code-language="trigger"]');
+  await trigger.click();
+
+  const list = page.locator('[data-code-language="list"]');
+  // Round 2 defect: `.ProseMirror ul { list-style: disc }` and its
+  // `padding-left: 1.5em` beat a bare `.bear-code-language-list` on
+  // specificity alone, rendering this widget as an indented bulleted list
+  // with no error anywhere. Fixed with a MORE SPECIFIC selector
+  // (`.ProseMirror .bear-code-language-list`), not an overriding utility.
+  const listStyle = await list.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { listStyleType: cs.listStyleType, paddingLeft: cs.paddingLeft };
+  });
+  expect(listStyle.listStyleType).toBe('none');
+  expect(listStyle.paddingLeft).toBe('0px');
+
+  // Round 2 defect: the filter input's focus ring was suppressed
+  // (`.bear-code-language-list:focus { outline: none }`) with no working
+  // replacement. The suppression is gone; the app's ordinary
+  // `:focus-visible` ring must paint on the input that actually holds focus
+  // while the popover is open.
+  const filterInput = page.locator('[data-code-language="filter"]');
+  await expect(filterInput).toBeFocused();
+  const outline = await filterInput.evaluate((el) => getComputedStyle(el).outlineStyle);
+  expect(outline).toBe('solid');
+
+  // Round 2 defect: `.is-active`'s background resolved identical to
+  // `:hover`'s, so a hovered row and the keyboard-active row were visually
+  // indistinguishable. Hover a DIFFERENT row than the active one and assert
+  // their backgrounds differ, with the active row carrying its own ring.
+  await page.locator('[data-code-language-option="css"]').hover();
+  const [activeBackground, activeShadow, hoveredBackground] = await Promise.all([
+    page
+      .locator('[role="option"].is-active')
+      .evaluate((el) => getComputedStyle(el).backgroundColor),
+    page.locator('[role="option"].is-active').evaluate((el) => getComputedStyle(el).boxShadow),
+    page
+      .locator('[data-code-language-option="css"]')
+      .evaluate((el) => getComputedStyle(el).backgroundColor),
+  ]);
+  expect(activeShadow).not.toBe('none');
+  expect(activeBackground).not.toBe(hoveredBackground);
+});
+
 test('Escape closes the code language popover and returns focus to the trigger', async ({
   page,
 }) => {

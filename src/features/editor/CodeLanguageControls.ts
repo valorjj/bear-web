@@ -47,8 +47,31 @@ function keyOf(choice: LanguageChoice): string {
   return choice.id ?? '';
 }
 
-function choices(): readonly LanguageChoice[] {
-  return [{ id: null, label: '' }, ...CODE_LANGUAGES.map((l) => ({ id: l.id, label: l.label }))];
+/**
+ * The choices offered for `fence`: "plain text", the twelve known
+ * languages, and — ONLY when `fence` names a language this editor does not
+ * know — an extra ECHO row at the front, whose id and label are the fence
+ * text verbatim.
+ *
+ * The echo row exists to close the destructive path this control would
+ * otherwise have: without it, opening the picker on a `rust` block defaults
+ * the active option to "Plain text" (index 0), and a keyboard user who opens
+ * and immediately presses Enter — a resting-position gesture, not a
+ * deliberate choice — silently clears a fence the user typed on purpose.
+ * With the echo row, opening on `rust` defaults the active option to a row
+ * that reads "rust", and re-choosing it is a no-op (see `isNoOp`), never an
+ * edit.
+ */
+function choices(fence: string | null): readonly LanguageChoice[] {
+  const base: LanguageChoice[] = [
+    { id: null, label: '' },
+    ...CODE_LANGUAGES.map((l) => ({ id: l.id, label: l.label })),
+  ];
+  const trimmed = fence?.trim() ?? '';
+  if (trimmed !== '' && resolveLanguage(fence) === null) {
+    return [{ id: trimmed, label: trimmed }, ...base];
+  }
+  return base;
 }
 
 /**
@@ -59,33 +82,75 @@ function choices(): readonly LanguageChoice[] {
  * normalizing an alias to its canonical id would silently rewrite the user's
  * file on the next autosave, exactly what `docs/rulings/notes-lifecycle.md`
  * exists to prevent. An UNKNOWN fence (`rust`) is never treated as already
- * "plain text": picking "Plain text" over it is a real edit that clears it.
+ * "plain text": picking "Plain text" over it is a real edit that clears it —
+ * but re-picking the ECHO row that reads "rust" (see `choices`) IS a no-op,
+ * because it is the same text the fence already holds.
  */
 function isNoOp(choice: LanguageChoice, fence: string | null): boolean {
   if (choice.id === null) return !fence || fence.trim() === '';
-  return resolveLanguage(fence)?.id === choice.id;
+  const resolved = resolveLanguage(fence);
+  if (resolved) return resolved.id === choice.id;
+  return fence !== null && fence.trim() === choice.id;
 }
 
 /**
- * The key of the choice that is currently IN EFFECT for `fence`, for
- * `aria-selected` purposes — distinct from `isNoOp`, which asks about a
- * hypothetical pick, and distinct from the keyboard-navigation "active"
- * choice below, which is about where the cursor sits in the list, not what
- * the document holds.
+ * The key of the choice that is currently IN EFFECT for `fence` — used both
+ * for `aria-selected` and as the default active row when the popover opens.
  *
  * Three cases: a blank fence selects "plain text" (`''`); a fence naming a
  * known language (by id or alias) selects that language's key; an UNKNOWN
- * fence (`rust`) selects nothing at all — it is neither "plain text" nor any
- * language this editor knows, and marking "Plain text" as selected over it
- * would misreport what the document holds.
+ * fence (`rust`) selects the ECHO row's key (the trimmed fence text itself,
+ * always present in `choices(fence)` for exactly this case) — never "plain
+ * text", which would misreport what the document holds and, as the default
+ * active row, would put one keystroke between the user and erasing it.
  */
-function selectedKey(fence: string | null): string | undefined {
+function selectedKey(fence: string | null): string {
   if (!fence || fence.trim() === '') return '';
-  return resolveLanguage(fence)?.id;
+  const resolved = resolveLanguage(fence);
+  return resolved ? resolved.id : fence.trim();
+}
+
+/** Sanitized for use as an HTML `id`: language ids and fence text are
+ * normally plain identifiers, but a fence is user input, and an id
+ * attribute must not contain whitespace. */
+function slug(key: string): string {
+  const cleaned = key.replace(/[^A-Za-z0-9_-]/g, '_');
+  return cleaned === '' ? 'none' : cleaned;
 }
 
 function optionId(pos: number, key: string): string {
-  return `bear-code-language-option-${pos}-${key === '' ? 'none' : key}`;
+  return `bear-code-language-option-${pos}-${slug(key)}`;
+}
+
+function listboxId(pos: number): string {
+  return `bear-code-language-listbox-${pos}`;
+}
+
+/** The widget's own elements, looked up fresh each time rather than
+ * threaded through every function individually — the DOM is the only state
+ * this plugin keeps, so reading it back is simpler than a growing parameter
+ * list, and it can never itself go stale the way a captured reference to a
+ * REPLACED node would (there are no replacements here; `renderOptions`
+ * mutates the same list in place). */
+function widgetParts(container: HTMLElement): {
+  trigger: HTMLElement | null;
+  popover: HTMLElement | null;
+  filterInput: HTMLInputElement | null;
+  list: HTMLUListElement | null;
+  emptyEl: HTMLElement | null;
+} {
+  return {
+    trigger: container.querySelector<HTMLElement>('[data-code-language="trigger"]'),
+    popover: container.querySelector<HTMLElement>('.bear-code-language-popover'),
+    filterInput: container.querySelector<HTMLInputElement>('[data-code-language="filter"]'),
+    list: container.querySelector<HTMLUListElement>('[data-code-language="list"]'),
+    emptyEl: container.querySelector<HTMLElement>('.bear-code-language-empty'),
+  };
+}
+
+/** The rendered `[role="option"]` elements, in DOM (visual) order. */
+function optionElements(list: HTMLUListElement): HTMLElement[] {
+  return [...list.querySelectorAll<HTMLElement>('[role="option"]')];
 }
 
 /**
@@ -93,40 +158,50 @@ function optionId(pos: number, key: string): string {
  * returns the key of the option that ends up ACTIVE (keyboard-highlighted),
  * or `null` if the filter matched nothing.
  *
+ * The empty state is rendered as a SIBLING of the `<ul>`, never inside it:
+ * `role="listbox"` permits only `option`/`group` children, and an `<li>`
+ * with neither role sitting inside one is an ARIA pattern violation no unit
+ * test enforces.
+ *
  * `preferredKey` wins if it survives the filter; otherwise the first match
- * wins. Passing `undefined` (opening the popover) prefers the fence's own
- * `selectedKey`; passing an explicit key (arrow-key movement) prefers that
- * exact key; the filter's own `input` handler passes `undefined` too, but
- * WITHOUT `selectedKey` winning ties, because requirement 5 wants the first
- * match after a fresh keystroke, not a resurrected stale selection — see the
- * `input` handler below, which never carries the fence's selected key
- * forward on its own.
+ * wins. Passing `undefined` (a fresh filter keystroke) deliberately does
+ * NOT fall back to the fence's own `selectedKey` — requirement 5 is that a
+ * fresh keystroke lands on the first match, never a stale or resurrected
+ * selection. Opening the popover passes `selectedKey(fence)` explicitly.
  */
 function renderOptions(
-  list: HTMLUListElement,
+  container: HTMLElement,
   labels: NonNullable<CodeLanguageControlsOptions['codeLabels']>,
   fence: string | null,
   filterText: string,
   pos: number,
   preferredKey?: string,
 ): string | null {
+  const { list, emptyEl, filterInput } = widgetParts(container);
+  if (!list) return null;
+
   list.replaceChildren();
 
   const query = filterText.trim().toLowerCase();
   const selected = selectedKey(fence);
-  const matches = choices().filter((choice) => {
+  const matches = choices(fence).filter((choice) => {
     const label = choice.id === null ? labels.none : choice.label;
     return label.toLowerCase().includes(query);
   });
 
   if (matches.length === 0) {
-    const empty = document.createElement('li');
-    empty.className = 'bear-code-language-empty';
-    empty.textContent = labels.empty;
-    list.appendChild(empty);
+    list.hidden = true;
     list.removeAttribute('aria-activedescendant');
+    filterInput?.removeAttribute('aria-activedescendant');
+    if (emptyEl) {
+      emptyEl.hidden = false;
+      emptyEl.textContent = labels.empty;
+    }
     return null;
   }
+
+  if (emptyEl) emptyEl.hidden = true;
+  list.hidden = false;
 
   const keys = matches.map(keyOf);
   const activeKey =
@@ -145,7 +220,15 @@ function renderOptions(
     list.appendChild(item);
   }
 
-  list.setAttribute('aria-activedescendant', optionId(pos, activeKey));
+  const activeId = optionId(pos, activeKey);
+  list.setAttribute('aria-activedescendant', activeId);
+  // Mirrored onto the filter input too: it is what actually holds DOM focus
+  // (see `toggle`), and `aria-activedescendant` is meaningful to assistive
+  // tech on whichever element currently has focus. `aria-controls` below
+  // ties the two together the way a combobox ties an editable field to the
+  // listbox it filters, per `docs/rulings/accessibility.md`.
+  filterInput?.setAttribute('aria-activedescendant', activeId);
+
   return activeKey;
 }
 
@@ -178,28 +261,36 @@ function controlElement(
   popover.contentEditable = 'false';
   popover.hidden = true;
 
+  const list = document.createElement('ul');
+  list.id = listboxId(pos);
+  list.setAttribute('role', 'listbox');
+  list.setAttribute('data-code-language', 'list');
+  list.className = 'bear-code-language-list';
+  // The listbox is a popup controlled by the filter input below, per the
+  // combobox pattern `docs/rulings/accessibility.md` calls for — it is
+  // never itself a separate Tab stop.
+  list.tabIndex = -1;
+
   const filterInput = document.createElement('input');
   filterInput.type = 'text';
   filterInput.className = 'bear-code-language-filter';
   filterInput.contentEditable = 'false';
   filterInput.setAttribute('data-code-language', 'filter');
   filterInput.setAttribute('aria-label', labels.filter);
+  filterInput.setAttribute('aria-controls', list.id);
   filterInput.placeholder = labels.filter;
 
-  const list = document.createElement('ul');
-  list.setAttribute('role', 'listbox');
-  list.setAttribute('data-code-language', 'list');
-  list.className = 'bear-code-language-list';
-  // The listbox itself owns focus and keyboard input; its options are never
-  // separately tabbable — that would fight the `aria-activedescendant`
-  // pattern by giving assistive tech two contradictory ideas of where focus
-  // is. See `docs/rulings/accessibility.md`.
-  list.tabIndex = -1;
+  // A SIBLING of the list, not a child of it — see `renderOptions`'s
+  // docblock for why: `role="listbox"` permits only `option`/`group`
+  // children.
+  const emptyEl = document.createElement('div');
+  emptyEl.className = 'bear-code-language-empty';
+  emptyEl.hidden = true;
 
-  popover.append(filterInput, list);
+  popover.append(filterInput, list, emptyEl);
   container.append(trigger, popover);
 
-  renderOptions(list, labels, fence, '', pos);
+  renderOptions(container, labels, fence, '', pos, selectedKey(fence));
 
   return container;
 }
@@ -302,10 +393,7 @@ export const CodeLanguageControls = Extension.create<CodeLanguageControlsOptions
               if (!filterInput) return false;
 
               const container = filterInput.closest<HTMLElement>('.bear-code-language');
-              const list = container?.querySelector<HTMLUListElement>(
-                '[data-code-language="list"]',
-              );
-              if (!container || !list) return false;
+              if (!container) return false;
 
               const pos = codeBlockPosAt(view.state);
               if (pos === null) return false;
@@ -315,7 +403,7 @@ export const CodeLanguageControls = Extension.create<CodeLanguageControlsOptions
               // No `preferredKey`: requirement 5 is that a fresh keystroke
               // lands the active option on the first match, never a stale
               // index left over from before the filter narrowed the list.
-              renderOptions(list, labels, fence, filterInput.value, pos);
+              renderOptions(container, labels, fence, filterInput.value, pos);
               return true;
             },
 
@@ -328,17 +416,24 @@ export const CodeLanguageControls = Extension.create<CodeLanguageControlsOptions
               // (Enter, and Space on keyup) fires as a native `click`, which
               // this plugin does not otherwise listen for — only `mousedown`,
               // so a real mouse click is not double-toggled by both events.
-              // Handling Enter/Space HERE, and calling `preventDefault()`, is
-              // what suppresses that synthetic click and makes this the only
-              // place the keyboard path opens or closes the popover.
+              // Handling the open keys HERE, and calling `preventDefault()`,
+              // is what suppresses that synthetic click and makes this the
+              // only place the keyboard path opens the popover. ArrowDown/Up
+              // and Home/End also open it — standard listbox-button
+              // behaviour — since the trigger only ever holds focus while
+              // the popover is closed (opening moves focus to the filter
+              // input), there is no "already open" case to disambiguate.
               const triggerEl = target?.closest<HTMLElement>('[data-code-language="trigger"]');
-              if (triggerEl && (event.key === 'Enter' || event.key === ' ')) {
+              if (
+                triggerEl &&
+                ['Enter', ' ', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)
+              ) {
                 event.preventDefault();
                 toggle(view, triggerEl, labels);
                 return true;
               }
 
-              const list = container.querySelector<HTMLUListElement>('[data-code-language="list"]');
+              const { list } = widgetParts(container);
               if (!list) return false;
 
               const isFilterInput = target?.closest('[data-code-language="filter"]') != null;
@@ -376,9 +471,11 @@ export const CodeLanguageControls = Extension.create<CodeLanguageControlsOptions
 
                 case ' ':
                   // Space must stay a literal character while the filter
-                  // input has focus — only the list's own Space activates
-                  // the highlighted option, matching how a native listbox
-                  // treats Space as "select", never "type".
+                  // input has focus — that is the DEFAULT once the popover
+                  // is open, per `toggle` below — and only activates the
+                  // highlighted option from elsewhere in the widget (there
+                  // is no other focusable elsewhere today, but the guard
+                  // documents the intent rather than relying on that).
                   if (isFilterInput) return false;
                   event.preventDefault();
                   chooseActive(view, list, labels);
@@ -387,6 +484,28 @@ export const CodeLanguageControls = Extension.create<CodeLanguageControlsOptions
                 default:
                   return false;
               }
+            },
+
+            // Tab (or a click) moving focus OUT of the widget entirely must
+            // close the popover — without this, Tabbing to the bottom
+            // toolbar left a stale open listbox in the accessibility tree,
+            // with `aria-expanded="true"` describing a control nobody could
+            // see was still claiming to be open.
+            focusout(_view, event) {
+              const target = event.target as HTMLElement | null;
+              const container = target?.closest<HTMLElement>('.bear-code-language');
+              if (!container) return false;
+
+              const { popover } = widgetParts(container);
+              if (!popover || popover.hidden) return false;
+
+              const related = (event as FocusEvent).relatedTarget as HTMLElement | null;
+              // Focus moving to another element WITHIN the widget (input <->
+              // list <-> an option) is not a dismissal.
+              if (related && container.contains(related)) return false;
+
+              close(container, { returnFocus: false });
+              return false;
             },
           },
         },
@@ -421,20 +540,27 @@ export const CodeLanguageControls = Extension.create<CodeLanguageControlsOptions
   },
 });
 
-/** The rendered `[role="option"]` elements, in DOM (visual) order. */
-function optionElements(list: HTMLUListElement): HTMLElement[] {
-  return [...list.querySelectorAll<HTMLElement>('[role="option"]')];
-}
-
 /**
  * Moves the keyboard-active option, wrapping at both ends, and updates
- * `aria-activedescendant` plus the `.is-active` visual highlight to match.
- * Does not touch `aria-selected` — that tracks the document's actual
- * language, not where keyboard navigation happens to be standing.
+ * `aria-activedescendant` (on the list AND the filter input — see
+ * `renderOptions`) plus the `.is-active` visual highlight to match. Does not
+ * touch `aria-selected` — that tracks the document's actual language, not
+ * where keyboard navigation happens to be standing.
+ *
+ * Scrolls the new active option into view every time: `aria-activedescendant`
+ * changes what assistive tech announces, but does nothing to the viewport —
+ * past the 8th of thirteen rows the active option went fully outside the
+ * list's own `overflow-y: auto` box with no visual indication anywhere,
+ * measured in a real browser (`list.scrollTop` stayed `0` after `End`, jsdom
+ * cannot see this at all).
  */
 function moveActive(list: HTMLUListElement, direction: 'next' | 'prev' | 'first' | 'last'): void {
   const options = optionElements(list);
   if (options.length === 0) return;
+
+  const filterInput = list
+    .closest<HTMLElement>('.bear-code-language')
+    ?.querySelector<HTMLInputElement>('[data-code-language="filter"]');
 
   const currentId = list.getAttribute('aria-activedescendant');
   const currentIndex = Math.max(
@@ -462,25 +588,37 @@ function moveActive(list: HTMLUListElement, direction: 'next' | 'prev' | 'first'
   const next = options[nextIndex]!;
   next.classList.add('is-active');
   list.setAttribute('aria-activedescendant', next.id);
+  filterInput?.setAttribute('aria-activedescendant', next.id);
+  next.scrollIntoView({ block: 'nearest' });
 }
 
-/** Opens or closes the popover attached to `trigger`, focusing the list on
- * open — per `docs/rulings/accessibility.md`, the listbox itself owns
- * keyboard focus rather than any of its options — and re-rendering its
- * options against the block's current fence, so a stale list from a
- * previous open never lingers. */
+/**
+ * Opens or closes the popover attached to `trigger`.
+ *
+ * Opening focuses the FILTER INPUT, not the list: a keyboard user has to be
+ * able to type a language name the moment the popover appears, and DOM
+ * order alone (input before list) only made that reachable via Shift+Tab.
+ * Arrow keys, Home/End, Enter and Space are all handled by delegated
+ * `keydown` regardless of which of the two currently holds focus, so this
+ * matches the standard combobox-with-listbox-popup pattern: an editable
+ * field that filters, with the popup listbox as its passive companion.
+ *
+ * Also re-renders the options against the block's current fence, so a
+ * stale list from a previous open never lingers, and seeds the active row
+ * on the block's CURRENT language — the echo row when the fence is unknown,
+ * never "plain text" by default (see `choices`/`selectedKey`).
+ */
 function toggle(
   view: EditorView,
   trigger: HTMLElement,
   labels: NonNullable<CodeLanguageControlsOptions['codeLabels']>,
 ): void {
   const container = trigger.closest<HTMLElement>('.bear-code-language');
-  const popover = container?.querySelector<HTMLElement>('.bear-code-language-popover');
-  if (!container || !popover) return;
+  if (!container) return;
+  const { popover, filterInput } = widgetParts(container);
+  if (!popover) return;
 
   if (popover.hidden) {
-    const list = container.querySelector<HTMLUListElement>('[data-code-language="list"]');
-    const filterInput = container.querySelector<HTMLInputElement>('[data-code-language="filter"]');
     const pos = codeBlockPosAt(view.state);
     const node = pos === null ? null : view.state.doc.nodeAt(pos);
     const fence = (node?.attrs.language as string | null | undefined) ?? null;
@@ -489,12 +627,9 @@ function toggle(
     popover.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');
 
-    if (list && pos !== null) {
-      // The current language wins the initial highlight, per requirement 4
-      // — a keyboard user opening the picker on a `ts` block should not have
-      // to arrow past eleven other languages to find where they started.
-      renderOptions(list, labels, fence, '', pos, selectedKey(fence));
-      list.focus();
+    if (pos !== null) {
+      renderOptions(container, labels, fence, '', pos, selectedKey(fence));
+      filterInput?.focus();
     }
   } else {
     close(container);
@@ -502,13 +637,12 @@ function toggle(
 }
 
 /** Hides the popover and, by default, returns focus to its trigger — the
- * contract Escape and a completed selection share. An outside click passes
- * `returnFocus: false`, because forcing focus back would fight wherever the
- * user actually clicked. */
+ * contract Escape and a completed selection share. An outside click or a
+ * Tab-away passes `returnFocus: false`, because forcing focus back would
+ * fight wherever the user actually sent it. */
 function close(container: HTMLElement, options: { returnFocus?: boolean } = {}): void {
   const { returnFocus = true } = options;
-  const popover = container.querySelector<HTMLElement>('.bear-code-language-popover');
-  const trigger = container.querySelector<HTMLElement>('[data-code-language="trigger"]');
+  const { popover, trigger } = widgetParts(container);
   if (popover) popover.hidden = true;
   trigger?.setAttribute('aria-expanded', 'false');
   if (returnFocus) trigger?.focus();
@@ -561,11 +695,11 @@ function choose(
     });
     view.dispatch(tr);
 
-    const triggerEl = container.querySelector<HTMLElement>('[data-code-language="trigger"]');
-    if (triggerEl) {
+    const { trigger } = widgetParts(container);
+    if (trigger) {
       const newLabel = languageLabel(choice.id) ?? labels.none;
-      triggerEl.textContent = newLabel;
-      triggerEl.setAttribute('aria-label', `${labels.trigger}: ${newLabel}`);
+      trigger.textContent = newLabel;
+      trigger.setAttribute('aria-label', `${labels.trigger}: ${newLabel}`);
     }
   }
 
@@ -573,7 +707,7 @@ function choose(
   view.focus();
 }
 
-/** `Enter`/`Space` on the list: resolves the option `aria-activedescendant`
+/** `Enter`/`Space` on the widget: resolves the option `aria-activedescendant`
  * names and applies it exactly the way a click on that option would. */
 function chooseActive(
   view: EditorView,
