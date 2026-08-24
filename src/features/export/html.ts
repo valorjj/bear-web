@@ -464,6 +464,26 @@ ${declarations}
       color: var(--bear-code-type);
     }
 
+    /*
+     * Two more flattening collisions, found by an empirical sweep of all
+     * twelve grammars and mirrored from src/styles/editor.css -- see that
+     * file's comment above the same two rules for the full reasoning. An
+     * xml/html/svg/xhtml attribute value or a number substituted into a
+     * template-literal string never actually gets BOTH classes on one
+     * exported element (lowlight nests them as separate elements, so this
+     * stylesheet never needs to break the tie on export's own DOM), but the
+     * rule is kept here anyway so the three class lists this file, editor.css
+     * and highlightClasses.ts carry stay identical rather than silently
+     * diverging on an entry that happens not to be load-bearing today.
+     */
+    .hljs-tag.hljs-string {
+      color: var(--bear-code-string);
+    }
+
+    .hljs-string.hljs-number {
+      color: var(--bear-code-number);
+    }
+
     /* Real tables since M8b; before that a table exported as a block of pipes. */
     table {
       width: 100%;

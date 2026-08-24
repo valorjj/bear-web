@@ -30,6 +30,17 @@ import { createLowlight } from 'lowlight';
  * bundler cannot statically resolve `import('highlight.js/lib/languages/' + id)`,
  * so a loop would either fail to bundle or fall back to shipping every grammar
  * highlight.js has. `extensions.test.ts` asserts this list and the roster agree.
+ *
+ * CAVEAT: this registry's OWN `highlightAuto` guesses a language, exactly
+ * like highlight.js's does -- that is what makes it correct for export
+ * (`src/features/export/html.ts`), which needs `registered()` and
+ * `highlight()` but never calls `highlightAuto` at all. It is WRONG for the
+ * editor's own decorations: `CodeBlockLowlight`'s built-in plugin falls back
+ * to `highlightAuto` whenever a fence names no language or an unregistered
+ * one, and this registry's guess would silently colour a block of plain
+ * prose as if it were code. `lowlightForEditor` below exists for exactly
+ * that consumer -- anyone reaching this export through the `@/features/editor`
+ * barrel (as `html.ts` does) should check which one they actually want.
  */
 export const lowlight = createLowlight({
   bash,

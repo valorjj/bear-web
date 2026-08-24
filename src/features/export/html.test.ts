@@ -3,6 +3,9 @@ import type { Plugin } from '@tiptap/pm/state';
 import { describe, expect, it } from 'vitest';
 
 import { editorExtensions, parseMarkdown } from '@/features/editor';
+// Raw text of the real stylesheet, not a copy: a Vite `?raw` import, so a
+// change to editor.css is what the colour-comparison tests below read.
+import EDITOR_CSS from '@/styles/editor.css?raw';
 
 import { EXPORT_TOKEN_NAMES, readExportTokens, renderNoteBody, renderNoteHtml } from './html';
 
@@ -58,6 +61,121 @@ function exportHljsClasses(markdownText: string): Set<string> {
   }
 
   return classes;
+}
+
+/**
+ * `editorHljsClasses`, but ordered and per-segment rather than flattened
+ * into a set -- a set is blind to which classes land TOGETHER on one span,
+ * which is exactly what the tag/string and string/number collisions below
+ * are about. Each entry is one decoration: its covered text and its full
+ * (possibly multi-class) `class` attribute, in document order.
+ */
+function editorDecorationSegments(markdownText: string): { text: string; classes: string }[] {
+  const editor = new Editor({ extensions: editorExtensions, content: parseMarkdown(markdownText) });
+
+  try {
+    const plugin = editor.state.plugins.find((candidate) =>
+      (candidate as Plugin & { key: string }).key.startsWith('lowlight$'),
+    );
+    if (!plugin) return [];
+
+    const decorations = plugin.getState(editor.state) as {
+      find: () => readonly { from: number; to: number; type: { attrs?: { class?: string } } }[];
+    };
+    return [...decorations.find()]
+      .sort((a, b) => a.from - b.from)
+      .map((decoration) => ({
+        text: editor.state.doc.textBetween(decoration.from, decoration.to),
+        classes: decoration.type.attrs?.class ?? '',
+      }));
+  } finally {
+    editor.destroy();
+  }
+}
+
+/**
+ * The colour actually painted on each of the export's own leaves, read off
+ * the REAL nested markup \`renderNoteBody\` produced -- not a class attribute
+ * replayed in isolation. This matters for a leaf like the \`\${\`/\`}\` delimiter
+ * text of a template-literal substitution: its own element is
+ * \`.hljs-subst\` (no role, no colour rule of its own), and it paints
+ * correctly only because it INHERITS \`--bear-code-string\` from the
+ * \`.hljs-string\` ancestor wrapping it -- a lookup keyed on its own class
+ * alone would miss that inheritance entirely.
+ *
+ * \`classed\` mirrors the editor's decoration list, which skips any leaf with
+ * no classes at all (see \`parseNodes\` in the tiptap extension): a leaf's own
+ * element carries at least one class, whether or not that class maps to a
+ * colour role.
+ */
+function exportPaintedSegments(
+  markdownText: string,
+): { text: string; classed: boolean; color: string }[] {
+  const html = renderNoteHtml(
+    { title: 't', text: '' },
+    Object.fromEntries(EXPORT_TOKEN_NAMES.map((name) => [name, `VALUE-${name}`])),
+  );
+  const css = html.slice(html.indexOf('<style>') + '<style>'.length, html.indexOf('</style>'));
+
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.append(style);
+
+  const host = document.createElement('div');
+  host.innerHTML = renderNoteBody(markdownText);
+  document.body.append(host);
+
+  try {
+    const code = host.querySelector('pre > code');
+    if (!code) return [];
+
+    const segments: { text: string; classed: boolean; color: string }[] = [];
+    const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      const text = node.textContent ?? '';
+      if (text !== '') {
+        const parent = node.parentElement;
+        segments.push({
+          text,
+          classed: parent !== null && parent !== code && parent.className !== '',
+          color: getComputedStyle(parent!).color,
+        });
+      }
+      node = walker.nextNode();
+    }
+    return segments;
+  } finally {
+    host.remove();
+    style.remove();
+  }
+}
+
+/**
+ * The colour a `class` attribute resolves to under `editor.css`'s REAL rules
+ * (not a reimplementation of them) -- `.ProseMirror pre` ancestors included,
+ * since editor.css's selectors are scoped under them. jsdom does not resolve
+ * `var(--x)` to an actual colour, so the result is the literal
+ * `var(--bear-code-*)` reference -- which is exactly what is needed here:
+ * proof of WHICH role's rule won the cascade, not what that role currently
+ * renders as.
+ */
+function editorPaintedColor(classes: string): string {
+  const style = document.createElement('style');
+  style.textContent = EDITOR_CSS;
+  document.head.append(style);
+
+  const root = document.createElement('div');
+  root.className = 'ProseMirror';
+  root.innerHTML = `<pre><span class="${classes}">x</span></pre>`;
+  document.body.append(root);
+
+  try {
+    return getComputedStyle(root.querySelector('span')!).color;
+  } finally {
+    root.remove();
+    style.remove();
+  }
 }
 
 const note = {
@@ -225,13 +343,78 @@ describe('the export and editor highlighting paths agree', () => {
     { name: 'an unregistered language', text: '```rust\nfn main() {}\n```\n' },
     { name: 'no language at all', text: '```\nplain text\n```\n' },
     { name: 'the compound-selector case', text: '```ts\nclass Foo extends Bar {}\n```\n' },
+    // The reviewer's own finding: an xml attribute value. The editor
+    // flattens `hljs-tag hljs-string` onto one span; export nests a
+    // `.hljs-string` element inside a `.hljs-tag` one. A SET comparison of
+    // classes cannot see this -- only which one PAINTS does.
+    {
+      name: 'an xml attribute value (tag/string collision)',
+      text: '```xml\n<a href="b">c</a>\n```\n',
+    },
+    // A number substituted into a template-literal string: editor flattens
+    // `hljs-string hljs-number`; export nests `.hljs-number` inside
+    // `.hljs-string`.
+    {
+      name: 'a number in a template string (string/number collision)',
+      text: '```ts\nconst s = `${1}`;\n```\n',
+    },
   ];
 
   for (const { name, text } of cases) {
     it(`produces the same .hljs-* classes as the editor for ${name}`, () => {
       expect(exportHljsClasses(text)).toEqual(editorHljsClasses(text));
     });
+
+    it(`paints the same colour, per token, as the editor for ${name}`, () => {
+      const editorSegments = editorDecorationSegments(text);
+      const exportSegments = exportPaintedSegments(text).filter((segment) => segment.classed);
+
+      expect(exportSegments.map((s) => s.text)).toEqual(editorSegments.map((s) => s.text));
+
+      const editorColors = editorSegments.map((s) => editorPaintedColor(s.classes));
+      const exportColors = exportSegments.map((s) => s.color);
+      expect(exportColors).toEqual(editorColors);
+    });
   }
+
+  it('is not vacuously true: removing the tag/string compound rule breaks the colour comparison (fault injection)', () => {
+    // Proves the test above actually exercises the compound rule, rather
+    // than passing regardless of whether it exists.
+    expect(editorPaintedColor('hljs-tag hljs-string')).toBe('var(--bear-code-string)');
+
+    const withoutRule = EDITOR_CSS.replace(
+      '.ProseMirror pre .hljs-tag.hljs-string {\n  color: var(--bear-code-string);\n}',
+      '',
+    );
+    expect(withoutRule).not.toBe(EDITOR_CSS);
+
+    const style = document.createElement('style');
+    style.textContent = withoutRule;
+    document.head.append(style);
+    const root = document.createElement('div');
+    root.className = 'ProseMirror';
+    root.innerHTML = '<pre><span class="hljs-tag hljs-string">x</span></pre>';
+    document.body.append(root);
+
+    try {
+      // With the compound rule gone, the two single-class, equal-specificity
+      // rules fall back to source order -- `type` (hljs-tag) is declared
+      // after `string` (hljs-string) in editor.css, so it wins, and the
+      // colour comparison this round exists to enforce would fail.
+      expect(getComputedStyle(root.querySelector('span')!).color).toBe('var(--bear-code-type)');
+    } finally {
+      root.remove();
+      style.remove();
+    }
+  });
+
+  it('the editor emits no .hljs-* class at all for an unregistered or absent language (absolute, not relative)', () => {
+    // Round 1 only compared the editor to export; a regression that made
+    // BOTH paths guess again would still pass that comparison. This is the
+    // direct assertion `editorHljsClasses()` was always able to make.
+    expect(editorHljsClasses('```rust\nfn main() {}\n```\n')).toEqual(new Set());
+    expect(editorHljsClasses('```\nplain text\n```\n')).toEqual(new Set());
+  });
 });
 
 describe('readExportTokens', () => {

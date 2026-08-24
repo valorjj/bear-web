@@ -90,6 +90,25 @@ describe('code block highlighting', () => {
     expect(codeBlock?.options).toHaveProperty('lowlight');
   });
 
+  it('gives CodeBlockLowlight the non-guessing registry, not the raw one', () => {
+    // Reverting `extensions.ts` to `CodeBlockLowlight.configure({ lowlight })`
+    // -- the raw, guessing registry -- leaves every assertion above this one
+    // green: `lowlight` still has the property, and it is still called
+    // `lowlight`. Only calling the configured registry's `highlightAuto` and
+    // checking it DECLINES rather than guesses would catch that revert, so
+    // that is what this asserts, right where a reader editing this file will
+    // see it.
+    const codeBlock = editorExtensions.find((extension) => extension.name === 'codeBlock');
+    const configuredLowlight = codeBlock?.options.lowlight as {
+      highlightAuto: (value: string) => { children: readonly { type: string; value?: string }[] };
+    };
+    const tree = configuredLowlight.highlightAuto('class A extends B {}');
+    // The raw registry's `highlightAuto` would confidently guess a language
+    // here and return several classed spans; the non-guessing one hands the
+    // text back as a single, unclassified text node.
+    expect(tree.children).toEqual([{ type: 'text', value: 'class A extends B {}' }]);
+  });
+
   it('registers exactly one codeBlock in the schema', () => {
     const names = editorExtensions.map((extension) => extension.name);
     expect(names.filter((name) => name === 'codeBlock')).toHaveLength(1);

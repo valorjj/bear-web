@@ -372,6 +372,36 @@
 }
 
 /*
+ * Two more flattening collisions, found by an empirical sweep of all twelve
+ * grammars for every leaf whose accumulated ancestor classes span more than
+ * one role (the same mechanism the `class_`/`inherited__` collision above
+ * comes from). `lowlight`'s hast tree NESTS these -- an xml/html/svg/xhtml
+ * attribute value is a `.hljs-string` span inside a `.hljs-tag` span; a
+ * number inside a template-literal interpolation is a `.hljs-number` span
+ * inside a `.hljs-string` one -- so the export stylesheet's real DOM never
+ * has this ambiguity. The editor's decoration plugin flattens both classes
+ * onto a single span, which is the anomaly; the ruling is that the export
+ * (nested) reading is correct, so both sides are made to agree with it:
+ *
+ *   - `.hljs-tag.hljs-string` (an attribute value) reads as a string, not a
+ *     type/tag reference.
+ *   - `.hljs-string.hljs-number` (a number substituted into a string) reads
+ *     as a number, not string body text.
+ *
+ * Compound selectors again, for the same reason as above: order-dependence
+ * on the six blocks was rejected once already (see the comment above, and
+ * this project's own `shadow-popover` precedent for why class-attribute or
+ * block order must never be what decides a colour).
+ */
+.ProseMirror pre .hljs-tag.hljs-string {
+  color: var(--bear-code-string);
+}
+
+.ProseMirror pre .hljs-string.hljs-number {
+  color: var(--bear-code-number);
+}
+
+/*
  * Tables. Real nodes since M8b, so this styles structure rather than a preserved
  * block of source. `table-layout: fixed` with `width: 100%` is what the official
  * extension's colgroup expects: without it a column resize writes widths the
