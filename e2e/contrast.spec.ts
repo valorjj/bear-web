@@ -40,6 +40,22 @@ const RULES = [
   { fg: 'faint', grounds: ['bg', 'surface', 'sidebar'], min: 3.0 },
   { fg: 'accent', grounds: ['bg', 'surface'], min: 4.5 },
   { fg: 'danger', grounds: ['bg', 'surface'], min: 4.5 },
+  /*
+   * The syntax palette is body-size text on `surface` — the `pre` background —
+   * and nowhere else. Five roles sit at 4.5 with `text` and `accent`.
+   *
+   * `code-comment` is held to 3.0, and the justification is `faint`'s two
+   * entries above rather than a new one: secondary information a reader skims.
+   * A comment at 4.5:1 cannot be dim, and a dim comment is the universal
+   * convention. This is the ONLY relaxation in the palette — do not lower the
+   * other five to keep a scheme faithful.
+   */
+  { fg: 'code-keyword', grounds: ['surface'], min: 4.5 },
+  { fg: 'code-string', grounds: ['surface'], min: 4.5 },
+  { fg: 'code-number', grounds: ['surface'], min: 4.5 },
+  { fg: 'code-comment', grounds: ['surface'], min: 3.0 },
+  { fg: 'code-function', grounds: ['surface'], min: 4.5 },
+  { fg: 'code-type', grounds: ['surface'], min: 4.5 },
 ] as const;
 
 /**
@@ -97,6 +113,12 @@ const READ = [
   'hl-green',
   'hl-pink',
   'hl-purple',
+  'code-keyword',
+  'code-string',
+  'code-number',
+  'code-comment',
+  'code-function',
+  'code-type',
 ];
 
 test.describe('contrast', () => {
