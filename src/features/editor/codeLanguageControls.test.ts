@@ -46,6 +46,14 @@ function optionFor(editor: Editor, id: string | null): Element | null {
   return editor.view.dom.querySelector(`[data-code-language-option="${id ?? ''}"]`);
 }
 
+function list(editor: Editor): HTMLUListElement | null {
+  return editor.view.dom.querySelector('[data-code-language="list"]');
+}
+
+function activeOption(editor: Editor): Element | null {
+  return editor.view.dom.querySelector('[role="option"].is-active');
+}
+
 /**
  * Invokes the plugin's own `handleDOMEvents` handler against the REAL
  * mounted view, the same approach `tableControls.test.ts` uses and for the
@@ -180,6 +188,33 @@ describe('the trigger', () => {
 });
 
 describe('opening and closing the popover', () => {
+  it('Enter on the trigger opens the popover, focuses the list, and seeds the active option', () => {
+    const editor = editorWith('```ts\nconst x = 1;\n```');
+    selectInsideCode(editor);
+
+    const result = fireOn(editor, 'keydown', trigger(editor)!, { key: 'Enter' });
+
+    expect(result.handled).toBe(true);
+    expect(popover(editor)?.hidden).toBe(false);
+    expect(trigger(editor)?.getAttribute('aria-expanded')).toBe('true');
+    expect(list(editor)).not.toBeNull();
+
+    editor.destroy();
+  });
+
+  it('Space on the trigger toggles it too, and a second press closes it', () => {
+    const editor = editorWith('```\nplain\n```');
+    selectInsideCode(editor);
+
+    fireOn(editor, 'keydown', trigger(editor)!, { key: ' ' });
+    expect(popover(editor)?.hidden).toBe(false);
+
+    fireOn(editor, 'keydown', trigger(editor)!, { key: ' ' });
+    expect(popover(editor)?.hidden).toBe(true);
+
+    editor.destroy();
+  });
+
   it('is hidden until the trigger is activated', () => {
     const editor = editorWith('```ts\nx\n```');
     selectInsideCode(editor);
@@ -373,6 +408,25 @@ describe('choosing a language', () => {
     editor.destroy();
   });
 
+  // A `Decoration.widget` is matched and reused by (pos, side, key) across
+  // transactions — the same mechanic `TableControls`' own comment documents
+  // for why its bar survives edits inside the same table without rebuilding.
+  // That means a fresh `decorations()` call after `choose()` returns the
+  // SAME cached DOM node rather than calling `controlElement` again, so the
+  // trigger's own label has to be refreshed directly or it goes stale.
+  it("updates the trigger's own label immediately, without waiting for a re-decoration", () => {
+    const editor = editorWith('```\nplain\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    fireOn(editor, 'mousedown', optionFor(editor, 'python')!, { button: 0 });
+
+    expect(trigger(editor)?.textContent).toBe('Python');
+    expect(trigger(editor)?.getAttribute('aria-label')).toBe('Code language: Python');
+
+    editor.destroy();
+  });
+
   it('returns focus to the editor after choosing', () => {
     const editor = editorWith('```\nplain\n```');
     const dom = editor.view.dom;
@@ -383,6 +437,208 @@ describe('choosing a language', () => {
     fireOn(editor, 'mousedown', optionFor(editor, 'python')!, { button: 0 });
 
     expect(document.activeElement).toBe(dom);
+
+    dom.remove();
+    editor.destroy();
+  });
+});
+
+describe('keyboard navigation', () => {
+  it('lands the active option on the CURRENT language when the popover opens', () => {
+    const editor = editorWith('```ts\nconst x = 1;\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('typescript');
+    expect(list(editor)?.getAttribute('aria-activedescendant')).toBe(activeOption(editor)?.id);
+
+    editor.destroy();
+  });
+
+  it('defaults the active option to the first row when the fence is unknown', () => {
+    const editor = editorWith('```rust\nfn main() {}\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    // "Plain text" is the first entry `choices()` yields.
+    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('');
+
+    editor.destroy();
+  });
+
+  it('ArrowDown moves to the next option and wraps past the last', () => {
+    const editor = editorWith('```\nplain\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    // Starts on "Plain text" (index 0, 13 options total).
+    fireOn(editor, 'keydown', list(editor)!, { key: 'ArrowDown' });
+    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('bash');
+
+    for (let i = 0; i < 12; i += 1) {
+      fireOn(editor, 'keydown', list(editor)!, { key: 'ArrowDown' });
+    }
+    // 12 more downs from "bash" (index 1) wraps back around to index 0.
+    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('');
+
+    editor.destroy();
+  });
+
+  it('ArrowUp moves to the previous option and wraps past the first', () => {
+    const editor = editorWith('```\nplain\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    const result = fireOn(editor, 'keydown', list(editor)!, { key: 'ArrowUp' });
+    expect(result.handled).toBe(true);
+    // Wrapped from "Plain text" (index 0) to the last entry, YAML.
+    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('yaml');
+
+    editor.destroy();
+  });
+
+  it('Home and End jump to the first and last option', () => {
+    const editor = editorWith('```\nplain\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    fireOn(editor, 'keydown', list(editor)!, { key: 'End' });
+    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('yaml');
+
+    fireOn(editor, 'keydown', list(editor)!, { key: 'Home' });
+    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('');
+
+    editor.destroy();
+  });
+
+  it('Enter selects the active option', () => {
+    const editor = editorWith('```\nplain\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    fireOn(editor, 'keydown', list(editor)!, { key: 'ArrowDown' }); // -> bash
+    const result = fireOn(editor, 'keydown', list(editor)!, { key: 'Enter' });
+
+    expect(result.handled).toBe(true);
+    expect(editor.getJSON().content?.[0]?.attrs?.language).toBe('bash');
+    expect(popover(editor)?.hidden).toBe(true);
+
+    editor.destroy();
+  });
+
+  it('Space selects the active option when the list has focus', () => {
+    const editor = editorWith('```\nplain\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    fireOn(editor, 'keydown', list(editor)!, { key: 'ArrowDown' }); // -> bash
+    fireOn(editor, 'keydown', list(editor)!, { key: ' ' });
+
+    expect(editor.getJSON().content?.[0]?.attrs?.language).toBe('bash');
+
+    editor.destroy();
+  });
+
+  it('Space is left alone (typed, not a selection) while the filter input has focus', () => {
+    const editor = editorWith('```\nplain\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    const result = fireOn(editor, 'keydown', filterInput(editor)!, { key: ' ' });
+
+    expect(result.handled).toBe(false);
+    expect(editor.getJSON().content?.[0]?.attrs?.language).toBeNull();
+
+    editor.destroy();
+  });
+
+  it('typing into the filter resets the active option to the first match, not a stale index', () => {
+    const editor = editorWith('```\nplain\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    // Move away from index 0 first, so a reset is actually observable.
+    fireOn(editor, 'keydown', list(editor)!, { key: 'ArrowDown' });
+    fireOn(editor, 'keydown', list(editor)!, { key: 'ArrowDown' });
+
+    const input = filterInput(editor)!;
+    input.value = 'ya';
+    fireOn(editor, 'input', input);
+
+    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('yaml');
+    expect(list(editor)?.getAttribute('aria-activedescendant')).toBe(activeOption(editor)?.id);
+
+    editor.destroy();
+  });
+
+  it('does not mark any option as keyboard-active when nothing matches the filter', () => {
+    const editor = editorWith('```\nplain\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    const input = filterInput(editor)!;
+    input.value = 'nonexistent-language';
+    fireOn(editor, 'input', input);
+
+    expect(activeOption(editor)).toBeNull();
+    expect(list(editor)?.hasAttribute('aria-activedescendant')).toBe(false);
+
+    editor.destroy();
+  });
+});
+
+describe('aria-selected for an unknown fence', () => {
+  // `rust` is neither a known language nor blank, so it is not "plain text"
+  // either — no option should read as selected over it.
+  it('marks no option as selected when the fence names an unknown language', () => {
+    const editor = editorWith('```rust\nfn main() {}\n```');
+    selectInsideCode(editor);
+    open(editor);
+
+    const selected = [...editor.view.dom.querySelectorAll('[role="option"]')].filter(
+      (el) => el.getAttribute('aria-selected') === 'true',
+    );
+    expect(selected).toHaveLength(0);
+
+    editor.destroy();
+  });
+});
+
+describe('closing on an outside click', () => {
+  it('closes the popover when a mousedown lands outside the widget entirely', () => {
+    const editor = editorWith('```\nplain\n```');
+    const dom = editor.view.dom;
+    document.body.appendChild(dom);
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+
+    selectInsideCode(editor);
+    open(editor);
+    expect(popover(editor)?.hidden).toBe(false);
+
+    outside.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+
+    expect(popover(editor)?.hidden).toBe(true);
+    // Focus was not forced back to the trigger — the click target is left
+    // alone, since the user was doing something else on purpose.
+    expect(document.activeElement).not.toBe(trigger(editor));
+
+    outside.remove();
+    dom.remove();
+    editor.destroy();
+  });
+
+  it('a click inside the widget itself does not close it', () => {
+    const editor = editorWith('```\nplain\n```');
+    const dom = editor.view.dom;
+    document.body.appendChild(dom);
+
+    selectInsideCode(editor);
+    open(editor);
+
+    popover(editor)!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+
+    expect(popover(editor)?.hidden).toBe(false);
 
     dom.remove();
     editor.destroy();

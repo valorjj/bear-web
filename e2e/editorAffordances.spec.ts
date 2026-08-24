@@ -196,3 +196,97 @@ test('a highlight colour chosen from the menu survives a reload', async ({ page 
   await page.getByRole('button', { name: /Title/ }).first().click();
   await expect(page.locator('.ProseMirror mark.hl-green')).toHaveText('highlight me');
 });
+
+/**
+ * The one thing no Vitest suite can prove: that a keyboard-only user can
+ * reach the code-language picker and actually choose a language with it.
+ * `codeLanguageControls.test.ts` proves every individual key handler works
+ * against the plugin directly; this proves the whole path is REACHABLE by a
+ * real Tab sequence and a real focus model, which jsdom cannot simulate.
+ */
+test('a keyboard-only user can choose a code block language', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Title');
+  await expect(editor).toContainText('Title');
+  await page.keyboard.press('Enter');
+  // The backtick input rule fires on Enter with no language captured,
+  // producing a bare code block — exactly the state a picker exists to fill
+  // in, and the state that shows "Plain text" rather than a language name.
+  await page.keyboard.type('```');
+  await page.keyboard.press('Enter');
+
+  await expect(page.locator('.ProseMirror pre code')).toHaveCount(1);
+  const trigger = page.locator('[data-code-language="trigger"]');
+  await expect(trigger).toHaveText('Plain text');
+  await expect(trigger).toHaveAttribute('aria-label', 'Code language: Plain text');
+
+  // Tab forward from inside the code block until the trigger itself is
+  // focused. The exact number of stops is not the claim being tested — that
+  // Tab reaches it AT ALL, with no `.focus()` shortcut, is.
+  let reached = false;
+  for (let i = 0; i < 6; i += 1) {
+    await page.keyboard.press('Tab');
+    reached = await trigger.evaluate((el) => el === document.activeElement);
+    if (reached) break;
+  }
+  expect(reached).toBe(true);
+
+  // Open with the keyboard, never a click.
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+  // From "Plain text" (the active option on open, since the block has no
+  // language yet), one ArrowDown reaches "Bash" — the roster's first entry.
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('[role="option"].is-active')).toHaveText('Bash');
+  await page.keyboard.press('Enter');
+
+  // The popover closes and the DOCUMENT changed: `renderHTML`'s
+  // `language-bash` class on the `<code>` element is downstream of the
+  // node's `language` attribute, not of anything the widget drew itself.
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.ProseMirror pre code.language-bash')).toHaveCount(1);
+  await expect(trigger).toHaveText('Bash');
+
+  // Focus lands back on the writing surface, not on the trigger and not
+  // lost to the page body — the same place a MOUSE pick already returns it
+  // to, so the keyboard path is not a second, inconsistent contract.
+  const focusedAfterChoice = await editor.evaluate((el) => el === document.activeElement);
+  expect(focusedAfterChoice).toBe(true);
+});
+
+test('Escape closes the code language popover and returns focus to the trigger', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Title');
+  await expect(editor).toContainText('Title');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('```');
+  await page.keyboard.press('Enter');
+
+  const trigger = page.locator('[data-code-language="trigger"]');
+  let reached = false;
+  for (let i = 0; i < 6; i += 1) {
+    await page.keyboard.press('Tab');
+    reached = await trigger.evaluate((el) => el === document.activeElement);
+    if (reached) break;
+  }
+  expect(reached).toBe(true);
+
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+  await page.keyboard.press('Escape');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  const focusedAfterEscape = await trigger.evaluate((el) => el === document.activeElement);
+  expect(focusedAfterEscape).toBe(true);
+});

@@ -39,6 +39,14 @@ export function codeBlockPosAt(state: EditorState): number | null {
 
 type LanguageChoice = { id: string | null; label: string };
 
+/** `''` stands for the "plain text"/no-language choice throughout this
+ * module — option ids, `aria-activedescendant` targets and DOM
+ * `data-code-language-option` values all use it instead of `null`, because
+ * it can go straight into an element id with no encoding step. */
+function keyOf(choice: LanguageChoice): string {
+  return choice.id ?? '';
+}
+
 function choices(): readonly LanguageChoice[] {
   return [{ id: null, label: '' }, ...CODE_LANGUAGES.map((l) => ({ id: l.id, label: l.label }))];
 }
@@ -58,16 +66,54 @@ function isNoOp(choice: LanguageChoice, fence: string | null): boolean {
   return resolveLanguage(fence)?.id === choice.id;
 }
 
+/**
+ * The key of the choice that is currently IN EFFECT for `fence`, for
+ * `aria-selected` purposes — distinct from `isNoOp`, which asks about a
+ * hypothetical pick, and distinct from the keyboard-navigation "active"
+ * choice below, which is about where the cursor sits in the list, not what
+ * the document holds.
+ *
+ * Three cases: a blank fence selects "plain text" (`''`); a fence naming a
+ * known language (by id or alias) selects that language's key; an UNKNOWN
+ * fence (`rust`) selects nothing at all — it is neither "plain text" nor any
+ * language this editor knows, and marking "Plain text" as selected over it
+ * would misreport what the document holds.
+ */
+function selectedKey(fence: string | null): string | undefined {
+  if (!fence || fence.trim() === '') return '';
+  return resolveLanguage(fence)?.id;
+}
+
+function optionId(pos: number, key: string): string {
+  return `bear-code-language-option-${pos}-${key === '' ? 'none' : key}`;
+}
+
+/**
+ * Rebuilds the option list against the current fence and filter text, and
+ * returns the key of the option that ends up ACTIVE (keyboard-highlighted),
+ * or `null` if the filter matched nothing.
+ *
+ * `preferredKey` wins if it survives the filter; otherwise the first match
+ * wins. Passing `undefined` (opening the popover) prefers the fence's own
+ * `selectedKey`; passing an explicit key (arrow-key movement) prefers that
+ * exact key; the filter's own `input` handler passes `undefined` too, but
+ * WITHOUT `selectedKey` winning ties, because requirement 5 wants the first
+ * match after a fresh keystroke, not a resurrected stale selection — see the
+ * `input` handler below, which never carries the fence's selected key
+ * forward on its own.
+ */
 function renderOptions(
   list: HTMLUListElement,
   labels: NonNullable<CodeLanguageControlsOptions['codeLabels']>,
   fence: string | null,
-  filter: string,
-): void {
+  filterText: string,
+  pos: number,
+  preferredKey?: string,
+): string | null {
   list.replaceChildren();
 
-  const query = filter.trim().toLowerCase();
-  const activeId = resolveLanguage(fence)?.id ?? null;
+  const query = filterText.trim().toLowerCase();
+  const selected = selectedKey(fence);
   const matches = choices().filter((choice) => {
     const label = choice.id === null ? labels.none : choice.label;
     return label.toLowerCase().includes(query);
@@ -78,23 +124,35 @@ function renderOptions(
     empty.className = 'bear-code-language-empty';
     empty.textContent = labels.empty;
     list.appendChild(empty);
-    return;
+    list.removeAttribute('aria-activedescendant');
+    return null;
   }
 
+  const keys = matches.map(keyOf);
+  const activeKey =
+    preferredKey !== undefined && keys.includes(preferredKey) ? preferredKey : keys[0]!;
+
   for (const choice of matches) {
+    const key = keyOf(choice);
     const label = choice.id === null ? labels.none : choice.label;
     const item = document.createElement('li');
+    item.id = optionId(pos, key);
     item.setAttribute('role', 'option');
-    item.setAttribute('data-code-language-option', choice.id ?? '');
-    item.setAttribute('aria-selected', String(choice.id === activeId));
+    item.setAttribute('data-code-language-option', key);
+    item.setAttribute('aria-selected', String(key === selected));
+    item.classList.toggle('is-active', key === activeKey);
     item.textContent = label;
     list.appendChild(item);
   }
+
+  list.setAttribute('aria-activedescendant', optionId(pos, activeKey));
+  return activeKey;
 }
 
 function controlElement(
   labels: NonNullable<CodeLanguageControlsOptions['codeLabels']>,
   fence: string | null,
+  pos: number,
 ): HTMLElement {
   const container = document.createElement('div');
   container.className = 'bear-code-language';
@@ -132,18 +190,24 @@ function controlElement(
   list.setAttribute('role', 'listbox');
   list.setAttribute('data-code-language', 'list');
   list.className = 'bear-code-language-list';
+  // The listbox itself owns focus and keyboard input; its options are never
+  // separately tabbable — that would fight the `aria-activedescendant`
+  // pattern by giving assistive tech two contradictory ideas of where focus
+  // is. See `docs/rulings/accessibility.md`.
+  list.tabIndex = -1;
 
   popover.append(filterInput, list);
   container.append(trigger, popover);
 
-  renderOptions(list, labels, fence, '');
+  renderOptions(list, labels, fence, '', pos);
 
   return container;
 }
 
 /**
  * A trigger button, floating before the code block the caret is in, that
- * opens a filterable list of the twelve known languages plus "plain text".
+ * opens a filterable, keyboard-navigable listbox of the twelve known
+ * languages plus "plain text".
  *
  * Built exactly like `TableControls`: a `Decoration.widget` with `side: -1`
  * and a stable `key`, so it lives inside the scrolling content and is
@@ -156,6 +220,14 @@ function controlElement(
  * merely existing, so every Markdown round-trip test is blind to whether it
  * runs at all — `codeLanguageControls.test.ts` asserts on the rendered DOM
  * instead, the way `tableControls.test.ts` does.
+ *
+ * The `view()` lifecycle below exists for exactly one thing: closing the
+ * popover on a mousedown OUTSIDE it, including outside the editor entirely
+ * (a click on the sidebar does not reach `handleDOMEvents`, which only sees
+ * events inside `view.dom`). It is added once per editor view and removed on
+ * `destroy`, the way a React component would clean up a `document` listener
+ * in `ScopeMenu`'s outside-click handling — this plugin has no component
+ * lifecycle to hang it from, so `view()` is ProseMirror's equivalent.
  */
 export const CodeLanguageControls = Extension.create<CodeLanguageControlsOptions>({
   name: 'codeLanguageControls',
@@ -182,7 +254,7 @@ export const CodeLanguageControls = Extension.create<CodeLanguageControlsOptions
             const fence = (node?.attrs.language as string | null | undefined) ?? null;
 
             return DecorationSet.create(state.doc, [
-              Decoration.widget(pos, () => controlElement(labels, fence), {
+              Decoration.widget(pos, () => controlElement(labels, fence, pos), {
                 side: -1,
                 key: `code-language-${pos}`,
                 ignoreSelection: true,
@@ -206,13 +278,14 @@ export const CodeLanguageControls = Extension.create<CodeLanguageControlsOptions
               if (option) {
                 if (event.button !== 0) return false;
                 event.preventDefault();
-                choose(view, option);
+                choose(view, option, labels);
                 return true;
               }
 
               // A click anywhere else inside the widget (the popover's own
-              // background) must not fall through to the editor and move
-              // the caret, but it is not an activation either.
+              // background, or the filter input) must not fall through to
+              // the editor and move the caret, but it is not an activation
+              // either.
               if (target?.closest('.bear-code-language')) {
                 event.preventDefault();
                 return true;
@@ -239,29 +312,163 @@ export const CodeLanguageControls = Extension.create<CodeLanguageControlsOptions
               const node = view.state.doc.nodeAt(pos);
               const fence = (node?.attrs.language as string | null | undefined) ?? null;
 
-              renderOptions(list, labels, fence, filterInput.value);
+              // No `preferredKey`: requirement 5 is that a fresh keystroke
+              // lands the active option on the first match, never a stale
+              // index left over from before the filter narrowed the list.
+              renderOptions(list, labels, fence, filterInput.value, pos);
               return true;
             },
 
-            keydown(_view, event) {
-              if (event.key !== 'Escape') return false;
+            keydown(view, event) {
               const target = event.target as HTMLElement | null;
               const container = target?.closest<HTMLElement>('.bear-code-language');
               if (!container) return false;
 
-              close(container);
-              return true;
+              // The trigger is a plain `<button>`: a keyboard activation
+              // (Enter, and Space on keyup) fires as a native `click`, which
+              // this plugin does not otherwise listen for — only `mousedown`,
+              // so a real mouse click is not double-toggled by both events.
+              // Handling Enter/Space HERE, and calling `preventDefault()`, is
+              // what suppresses that synthetic click and makes this the only
+              // place the keyboard path opens or closes the popover.
+              const triggerEl = target?.closest<HTMLElement>('[data-code-language="trigger"]');
+              if (triggerEl && (event.key === 'Enter' || event.key === ' ')) {
+                event.preventDefault();
+                toggle(view, triggerEl, labels);
+                return true;
+              }
+
+              const list = container.querySelector<HTMLUListElement>('[data-code-language="list"]');
+              if (!list) return false;
+
+              const isFilterInput = target?.closest('[data-code-language="filter"]') != null;
+
+              switch (event.key) {
+                case 'Escape':
+                  event.preventDefault();
+                  close(container);
+                  return true;
+
+                case 'ArrowDown':
+                  event.preventDefault();
+                  moveActive(list, 'next');
+                  return true;
+
+                case 'ArrowUp':
+                  event.preventDefault();
+                  moveActive(list, 'prev');
+                  return true;
+
+                case 'Home':
+                  event.preventDefault();
+                  moveActive(list, 'first');
+                  return true;
+
+                case 'End':
+                  event.preventDefault();
+                  moveActive(list, 'last');
+                  return true;
+
+                case 'Enter':
+                  event.preventDefault();
+                  chooseActive(view, list, labels);
+                  return true;
+
+                case ' ':
+                  // Space must stay a literal character while the filter
+                  // input has focus — only the list's own Space activates
+                  // the highlighted option, matching how a native listbox
+                  // treats Space as "select", never "type".
+                  if (isFilterInput) return false;
+                  event.preventDefault();
+                  chooseActive(view, list, labels);
+                  return true;
+
+                default:
+                  return false;
+              }
             },
           },
+        },
+
+        view(editorView) {
+          const onDocumentMouseDown = (event: MouseEvent): void => {
+            const openPopover = editorView.dom.querySelector<HTMLElement>(
+              '.bear-code-language-popover:not([hidden])',
+            );
+            if (!openPopover) return;
+
+            const target = event.target as HTMLElement | null;
+            if (target?.closest('.bear-code-language')) return;
+
+            const container = openPopover.closest<HTMLElement>('.bear-code-language');
+            // No focus return here: the user clicked something else on
+            // purpose (the sidebar, another note), and forcing focus back to
+            // the trigger would fight whatever they actually clicked.
+            if (container) close(container, { returnFocus: false });
+          };
+
+          document.addEventListener('mousedown', onDocumentMouseDown, true);
+
+          return {
+            destroy() {
+              document.removeEventListener('mousedown', onDocumentMouseDown, true);
+            },
+          };
         },
       }),
     ];
   },
 });
 
-/** Opens or closes the popover attached to `trigger`, focusing the filter
- * input on open and re-rendering its options against the block's current
- * fence, so a stale list from a previous open never lingers. */
+/** The rendered `[role="option"]` elements, in DOM (visual) order. */
+function optionElements(list: HTMLUListElement): HTMLElement[] {
+  return [...list.querySelectorAll<HTMLElement>('[role="option"]')];
+}
+
+/**
+ * Moves the keyboard-active option, wrapping at both ends, and updates
+ * `aria-activedescendant` plus the `.is-active` visual highlight to match.
+ * Does not touch `aria-selected` — that tracks the document's actual
+ * language, not where keyboard navigation happens to be standing.
+ */
+function moveActive(list: HTMLUListElement, direction: 'next' | 'prev' | 'first' | 'last'): void {
+  const options = optionElements(list);
+  if (options.length === 0) return;
+
+  const currentId = list.getAttribute('aria-activedescendant');
+  const currentIndex = Math.max(
+    0,
+    options.findIndex((option) => option.id === currentId),
+  );
+
+  let nextIndex: number;
+  switch (direction) {
+    case 'next':
+      nextIndex = (currentIndex + 1) % options.length;
+      break;
+    case 'prev':
+      nextIndex = (currentIndex - 1 + options.length) % options.length;
+      break;
+    case 'first':
+      nextIndex = 0;
+      break;
+    case 'last':
+      nextIndex = options.length - 1;
+      break;
+  }
+
+  for (const option of options) option.classList.remove('is-active');
+  const next = options[nextIndex]!;
+  next.classList.add('is-active');
+  list.setAttribute('aria-activedescendant', next.id);
+}
+
+/** Opens or closes the popover attached to `trigger`, focusing the list on
+ * open — per `docs/rulings/accessibility.md`, the listbox itself owns
+ * keyboard focus rather than any of its options — and re-rendering its
+ * options against the block's current fence, so a stale list from a
+ * previous open never lingers. */
 function toggle(
   view: EditorView,
   trigger: HTMLElement,
@@ -278,32 +485,58 @@ function toggle(
     const node = pos === null ? null : view.state.doc.nodeAt(pos);
     const fence = (node?.attrs.language as string | null | undefined) ?? null;
     if (filterInput) filterInput.value = '';
-    if (list) renderOptions(list, labels, fence, '');
 
     popover.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');
-    filterInput?.focus();
+
+    if (list && pos !== null) {
+      // The current language wins the initial highlight, per requirement 4
+      // — a keyboard user opening the picker on a `ts` block should not have
+      // to arrow past eleven other languages to find where they started.
+      renderOptions(list, labels, fence, '', pos, selectedKey(fence));
+      list.focus();
+    }
   } else {
     close(container);
   }
 }
 
-/** Hides the popover and returns focus to its trigger — the contract
- * Escape and a completed selection share. */
-function close(container: HTMLElement): void {
+/** Hides the popover and, by default, returns focus to its trigger — the
+ * contract Escape and a completed selection share. An outside click passes
+ * `returnFocus: false`, because forcing focus back would fight wherever the
+ * user actually clicked. */
+function close(container: HTMLElement, options: { returnFocus?: boolean } = {}): void {
+  const { returnFocus = true } = options;
   const popover = container.querySelector<HTMLElement>('.bear-code-language-popover');
   const trigger = container.querySelector<HTMLElement>('[data-code-language="trigger"]');
   if (popover) popover.hidden = true;
   trigger?.setAttribute('aria-expanded', 'false');
-  trigger?.focus();
+  if (returnFocus) trigger?.focus();
 }
 
 /**
- * Applies the clicked option's language to the code block the popover
- * belongs to, unless doing so would be a no-op (see `isNoOp`), then closes
- * the popover and restores focus to the editor.
+ * Applies the clicked or keyboard-activated option's language to the code
+ * block the popover belongs to, unless doing so would be a no-op (see
+ * `isNoOp`), then closes the popover and restores focus to the editor.
+ *
+ * Also refreshes the TRIGGER's own label directly, rather than trusting the
+ * next `decorations()` pass to do it: `Decoration.widget` is matched and
+ * reused by `(pos, side, key)` across transactions, exactly like
+ * `TableControls`' bar — its own comment calls this out as the reason the
+ * widget survives edits inside the same table without rebuilding. That
+ * reuse means a fresh `decorations()` call with an UPDATED fence still
+ * returns the same cached DOM node rather than invoking `controlElement`
+ * again, so the trigger would otherwise keep showing the language it had
+ * when the widget was first built until the caret leaves the block and
+ * returns. Measured via Playwright, not reasoned out in advance — a jsdom
+ * unit test cannot see this, because nothing there re-decorates on a timer
+ * the way a real transaction dispatch does.
  */
-function choose(view: EditorView, option: HTMLElement): void {
+function choose(
+  view: EditorView,
+  option: HTMLElement,
+  labels: NonNullable<CodeLanguageControlsOptions['codeLabels']>,
+): void {
   const container = option.closest<HTMLElement>('.bear-code-language');
   if (!container) return;
 
@@ -327,8 +560,28 @@ function choose(view: EditorView, option: HTMLElement): void {
       language: choice.id,
     });
     view.dispatch(tr);
+
+    const triggerEl = container.querySelector<HTMLElement>('[data-code-language="trigger"]');
+    if (triggerEl) {
+      const newLabel = languageLabel(choice.id) ?? labels.none;
+      triggerEl.textContent = newLabel;
+      triggerEl.setAttribute('aria-label', `${labels.trigger}: ${newLabel}`);
+    }
   }
 
   close(container);
   view.focus();
+}
+
+/** `Enter`/`Space` on the list: resolves the option `aria-activedescendant`
+ * names and applies it exactly the way a click on that option would. */
+function chooseActive(
+  view: EditorView,
+  list: HTMLUListElement,
+  labels: NonNullable<CodeLanguageControlsOptions['codeLabels']>,
+): void {
+  const activeId = list.getAttribute('aria-activedescendant');
+  if (!activeId) return;
+  const option = list.querySelector<HTMLElement>(`#${CSS.escape(activeId)}`);
+  if (option) choose(view, option, labels);
 }

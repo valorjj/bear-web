@@ -775,6 +775,28 @@
   background: var(--bear-selected);
 }
 
+/*
+ * The keyboard-navigated option, distinct from `aria-selected` above: this
+ * is "where the cursor is standing", not "what the document holds", and the
+ * two are frequently different rows (arrowing away from the current
+ * language before committing a choice).
+ */
+.bear-code-language-list [role='option'].is-active {
+  background: var(--bear-hover);
+}
+
+/*
+ * The list itself owns focus (`tabIndex = -1`, focused programmatically on
+ * open) rather than any individual option, so the browser's default focus
+ * ring would draw around the whole box with nothing to say which option is
+ * active. The `.is-active` highlight above is this widget's focus
+ * indicator, the same reasoning `RichEditor`'s own
+ * `focus-visible:outline-none` documents for the writing surface.
+ */
+.bear-code-language-list:focus {
+  outline: none;
+}
+
 .bear-code-language-empty {
   padding: 0.125rem 0.375rem;
   color: var(--bear-faint);
