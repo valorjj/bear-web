@@ -275,20 +275,24 @@
    * five to keep a palette faithful.
    */
   --bear-code-keyword-l: #a626a4;
-  /* #1e753b was 4.27 on gruvbox-light's surface */
+  /* Darkened from #1f7a3d, which measured 4.27 on gruvbox-light's surface —
+     the worst-case light-theme surface for this hue. Now 4.56. */
   --bear-code-string-l: #1e753b;
-  /* #a84b00 was 4.14 on gruvbox-light's surface */
+  /* Darkened from #b25000, which measured 4.14 on gruvbox-light's surface —
+     the worst-case light-theme surface for this hue. Now 4.55. */
   --bear-code-number-l: #a84b00;
   --bear-code-comment-l: #6f7480;
   --bear-code-function-l: #2a5db0;
   --bear-code-type-l: #00706b;
 
-  /* #cc9cec was 4.18 on nord's surface */
+  /* Lightened from #c792ea, which measured 4.18 on nord's surface —
+     the worst-case dark-theme surface for this hue. Now 4.57. */
   --bear-code-keyword-d: #cc9cec;
   --bear-code-string-d: #9ece6a;
   --bear-code-number-d: #ffb86c;
   --bear-code-comment-d: #8b93a7;
-  /* #87aeff was 4.38 on nord's surface */
+  /* Lightened from #82aaff, which measured 4.38 on nord's surface —
+     the worst-case dark-theme surface for this hue. Now 4.57. */
   --bear-code-function-d: #87aeff;
   --bear-code-type-d: #7fdbca;
 
