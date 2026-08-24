@@ -53,10 +53,17 @@ describe('parseColour', () => {
    * Task 3's syntax palette: `--bear-muted`'s longstanding `color-mix(in
    * oklab, …)` uses a literal percentage and folds to `rgb(…)` well before it
    * reaches this function, so this format was unexercised until now. Known
-   * conversion: `oklab(1 0 0)` is white, `oklab(0 0 0)` is black.
+   * conversion: `oklab(1 0 0)` is white, `oklab(0 0 0)` is black. Not rounded
+   * — see the `color(srgb …)` cases above, which also return floats — so
+   * this is `toBeCloseTo`, not `toEqual`.
    */
   it('reads oklab(L a b), the format a calc()-percentage color-mix(in oklab, …) resolves to', () => {
-    expect(parseColour('oklab(1 0 0)')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
+    const white = parseColour('oklab(1 0 0)');
+    expect(white.r).toBeCloseTo(255, 3);
+    expect(white.g).toBeCloseTo(255, 3);
+    expect(white.b).toBeCloseTo(255, 3);
+    expect(white.a).toBe(1);
+
     expect(parseColour('oklab(0 0 0)')).toEqual({ r: 0, g: 0, b: 0, a: 1 });
   });
 
@@ -65,14 +72,36 @@ describe('parseColour', () => {
   });
 
   /**
-   * The guard that gives the two cases above their teeth.
-   *
-   * A per-format assertion only covers the formats someone thought to list.
-   * This states the property the harness actually depends on — no input the
-   * cascade can hand it may produce a NaN channel — so a future colour
-   * function that slips through fails here instead of passing downstream.
+   * The CSS Color 4 spellings of `oklab(…)` that are not plain space- (or
+   * comma-) separated numbers: a percentage `L`, and the `none` keyword on
+   * any channel. Both are valid CSS `color-mix()` output the browser is free
+   * to emit, and both fell straight through to NaN before `parseComponent`
+   * existed — `oklab(50% 0 0)` is `Number('50%')`, and `oklab(none 0 0)` is
+   * `Number('none')`, neither of which is a number.
    */
-  it('never yields NaN for any format the cascade can hand it', () => {
+  it('reads a percentage L and a none channel in oklab(…)', () => {
+    const fromPercent = parseColour('oklab(50% 0 0)');
+    const fromNumber = parseColour('oklab(0.5 0 0)');
+    expect(fromPercent.r).toBeCloseTo(fromNumber.r, 5);
+    expect(fromPercent.g).toBeCloseTo(fromNumber.g, 5);
+    expect(fromPercent.b).toBeCloseTo(fromNumber.b, 5);
+
+    // `none` on a or b means "no chroma on this axis" — 0 — so
+    // `oklab(0.5 none none)` is the same grey as `oklab(0.5 0 0)`.
+    const fromNone = parseColour('oklab(0.5 none none)');
+    expect(fromNone.r).toBeCloseTo(fromNumber.r, 5);
+    expect(fromNone.g).toBeCloseTo(fromNumber.g, 5);
+    expect(fromNone.b).toBeCloseTo(fromNumber.b, 5);
+  });
+
+  /**
+   * The property the harness actually depends on, for every notation this
+   * function has been explicitly taught: no input it can honestly parse may
+   * produce a NaN channel. This is NOT the guard against an unrecognised
+   * notation — that is the throw tests below — it only covers formats
+   * already listed here, and is only as strong as that list.
+   */
+  it('never yields NaN for any recognised format', () => {
     for (const css of [
       '#fff',
       '#ffffff',
@@ -85,6 +114,8 @@ describe('parseColour', () => {
       'color(srgb 0.356863 0.290196 0.839216 / 0.12)',
       'oklab(0.523614 0.18045 -0.109351)',
       'oklab(0.742742 0.0885881 -0.101648 / 0.5)',
+      'oklab(50% 0 0)',
+      'oklab(none 0 0)',
     ]) {
       const { r, g, b, a } = parseColour(css);
       expect(Number.isNaN(r + g + b + a), `${css} produced a NaN channel`).toBe(false);
@@ -92,11 +123,36 @@ describe('parseColour', () => {
   });
 
   /**
-   * Refuses rather than guesses. `color(display-p3 …)` has an identical shape
-   * and wider primaries, so reading its components as sRGB would return a
-   * plausible but wrong colour — and a wrong colour here is a wrong contrast
-   * verdict, which is worse than a crash. Nothing emits p3 today; this exists
-   * so that if anything ever does, it fails loudly.
+   * Refuses rather than guesses, generally. This is the belt-and-braces half
+   * of the fix: `color(srgb …)` shipped blind in F, `oklab(…)` shipped blind
+   * in Task 3, and the third occurrence of the identical NaN-then-silent-pass
+   * shape (an unrecognised functional notation falling through to a
+   * `rgb(`-stripping fallback) is what makes "another branch per format"
+   * the wrong fix. Every notation this function has not been explicitly
+   * taught — real CSS (`oklch()`, `lab()`, `lch()`, `hsl()`, `hwb()`) and a
+   * notation that will never exist — throws, naming itself. A future colour
+   * function therefore fails here on its OWN, with no branch needing to be
+   * added first — unlike the NaN-guard above, which only ever covers what
+   * someone already listed.
+   */
+  it.each([
+    'oklch(0.7 0.1 200)',
+    'lab(50 20 -30)',
+    'lch(50 20 200)',
+    'hsl(200 50% 50%)',
+    'hwb(200 30% 20%)',
+    'not-a-real-notation(1 2 3)',
+  ])('throws on the unrecognised notation %s', (css) => {
+    const notation = css.slice(0, css.indexOf('('));
+    expect(() => parseColour(css)).toThrow(new RegExp(notation));
+  });
+
+  /**
+   * `color(display-p3 …)` specifically: it has the SAME shape as the
+   * `color(srgb …)` this function does understand, so reading its
+   * components as sRGB would silently yield a plausible but wrong colour
+   * rather than throwing — the one case the generic "unrecognised notation"
+   * check above cannot catch, because the notation IS recognised.
    */
   it('throws on a colour space it cannot honestly interpret', () => {
     expect(() => parseColour('color(display-p3 1 0 0)')).toThrow(/display-p3/);

@@ -61,5 +61,30 @@ test.describe('the syntax palette', () => {
     expect(probe.light).not.toBe(probe.dark);
     expect(probe.mid).not.toBe(probe.light);
     expect(probe.mid).not.toBe(probe.dark);
+
+    // The three string-inequality checks above pass for ANY third colour,
+    // including one nothing to do with interpolation — a broken --bear-dark
+    // that instead landed on, say, a fixed grey would still be "distinct
+    // from both endpoints" and slip through. What the test's name actually
+    // claims is betweenness, so parse all three and check it for real: each
+    // channel of the midpoint colour must sit between the corresponding
+    // channels of the light and dark endpoints (inclusive, since oklab
+    // interpolation is not guaranteed monotone per sRGB channel at the
+    // gamut edge, though it is for this role's two literals).
+    const light = parseColour(probe.light);
+    const mid = parseColour(probe.mid);
+    const dark = parseColour(probe.dark);
+    for (const channel of ['r', 'g', 'b'] as const) {
+      const lo = Math.min(light[channel], dark[channel]);
+      const hi = Math.max(light[channel], dark[channel]);
+      expect(
+        mid[channel],
+        `mid ${channel}=${mid[channel]} is not between light ${channel}=${light[channel]} and dark ${channel}=${dark[channel]}`,
+      ).toBeGreaterThanOrEqual(lo);
+      expect(
+        mid[channel],
+        `mid ${channel}=${mid[channel]} is not between light ${channel}=${light[channel]} and dark ${channel}=${dark[channel]}`,
+      ).toBeLessThanOrEqual(hi);
+    }
   });
 });

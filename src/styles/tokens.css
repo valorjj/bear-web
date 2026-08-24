@@ -520,7 +520,7 @@
   --bear-sidebar: #f2e9e1;
   --bear-canvas: #e9e0d6;
   /*
-   * Darkened from Rosé Pine Dawn's own #575279 (39.1% toward black in
+   * Darkened from Rosé Pine Dawn's own #575279 (24.8% toward black in
    * oklab) so the derived `muted` (72%) and `faint` (56%) tokens clear AA —
    * the upstream value sat too close to `--bear-bg` for any reasonable
    * ratio to derive a legible secondary tier from it.

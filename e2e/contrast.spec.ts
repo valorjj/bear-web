@@ -136,7 +136,15 @@ test.describe('contrast', () => {
       for (const rule of [...RULES, ...DECORATIVE]) {
         for (const ground of rule.grounds) {
           const ratio = contrastRatio(parseColour(tokens[rule.fg]!), parseColour(tokens[ground]!));
-          if (ratio < rule.min) {
+          // A non-finite ratio (NaN, or +/-Infinity from a degenerate colour)
+          // must fail, not silently pass: `NaN < min` and `Infinity < min`
+          // are both false, which is the exact mechanism that hid nine
+          // themes' real contrast failures behind a `parseColour` blind
+          // spot. This check stands even if `parseColour` itself is ever
+          // bypassed or a future format sneaks past its throw.
+          if (!Number.isFinite(ratio)) {
+            failures.push(`${rule.fg} on ${ground}: unparseable colour (ratio was ${ratio})`);
+          } else if (ratio < rule.min) {
             failures.push(`${rule.fg} on ${ground}: ${ratio.toFixed(2)} < ${rule.min}`);
           }
         }
@@ -148,7 +156,13 @@ test.describe('contrast', () => {
           parseColour(tokens[rule.ground]!),
         );
         const ratio = contrastRatio(parseColour(tokens[rule.fg]!), ground);
-        if (ratio < rule.min) {
+        // Same non-finite guard as the loop above — an unparseable colour
+        // must not be able to hide behind `NaN < min` being false.
+        if (!Number.isFinite(ratio)) {
+          failures.push(
+            `${rule.fg} on ${rule.overlay} over ${rule.ground}: unparseable colour (ratio was ${ratio})`,
+          );
+        } else if (ratio < rule.min) {
           failures.push(
             `${rule.fg} on ${rule.overlay} over ${rule.ground}: ${ratio.toFixed(2)} < ${rule.min}`,
           );
