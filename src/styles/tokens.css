@@ -156,8 +156,20 @@
    * and a light background lands visibly darker in some hues than others,
    * which would make `muted` inconsistent across the roster.
    */
-  --bear-muted: color-mix(in oklab, var(--bear-text) 68%, var(--bear-bg));
-  --bear-faint: color-mix(in oklab, var(--bear-text) 51%, var(--bear-bg));
+  /*
+   * 68%/51% were F's original ratios and failed AA on nine of the eleven
+   * derived themes (solarized-light, rose-dawn, latte, gruvbox-light, snow,
+   * sepia, solarized-dark, tokyo-night, gruvbox-dark) — as low as 2.87:1 for
+   * `muted` and 2.05:1 for `faint`, both hidden since F by a `parseColour`
+   * blind spot: `color-mix(in oklab, …)` at these ratios resolves to
+   * `oklab(…)`, which fell through to `NaN`, and `NaN < min` is `false`.
+   * 90%/71% are the smallest whole-percent ratios that clear every floor on
+   * all sixteen themes (verified against all eleven derived themes' `bg`,
+   * `surface` and `sidebar` grounds) without moving the five pre-F themes,
+   * which override both tokens with literal hex and never reach this rule.
+   */
+  --bear-muted: color-mix(in oklab, var(--bear-text) 90%, var(--bear-bg));
+  --bear-faint: color-mix(in oklab, var(--bear-text) 71%, var(--bear-bg));
   --bear-border: color-mix(in oklab, var(--bear-text) 13%, var(--bear-bg));
   --bear-focus: var(--bear-accent);
 
