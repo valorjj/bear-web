@@ -298,6 +298,59 @@
 }
 
 /*
+ * Syntax highlighting. One selector per role, listing the `.hljs-*` classes
+ * that role claims — kept in step with
+ * `src/features/editor/highlightClasses.ts`, whose test derives the class set
+ * from the grammars themselves and fails on any class neither coloured here nor
+ * explicitly left at `--bear-text`.
+ *
+ * Scoped under `.ProseMirror pre` so these can never reach the inline `code`
+ * mark. `.ProseMirror code` styles inline code and `.ProseMirror pre code`
+ * above deliberately undoes it inside a block; six new colours must not leak
+ * across that boundary.
+ */
+.ProseMirror pre .hljs-keyword,
+.ProseMirror pre .hljs-literal,
+.ProseMirror pre .hljs-built_in,
+.ProseMirror pre .hljs-selector-tag {
+  color: var(--bear-code-keyword);
+}
+
+.ProseMirror pre .hljs-string,
+.ProseMirror pre .hljs-regexp,
+.ProseMirror pre .hljs-char,
+.ProseMirror pre .hljs-meta-string {
+  color: var(--bear-code-string);
+}
+
+.ProseMirror pre .hljs-number,
+.ProseMirror pre .hljs-symbol {
+  color: var(--bear-code-number);
+}
+
+.ProseMirror pre .hljs-comment,
+.ProseMirror pre .hljs-quote {
+  color: var(--bear-code-comment);
+}
+
+.ProseMirror pre .hljs-title,
+.ProseMirror pre .hljs-section,
+.ProseMirror pre .hljs-function,
+.ProseMirror pre .function_ {
+  color: var(--bear-code-function);
+}
+
+.ProseMirror pre .hljs-type,
+.ProseMirror pre .hljs-attr,
+.ProseMirror pre .hljs-attribute,
+.ProseMirror pre .hljs-tag,
+.ProseMirror pre .hljs-name,
+.ProseMirror pre .hljs-selector-class,
+.ProseMirror pre .class_ {
+  color: var(--bear-code-type);
+}
+
+/*
  * Tables. Real nodes since M8b, so this styles structure rather than a preserved
  * block of source. `table-layout: fixed` with `width: 100%` is what the official
  * extension's colgroup expects: without it a column resize writes widths the
