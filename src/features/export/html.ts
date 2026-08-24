@@ -521,6 +521,17 @@ ${declarations}
       color: var(--bear-code-keyword);
     }
 
+    /*
+     * A sixth, mirrored from src/styles/editor.css: Kotlin's reified
+     * modifier inside a generic type parameter list, nested in a function
+     * signature. A three-class compound selector, not two -- see that
+     * file's comment above the same rule for why. (No backticks in this
+     * comment: it lives inside a template literal.)
+     */
+    .hljs-function.hljs-type.hljs-keyword {
+      color: var(--bear-code-keyword);
+    }
+
     /* Real tables since M8b; before that a table exported as a block of pipes. */
     table {
       width: 100%;

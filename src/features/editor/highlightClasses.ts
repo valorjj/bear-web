@@ -100,10 +100,48 @@ export function roleOfFlattenedClasses(classes: readonly string[]): Role | null 
  * exists so a human reading this file sees the full, current set in one
  * place, and so that sweep can also assert nothing here has gone stale
  * (a listed combination the corpus no longer produces, or a produced
- * combination missing from this list) — three rounds of hand-discovery
- * (Task 4, then two review passes) each found more than the last, which is
- * why the sweep — not this list — is what a new grammar or corpus addition
- * is actually checked against.
+ * combination missing from this list) — four rounds of discovery (Task 4,
+ * then three review passes) found 2, then 4, then 9, then this 10th, each
+ * time from widening the sweep's corpus rather than from a new idea about
+ * where to look.
+ *
+ * THIS LIST CANNOT BE PROVEN EXHAUSTIVE, and that is not a gap to close by
+ * trying harder. CSS has no way to express "colour this by whichever class
+ * is innermost" — a compound selector is the only tool available, and one
+ * is needed per DISTINCT combination of classes, not per role. The set of
+ * combinations a grammar can produce is a function of that grammar's mode
+ * nesting (which scopes can appear inside which other scopes), and nothing
+ * bounds that except reading every grammar's source — a hand-written corpus
+ * can only ever have exercised what it happened to exercise. Four rounds of
+ * widening this corpus found a new combination every time; there is no
+ * reason to expect a fifth round would not.
+ *
+ * What the enumeration test actually guarantees, precisely: every
+ * combination the CURRENT corpus in `highlightClasses.test.ts` produces has
+ * a correct, mechanically-verified compound rule. A combination the corpus
+ * has never exercised resolves by cascade accident — whichever of the six
+ * single-class blocks in `editor.css` happens to sit last in the file —
+ * which may or may not match `roleOfFlattenedClasses`' answer (Kotlin's
+ * `Int` parameter type sat "correct" for three rounds this way before this
+ * list had an entry for it). The corpus is therefore the actual coverage
+ * boundary of this whole mechanism, not this list and not the six role
+ * blocks. Extending coverage means adding a sample that exercises the new
+ * nesting to the corpus; the test will then name the missing combination
+ * and grammar directly, and fixing it costs one entry here plus two mirrored
+ * CSS rules (one per stylesheet) — cheap, but only after the corpus has
+ * actually seen the case.
+ *
+ * THE DURABLE FIX IS NOT A BIGGER CORPUS: it is to stop flattening. If the
+ * editor's decorations were built as NESTED spans the way export's
+ * `DOMSerializer` output already is, a leaf's own innermost element would
+ * always carry exactly one role-bearing class, no compound rule would ever
+ * be needed, and this entire class of divergence — accidental or not —
+ * would stop being possible rather than being enumerated down to zero. That
+ * requires replacing how `CodeBlockLowlight`'s decoration plugin builds
+ * decorations (`getDecorations`/`parseNodes` in
+ * `@tiptap/extension-code-block-lowlight`) with something that mirrors hast
+ * structure instead of flattening it — a substantial change to a shipped,
+ * user-facing area, and deliberately not attempted as part of this task.
  */
 export const KNOWN_FLATTENED_COLLISIONS: readonly (readonly string[])[] = [
   ['hljs-title', 'class_'],
@@ -115,6 +153,13 @@ export const KNOWN_FLATTENED_COLLISIONS: readonly (readonly string[])[] = [
   ['hljs-function', 'hljs-number'],
   ['hljs-function', 'hljs-string'],
   ['hljs-function', 'hljs-literal'],
+  // Kotlin's `reified` modifier inside a generic type parameter list,
+  // nested inside a function signature -- e.g. `inline fun <reified T>
+  // f(x: T = TODO() as T): T = x`. `hljs-function` wraps the whole
+  // signature, `hljs-type` the generic parameter list, and `hljs-keyword`
+  // `reified` itself: three classes, three roles pairwise, innermost
+  // (`hljs-keyword`) wins per the mechanical rule.
+  ['hljs-function', 'hljs-type', 'hljs-keyword'],
 ];
 // `['hljs-title', 'inherited__']` (without `class_`) was in an earlier draft
 // of this list, matching a defensive CSS selector Task 4 wrote alongside

@@ -127,6 +127,7 @@ const NESTED_SAMPLES: Record<string, readonly string[]> = {
     'fun f(a: Int = 1): String = "hi"',
     'fun g(a: Int, b: String = "d", c: Double = 1.5, d: Boolean = true, vararg e: Int): Boolean { return true }',
     'fun h(a: List<Int> = listOf(1, 2)): Unit {}',
+    'inline fun <reified T> f(x: T = TODO() as T): T = x',
   ],
   markdown: [
     '# T\n\n**bold *and nested* text** and `code with "quotes"` and [link](http://x "title")\n\n```js\nconst x = 1;\n```\n',

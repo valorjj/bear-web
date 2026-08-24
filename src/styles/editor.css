@@ -450,6 +450,23 @@
 }
 
 /*
+ * A sixth, a three-class case: Kotlin's `reified` modifier inside a generic
+ * type parameter list, nested in a function signature (`inline fun
+ * <reified T> f(...)`). The leaf carries `hljs-function` (the whole
+ * signature), `hljs-type` (the generic parameter list) AND `hljs-keyword`
+ * (`reified` itself) together. A three-class compound selector is required,
+ * not two: `.hljs-function.hljs-keyword` alone would tie in specificity with
+ * the two-class `.hljs-function.hljs-type` rule above and fall back to
+ * source order again -- exactly the failure this whole mechanism exists to
+ * stop. See `KNOWN_FLATTENED_COLLISIONS` in `highlightClasses.ts` for why
+ * this list, despite four rounds of widening, is not and cannot be proven
+ * complete.
+ */
+.ProseMirror pre .hljs-function.hljs-type.hljs-keyword {
+  color: var(--bear-code-keyword);
+}
+
+/*
  * Tables. Real nodes since M8b, so this styles structure rather than a preserved
  * block of source. `table-layout: fixed` with `width: 100%` is what the official
  * extension's colgroup expects: without it a column resize writes widths the
