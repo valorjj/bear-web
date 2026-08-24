@@ -286,8 +286,24 @@ ${declarations}
       margin: 0;
     }
 
+    /*
+     * Backgrounds are part of the document, not decoration the printer may
+     * discard. Chrome defaults to print-color-adjust: economy, which drops
+     * EVERY painted background - a code block's surface, a highlight mark, a
+     * tag pill, a table's header row - and leaves their text sitting on bare
+     * paper. The user could tick "Background graphics" in the print dialog to
+     * get them back, but a checkbox buried in a browser dialog is not where
+     * this document's design lives. The exact keyword is inherited, so
+     * declaring it on the root covers every descendant.
+     *
+     * This does NOT force the PAGE background: the @media print block below
+     * still clears html/body, so a dark theme exports onto white paper rather
+     * than flooding a sheet with ink.
+     */
     html {
       background: var(--bear-bg);
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
     }
 
     body {

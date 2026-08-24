@@ -248,6 +248,34 @@ describe('renderNoteHtml', () => {
     expect(renderNoteHtml(note, tokens)).toContain('@page');
   });
 
+  it('opts into printing backgrounds, so a code block keeps its surface on paper', () => {
+    // Chrome's default is print-color-adjust: economy, which silently drops
+    // every painted background and prints the text onto bare paper. Nothing in
+    // the unit suite can see a real print, so this asserts the declaration
+    // itself - and it must be on the ROOT, because the property is inherited
+    // and every painted descendant depends on that inheritance.
+    const html = renderNoteHtml(note, tokens);
+    const root = html.match(/\n    html \{([^}]*)\}/);
+
+    expect(root).not.toBeNull();
+    // Anchored to the start of the declaration. A bare
+    // toContain('print-color-adjust: exact') is VACUOUS for the unprefixed
+    // form, because the -webkit- line contains that substring - deleting the
+    // unprefixed declaration left this test green until it was fault-injected.
+    expect(root?.[1]).toMatch(/(?:^|[\s;])print-color-adjust: exact/m);
+    // Chrome and Safari still need the prefixed form; unprefixed alone is
+    // silently ignored there, which is the exact failure being fixed.
+    expect(root?.[1]).toContain('-webkit-print-color-adjust: exact');
+  });
+
+  it('still clears the PAGE background when printing, so a dark theme does not flood the sheet', () => {
+    // The pairing matters: `exact` above means backgrounds are honoured, so
+    // without this rule a Nord export would print a full sheet of #2e3440.
+    expect(renderNoteHtml(note, tokens)).toMatch(
+      /@media print \{\s*html, body \{\s*background: none;/,
+    );
+  });
+
   it('has no reference to any external host', () => {
     // A self-contained export cannot depend on the network; a broken font or
     // stylesheet link would silently change the document weeks later.
