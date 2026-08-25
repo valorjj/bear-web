@@ -310,7 +310,7 @@ function controlElement(
  * `Node`: it registers nothing in the schema and mutates no document by
  * merely existing, so every Markdown round-trip test is blind to whether it
  * runs at all — `codeLanguageControls.test.ts` asserts on the rendered DOM
- * instead, the way `tableControls.test.ts` does.
+ * instead, the way `tableHandles.test.ts` does.
  *
  * The `view()` lifecycle below exists for exactly one thing: closing the
  * popover on a mousedown OUTSIDE it, including outside the editor entirely

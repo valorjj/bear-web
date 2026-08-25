@@ -712,17 +712,6 @@
 }
 
 /*
- * The table bar — a `Decoration.widget` placed just before the table the
- * caret is in (see `TableControls.ts`). It lives inside the scrolling content
- * on purpose, so it tracks the table with no geometry code at all.
- *
- * `position: relative` plus a negative bottom margin, NOT `absolute`: the
- * editor's own `overflow-auto` clips left-side and top overflow (the same
- * constraint that made the fold gutter a reserved column rather than an
- * overlay), so a bar hanging outside the flow would be cut off above a table
- * at the top of a note.
- */
-/*
  * The table's edge handles — a `⊕` on each row's left edge and each column's
  * top edge (see `TableHandles.ts`). This replaced a bar of five words that
  * floated above the user's prose.
@@ -790,8 +779,11 @@
  * forwards through `:has(+ …)`; the table extension may wrap the table in a
  * scroll container, so both siblings are named.
  *
- * `:focus-visible` is not a nicety here — it is the only thing that makes the
- * handles reachable without a pointer at all.
+ * `:focus-visible` keeps a tab-focused handle visible rather than leaving the
+ * focus ring on an invisible button. It does NOT by itself make the handles
+ * operable from the keyboard: the plugin registers `mousedown` and no key
+ * handler, exactly as `HeadingFold`'s gutter does. The keyboard route to these
+ * commands is the context menu.
  */
 .bear-table-handles:has(+ table:hover) .bear-table-handle,
 .bear-table-handles:has(+ .tableWrapper:hover) .bear-table-handle,

@@ -144,7 +144,12 @@ function handlesLayer(
     const table = tableElement(view, pos);
     if (table === null) return;
 
-    const rows = Array.from(table.querySelectorAll('tr'));
+    // DIRECT children only. `tableCell`'s content is `block+`, so a nested
+    // table is schema-legal even though GFM cannot express one — and a bare
+    // `querySelectorAll('tr')` would descend into it, joining its rows to this
+    // table's and silently breaking the row-index ↔ node-child-index bridge
+    // `cellTextPos` depends on.
+    const rows = Array.from(table.querySelectorAll(':scope > tbody > tr, :scope > thead > tr'));
     const columns = Array.from(rows[0]?.children ?? []).filter(
       (cell): cell is HTMLElement => cell instanceof HTMLElement,
     );
@@ -152,8 +157,18 @@ function handlesLayer(
     // Rebuild only when the SHAPE changed. A table is re-measured on every
     // transaction, and rebuilding unconditionally would drop focus from a
     // handle a keyboard user had just tabbed to.
-    const wanted = rows.length + columns.length;
-    if (layer.childElementCount !== wanted) {
+    //
+    // The signature is TWO-DIMENSIONAL, and a sum will not do. `3x2` and `2x3`
+    // both total five, so a single update that transposes a table would keep
+    // the stale children — and buttons still labelled `row` would be
+    // repositioned along the column edge, so the leftmost column handle would
+    // insert a ROW. That is reachable in normal use, not a curiosity:
+    // `prosemirror-history` groups steps within 500ms, so one `Ctrl+Z` over a
+    // quick "delete row, add column" pair produces exactly that one update, as
+    // does a paste replacing the table.
+    const signature = `${String(rows.length)}x${String(columns.length)}`;
+    if (layer.getAttribute('data-shape') !== signature) {
+      layer.setAttribute('data-shape', signature);
       layer.replaceChildren(
         ...rows.map((_row, index) => handleElement('row', index, labels.addRow)),
         ...columns.map((_cell, index) => handleElement('column', index, labels.addColumn)),
@@ -224,14 +239,18 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
     if (labels === null) return [];
 
     /**
-     * Every live layer's `measure()`. A widget is created by the decoration
-     * pass but must be re-measured by events the decoration pass never sees —
-     * a window resize above all — so the closures are collected here and the
-     * plugin's `view()` drives them.
+     * Every live layer's `measure()`, keyed by the layer element itself. A
+     * widget is created by the decoration pass but must be re-measured by
+     * events the decoration pass never sees — a window resize above all — so
+     * the closures are collected here and the plugin's `view()` drives them.
+     *
+     * Keyed by the DOM node because that is exactly what the widget's own
+     * `destroy` receives, so one layer's closure can be dropped without the
+     * plugin having to stash anything on the element.
      */
-    const measurers = new Set<() => void>();
+    const measurers = new Map<HTMLElement, () => void>();
     const measureAll = (): void => {
-      for (const measure of measurers) measure();
+      for (const measure of measurers.values()) measure();
     };
 
     return [
@@ -248,10 +267,7 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
                 pos,
                 (view) => {
                   const { dom, measure } = handlesLayer(view, pos, labels);
-                  measurers.add(measure);
-                  // Stored so `destroy` below can drop exactly this closure
-                  // rather than clearing the set.
-                  Reflect.set(dom, '__bearMeasure', measure);
+                  measurers.set(dom, measure);
                   return dom;
                 },
                 {
@@ -267,8 +283,7 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
                   // ProseMirror serializes, nor absorb a caret.
                   ignoreSelection: true,
                   destroy(dom) {
-                    const measure = Reflect.get(dom, '__bearMeasure');
-                    if (typeof measure === 'function') measurers.delete(measure as () => void);
+                    measurers.delete(dom as HTMLElement);
                   },
                 },
               ),
@@ -291,7 +306,12 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
               event.preventDefault();
 
               const kind = button.getAttribute('data-table-handle');
-              const index = Number(button.getAttribute('data-index'));
+              // `parseInt`, not `Number`: `Number(null)` is `0`, and `0` is a
+              // perfectly good integer — so a handle element that somehow
+              // carried no `data-index` would be silently treated as index 0
+              // and act on the wrong row. `parseInt('')` is `NaN`, which the
+              // guard below rejects.
+              const index = Number.parseInt(button.getAttribute('data-index') ?? '', 10);
               if ((kind !== 'row' && kind !== 'column') || !Number.isInteger(index)) return false;
 
               return activate(view, kind, index);

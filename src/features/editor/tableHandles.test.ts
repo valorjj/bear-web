@@ -1,8 +1,11 @@
 import { Editor, getSchema } from '@tiptap/core';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { TextSelection } from '@tiptap/pm/state';
 import { describe, expect, it } from 'vitest';
 
 import { buildEditorExtensions, editorExtensions } from './extensions';
 import { serializeMarkdown } from './markdown';
+import { cellTextPos, TableHandles } from './TableHandles';
 import { tablePosAt } from './tablePos';
 
 const LABELS = { addRow: 'Insert row here', addColumn: 'Insert column here' };
@@ -285,5 +288,218 @@ describe('a handle acts on ITS OWN row or column, not the caret’s', () => {
     expect(result.defaultPrevented).toBe(false);
 
     editor.destroy();
+  });
+});
+
+describe('cellTextPos', () => {
+  // The arithmetic the whole module turns on — three `+1`s, one past each of
+  // the table's, the row's and the cell's own opening token. It is otherwise
+  // covered only transitively through the insert tests, where an off-by-one
+  // would surface as a mysteriously wrong Markdown string rather than as
+  // "this position is in the wrong cell".
+  //
+  // Asserted through the CELL'S OWN TEXT rather than as a number: a pinned
+  // integer would be a restatement of the implementation, whereas "the
+  // position for (1, 0) resolves inside the cell reading `1`" is the property
+  // the callers actually need.
+  //
+  // It is asserted through `TextSelection.near` because that is precisely what
+  // `activate()` does with the result. The raw position lands inside the cell
+  // but BEFORE its paragraph, so reading `$pos.parent` off it would report the
+  // cell — true, and not the property that matters. `near` is what turns it
+  // into the caret the table commands then read.
+  function cellTextAt(
+    doc: ProseMirrorNode,
+    tablePos: number,
+    row: number,
+    column: number,
+  ): { text: string; caretIn: string } | null {
+    const pos = cellTextPos(doc, tablePos, row, column);
+    if (pos === null) return null;
+    const { $from } = TextSelection.near(doc.resolve(pos));
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      const node = $from.node(depth);
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+        return { text: node.textContent, caretIn: $from.parent.type.name };
+      }
+    }
+    return null;
+  }
+
+  it.each([
+    [0, 0, 'a'],
+    [0, 1, 'b'],
+    [0, 2, 'c'],
+    [1, 0, '1'],
+    [1, 1, '2'],
+    [1, 2, '3'],
+  ])('resolves cell (%i, %i) to the cell reading %s', (row, column, text) => {
+    const editor = labelled(WIDE_TABLE_HTML);
+    caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
+
+    // `caretIn` pins the caret as landing in the cell's PARAGRAPH: one `+1`
+    // too few would still be somewhere in the right cell's neighbourhood and
+    // would still serialize plausibly.
+    expect(cellTextAt(editor.state.doc, tablePos, row, column)).toEqual({
+      text,
+      caretIn: 'paragraph',
+    });
+
+    editor.destroy();
+  });
+
+  it.each([
+    ['a negative row', -1, 0],
+    ['a row past the end', 2, 0],
+    ['a negative column', 0, -1],
+    ['a column past the end', 0, 3],
+  ])('returns null for %s', (_name, row, column) => {
+    const editor = labelled(WIDE_TABLE_HTML);
+    caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
+
+    expect(cellTextPos(editor.state.doc, tablePos, row, column)).toBeNull();
+
+    editor.destroy();
+  });
+
+  it('returns null when the position is not a table', () => {
+    const editor = labelled('<p>plain</p>');
+
+    expect(cellTextPos(editor.state.doc, 0, 0, 0)).toBeNull();
+
+    editor.destroy();
+  });
+});
+
+describe('the shape guard', () => {
+  /**
+   * Replaces the table the caret is in with one of the given dimensions, in a
+   * SINGLE transaction that leaves the selection inside the new table.
+   *
+   * Both halves matter. One transaction is what a grouped undo produces —
+   * `prosemirror-history` groups steps within 500ms, so a quick "delete row,
+   * add column" pair comes back as one update. Keeping the selection inside
+   * the table at the same position keeps the decoration's `key` identical, so
+   * the widget is REUSED rather than rebuilt — which is the only state in
+   * which a stale child can survive.
+   */
+  function transposeTable(editor: Editor, rows: number, columns: number): void {
+    const { schema } = editor;
+    const at = tablePosAt(editor.state)!;
+    const old = editor.state.doc.nodeAt(at)!;
+
+    const cell = (type: 'tableHeader' | 'tableCell', text: string) =>
+      schema.nodes[type]!.create(null, schema.nodes.paragraph!.create(null, schema.text(text)));
+
+    const table = schema.nodes.table!.create(
+      null,
+      Array.from({ length: rows }, (_row, r) =>
+        schema.nodes.tableRow!.create(
+          null,
+          Array.from({ length: columns }, (_column, c) =>
+            cell(r === 0 ? 'tableHeader' : 'tableCell', `r${String(r)}c${String(c)}`),
+          ),
+        ),
+      ),
+    );
+
+    const tr = editor.state.tr.replaceWith(at, at + old.nodeSize, table);
+    tr.setSelection(TextSelection.near(tr.doc.resolve(at + 3)));
+    editor.view.dispatch(tr);
+  }
+
+  /** Each handle as `<kind><index>`, in the layer's own DOM order. */
+  function handleOrder(editor: Editor): string[] {
+    return [...(layer(editor)?.children ?? [])].map(
+      (el) =>
+        `${el.getAttribute('data-table-handle') ?? '?'}${el.getAttribute('data-index') ?? '?'}`,
+    );
+  }
+
+  // 3×2 and 2×3 both total five handles, so a guard that compares a SUM sees
+  // no change and keeps the stale children. The buttons are then repositioned
+  // by their DOM index — rows first, then columns — so the leftmost column
+  // position ends up holding a button still marked `row`, and clicking it
+  // inserts a ROW. That is the "acts on the wrong thing" failure this whole
+  // module exists to prevent.
+  it('rebuilds when a table transposes without changing its handle COUNT', () => {
+    const editor = labelled(TABLE_HTML);
+    caretInFirstBodyCell(editor);
+    expect(handleOrder(editor)).toEqual(['row0', 'row1', 'row2', 'column0', 'column1']);
+
+    transposeTable(editor, 2, 3);
+
+    expect(handleOrder(editor)).toEqual(['row0', 'row1', 'column0', 'column1', 'column2']);
+
+    editor.destroy();
+  });
+
+  it('leaves the leftmost column handle inserting a COLUMN after a transpose', () => {
+    const editor = labelled(TABLE_HTML);
+    caretInFirstBodyCell(editor);
+
+    transposeTable(editor, 2, 3);
+
+    // Addressed by POSITION in the layer — the first handle after the row
+    // handles is the one drawn at the leftmost column — not by its own
+    // `data-*`, which is the very thing that goes stale.
+    const first = layer(editor)!.children[2]!;
+    expect(mousedownOn(editor, first).handled).toBe(true);
+
+    // A column was inserted after column 0: the new blank column sits between
+    // `r0c0` and `r0c1`. Had a stale `row` handle survived there, a blank ROW
+    // would have appeared instead and every row would still have three cells.
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      [
+        // The blank column is padded to the alignment row's three-dash
+        // minimum, not to the other columns' width — the serializer's own
+        // behaviour, per `docs/rulings/tables.md`.
+        '| r0c0 |     | r0c1 | r0c2 |',
+        '| ---- | --- | ---- | ---- |',
+        '| r1c0 |     | r1c1 | r1c2 |',
+        '',
+        '',
+      ].join('\n'),
+    );
+
+    editor.destroy();
+  });
+
+  // The other direction, and the sharper failure. Going 2×3 → 3×2 under a
+  // sum-based guard leaves a button marked `column` sitting at the THIRD ROW's
+  // position, so clicking it does not merely decline — it succeeds and inserts
+  // a COLUMN where the user asked for a row. "Did nothing" is a bug; "did the
+  // other thing" is the bug this module exists to prevent.
+  it('leaves the last row handle inserting a ROW after the reverse transpose', () => {
+    const editor = labelled(WIDE_TABLE_HTML);
+    caretInFirstBodyCell(editor);
+    expect(handleOrder(editor)).toEqual(['row0', 'row1', 'column0', 'column1', 'column2']);
+
+    transposeTable(editor, 3, 2);
+
+    // Addressed by POSITION again: the third handle is the one drawn at the
+    // last row's edge.
+    const third = layer(editor)!.children[2]!;
+    expect(mousedownOn(editor, third).handled).toBe(true);
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      [
+        '| r0c0 | r0c1 |',
+        '| ---- | ---- |',
+        '| r1c0 | r1c1 |',
+        '| r2c0 | r2c1 |',
+        '|      |      |',
+        '',
+        '',
+      ].join('\n'),
+    );
+
+    editor.destroy();
+  });
+
+  it('is an Extension with the name the plugin key describes', () => {
+    expect(TableHandles.name).toBe('tableHandles');
   });
 });

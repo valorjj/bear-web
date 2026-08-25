@@ -88,7 +88,7 @@ function fireFocusOut(
 
 /**
  * Invokes the plugin's own `handleDOMEvents` handler against the REAL
- * mounted view, the same approach `tableControls.test.ts` uses and for the
+ * mounted view, the same approach `tableHandles.test.ts` uses and for the
  * same reason: these handlers resolve through `closest()`/`event.target`, so
  * they need no layout engine, only real elements.
  */
@@ -130,7 +130,7 @@ describe('codeBlockPosAt', () => {
 });
 
 describe('the code language controls schema contract', () => {
-  // Same blind spot `TableControls`/`HeadingFold` document: this is an
+  // Same blind spot `TableHandles`/`HeadingFold` document: this is an
   // Extension that decorates and never mutates, so every Markdown
   // round-trip test in the suite passes whether or not this plugin runs.
   it('adds nothing to the schema, because it is an Extension', () => {
@@ -192,7 +192,7 @@ describe('the trigger', () => {
 
   // The schema-only `editorExtensions` constant supplies no labels. A
   // control with no user-facing text would be worse than none at all, so
-  // with no labels there is no plugin — same contract as `TableControls`.
+  // with no labels there is no plugin — same contract as `TableHandles`.
   it('renders nothing at all when the caller supplied no labels', () => {
     const editor = new Editor({
       extensions: editorExtensions,
@@ -466,7 +466,7 @@ describe('choosing a language', () => {
   });
 
   // A `Decoration.widget` is matched and reused by (pos, side, key) across
-  // transactions — the same mechanic `TableControls`' own comment documents
+  // transactions — the same mechanic `TableHandles`' own comment documents
   // for why its bar survives edits inside the same table without rebuilding.
   // That means a fresh `decorations()` call after `choose()` returns the
   // SAME cached DOM node rather than calling `controlElement` again, so the
