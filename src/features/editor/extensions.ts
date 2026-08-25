@@ -8,7 +8,8 @@ import StarterKit from '@tiptap/starter-kit';
 
 import { CodeLanguageControls, type CodeLanguageControlsOptions } from './CodeLanguageControls';
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
-import { TableControls, type TableControlsOptions } from './TableControls';
+import { ContextMenu, type ContextMenuOptions } from './ContextMenu';
+import { TableHandles, type TableHandlesOptions } from './TableHandles';
 import { Highlight } from './Highlight';
 import { lowlightForEditor } from './lowlight';
 import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
@@ -28,7 +29,11 @@ import { TaskItemPromotion } from './taskItemPromotion';
  */
 function buildSupportedExtensions(
   options: Partial<
-    TagPillOptions & HeadingFoldOptions & TableControlsOptions & CodeLanguageControlsOptions
+    TagPillOptions &
+      HeadingFoldOptions &
+      TableHandlesOptions &
+      ContextMenuOptions &
+      CodeLanguageControlsOptions
   >,
 ): Extensions {
   return [
@@ -54,7 +59,7 @@ function buildSupportedExtensions(
     StarterKit.configure({ underline: false, codeBlock: false }),
     // Registered here rather than inside `buildSupportedExtensions`' tail so it
     // sits with the other schema-contributing nodes. Unlike `TagPill`,
-    // `HeadingFold` and `TableControls`, this IS a Node: it changes the schema,
+    // `HeadingFold` and `TableHandles`, this IS a Node: it changes the schema,
     // so `computeRecognizedHtmlTags()` sees it and the round-trip suites are
     // not blind to it.
     CodeBlockLowlight.configure({ lowlight: lowlightForEditor }),
@@ -105,9 +110,13 @@ function buildSupportedExtensions(
     // Decoration only, exactly like `HeadingFold` above: it adds nothing to
     // the schema and mutates no document, so tables serialize identically
     // whether or not this runs. Without `labels` it registers no plugin at
-    // all — see `TableControls.ts`.
-    TableControls.configure(options),
-    // Same shape as `TableControls` immediately above: decoration only, no
+    // all — see `TableHandles.ts`.
+    TableHandles.configure(options),
+    // Registered with no `onOpen`, which is its "nobody is listening" state:
+    // it registers no plugin at all, so the browser's own context menu is
+    // untouched until the app wires a handler through. See `ContextMenu.ts`.
+    ContextMenu.configure(options),
+    // Same shape as `TableHandles` above: decoration only, no
     // schema change, and no plugin registered at all without `codeLabels`.
     // See `CodeLanguageControls.ts`.
     CodeLanguageControls.configure(options),
@@ -161,7 +170,11 @@ function computeRecognizedHtmlTags(): Set<string> {
  */
 export function buildEditorExtensions(
   options: Partial<
-    TagPillOptions & HeadingFoldOptions & TableControlsOptions & CodeLanguageControlsOptions
+    TagPillOptions &
+      HeadingFoldOptions &
+      TableHandlesOptions &
+      ContextMenuOptions &
+      CodeLanguageControlsOptions
   > = {},
 ): Extensions {
   return [

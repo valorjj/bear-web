@@ -4,7 +4,9 @@ How this app's controls announce themselves to assistive tech, and which
 affordances a control must keep at rest.
 
 **Trigger:** any diff touching `aria-label`, `aria-hidden`, `aria-current`,
-`aria-pressed` or an accessible-name assertion; `src/ui/Icon.tsx` (the sole
+`aria-pressed` or an accessible-name assertion; `src/features/editor/EditorContextMenu.tsx`
+(the `menuitemcheckbox`/`menuitemradio`/`menuitem` roles and the `Shift+F10`
+route into it) and `src/features/editor/HighlightPalette.tsx`; `src/ui/Icon.tsx` (the sole
 `lucide-react` importer, which stamps `aria-hidden` on every glyph);
 `src/ui/SidebarRow.tsx`'s explicit `{' '}` before the count;
 `src/features/notes/NoteListItem.tsx`'s `label` string and its two sibling
@@ -185,14 +187,20 @@ Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
   widens the heading behaviour, that test fails and the bar needs the same
   treatment.
 
-- **The table bar's buttons are WORDS, not glyphs, and that follows the
-  existing destructive-control rule rather than making a new one.** Three of
-  the five delete content. An icon-only "delete column" asks the user to
-  recall a glyph before throwing data away, which is the same objection that
-  keeps "Delete forever" and "Empty trash" as text. Only the WORD takes
-  `--bear-danger`; the fill stays quiet, matching "Move to trash" in the note
-  list. It also happens to avoid copying five more glyph paths into
-  `Icon.tsx`, but that is a convenience, not the reason.
+- **The table bar's WORDS-not-glyphs rule is gone WITH THE BAR, but it
+  strengthens the destructive-control rule rather than reversing it.** The bar
+  itself no longer exists — sub-project H replaced it with edge handles and a
+  right-click context menu. The original reasoning was that three of the bar's
+  five buttons deleted content, and an icon-only "delete column" asks the user
+  to recall a glyph before throwing data away, the same objection that keeps
+  "Delete forever" and "Empty trash" as text. That reasoning did not get
+  weaker; the destructive three (`Delete row`, `Delete column`, `Delete table`)
+  are now named ROWS in `EditorContextMenu.tsx`, plain `menuitem`s with real
+  words, not icons — the words survive and moved somewhere a mis-aimed hover
+  cannot reach them, since a menu row requires a deliberate click to even be
+  near, unlike a bar button sitting in the flow of the page. Only the word
+  still takes `--bear-danger`; the fill stays quiet, matching "Move to trash"
+  in the note list.
 
 - **The fold badge's level is now a `Heading1`–`Heading6` glyph, and the
   accessible-name test it broke had to be REWRITTEN, not merely kept green.**
@@ -237,3 +245,32 @@ Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
   is always in effect, which is what radio semantics carry. Its light/dark
   separators are headings, NOT nested `role="group"` wrappers: a `group`
   sitting between a `radiogroup` and its radios is not a shape ARIA defines.
+
+- **The editing context menu's keyboard route is not optional, and its roles
+  are chosen per action shape.** `Shift+F10` (via `ContextMenu.ts`'s
+  `Shift-F10` keymap entry, dispatching `openContextMenu`) is the keyboard
+  equivalent of a right-click and must open the same menu at the caret — a
+  pointer-only affordance for editing commands this central would be a
+  regression, not a convenience. Inside the menu, `role="menuitemcheckbox"`
+  marks an independently-toggleable state (bold, italic, the four list/quote
+  toggles), `role="menuitemradio"` marks a MUTUALLY EXCLUSIVE choice (the
+  heading level row, the highlight colour row), and plain `role="menuitem"`
+  marks a one-shot action (insert/delete row or column, delete table). The
+  accepted cost: `ContextMenu.ts` calls `event.preventDefault()` on the native
+  `contextmenu` event to show ours instead, which also removes the browser's
+  OWN spellcheck suggestions, Look Up and Services from the writing surface —
+  there is no way to keep half of a native menu. Overriding `contextmenu` is an
+  all-or-nothing trade, made deliberately.
+
+- **A `menuitemradio` group must be able to represent every one of its
+  options, or it is lying to sighted users too, not only to assistive tech.**
+  The heading row shipped reading `EditorFlags.heading1` alone, which is `true`
+  only at level 1 — so a caret in an H2 through H6 heading opened the menu with
+  NONE of the six rows checked, and five of six heading levels could simply
+  never show as checked no matter where the caret sat. Because
+  `aria-checked:bg-selected` is what paints the row's highlight, this was
+  visible on screen, not just to a screen reader — the same defect shape as
+  the scope-menu checkmark gap above. Fixed by widening `EditorFlags` with
+  `headingLevel: number | null` (computed independently of the pre-existing
+  `heading1`, which the toolbar's own `aria-pressed` still reads), and having
+  the menu's radio row check `headingLevel === n` instead.

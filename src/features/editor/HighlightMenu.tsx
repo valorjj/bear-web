@@ -1,9 +1,9 @@
 import { type ReactElement, useEffect, useRef } from 'react';
 
 import { useT } from '@/i18n';
-import type { TranslationKey } from '@/i18n';
 
 import type { HighlightColor } from './Highlight';
+import { HIGHLIGHT_CHOICES } from './highlightChoices';
 
 export interface HighlightMenuProps {
   /** The colour currently under the cursor, or `null` for the default tint. */
@@ -12,29 +12,6 @@ export interface HighlightMenuProps {
   /** Closes without choosing — Escape, or a click elsewhere. */
   onDismiss: () => void;
 }
-
-interface Choice {
-  color: HighlightColor | null;
-  label: TranslationKey;
-  /**
-   * The Tailwind utility for this swatch's fill. Written out rather than
-   * interpolated from the colour name: Tailwind scans source text for whole
-   * class names, so a `bg-hl-${color}` template would compile to nothing at
-   * all — the same silent-no-output failure mode `--color-hover`'s two-
-   * milestone absence had.
-   */
-  swatch: string;
-}
-
-const CHOICES: readonly Choice[] = [
-  // The default leads, because it is what every existing `==text==` already
-  // is and the colours are the addition.
-  { color: null, label: 'editor.highlight.default', swatch: 'bg-selected' },
-  { color: 'blue', label: 'editor.highlight.blue', swatch: 'bg-hl-blue' },
-  { color: 'green', label: 'editor.highlight.green', swatch: 'bg-hl-green' },
-  { color: 'pink', label: 'editor.highlight.pink', swatch: 'bg-hl-pink' },
-  { color: 'purple', label: 'editor.highlight.purple', swatch: 'bg-hl-purple' },
-];
 
 /**
  * The highlight colours, as a menu under the toolbar's colour chevron.
@@ -75,7 +52,7 @@ export function HighlightMenu({ current, onChoose, onDismiss }: HighlightMenuPro
       aria-label={t('editor.highlight.menu')}
       className="flex min-w-36 flex-col gap-0.5 rounded-lg bg-surface p-1 shadow-popover"
     >
-      {CHOICES.map((choice) => (
+      {HIGHLIGHT_CHOICES.map((choice) => (
         <button
           key={choice.color ?? 'default'}
           ref={choice.color === current ? checked : undefined}

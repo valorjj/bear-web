@@ -1,14 +1,26 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * The three editor affordances added in E, covering only what no unit test
- * can: real geometry, and Chromium's real focus behaviour.
+ * The editor affordances added in E, covering only what no unit test can:
+ * real geometry, and Chromium's real focus behaviour.
  *
  * Everything about WHAT these controls do — the commands, the Markdown they
  * produce, the decoration set — is asserted in Vitest
  * (`tableControls.test.ts`, `toolbars.test.tsx`, `headingFold.test.ts`).
- * jsdom has no layout engine, so where the bar lands and whether a button in
- * a ProseMirror widget can take focus are only answerable here.
+ * jsdom has no layout engine, so where a control lands and whether a button
+ * in a ProseMirror widget can take focus are only answerable here.
+ *
+ * REWRITTEN in sub-project H's fix round 1 (Finding 4): the three table
+ * tests below used to assert a floating `role="toolbar"` bar above the
+ * table. `d9d6de5 feat(editor): replace the table bar with edge handles`
+ * (Task 9) deleted that bar in favour of per-row/-column `⊕` handles
+ * (`TableHandles.ts`) plus the context menu's own table section (Task 10) —
+ * deliberately, following user feedback ("I do not want a text-written
+ * button") recorded in `TableHandles.ts`'s own docblock — and these three
+ * tests were never updated to match, leaving them permanently red. The
+ * COVERAGE they were protecting (a table control's geometry, and whether a
+ * button inside a ProseMirror widget can take real keyboard focus) still
+ * applies to the edge handles, so it is rewritten below rather than deleted.
  */
 
 async function openNoteWithTable(page: import('@playwright/test').Page): Promise<void> {
@@ -35,41 +47,75 @@ async function openNoteWithTable(page: import('@playwright/test').Page): Promise
   await expect(page.locator('.ProseMirror table')).toHaveCount(1);
 }
 
-test('the table bar sits above the table it belongs to', async ({ page }) => {
+test('a row handle sits outside the table it belongs to, and a column handle sits above it', async ({
+  page,
+}) => {
   await openNoteWithTable(page);
 
-  const bar = page.getByRole('toolbar', { name: 'Table' });
-  await expect(bar).toBeVisible();
+  const table = page.locator('.ProseMirror table');
+  const rowHandle = page.locator('[data-table-handle="row"][data-index="0"]');
+  const columnHandle = page.locator('[data-table-handle="column"][data-index="0"]');
 
-  const barBox = await bar.boundingBox();
-  const tableBox = await page.locator('.ProseMirror table').boundingBox();
-  expect(barBox).not.toBeNull();
+  // Hidden by `opacity: 0` before the hover — checked directly, not assumed:
+  // Playwright's own `toBeVisible()` ignores `opacity` entirely (only
+  // `visibility`/`display` count), so `toBeVisible()` below would pass
+  // whether or not the CSS reveal rule
+  // (`.bear-table-handles:has(+ table:hover)` in `editor.css`) actually
+  // fires — it asserts only that the button EXISTS and has layout, which is
+  // true regardless of hover. Reading `opacity` before and after the hover
+  // is what actually exercises the reveal.
+  await expect(rowHandle).toHaveCSS('opacity', '0');
+
+  // Revealed on hovering the TABLE, not the (invisible, one-pixel-tall)
+  // handle layer itself.
+  await table.hover();
+
+  await expect(rowHandle).toHaveCSS('opacity', '1');
+  await expect(columnHandle).toHaveCSS('opacity', '1');
+  await expect(rowHandle).toBeVisible();
+  await expect(columnHandle).toBeVisible();
+
+  const tableBox = await table.boundingBox();
+  const rowBox = await rowHandle.boundingBox();
+  const columnBox = await columnHandle.boundingBox();
   expect(tableBox).not.toBeNull();
+  expect(rowBox).not.toBeNull();
+  expect(columnBox).not.toBeNull();
 
-  // Above, not overlapping. The widget is placed INSIDE the scrolling content
-  // precisely so this holds without any geometry code — a regression to
-  // `fixed` positioning would show up here as drift.
-  expect(barBox!.y + barBox!.height).toBeLessThanOrEqual(tableBox!.y);
-  // Left-aligned with the table, and never wider than it.
-  expect(Math.abs(barBox!.x - tableBox!.x)).toBeLessThan(2);
+  // The row handle hangs OFF the table's own left edge — `translate(-100%,
+  // -50%)` in `editor.css` — not inside it, so it never sits over the
+  // table's own content.
+  expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(tableBox!.x + 1);
+  // Roughly vertically centred on the table's own first row, within a
+  // couple of pixels of the table's own top edge.
+  expect(Math.abs(rowBox!.y + rowBox!.height / 2 - tableBox!.y)).toBeLessThan(20);
+
+  // The column handle straddles the table's TOP BORDER — `translate(-50%,
+  // -50%)` — rather than sitting fully above it, unlike a row handle: its
+  // own vertical centre sits within its own half-height of the table's top
+  // edge.
+  expect(Math.abs(columnBox!.y + columnBox!.height / 2 - tableBox!.y)).toBeLessThan(
+    columnBox!.height / 2 + 2,
+  );
 });
 
-test('the bar goes away when the caret leaves the table', async ({ page }) => {
+test('the table handles go away when the caret leaves the table', async ({ page }) => {
   await openNoteWithTable(page);
-  await expect(page.getByRole('toolbar', { name: 'Table' })).toBeVisible();
+  await expect(page.locator('[data-table-handle]')).not.toHaveCount(0);
 
   // The title paragraph, which is outside the table. `.first()` is the note
   // title rather than a cell's paragraph — cells contain paragraphs too, and
-  // clicking one of those would leave the caret inside the table and the bar
-  // correctly visible.
+  // clicking one of those would leave the caret inside the table and the
+  // handles correctly present.
   const title = page.locator('.ProseMirror > p').first();
   await expect(title).toContainText('Title');
   await title.click();
 
   // Asserts the CARET actually left before asserting the consequence. Without
-  // this, a click that did not take reads as "the bar refuses to hide", which
-  // points at the plugin rather than at the click. Observed roughly once in
-  // nine full runs under contention.
+  // this, a click that did not take reads as "the handles refuse to hide",
+  // which points at the plugin rather than at the click. Observed roughly
+  // once in nine full runs under contention (documented for the bar this
+  // replaces; the same race applies here unchanged).
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -80,7 +126,7 @@ test('the bar goes away when the caret leaves the table', async ({ page }) => {
     )
     .toBe(true);
 
-  await expect(page.getByRole('toolbar', { name: 'Table' })).toBeHidden();
+  await expect(page.locator('[data-table-handle]')).toHaveCount(0);
 });
 
 /**
@@ -90,17 +136,18 @@ test('the bar goes away when the caret leaves the table', async ({ page }) => {
  * with `Mod-Alt-F` as its keyboard route.
  *
  * That finding does NOT extend here, and this test is what keeps the claim
- * honest rather than assumed: a button in the table bar's widget takes focus
- * normally, so the bar needs no keyboard escape hatch of its own. If Chromium
- * ever generalises the heading behaviour, this fails and the bar needs the
+ * honest rather than assumed: a button in the table handles' widget takes
+ * focus normally, so the handles need no keyboard escape hatch of their own
+ * beyond the context menu's own table section (Task 10). If Chromium ever
+ * generalises the heading behaviour, this fails and the handles need the
  * same treatment the fold gutter got.
  */
-test('a table bar button can take focus, unlike the fold gutter', async ({ page }) => {
+test('a table handle button can take focus, unlike the fold gutter', async ({ page }) => {
   await openNoteWithTable(page);
-  await expect(page.getByRole('toolbar', { name: 'Table' })).toBeVisible();
+  await expect(page.locator('[data-table-handle]')).not.toHaveCount(0);
 
   const focused = await page.evaluate(() => {
-    const button = document.querySelector('[data-table-action]') as HTMLElement | null;
+    const button = document.querySelector('[data-table-handle]') as HTMLElement | null;
     button?.focus();
     return document.activeElement === button;
   });

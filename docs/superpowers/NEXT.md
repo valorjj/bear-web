@@ -71,6 +71,62 @@ Still open, and deliberately not F: a custom-theme editor (letting a user
 supply their own eight colours), and per-theme syntax palettes, which **C
 will need** — that is why C is queued after F rather than before it.
 
+### H. Editor interaction surfaces — SHIPPED 2026-08-25
+
+Spec: `docs/superpowers/specs/2026-08-25-h-editor-interaction-surfaces-design.md`.
+Plan: `docs/superpowers/plans/2026-08-25-h-editor-interaction-surfaces.md`.
+Rulings touched: `docs/rulings/tables.md`, `docs/rulings/accessibility.md`.
+
+Eleven tasks: a live-state selector fixing the bottom toolbar's stale pressed
+states, a highlight colour palette that floats at the caret instead of living
+only in the bottom toolbar, a right-click (and `Shift+F10`) editing menu, and
+edge handles on table rows/columns replacing the floating table bar E shipped.
+
+Findings worth carrying forward:
+
+- **`useEditor` does not re-render on transactions in Tiptap v3**
+  (`shouldRerenderOnTransaction` defaults to `false`); `editor.isActive()`
+  called during a React render reads stale state. Fixed by reading through
+  `editorState.ts`'s `useEditorState` selector, never `isActive` in a render
+  body. The obvious falsification (revert one `aria-pressed` back to
+  `isActive`) does NOT work — `flags` is one shared object, so the flag
+  flipping still re-renders and the reverted read still sees fresh state. The
+  falsifying change is removing the `useEditorState` subscription itself.
+- **A `menuitemradio` group must be able to represent every one of its
+  options.** The context menu's heading row initially read `EditorFlags`'s
+  toolbar-shaped `heading1` alone, so five of six heading levels could never
+  show as checked — visible to sighted users too, since `aria-checked` drives
+  the row's own highlight colour. Fixed by adding `headingLevel: number | null`
+  alongside the pre-existing `heading1`.
+- **A widget's shape was chosen specifically to avoid geometry code, and edge
+  handles reintroduce it deliberately** — so no unit test can assert a
+  handle's position; that coverage lives only in `e2e/editorContext.spec.ts`
+  and `e2e/editorAffordances.spec.ts`.
+- **A shape-guard defect the reviewer caught: comparing `rows.length +
+  columns.length` cannot detect a transpose.** A 3×2 → 2×3 change (reachable
+  via one grouped `Ctrl+Z` over "delete row, add column", since
+  `prosemirror-history` groups steps within 500ms) kept the sum constant and
+  left handles whose kind/index no longer matched their position — a column
+  handle that inserted a row. Fixed with a 2-D `data-shape` signature.
+- **Moving the selection to the right-clicked position on menu open, instead
+  of per-command, fixed a stale-context bug but nearly introduced a new
+  collision:** the floating highlight palette derives from the selection too,
+  so right-clicking highlighted text popped the palette on top of the menu
+  until it was gated on `contextMenu === null`.
+- **Three near-vacuous test assertions were found and replaced in this plan**
+  (`toHaveProperty('pos')`, an `aria-expanded`-only submenu check, and
+  `toBeVisible()` against an opacity-only reveal rule) — see the CLAUDE.md
+  toolchain-surprises entry.
+
+**G (PDF export) is next, and was deliberately held until H shipped.** The
+user's stated motivation: Bear's own PDF export ignores the selected theme, and
+closing that gap is the point of G — a note exported under a dark theme should
+not print near-white text on white paper. G's spec
+(`docs/superpowers/specs/2026-08-25-g-pdf-export-design.md`) already makes the
+theme authoritative for the printed document, and its test plan renders the
+fixed corpus note to PDF in four themes spanning the roster's light/dark
+groups.
+
 ## The three sub-projects, in order
 
 Chosen from four Bear screenshots the user supplied. All three are

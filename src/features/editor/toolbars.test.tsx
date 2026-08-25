@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EditorView } from '@tiptap/pm/view';
 import { createRef } from 'react';
@@ -7,6 +7,30 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { renderWithI18n } from '@/i18n/testing';
 
 import { RichEditor, type RichEditorHandle } from './RichEditor';
+
+// Task 5's palette-placement effect calls `posToDOMRect`, which resolves to
+// `EditorView.coordsAtPos` and, for a non-collapsed range, `Range.getClientRects`.
+// jsdom has no layout engine and implements neither; see the same stub in
+// `NoteEditor.test.tsx` and the toolchain note in CLAUDE.md about jsdom lacking
+// `coordsAtPos`/`posAtCoords` support.
+const emptyRect: DOMRect = {
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  toJSON: () => ({}),
+};
+Range.prototype.getBoundingClientRect = () => emptyRect;
+Range.prototype.getClientRects = () =>
+  ({
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: function* () {},
+  }) as unknown as DOMRectList;
 
 // A block-level toggle (list, blockquote, code block) calls ProseMirror's
 // `tr.scrollIntoView()` internally, and clicking a toolbar button blurs the
@@ -491,5 +515,57 @@ describe('the highlight colour menu', () => {
 
     expect(screen.queryByRole('menu', { name: 'Highlight colour' })).toBeNull();
     expect(handleRef.current?.getMarkdown()).toBe('word');
+  });
+
+  // `HighlightMenu` (this chevron) and `HighlightPalette` (floats at the
+  // caret inside a highlight) are two independent surfaces that both use the
+  // string "Highlight colour" as their accessible name. The palette is
+  // gated on `contextMenu === null`, but nothing gates it against the
+  // toolbar's own colour menu — so with the caret already inside a
+  // highlight, opening the chevron's menu risks rendering both at once,
+  // which makes `getByRole('menu', { name: 'Highlight colour' })`
+  // strict-mode-ambiguous for any test (including every `openColourMenu()`
+  // call above) that runs with the caret inside a highlight.
+  it('renders exactly one "Highlight colour" surface when the caret is inside a highlight', async () => {
+    const { handleRef } = renderEditor('<mark class="hl-green">word</mark>');
+    await screen.findByLabelText('Note text');
+
+    // Caret inside the mark, not a selection spanning it — this is what
+    // makes `HighlightPalette` pop via `flags.highlightRange`.
+    handleRef.current?.editor?.commands.setTextSelection(2);
+
+    await userEvent.click(
+      within(bottomToolbar()).getByRole('button', { name: 'Highlight colour' }),
+    );
+
+    expect(screen.getAllByRole('menu', { name: 'Highlight colour' })).toHaveLength(1);
+  });
+});
+
+describe('live formatting state', () => {
+  it('repaints the toolbar when the selection moves, with no React state change', async () => {
+    // The regression this pins: `useEditor` does not re-render on transactions
+    // in Tiptap v3, so a toolbar reading `editor.isActive()` during render
+    // reports whatever was true when React last rendered for a reason of its
+    // own. Nothing in this test touches React state — the ONLY thing that can
+    // repaint the button is the editor-state subscription.
+    const { handleRef } = renderEditor('plain **bold** plain');
+    await screen.findByLabelText('Note text');
+    const editor = handleRef.current?.editor;
+    if (editor === null || editor === undefined) {
+      throw new Error('editor did not mount');
+    }
+
+    const boldButton = within(bottomToolbar()).getByRole('button', { name: 'Bold' });
+
+    act(() => {
+      editor.commands.setTextSelection(2);
+    });
+    await waitFor(() => expect(boldButton).toHaveAttribute('aria-pressed', 'false'));
+
+    act(() => {
+      editor.commands.setTextSelection(9);
+    });
+    await waitFor(() => expect(boldButton).toHaveAttribute('aria-pressed', 'true'));
   });
 });

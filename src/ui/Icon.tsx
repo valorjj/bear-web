@@ -1,6 +1,7 @@
 import {
   ChevronDown,
   ChevronRight,
+  Plus,
   Heading1,
   Heading2,
   Heading3,
@@ -100,6 +101,14 @@ type IconNode = readonly (readonly [tag: string, attrs: Readonly<Record<string, 
 const ICON_NODES = new Map<LucideIcon, IconNode>([
   [ChevronDown, [['path', { d: 'm6 9 6 6 6-6' }]]],
   [ChevronRight, [['path', { d: 'm9 18 6-6-6-6' }]]],
+  // The row/column edge handles' `⊕` (`TableHandles.ts`).
+  [
+    Plus,
+    [
+      ['path', { d: 'M5 12h14' }],
+      ['path', { d: 'M12 5v14' }],
+    ],
+  ],
   // The six below draw the fold gutter's level indicator. Their shared first
   // three paths are the `H`; only the trailing numeral differs. `Heading6`
   // is the only entry that is not paths alone.
@@ -201,6 +210,7 @@ export function renderIconMarkup(glyph: LucideIcon, size: IconProps['size'] = 'm
 export type { LucideIcon };
 
 export {
+  Ban,
   FileText,
   Inbox,
   ListTodo,
@@ -237,4 +247,8 @@ export {
   Heading5,
   Heading6,
   UserRound,
+  Pilcrow,
+  Rows3,
+  Columns3,
+  Plus,
 } from 'lucide-react';

@@ -105,6 +105,8 @@ export const en = {
   'editor.highlight.green': 'Green',
   'editor.highlight.pink': 'Pink',
   'editor.highlight.purple': 'Purple',
+  'editor.highlight.palette': 'Highlight colour',
+  'editor.highlight.remove': 'Remove highlight',
   'editor.toolbar.link': 'Link',
   'editor.toolbar.code': 'Code block',
   'editor.toolbar.table': 'Table',
@@ -116,12 +118,27 @@ export const en = {
   'export.pdf': 'PDF',
   'export.failed': 'This note could not be exported.',
 
-  'editor.table.controls': 'Table',
-  'editor.table.addRow': '+ Row',
-  'editor.table.deleteRow': '− Row',
-  'editor.table.addColumn': '+ Column',
-  'editor.table.deleteColumn': '− Column',
+  // The two edge handles' accessible names. They point AT a row or column,
+  // so "here" is the whole meaning — the bar these replaced had to say which
+  // table it acted on.
+  'editor.table.addRowHandle': 'Insert row here',
+  'editor.table.addColumnHandle': 'Insert column here',
+  // Full sentences, because these are context-menu rows now rather than
+  // buttons on a bar that already named the table.
+  'editor.table.deleteRow': 'Delete row',
+  'editor.table.deleteColumn': 'Delete column',
   'editor.table.deleteTable': 'Delete table',
+
+  'editor.context.menu': 'Editing options',
+  'editor.context.paragraph': 'Body text',
+  'editor.context.table': 'Table',
+  'editor.context.format': 'Format',
+  'editor.context.blocks': 'Blocks',
+  'editor.table.addRowBefore': 'Insert row above',
+  'editor.table.addRowAfter': 'Insert row below',
+  'editor.table.addColumnBefore': 'Insert column before',
+  'editor.table.addColumnAfter': 'Insert column after',
+
   'editor.code.language': 'Code language',
   'editor.code.none': 'Plain text',
   'editor.code.filter': 'Filter languages',

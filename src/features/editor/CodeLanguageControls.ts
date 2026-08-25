@@ -12,7 +12,7 @@ export interface CodeLanguageControlsOptions {
    * at all.
    *
    * Absent rather than unlabelled, deliberately, exactly like
-   * `TableControls.labels`: no user-facing string may be hardcoded, and a
+   * `TableHandles.labels`: no user-facing string may be hardcoded, and a
    * control with blank text would be worse than no control. The twelve
    * language display names are NOT here — they are `label` fields on
    * `CODE_LANGUAGES`, proper nouns identical in every locale.
@@ -300,7 +300,7 @@ function controlElement(
  * opens a filterable, keyboard-navigable listbox of the twelve known
  * languages plus "plain text".
  *
- * Built exactly like `TableControls`: a `Decoration.widget` with `side: -1`
+ * Built exactly like `TableHandles`: a `Decoration.widget` with `side: -1`
  * and a stable `key`, so it lives inside the scrolling content and is
  * reused rather than rebuilt across the many transactions that move the
  * caret within the same code block; a single `Plugin` with no `state` field
@@ -310,7 +310,7 @@ function controlElement(
  * `Node`: it registers nothing in the schema and mutates no document by
  * merely existing, so every Markdown round-trip test is blind to whether it
  * runs at all — `codeLanguageControls.test.ts` asserts on the rendered DOM
- * instead, the way `tableControls.test.ts` does.
+ * instead, the way `tableHandles.test.ts` does.
  *
  * The `view()` lifecycle below exists for exactly one thing: closing the
  * popover on a mousedown OUTSIDE it, including outside the editor entirely
@@ -656,7 +656,7 @@ function close(container: HTMLElement, options: { returnFocus?: boolean } = {}):
  * Also refreshes the TRIGGER's own label directly, rather than trusting the
  * next `decorations()` pass to do it: `Decoration.widget` is matched and
  * reused by `(pos, side, key)` across transactions, exactly like
- * `TableControls`' bar — its own comment calls this out as the reason the
+ * the old table bar — its own comment calls this out as the reason the
  * widget survives edits inside the same table without rebuilding. That
  * reuse means a fresh `decorations()` call with an UPDATED fence still
  * returns the same cached DOM node rather than invoking `controlElement`
