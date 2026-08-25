@@ -68,6 +68,12 @@ function isTimeout(error: unknown): boolean {
  * shared browser is torn down immediately instead — the next render lazily
  * relaunches it. An INJECTED browser (tests) is never closed here: it belongs
  * to the caller, and killing it would take out the rest of the suite.
+ *
+ * Known trade-off, deferred rather than solved: the shared browser may be
+ * hosting a CONCURRENT render, which this kills, surfacing to an unrelated
+ * user as a 500. Reaching it requires a context close to hang for 5s, which
+ * has not been observed; fixing it properly means draining the queue before
+ * the teardown.
  */
 const CLOSE_TIMEOUT_MS = 5_000;
 

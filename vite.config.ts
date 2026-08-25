@@ -58,22 +58,32 @@ export default defineConfig({
           exclude: [...configDefaults.exclude, 'server/pdf/**'],
         },
       },
-      {
-        /*
-         * The renderer service. A third project rather than a folder of the
-         * `server` one because these tests drive a real Chromium: they are
-         * slow, they must not run alongside the DB tests' sequential file
-         * lock, and like `server` they deliberately do NOT `extend` — jsdom
-         * and the swapped global `Blob` would make them lie about the
-         * environment they prove.
-         */
-        test: {
-          name: 'pdf',
-          environment: 'node',
-          include: ['server/pdf/**/*.test.ts'],
-          testTimeout: 30_000,
-        },
-      },
+      /*
+       * The renderer service, and it is GATED rather than merely filtered.
+       *
+       * Its tests launch a real Chromium. Excluding it with `--project='!pdf'`
+       * in the `test` script left `npx vitest run` and — the one that actually
+       * matters on a fanless machine — bare `npm run test:watch` still
+       * launching a browser, because neither passes that filter. Gating the
+       * project's very existence on an env var means no invocation can load it
+       * by accident; `npm run test:pdf` is the only thing that sets the flag.
+       *
+       * Like `server`, it deliberately does NOT `extend`: jsdom and the
+       * swapped global `Blob` would make these tests lie about the
+       * environment they prove.
+       */
+      ...(process.env.VITEST_PDF === '1'
+        ? [
+            {
+              test: {
+                name: 'pdf',
+                environment: 'node' as const,
+                include: ['server/pdf/**/*.test.ts'],
+                testTimeout: 30_000,
+              },
+            },
+          ]
+        : []),
     ],
   },
 });

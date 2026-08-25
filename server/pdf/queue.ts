@@ -16,11 +16,16 @@ export const RESTART_EVERY = 50;
  * Admission, which is a different thing from concurrency.
  *
  * The concurrency limit alone bounds how many renders run; it does NOT bound
- * how many callers are parked waiting, each holding its request body. With a
- * 2MB body cap and the container's 1g `mem_limit` — a kill, not a warning —
- * roughly 500 parked requests is an OOM, reachable by one client. Past this
- * depth callers are shed immediately rather than queued, which the spec's
- * error table already maps to 503 "PDF export is unavailable right now".
+ * how many callers are parked waiting, each holding its request body against
+ * the container's 1g `mem_limit`, which is a kill and not a warning.
+ *
+ * Over HTTP this is now the second of two limits — `MAX_INFLIGHT` in
+ * `server.ts` refuses a request before its body is read, so the unbounded-
+ * parking OOM is not reachable through `/render`. This one bounds any OTHER
+ * caller of `withSlot`, and keeps the queue's own invariant local to the
+ * queue rather than resting on a constant in a different module. Past this
+ * depth callers are shed immediately, which the spec's error table already
+ * maps to 503 "PDF export is unavailable right now".
  */
 export const MAX_QUEUE_DEPTH = 8;
 

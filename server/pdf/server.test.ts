@@ -81,23 +81,21 @@ describe('createRenderServer', () => {
       },
     });
 
-    const response = await post(base, 'x'.repeat(64 * 1024)).catch((error: Error) => error);
+    // Just over the limit, and small enough to arrive in ONE chunk, so the
+    // response is written and flushed before the socket is destroyed. An
+    // earlier version sent 64KB, which raced the destroy and could surface as
+    // a fetch rejection instead of a status — so it accepted either, and the
+    // status half asserted nothing.
+    const response = await post(base, 'x'.repeat(1100));
 
-    // Node may destroy the socket before the response is fully read, which
-    // surfaces as a fetch rejection rather than a 413. Either is an acceptable
-    // refusal; what is NOT acceptable is the renderer being handed the body,
-    // or the process dying on a second set of headers.
-    if (response instanceof Error) expect(response.message).toBeTruthy();
-    else expect(response.status).toBe(413);
-
+    expect(response.status).toBe(413);
     expect(rendered, 'the oversized body must never reach the renderer').toBe(0);
 
     // Honesty: this line is a smoke check, not a proven control. Removing the
     // `settled` latch and the `req.on('error')` handler was fault-injected and
     // this test still passed — Node does not re-fire `data`/`end` on a
     // destroyed request, so the double-header path could not be provoked. The
-    // falsifiable assertion in this test is the one above it: raising the size
-    // limit makes `rendered` become 1 and the 413 become a 200.
+    // falsifiable assertions are the two above.
     expect((await fetch(`${base}/health`)).status).toBe(200);
   });
 

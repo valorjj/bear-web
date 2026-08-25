@@ -4,13 +4,17 @@ import type { AddressInfo } from 'node:net';
 import { chromium, type Browser } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { renderPdf, RenderTimeoutError } from './render.ts';
+import { closeSharedBrowser, renderPdf, RenderTimeoutError, sharedBrowser } from './render.ts';
 
 let browser: Browser;
 beforeAll(async () => {
   browser = await chromium.launch();
 }, 60_000);
-afterAll(async () => browser?.close());
+afterAll(async () => {
+  await browser?.close();
+  // The egress case below launches the PRODUCTION browser via sharedBrowser().
+  await closeSharedBrowser();
+});
 
 const latin1 = (pdf: Uint8Array): string => Buffer.from(pdf).toString('latin1');
 
@@ -118,6 +122,42 @@ describe('renderPdf', () => {
 
     expect(embeddedFonts(serif)).not.toEqual([]);
     expect(embeddedFonts(serif)).not.toEqual(embeddedFonts(mono));
+  });
+
+  it('denies the browser its own resolution, independently of the route abort', async () => {
+    /*
+     * This exists because the other layer had NO regression coverage.
+     *
+     * Every other case here injects a browser launched with no args, so
+     * EGRESS_DENY_ARGS was exercised by nothing: deleting it left the whole
+     * suite green. So this case uses `sharedBrowser()` — the real production
+     * launch path — and deliberately registers NO `page.route`, because with
+     * the abort in place the assertion would pass whether or not the launch
+     * args are there, which is exactly the hole it is filling.
+     *
+     * Both a literal IP and a hostname are attempted: Chromium routes literal
+     * addresses through its host resolver too, so `MAP * ~NOTFOUND` stops both.
+     */
+    const hits: string[] = [];
+    const listener: Server = createServer((req, res) => {
+      hits.push(req.url ?? '');
+      res.end('x');
+    });
+    await new Promise<void>((r) => listener.listen(0, '127.0.0.1', r));
+    const port = (listener.address() as AddressInfo).port;
+
+    const context = await (await sharedBrowser()).newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
+    await page.setContent(
+      `<img src="http://127.0.0.1:${port}/literal-ip"><img src="http://localhost:${port}/hostname">`,
+      { waitUntil: 'load' },
+    );
+
+    await new Promise((r) => setTimeout(r, 250));
+    await context.close();
+    await new Promise<void>((r) => listener.close(() => r()));
+
+    expect(hits).toEqual([]);
   });
 
   /*
