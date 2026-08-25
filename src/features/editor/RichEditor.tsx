@@ -6,17 +6,30 @@ import { ExportMenu, type ExportFormat } from '@/features/export';
 import { useT } from '@/i18n';
 
 import { BottomToolbar } from './BottomToolbar';
+import type { ContextMenuRequest } from './ContextMenu';
 import { EMPTY_FLAGS, editorFlagsSelector } from './editorState';
+import { EditorContextMenu, type ContextMenuAction } from './EditorContextMenu';
 import { buildEditorExtensions } from './extensions';
 import { HeadingMenu } from './HeadingMenu';
 import { HighlightMenu } from './HighlightMenu';
 import { HighlightPalette, type HighlightChoiceResult } from './HighlightPalette';
 import type { HighlightColor } from './Highlight';
+import { COMMANDS, TABLE_ACTIONS, type TableAction } from './tableCommands';
 import { pinAllSelectionStep } from './toolbarSelection';
 import type { HeadingMenuRequest } from './HeadingFold';
 import { InfoPanel } from './InfoPanel';
 import { parseMarkdown, serializeMarkdown } from './markdown';
 import { TopControls } from './TopControls';
+
+/**
+ * Type guard over `ContextMenuAction`, not a bare `.includes` call: the
+ * seven table actions are a `TableAction`, a strict subset of the sixteen
+ * `ContextMenuAction`s, and this is what lets `handleContextMenuAction`
+ * index `COMMANDS` (keyed only by `TableAction`) without a cast.
+ */
+function isTableAction(action: ContextMenuAction): action is TableAction {
+  return (TABLE_ACTIONS as readonly string[]).includes(action);
+}
 
 export interface RichEditorHandle {
   getMarkdown: () => string;
@@ -116,6 +129,7 @@ export function RichEditor({
   const [infoOpen, setInfoOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [menu, setMenu] = useState<HeadingMenuRequest | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   /**
    * The colour the toolbar's Highlight button applies. Sticky across clicks so
@@ -143,6 +157,14 @@ export function RichEditor({
   // component threads in, rather than being the one exception.
   const openMenuRef = useRef((request: HeadingMenuRequest) => setMenu(request));
   openMenuRef.current = (request: HeadingMenuRequest) => setMenu(request);
+
+  // Same discipline again, for `ContextMenu.onOpen`: the plugin is built once
+  // in the `useState` initializer below and captures whatever identity this
+  // ref holds at that moment, so the ref (stable) rather than `setContextMenu`
+  // itself (also stable, but kept consistent with every other extension
+  // option here) is what gets threaded through.
+  const contextMenuRef = useRef((request: ContextMenuRequest) => setContextMenu(request));
+  contextMenuRef.current = (request: ContextMenuRequest) => setContextMenu(request);
 
   const [extensions] = useState(() =>
     buildEditorExtensions({
@@ -174,6 +196,10 @@ export function RichEditor({
       // there is no "nobody is listening" state to represent with `null` here.
       onOpenMenu: (request) => openMenuRef.current(request),
       foldHint: t('editor.fold.toggle'),
+      // Unconditionally wired, same as `onOpenMenu` above and for the same
+      // reason: the context menu is a built-in editor affordance, not an
+      // opt-in prop the app may omit.
+      onOpen: (request) => contextMenuRef.current(request),
       // Read once at mount, like every option above it — the editor is keyed
       // by note id and rebuilt on a language change, so there is no live
       // language switch for these to miss.
@@ -259,6 +285,90 @@ export function RichEditor({
    */
   const [paletteAt, setPaletteAt] = useState<{ top: number; left: number } | null>(null);
   const paletteRef = useRef<HTMLDivElement | null>(null);
+  // Holds the placement effect's own `measure` so the post-mount correction
+  // effect below can call the exact same function rather than a second copy
+  // of its arithmetic. See that effect for why the correction is needed.
+  const measurePaletteRef = useRef<(() => void) | null>(null);
+
+  /**
+   * The context menu's `onAction` dispatch, kept as one function rather than
+   * inlined in the switch below: it is the one place `setTextSelection` is
+   * required before a table command runs, because a right-click does not
+   * move the caret (`ContextMenu.ts` resolves `pos` from the pointer, not
+   * from `state.selection`) — without it, a table command would act on
+   * whatever cell the caret already happened to sit in, not the one the user
+   * clicked. The eleven inline/block toggles below need no such fix: they
+   * apply to the caret/selection as-is, the same way the bottom toolbar's
+   * equivalent buttons do.
+   */
+  function handleContextMenuAction(action: ContextMenuAction): void {
+    if (editor === null || contextMenu === null) return;
+
+    if (isTableAction(action)) {
+      editor.commands.setTextSelection(contextMenu.pos);
+      COMMANDS[action](editor.state, editor.view.dispatch);
+      return;
+    }
+
+    const chain = editor.chain().command(pinAllSelectionStep).focus();
+    switch (action) {
+      case 'bold':
+        chain.toggleBold().run();
+        break;
+      case 'italic':
+        chain.toggleItalic().run();
+        break;
+      case 'strike':
+        chain.toggleStrike().run();
+        break;
+      case 'link': {
+        // Same prompt-driven flow as the bottom toolbar's own link button —
+        // see `BottomToolbar.tsx`'s `ACTIONS` entry for `link`. Not extracted
+        // into a shared helper: this is the only other call site, and the
+        // two already agree because both defer to `window.prompt` and the
+        // same `unsetLink`/`setLink` pair.
+        const href = window.prompt(t('editor.link.prompt'));
+        if (href === null || href === '') {
+          chain.unsetLink().run();
+        } else {
+          chain.extendMarkRange('link').setLink({ href }).run();
+        }
+        break;
+      }
+      case 'bulletList':
+        chain.toggleBulletList().run();
+        break;
+      case 'orderedList':
+        chain.toggleOrderedList().run();
+        break;
+      case 'taskList':
+        chain.toggleTaskList().run();
+        break;
+      case 'codeBlock':
+        chain.toggleCodeBlock().run();
+        break;
+      case 'blockquote':
+        chain.toggleBlockquote().run();
+        break;
+    }
+  }
+
+  /**
+   * `setTextSelection(contextMenu.pos)` before `setNode`, exactly the fix
+   * `HeadingMenu`'s own `onSetLevel` needed (`menu.pos + 1`, documented at its
+   * call site below): a right-click never moves the caret, so without this a
+   * heading change would land on whatever the caret already sat in rather
+   * than the heading the user actually clicked.
+   */
+  function handleSetContextHeading(level: 0 | 1 | 2 | 3 | 4 | 5 | 6): void {
+    if (editor === null || contextMenu === null) return;
+    const chain = editor.chain().focus().setTextSelection(contextMenu.pos);
+    if (level === 0) {
+      chain.setNode('paragraph').run();
+    } else {
+      chain.setNode('heading', { level }).run();
+    }
+  }
 
   const highlightRange = flags.highlightRange;
 
@@ -307,6 +417,7 @@ export function RichEditor({
       setPaletteAt({ top, left });
     };
 
+    measurePaletteRef.current = measure;
     measure();
 
     // `capture: true` on scroll: the editor's own scroller is a descendant,
@@ -315,6 +426,7 @@ export function RichEditor({
     window.addEventListener('scroll', measure, true);
     window.addEventListener('resize', measure);
     return () => {
+      measurePaletteRef.current = null;
       window.removeEventListener('scroll', measure, true);
       window.removeEventListener('resize', measure);
     };
@@ -322,6 +434,26 @@ export function RichEditor({
     // rebuilds the object each call, so depending on its identity would
     // re-run this effect on every transaction.
   }, [editor, highlightRange?.from, highlightRange?.to]);
+
+  /**
+   * R9's correction pass. The effect above's very first `measure()` call
+   * runs before `<HighlightPalette>` has ever mounted — `paletteAt` starts
+   * `null`, so `paletteRef.current` is `null` too — and falls back to
+   * `PALETTE_ESTIMATED_HEIGHT`/`WIDTH`. Those constants are accurate today,
+   * but nothing re-measures against the REAL element until the next scroll
+   * or resize, exactly the gap `HeadingMenu` closes for its own badge with a
+   * measure-after-mount effect. Keyed on whether the palette is showing at
+   * all (not on `paletteAt`'s own top/left, which this call itself changes,
+   * or this would loop) — it runs once per open, right after the div this
+   * effect's own state update causes to mount.
+   */
+  useEffect(() => {
+    if (paletteAt === null) return;
+    measurePaletteRef.current?.();
+    // Depends on the open/closed TRANSITION, not on `paletteAt`'s own
+    // top/left — this call's own `setPaletteAt` changes those, which would
+    // otherwise loop.
+  }, [paletteAt !== null]);
 
   // `onEditorReady` is read through a ref, the same discipline as
   // `activateRef` above: the callback's IDENTITY must not be a dependency
@@ -538,6 +670,26 @@ export function RichEditor({
             // chain) leave focus on the menu button React is about to unmount,
             // and it falls to `<body>` — the user's next keystroke goes nowhere.
             editor?.commands.focus();
+          }}
+        />
+      )}
+
+      {/*
+       * Rendered by the app, never by the plugin — same boundary as
+       * `HeadingMenu` above: `ContextMenu.ts` owns the DOM event and hands a
+       * request up through `onOpen`, and this is the only place that turns a
+       * menu choice into an editor command.
+       */}
+      {contextMenu !== null && editor !== null && (
+        <EditorContextMenu
+          request={contextMenu}
+          flags={flags}
+          onAction={handleContextMenuAction}
+          onSetHeading={handleSetContextHeading}
+          onSetHighlight={(result) => applyHighlightChoice(editor, result)}
+          onClose={() => {
+            setContextMenu(null);
+            editor.commands.focus();
           }}
         />
       )}

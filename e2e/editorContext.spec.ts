@@ -5,6 +5,13 @@ import { expect, test } from '@playwright/test';
  * palette anchored at that text, rather than requiring a trip to the bottom
  * toolbar. Covers only what no unit test can — real geometry and the
  * palette's real show/hide behaviour as the caret moves in and out of a mark.
+ *
+ * Task 10 adds the right-click (and `Shift-F10`) context menu below. It too
+ * covers only what no unit test can: whether the BROWSER's own menu is
+ * actually suppressed, real flip geometry near a viewport edge, and — the
+ * one Task 6's own unit test had to fake with a `posAtCoords` spy because
+ * jsdom has no hit testing — whether a table command actually lands on the
+ * cell the pointer was over, not wherever the caret happened to already be.
  */
 
 async function highlightWord(page: import('@playwright/test').Page): Promise<void> {
@@ -196,4 +203,226 @@ test('the palette flips below the highlight when there is no room above it', asy
   expect(paletteBox).not.toBeNull();
   expect(paletteBox!.y).toBeGreaterThanOrEqual(0);
   expect(paletteBox!.y + paletteBox!.height).toBeLessThanOrEqual(viewport!.height);
+});
+
+// --- Task 10: the right-click context menu ---------------------------------
+
+const CONTEXT_MENU = { name: 'Editing options' } as const;
+
+async function openNoteWithText(page: import('@playwright/test').Page): Promise<void> {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('some prose text');
+  await expect(editor).toContainText('some prose text');
+}
+
+/** Same shape as `editorAffordances.spec.ts`'s own helper of the same name. */
+async function openNoteWithTable(page: import('@playwright/test').Page): Promise<void> {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Title');
+  await expect(editor).toContainText('Title');
+
+  await page.keyboard.press('Enter');
+  await page
+    .getByRole('toolbar', { name: 'Formatting toolbar' })
+    .getByRole('button', { name: 'Table' })
+    .click();
+
+  await expect(page.locator('.ProseMirror table')).toHaveCount(1);
+}
+
+test('right-click opens ours and suppresses the browser menu', async ({ page }) => {
+  await openNoteWithText(page);
+
+  // No native `contextmenu` API exists for Playwright to query — a real OS
+  // context menu renders outside the page entirely. What IS observable from
+  // inside the page is whether the event that would have opened it was
+  // prevented, which is exactly what `ContextMenu.ts`'s handler does. Recorded
+  // through a capture-phase listener installed BEFORE the click, since our own
+  // plugin's listener runs first and installing after the click would race it.
+  // BUBBLE phase, deliberately not capture: bubbling reaches `document` LAST,
+  // after every ancestor's own listener (including the ProseMirror view's own
+  // `contextmenu` handler on `.ProseMirror` itself) has already run — so by
+  // the time this fires, `preventDefault()` has already happened if it was
+  // going to.
+  await page.evaluate(() => {
+    (window as unknown as { __ctxPrevented: boolean | null }).__ctxPrevented = null;
+    document.addEventListener('contextmenu', (event) => {
+      (window as unknown as { __ctxPrevented: boolean | null }).__ctxPrevented =
+        event.defaultPrevented;
+    });
+  });
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click({ button: 'right' });
+
+  await expect(page.getByRole('menu', CONTEXT_MENU)).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __ctxPrevented: boolean | null }).__ctxPrevented),
+    )
+    .toBe(true);
+
+  // Escape returns focus to the writing surface rather than leaving it on
+  // whatever the menu's own first item focused. Checked as
+  // `document.activeElement`, not by typing and re-reading the text: the
+  // right-click landed wherever the pointer happened to resolve within the
+  // editor, and this assertion should not depend on exactly where that was.
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu', CONTEXT_MENU)).toBeHidden();
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.classList.contains('ProseMirror')))
+    .toBe(true);
+});
+
+test("the browser's own menu still appears over the sidebar", async ({ page }) => {
+  await openNoteWithText(page);
+
+  // The tag sidebar, unlike the editor, never registers the plugin — so its
+  // `contextmenu` event must reach the browser untouched.
+  const sidebar = page.getByRole('button', { name: 'New note' });
+  const prevented = await sidebar.evaluate(
+    (el) =>
+      new Promise<boolean>((resolve) => {
+        el.addEventListener('contextmenu', (event) => resolve(event.defaultPrevented), {
+          once: true,
+        });
+        el.dispatchEvent(
+          new MouseEvent('contextmenu', {
+            bubbles: true,
+            cancelable: true,
+            clientX: 5,
+            clientY: 5,
+          }),
+        );
+      }),
+  );
+  expect(prevented).toBe(false);
+  await expect(page.getByRole('menu', CONTEXT_MENU)).toBeHidden();
+});
+
+test('Shift+F10 opens the menu at the caret', async ({ page }) => {
+  await openNoteWithText(page);
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.press('Shift+F10');
+
+  const menu = page.getByRole('menu', CONTEXT_MENU);
+  await expect(menu).toBeVisible();
+
+  // Table section absent: the caret sits in plain prose.
+  await expect(page.getByRole('group', { name: 'Table' })).toHaveCount(0);
+});
+
+test('the table section appears only inside a table', async ({ page }) => {
+  await openNoteWithText(page);
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click({ button: 'right' });
+  await expect(page.getByRole('menu', CONTEXT_MENU)).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Table' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu', CONTEXT_MENU)).toBeHidden();
+
+  await openNoteWithTable(page);
+  const cell = page.locator('.ProseMirror td').first();
+  await cell.click({ button: 'right' });
+
+  await expect(page.getByRole('menu', CONTEXT_MENU)).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Table' })).toBeVisible();
+});
+
+test('the menu flips above the pointer near the bottom edge', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('Title');
+  await page.keyboard.press('Enter');
+
+  for (let i = 0; i < 40; i += 1) {
+    await page.keyboard.type(`Padding line ${i} filler text here.`);
+    await page.keyboard.press('Enter');
+  }
+  await page.keyboard.type('bottom target line');
+
+  // No manual scroll needed, unlike the palette flip test above: a
+  // contenteditable auto-scrolls to keep the caret in view as the user
+  // types, and it does so minimally — verified directly, typing this many
+  // lines already leaves the last one within about 10px of the WINDOW'S
+  // bottom edge (not merely the pane's), which is exactly the band
+  // `EditorContextMenu`'s own flip check (`window.innerHeight`) has no room
+  // in.
+  const target = page.locator('.ProseMirror > p', { hasText: 'bottom target line' });
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  expect(box).not.toBeNull();
+
+  // Near the paragraph's own LEFT edge, not its horizontal centre: the
+  // floating bottom toolbar is centred over the pane and, at this scroll
+  // position, sits directly on top of the centre of this very line —
+  // verified with `document.elementFromPoint`, which returned the toolbar,
+  // not the paragraph, for a centred click here. The toolbar is narrower
+  // than the pane, so its left edge clears well before the text does.
+  await page.mouse.click(box!.x + 4, box!.y + box!.height / 2, { button: 'right' });
+
+  const menu = page.getByRole('menu', CONTEXT_MENU);
+  await expect(menu).toBeVisible();
+
+  // The menu itself first mounts at its unflipped guess (`request.rect.bottom
+  // + 4`, `EditorContextMenu`'s own initial `position` state) and corrects
+  // in an effect once its real height exists — the same two-stage placement
+  // `HeadingMenu` and the highlight palette both use. Polled rather than
+  // read once, so this doesn't race that correction pass.
+  await expect
+    .poll(async () => {
+      const menuBox = await menu.boundingBox();
+      return menuBox === null ? null : menuBox.y + menuBox.height;
+    })
+    .toBeLessThanOrEqual(box!.y + box!.height / 2 + 1);
+});
+
+test('a table row inserts from the menu at the right-clicked cell', async ({ page }) => {
+  await openNoteWithTable(page);
+
+  // One header row plus one data row (`insertTable({ rows: 2, ... })`, one of
+  // which is the header) — add a second data row through the menu itself so
+  // there are two distinguishable rows to insert between.
+  const firstCell = page.locator('.ProseMirror td').first();
+  await firstCell.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Insert row below' }).click();
+  await expect(page.locator('.ProseMirror table tr')).toHaveCount(3);
+
+  const firstColumnCells = page.locator('.ProseMirror table tr td:first-child');
+  await expect(firstColumnCells).toHaveCount(2);
+
+  await firstColumnCells.nth(0).click();
+  await page.keyboard.type('RowA');
+  await firstColumnCells.nth(1).click();
+  await page.keyboard.type('RowB');
+  await expect(firstColumnCells).toHaveText(['RowA', 'RowB']);
+
+  // Caret parked in RowA's cell...
+  await firstColumnCells.nth(0).click();
+  // ...but the right-click — and the row it inserts — targets RowB.
+  await firstColumnCells.nth(1).click({ button: 'right' });
+  await expect(page.getByRole('menu', CONTEXT_MENU)).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Insert row below' }).click();
+
+  // The new empty row lands directly after RowB, not after RowA — which is
+  // what the caret's own (unmoved) position would have produced instead.
+  await expect(page.locator('.ProseMirror table tr td:first-child')).toHaveText([
+    'RowA',
+    'RowB',
+    '',
+  ]);
 });
