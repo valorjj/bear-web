@@ -2,8 +2,10 @@
 
 Governs how Markdown tables are represented in the editor schema and how they are serialized back to Markdown.
 
-**Trigger:** `src/features/editor/TableControls.ts` (`TABLE_ACTIONS`,
-`tablePosAt`, `COMMANDS`, `TableControlsOptions.labels`),
+**Trigger:** `src/features/editor/TableHandles.ts` (the edge-handle widgets and
+their `data-shape` rebuild guard), `src/features/editor/tablePos.ts`
+(`tablePosAt`), `src/features/editor/tableCommands.ts` (`TABLE_COMMANDS`, the
+seven-action `COMMANDS` map),
 `src/features/editor/tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` imports and `MarkdownTable`/`TableRow`/`TableHeader`/`TableCell` entries in `src/features/editor/extensions.ts`, `RawTable` in `src/features/editor/RawBlock.ts`, `src/features/editor/table.test.ts`, and any table fixture in `markdown.test.ts`'s `CANONICAL` or `stability.test.ts`'s `NON_CANONICAL`.
 
 - **Tables are real nodes, and the `RawTable` fallback is no longer registered.**
@@ -75,10 +77,18 @@ Governs how Markdown tables are represented in the editor schema and how they ar
   and `HeadingFold`'s `onOpenMenu` both keep by having the app pass callbacks
   down rather than the plugin reaching up.
 
-- **Adds land AFTER the current row/column, and there is deliberately no
-  "before" pair.** Ten buttons on a bar that floats over the user's prose is a
-  worse trade than one extra keystroke, and "after" matches a behaviour the
-  editor already had: `Tab` out of the last cell appends a row.
+- **Adds no longer have a missing "before" pair — that gap was about the bar,
+  and the bar is gone.** The original reasoning was real: ten buttons on a bar
+  that floats over the user's prose was a worse trade than one extra keystroke,
+  so only "after" shipped, matching a behaviour the editor already had (`Tab`
+  out of the last cell appends a row). Sub-project H deleted the bar in favour
+  of a right-click menu and edge handles, and the reason for the gap went with
+  it: the menu has no width budget to protect, so it carries both `Insert row
+  above`/`Insert row below` and `Insert column before`/`Insert column after` as
+  named rows (`tableCommands.ts`'s `TABLE_COMMANDS`). The edge handles need
+  neither direction at all — a handle inserts adjacent to the edge it sits on,
+  so which edge the user clicked already says "before" or "after" without a
+  choice to make.
 
 - **`tablePosAt` walks OUTWARD from the cursor; it does not scan the
   document.** A table nested in a blockquote or a list item must resolve to
@@ -94,3 +104,29 @@ Governs how Markdown tables are represented in the editor schema and how they ar
   takes the body row and leaves the header, and `addColumn` inserts after
   column 0 so the new column lands in the MIDDLE. A trailing blank line in
   each is `TrailingNode`'s paragraph, not the table's.
+
+- **The widget shape was originally chosen to need NO geometry code, and edge
+  handles reintroduce that geometry deliberately.** The bar rendered as one
+  `Decoration.widget` anchored to the table's own position, so it could never
+  drift on scroll — there was nothing to measure. `TableHandles.ts` instead
+  computes a handle's position from the table's real row/column boxes, which is
+  exactly the class of code the original design avoided. Consequently **no unit
+  test can assert a handle's position**: jsdom has no layout engine, so a
+  handle's coordinates are meaningless under Vitest. That coverage lives only
+  in `e2e/editorContext.spec.ts` and `e2e/editorAffordances.spec.ts`, against a
+  real browser.
+
+- **A handle's identity must be checked against the table's full 2-D shape, not
+  a scalar summary — a shape-guard defect found in review proves why.**
+  `TableHandles.ts` originally decided whether to rebuild its handles by
+  comparing `rows.length + columns.length` between the current and previous
+  render. A 3×2 → 2×3 transpose keeps that sum at 5, so the guard saw no
+  change, skipped the rebuild, and left handles whose `data-table-handle` kind
+  and `data-index` no longer matched the table under them — clicking what was
+  now a COLUMN handle inserted a ROW instead. This was reachable in practice,
+  not merely theoretical: `prosemirror-history` groups steps within a 500ms
+  window, so a single `Ctrl+Z` undoing a quick "delete a row, add a column"
+  pair produces exactly that one transpose-shaped update. Fixed by comparing a
+  2-D `data-shape` signature (rows and columns separately) rather than their
+  sum, so any shape change — including one that preserves the total — forces a
+  rebuild.

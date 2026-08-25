@@ -128,6 +128,18 @@ for (const theme of THEMES) {
       await shot(list, `03-note-list-${theme.name}`);
       await shot(editor, `04-editor-rich-${theme.name}`);
 
+      // The right-click context menu, open on a table cell — its tallest
+      // form, since the Table group adds a seventh section beneath the four
+      // that show for any caret position. Shot against the CPI table already
+      // on screen in this note rather than switching to a fixture built for
+      // it, so the frame is one the app actually rests in.
+      await page.locator('.ProseMirror td').first().click({ button: 'right' });
+      await expect(page.getByRole('menu', { name: 'Editing options' })).toBeVisible();
+      await expect(page.getByRole('group', { name: 'Table' })).toBeVisible();
+      await shot(page, `14-editor-context-menu-${theme.name}`);
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('menu', { name: 'Editing options' })).toBeHidden();
+
       await openNote(page, /Sprint checklist/, 'Density pass');
       await blur(page);
       await shot(editor, `05-editor-todo-${theme.name}`);
