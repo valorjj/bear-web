@@ -1147,3 +1147,42 @@ test('the row context menu opens from the keyboard, and PDF names its own precon
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 });
+
+test('an unpinned row reveals its pin on hover; a pinned one shows it at rest', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.fill(NOTE_TEXT);
+  await editor.blur();
+
+  const row = page.getByRole('button', { name: /Groceries/ });
+  await expect(row).toBeVisible();
+  const pin = page.getByRole('button', { name: 'Pin note' });
+
+  // `opacity` read directly, not `toBeVisible()`, which ignores opacity
+  // entirely — it would pass whether or not the reveal rule fires, since the
+  // button exists and has layout either way. Same reasoning, and the same
+  // trap, as the table handles' own reveal test.
+  await expect(pin).toHaveCSS('opacity', '0');
+
+  await row.hover();
+  await expect(pin).toHaveCSS('opacity', '1');
+
+  // Focus is the keyboard equivalent of that hover, and without it the pin
+  // would be an invisible tab stop.
+  await page.mouse.move(0, 0);
+  await expect(pin).toHaveCSS('opacity', '0');
+  await row.focus();
+  await expect(pin).toHaveCSS('opacity', '1');
+
+  // Once pinned it is state, not an affordance, so it stays drawn with
+  // nothing hovering or focused.
+  await pin.click();
+  const unpin = page.getByRole('button', { name: 'Unpin note' });
+  await page.mouse.move(0, 0);
+  await unpin.blur();
+  await expect(unpin).toHaveCSS('opacity', '1');
+});

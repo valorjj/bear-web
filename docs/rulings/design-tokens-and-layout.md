@@ -716,6 +716,20 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   edge. 20px (`pl-5`) was the tighter fit and is OFF `sourceLint`'s permitted
   spacing scale — the guard caught it, which is what the guard is for.
 
+- **An unpinned row's pin is hidden at rest and revealed on hover or focus;
+  a pinned one is always drawn.** On the old right-edge position a faint pin
+  read as a control. On the metadata line it reads as STATE, and a state
+  marker drawn on every row says "pinned" about notes that are not. What
+  makes hiding it safe is the row's context menu: Pin/Unpin lives there too,
+  so hover is no longer the only route, which is exactly the objection that
+  kept the pin drawn before M9c. `opacity`, never `hidden` — the button must
+  stay in the DOM, in the tab order, and keep announcing `aria-pressed`
+  regardless of hover — and `group-focus-within` is what stops it becoming an
+  invisible tab stop. **`toBeVisible()` ignores `opacity`**, so the only test
+  that can see this rule is a `toHaveCSS('opacity', …)` read before and after
+  the hover; `e2e/notes.spec.ts` does that, the same way the table handles'
+  reveal is covered.
+
 - **The preview reserves its height; the thumbnail does not.** Reserving the
   snippet's two lines is what keeps rows uniform whether or not a note has a
   body. Reserving space for a thumbnail would do the opposite: most notes name

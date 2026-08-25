@@ -53,7 +53,7 @@ feature and is not yet scheduled.
 
 1761 unit tests (plus 92 server tests, 55 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 125 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 126 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **G moved PDF export off the client entirely, and it is the first capability
@@ -90,7 +90,9 @@ monospace text**. That inconsistency is accepted deliberately and recorded in
 ships. The row menu (`NoteRowMenu.tsx`, right-click or `Shift+F10`) carries
 Pin/Unpin, Duplicate, Copy text, an Export group and the destructive route —
 Delete in an active scope, Restore plus Delete forever in the trash, the
-latter still routed through `ConfirmDialog`. A right-click does NOT select the
+latter still routed through `ConfirmDialog`. That menu is also what let the
+resting pin go: an unpinned row's pin is now hidden until the row is hovered
+or focused, because hover is no longer the only route to pinning. A right-click does NOT select the
 row, so every action is addressed by the request's `noteId`. Two extractions
 came out of it: `src/lib/useAnchoredMenu.ts` (placement, focus, dismissal and
 the Tab trap, which `HeadingMenu`, `EditorContextMenu` and `TableHandleMenu`

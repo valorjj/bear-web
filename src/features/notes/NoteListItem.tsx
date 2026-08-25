@@ -83,7 +83,10 @@ export function NoteListItem({
       // A chip, not a band. Soft Depth insets the row and rounds it, so the
       // 4px of list ground between rows is what separates them — which is why
       // the hairline divider this row used to draw is gone.
-      className={`ease-bear relative mx-2 my-1 overflow-hidden rounded-md transition-colors duration-[var(--bear-duration-fast)] ${
+      // `group` so the pin below can reveal itself on a hover of the WHOLE
+      // row, not merely of its own 22px box — a control the user has to find
+      // before they can hover it is not an affordance.
+      className={`ease-bear group relative mx-2 my-1 overflow-hidden rounded-md transition-colors duration-[var(--bear-duration-fast)] ${
         selected ? 'bg-selected' : ''
       }`}
       onContextMenu={(event) => {
@@ -196,11 +199,29 @@ export function NoteListItem({
         // row's right edge, which is where it lived until M9c. The pin marks
         // the note's state, and state belongs with the metadata line, not
         // floating in the middle of the content.
-        className={`ease-bear absolute bottom-2 left-2 p-1 transition-colors duration-[var(--bear-duration-fast)] hover:text-accent ${
+        //
+        // An UNPINNED row's pin is hidden at rest and revealed on hover or on
+        // focus anywhere in the row. On the old right-edge position a faint
+        // pin read as a control; on the metadata line it reads as state, and
+        // a state marker drawn on every row says "pinned" about notes that
+        // are not. Hiding it costs nothing a pointer user needs — the row's
+        // context menu carries Pin/Unpin, so hover is no longer the only
+        // route — and `group-focus-within` is what keeps it from becoming an
+        // invisible tab stop for a keyboard user.
+        //
+        // `opacity`, not `hidden`: the button must stay in the DOM and in the
+        // tab order, and its `aria-pressed` must keep announcing the note's
+        // state whether or not anything is hovering. Consequence for tests —
+        // Playwright's `toBeVisible()` ignores `opacity`, so this rule can
+        // only be covered by a polled `toHaveCSS`, which is what
+        // `e2e/appearance.spec.ts` does.
+        className={`ease-bear absolute bottom-2 left-2 p-1 transition-[color,opacity] duration-[var(--bear-duration-fast)] hover:text-accent ${
           // Reads by colour, never by glyph: a slashed pin in the unpinned
           // state reads as "pinning is unavailable" (the grammar of a
           // muted-mic glyph), not "click to pin".
-          note.pinned ? 'text-accent' : 'text-faint'
+          note.pinned
+            ? 'text-accent opacity-100'
+            : 'text-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
         }`}
       >
         <Icon glyph={Pin} size="sm" />
