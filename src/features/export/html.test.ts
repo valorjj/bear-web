@@ -479,3 +479,60 @@ describe('readExportTokens', () => {
     }
   });
 });
+
+/**
+ * Finds the declaration block for a selector, tolerant of whitespace and
+ * formatting differences between editor.css and the export's inline <style>.
+ * Throws rather than returning undefined, so a selector that stops existing
+ * in either stylesheet fails the test loudly instead of comparing nothing.
+ */
+function ruleBody(css: string, selector: string): string {
+  const escaped = selector
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\s+/g, '\\s+');
+  const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`));
+  if (!match) throw new Error(`rule not found for selector: ${selector}`);
+  return match[1] ?? '';
+}
+
+/**
+ * A table's row height in the PDF export must match the editor's, and it
+ * diverged twice at once: DOMSerializer emits a bare empty <p></p> for an
+ * empty cell (no trailing <br>, which is what gives the EDITOR's empty
+ * paragraph a line box), and the export's cell-paragraph rule dropped the
+ * editor's `margin: 0` entirely, falling back to the UA sheet's `margin: 1em
+ * 0` for any paragraph that isn't a `body > * + *` sibling.
+ *
+ * This test cannot see the pixel result -- jsdom has no layout engine, per
+ * this repo's own CLAUDE.md -- so it compares the DECLARED rules instead,
+ * which is exactly where both divergences live. It is deliberately more
+ * specific than "both files mention td": it pins the margin value and
+ * requires an explicit height-establishing declaration on the export side,
+ * so a future edit that silently drops either one fails here rather than
+ * shipping.
+ */
+describe('table-cell paragraph rules stay parallel between editor and export', () => {
+  it('applies the same margin reset the editor applies to cell paragraphs', () => {
+    const editorRule = ruleBody(EDITOR_CSS, '.ProseMirror th > p,\n.ProseMirror td > p');
+    expect(editorRule).toMatch(/margin\s*:\s*0\b/);
+
+    const html = renderNoteHtml(note, tokens);
+    const exportCss = html.slice(html.indexOf('<style>') + '<style>'.length, html.indexOf('</style>'));
+    const exportRule = ruleBody(exportCss, 'th > p,\ntd > p');
+    expect(exportRule).toMatch(/margin\s*:\s*0\b/);
+  });
+
+  it('gives an empty cell paragraph an explicit line box, since DOMSerializer omits the caret <br>', () => {
+    // The editor needs no such declaration: ProseMirror's own DOM always
+    // carries the trailing <br>, so an empty <p> is naturally one line tall.
+    // The export has no <br> to lean on, so its rule must establish the line
+    // box itself -- min-height, 1lh, or an equivalent -- or an empty row
+    // collapses to padding alone.
+    const html = renderNoteHtml(note, tokens);
+    const exportCss = html.slice(html.indexOf('<style>') + '<style>'.length, html.indexOf('</style>'));
+    const exportRule = ruleBody(exportCss, 'th > p,\ntd > p');
+
+    expect(exportRule).toMatch(/min-height\s*:\s*\S/);
+    expect(exportRule).not.toMatch(/min-height\s*:\s*(0|auto)\b/);
+  });
+});

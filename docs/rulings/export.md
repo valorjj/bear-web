@@ -155,3 +155,27 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   `app.name`). Korean uses both acronyms verbatim. `export.markdown` is
   deliberately NOT on it — Korean does render that as 마크다운 — so the list stays
   a set of specific exceptions rather than a blanket exemption for the group.
+
+- **`editor.css` and the export's inline `<style>` are two independent
+  stylesheets for one document, and a rule can drift between them with no test
+  noticing — the same failure family as the `.hljs-*` flattening case above,
+  now confirmed for table cells.** An empty table row rendered ~20px tall in
+  the exported PDF against ~40px in the editor. Two divergences compounded:
+  (1) ProseMirror inserts a trailing `<br>` into every empty block so a caret
+  has somewhere to sit, giving an empty `<p>` a real line box in the editor —
+  but `DOMSerializer` emits a bare `<p></p>` with no `<br>`, and a paragraph
+  with no line box is zero height, so the export's empty cell was padding
+  alone. (2) `editor.css`'s `.ProseMirror th > p, .ProseMirror td > p` sets
+  `margin: 0`; the export's counterpart at `html.ts` only had `text-indent:
+  0` — cell paragraphs are not `body > * + *` siblings, so they fell back to
+  the UA sheet's `margin: 1em 0`, invisible on an empty table but capable of
+  making populated cells inconsistently tall. Fixed by adding `margin: 0` and
+  `min-height: 1lh` to the export's `th > p, td > p` rule — `1lh` reproduces
+  the missing line box directly off the same line-height the editor uses,
+  rather than a magic-number `min-height` that could silently drift from
+  `--bear-line-height`. `html.test.ts`'s "table-cell paragraph rules stay
+  parallel between editor and export" describe block guards this: it extracts
+  both rules' declaration text via regex (jsdom has no layout engine, so pixel
+  height cannot be asserted) and requires the margin reset and an explicit
+  non-zero `min-height` on the export side. It goes red if either rule
+  regresses — verified against the pre-fix stylesheet.
