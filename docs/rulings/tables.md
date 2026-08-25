@@ -2,8 +2,10 @@
 
 Governs how Markdown tables are represented in the editor schema and how they are serialized back to Markdown.
 
-**Trigger:** `src/features/editor/TableHandles.ts` (the edge-handle widgets and
-their `data-shape` rebuild guard), `src/features/editor/tablePos.ts`
+**Trigger:** `src/features/editor/TableHandles.ts` (the edge-handle widgets,
+their `data-shape` rebuild guard, `onOpenTableMenu`, `runTableHandleAction`),
+`src/features/editor/TableHandleMenu.tsx` (the menu a handle opens),
+`src/features/editor/tablePos.ts`
 (`tablePosAt`), `src/features/editor/tableCommands.ts` (`TABLE_ACTIONS`, the
 seven-action `COMMANDS` map),
 `src/features/editor/tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` imports and `MarkdownTable`/`TableRow`/`TableHeader`/`TableCell` entries in `src/features/editor/extensions.ts`, `RawTable` in `src/features/editor/RawBlock.ts`, `src/features/editor/table.test.ts`, and any table fixture in `markdown.test.ts`'s `CANONICAL` or `stability.test.ts`'s `NON_CANONICAL`.
@@ -85,10 +87,24 @@ seven-action `COMMANDS` map),
   of a right-click menu and edge handles, and the reason for the gap went with
   it: the menu has no width budget to protect, so it carries both `Insert row
   above`/`Insert row below` and `Insert column before`/`Insert column after` as
-  named rows (`tableCommands.ts`'s `TABLE_ACTIONS`). The edge handles need
-  neither direction at all — a handle inserts adjacent to the edge it sits on,
-  so which edge the user clicked already says "before" or "after" without a
-  choice to make.
+  named rows (`tableCommands.ts`'s `TABLE_ACTIONS`).
+
+  **Superseded, in the row/column named "handles need neither direction at
+  all".** That held only while a handle inserted directly on click, so which
+  edge the user clicked already said "before" or "after". A later change
+  (`table-row-menu`) found that direct-insert-only shape undiscoverable for
+  DELETION — right-click has no affordance anywhere in this app, so a user
+  looking at a table full of `+` handles had no way to find `Delete row`/
+  `Delete column` at all. A handle now OPENS A MENU scoped to its own row or
+  column (`TableHandleMenu.tsx`) rather than inserting directly, and that menu
+  carries the same both-directions pair the context menu does (`Insert row
+  above`/`Insert row below`, `Insert column before`/`Insert column after`)
+  plus `Delete row`/`Delete column`. The glyph changed from `+` to a grip
+  (`GripHorizontal` for a row handle, `GripVertical` for a column handle, in
+  `Icon.tsx`'s `ICON_NODES`) because a `+` that opens a menu instead of adding
+  something is a lie the user discovers the moment they click it. Adding a row
+  is now two clicks instead of one; that cost was accepted deliberately, in
+  exchange for deletion actually being reachable.
 
 - **`tablePosAt` walks OUTWARD from the cursor; it does not scan the
   document.** A table nested in a blockquote or a list item must resolve to
@@ -123,7 +139,9 @@ seven-action `COMMANDS` map),
   render. A 3×2 → 2×3 transpose keeps that sum at 5, so the guard saw no
   change, skipped the rebuild, and left handles whose `data-table-handle` kind
   and `data-index` no longer matched the table under them — clicking what was
-  now a COLUMN handle inserted a ROW instead. This was reachable in practice,
+  now a COLUMN handle inserted a ROW instead (now: opened a menu claiming to
+  be about a row, on a button sitting at a column's edge). This was reachable
+  in practice,
   not merely theoretical: `prosemirror-history` groups steps within a 500ms
   window, so a single `Ctrl+Z` undoing a quick "delete a row, add a column"
   pair produces exactly that one transpose-shaped update. Fixed by comparing a

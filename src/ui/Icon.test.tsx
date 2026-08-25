@@ -3,13 +3,14 @@ import type { LucideIcon } from 'lucide-react';
 import {
   ChevronDown,
   ChevronRight,
+  GripHorizontal,
+  GripVertical,
   Heading1,
   Heading2,
   Heading3,
   Heading4,
   Heading5,
   Heading6,
-  Plus,
   Search,
 } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
@@ -135,9 +136,10 @@ describe('renderIconMarkup', () => {
     ['Heading4', Heading4],
     ['Heading5', Heading5],
     ['Heading6', Heading6],
-    // The table edge handles' `⊕` (`TableHandles.ts`), copied verbatim like
-    // every entry above it and needing the same drift guard.
-    ['Plus', Plus],
+    // The table row/column handles' grips (`TableHandles.ts`), copied
+    // verbatim like every entry above it and needing the same drift guard.
+    ['GripHorizontal', GripHorizontal],
+    ['GripVertical', GripVertical],
   ])('matches the real %s glyph', (_name, glyph) => {
     const { container: real } = render(<Icon glyph={glyph} />);
 

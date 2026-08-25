@@ -126,11 +126,13 @@ export const en = {
   'export.failed.rateLimited': 'Too many exports — try again shortly.',
   'export.failed.unavailable': 'PDF export is unavailable right now.',
 
-  // The two edge handles' accessible names. They point AT a row or column,
-  // so "here" is the whole meaning — the bar these replaced had to say which
-  // table it acted on.
-  'editor.table.addRowHandle': 'Insert row here',
-  'editor.table.addColumnHandle': 'Insert column here',
+  // The two edge handles' accessible names, and the label of the menu each
+  // one opens — one string covers both, since the button's whole job is
+  // "open this menu". Used to read "Insert row/column here", back when a
+  // click inserted directly; a handle that opens a menu instead needs a
+  // name that does not promise an action on its own.
+  'editor.table.rowHandle': 'Row options',
+  'editor.table.columnHandle': 'Column options',
   // Full sentences, because these are context-menu rows now rather than
   // buttons on a bar that already named the table.
   'editor.table.deleteRow': 'Delete row',

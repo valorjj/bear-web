@@ -5,10 +5,10 @@ import { describe, expect, it } from 'vitest';
 
 import { buildEditorExtensions, editorExtensions } from './extensions';
 import { serializeMarkdown } from './markdown';
-import { cellTextPos, TableHandles } from './TableHandles';
+import { cellTextPos, TableHandles, type TableHandleMenuRequest } from './TableHandles';
 import { tablePosAt } from './tablePos';
 
-const LABELS = { addRow: 'Insert row here', addColumn: 'Insert column here' };
+const LABELS = { row: 'Row options', column: 'Column options' };
 
 /** Two columns, a header row and two body rows. */
 const TABLE_HTML =
@@ -25,18 +25,30 @@ const WIDE_TABLE_HTML =
   '<tr><td><p>1</p></td><td><p>2</p></td><td><p>3</p></td></tr>' +
   '</tbody></table>';
 
-function labelled(content: string): Editor {
-  return new Editor({ extensions: buildEditorExtensions({ labels: LABELS }), content });
+/**
+ * Records every `onOpenTableMenu` request, so a test can assert not just that
+ * one FIRED but what it named — the request is what carries "which row or
+ * column", which is the whole point of this menu route existing.
+ */
+function labelled(content: string): { editor: Editor; requests: TableHandleMenuRequest[] } {
+  const requests: TableHandleMenuRequest[] = [];
+  const editor = new Editor({
+    extensions: buildEditorExtensions({
+      labels: LABELS,
+      onOpenTableMenu: (request) => requests.push(request),
+    }),
+    content,
+  });
+  return { editor, requests };
 }
 
 /**
  * Puts the caret inside the table's FIRST body cell — row index 1, column
  * index 0 — and returns nothing.
  *
- * Every handle test below then clicks a handle for a DIFFERENT row or column,
- * which is the only way to tell "acted on the handle's row" apart from "acted
- * on the caret's row". The bar this module replaced could only ever do the
- * latter.
+ * Every test below then acts on a DIFFERENT row or column, which is the only
+ * way to tell "acted on the handle's row" apart from "acted on the caret's
+ * row". The bar this module replaced could only ever do the latter.
  */
 function caretInFirstBodyCell(editor: Editor): void {
   let pos: number | null = null;
@@ -100,7 +112,7 @@ describe('the table handles schema contract', () => {
   });
 
   it('leaves the table byte-identical while the handles are showing', () => {
-    const editor = labelled(TABLE_HTML);
+    const { editor } = labelled(TABLE_HTML);
     caretInFirstBodyCell(editor);
 
     expect(layer(editor)).not.toBeNull();
@@ -118,7 +130,7 @@ describe('the table handles schema contract', () => {
 
 describe('the handle layer', () => {
   it('decorates nothing while the caret is outside a table', () => {
-    const editor = labelled(`<p>before</p>${TABLE_HTML}`);
+    const { editor } = labelled(`<p>before</p>${TABLE_HTML}`);
     editor.commands.setTextSelection(1);
 
     expect(layer(editor)).toBeNull();
@@ -127,7 +139,7 @@ describe('the handle layer', () => {
   });
 
   it('appears when the caret moves into the table, and goes again when it leaves', () => {
-    const editor = labelled(`<p>before</p>${TABLE_HTML}`);
+    const { editor } = labelled(`<p>before</p>${TABLE_HTML}`);
 
     caretInFirstBodyCell(editor);
     expect(layer(editor)).not.toBeNull();
@@ -144,7 +156,7 @@ describe('the handle layer', () => {
   // measuring the stub rather than the code. Positioning belongs to
   // Playwright.
   it('draws one handle per row and one per column, each carrying its index', () => {
-    const editor = labelled(WIDE_TABLE_HTML);
+    const { editor } = labelled(WIDE_TABLE_HTML);
     caretInFirstBodyCell(editor);
 
     expect(handles(editor, 'row').map((el) => el.getAttribute('data-index'))).toEqual(['0', '1']);
@@ -157,12 +169,20 @@ describe('the handle layer', () => {
     editor.destroy();
   });
 
-  it('labels every handle with the caller’s own string', () => {
-    const editor = labelled(TABLE_HTML);
+  it('labels every handle with the caller’s own string, and marks it as a menu opener', () => {
+    const { editor } = labelled(TABLE_HTML);
     caretInFirstBodyCell(editor);
 
-    expect(handleAt(editor, 'row', 0).getAttribute('aria-label')).toBe(LABELS.addRow);
-    expect(handleAt(editor, 'column', 0).getAttribute('aria-label')).toBe(LABELS.addColumn);
+    const row = handleAt(editor, 'row', 0);
+    const column = handleAt(editor, 'column', 0);
+
+    expect(row.getAttribute('aria-label')).toBe(LABELS.row);
+    expect(column.getAttribute('aria-label')).toBe(LABELS.column);
+    // A button that opens a menu says so, and starts closed.
+    expect(row.getAttribute('aria-haspopup')).toBe('menu');
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(column.getAttribute('aria-haspopup')).toBe('menu');
+    expect(column.getAttribute('aria-expanded')).toBe('false');
 
     editor.destroy();
   });
@@ -184,7 +204,7 @@ describe('the handle layer', () => {
   // document, so a table inside a blockquote resolves to the table and not to
   // an ancestor. This is the case that walk exists for.
   it('resolves the INNERMOST table when one is nested in a blockquote', () => {
-    const editor = labelled(`<blockquote>${TABLE_HTML}</blockquote>`);
+    const { editor } = labelled(`<blockquote>${TABLE_HTML}</blockquote>`);
     caretInFirstBodyCell(editor);
 
     const pos = tablePosAt(editor.state);
@@ -195,29 +215,120 @@ describe('the handle layer', () => {
   });
 });
 
-describe('a handle acts on ITS OWN row or column, not the caret’s', () => {
-  // This is the whole reason `TableHandles` is more than a restyled bar. The
-  // caret sits in row 1 / column 0 in every case below and the handle clicked
-  // is always a DIFFERENT index, so the expectation distinguishes the two
-  // outcomes rather than merely asserting "something was added":
-  //
-  //   caret-based `addRowAfter` would put the blank row between `1 | 2` and
-  //   `3 | 4`; the row-2 handle puts it at the end.
-  //   caret-based `addColumnAfter` would put the blank column between `a` and
-  //   `b`; the column-2 handle puts it at the end.
-  //
-  // Cell padding and the three-dash minimum are the serializer's, per
-  // `docs/rulings/tables.md`.
-  it('inserts a row after the row the handle names', () => {
-    const editor = labelled(TABLE_HTML);
+describe('clicking a handle opens a menu scoped to ITS OWN row or column, not the caret’s', () => {
+  // The caret sits in row 1 / column 0 in every case below, and the handle
+  // clicked is always a DIFFERENT index — the only way to tell "the menu is
+  // scoped to the handle" apart from "the menu is scoped to the caret".
+  it('reports the row the handle names, not the caret’s row', () => {
+    const { editor, requests } = labelled(TABLE_HTML);
+    caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
+
+    const target = handleAt(editor, 'row', 2);
+    const result = mousedownOn(editor, target);
+
+    expect(result.handled).toBe(true);
+    // Without `preventDefault` the caret is placed into the widget and
+    // whatever the menu eventually acts on would drift with it.
+    expect(result.defaultPrevented).toBe(true);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ tablePos, kind: 'row', index: 2 });
+    expect(requests[0]!.anchor).toBe(target);
+    // No document mutation from the click alone — only the menu opened.
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      '| a   | b   |\n| --- | --- |\n| 1   | 2   |\n| 3   | 4   |\n\n',
+    );
+    // Flipped synchronously, not left for React to catch up to later — the
+    // plugin has no other chance to say "a menu is now open" for this button.
+    expect(target.getAttribute('aria-expanded')).toBe('true');
+
+    editor.destroy();
+  });
+
+  it('reports the column the handle names, not the caret’s column', () => {
+    const { editor, requests } = labelled(WIDE_TABLE_HTML);
+    caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
+
+    const target = handleAt(editor, 'column', 2);
+    mousedownOn(editor, target);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ tablePos, kind: 'column', index: 2 });
+
+    editor.destroy();
+  });
+
+  it('reports the header row when the header handle is clicked', () => {
+    const { editor, requests } = labelled(TABLE_HTML);
+    caretInFirstBodyCell(editor);
+
+    mousedownOn(editor, handleAt(editor, 'row', 0));
+
+    expect(requests[0]).toMatchObject({ kind: 'row', index: 0 });
+
+    editor.destroy();
+  });
+
+  it('ignores a right-click and opens nothing', () => {
+    const { editor, requests } = labelled(TABLE_HTML);
+    caretInFirstBodyCell(editor);
+
+    const result = mousedownOn(editor, handleAt(editor, 'row', 2), { button: 2 });
+
+    expect(result.handled).toBe(false);
+    expect(requests).toHaveLength(0);
+
+    editor.destroy();
+  });
+
+  it('lets a click on the prose fall through to the editor', () => {
+    const { editor, requests } = labelled(TABLE_HTML);
+    caretInFirstBodyCell(editor);
+
+    const result = mousedownOn(editor, editor.view.dom);
+
+    expect(result.handled).toBe(false);
+    expect(result.defaultPrevented).toBe(false);
+    expect(requests).toHaveLength(0);
+
+    editor.destroy();
+  });
+
+  it('opens nothing when nobody is listening', () => {
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ labels: LABELS, onOpenTableMenu: null }),
+      content: TABLE_HTML,
+    });
     caretInFirstBodyCell(editor);
 
     const result = mousedownOn(editor, handleAt(editor, 'row', 2));
 
-    expect(result.handled).toBe(true);
-    // Without `preventDefault` the caret is placed into the widget and the
-    // selection this handler set is lost before the command reads it.
-    expect(result.defaultPrevented).toBe(true);
+    expect(result.handled).toBe(false);
+
+    editor.destroy();
+  });
+});
+
+describe('runTableHandleAction acts on the row or column NAMED, not the caret’s', () => {
+  // This is the command `TableHandleMenu`'s buttons call, via
+  // `editor.commands`. Same discipline as the click tests above: caret stays
+  // in row 1 / column 0 throughout, and the action always targets a different
+  // index, so each expectation distinguishes "acted on the request" from
+  // "acted on the caret" rather than merely asserting "something changed".
+  //
+  //   caret-based `addRowAfter` would put the blank row between `1 | 2` and
+  //   `3 | 4`; targeting row 2 puts it at the end.
+  //   caret-based `addColumnAfter` would put the blank column between `a` and
+  //   `b`; targeting column 2 puts it at the end.
+  it('inserts a row after the row named, regardless of the caret', () => {
+    const { editor } = labelled(TABLE_HTML);
+    caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
+
+    const result = editor.commands.runTableHandleAction(tablePos, 'row', 2, 'addRowAfter');
+
+    expect(result).toBe(true);
     expect(serializeMarkdown(editor.getJSON())).toBe(
       '| a   | b   |\n| --- | --- |\n| 1   | 2   |\n| 3   | 4   |\n|     |     |\n\n',
     );
@@ -225,11 +336,26 @@ describe('a handle acts on ITS OWN row or column, not the caret’s', () => {
     editor.destroy();
   });
 
-  it('inserts a row after the HEADER when the header handle is clicked', () => {
-    const editor = labelled(TABLE_HTML);
+  it('inserts a row above the row named', () => {
+    const { editor } = labelled(TABLE_HTML);
     caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
 
-    mousedownOn(editor, handleAt(editor, 'row', 0));
+    editor.commands.runTableHandleAction(tablePos, 'row', 2, 'addRowBefore');
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      '| a   | b   |\n| --- | --- |\n| 1   | 2   |\n|     |     |\n| 3   | 4   |\n\n',
+    );
+
+    editor.destroy();
+  });
+
+  it('inserts a row after the HEADER when row 0 is named', () => {
+    const { editor } = labelled(TABLE_HTML);
+    caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
+
+    editor.commands.runTableHandleAction(tablePos, 'row', 0, 'addRowAfter');
 
     expect(serializeMarkdown(editor.getJSON())).toBe(
       '| a   | b   |\n| --- | --- |\n|     |     |\n| 1   | 2   |\n| 3   | 4   |\n\n',
@@ -238,13 +364,13 @@ describe('a handle acts on ITS OWN row or column, not the caret’s', () => {
     editor.destroy();
   });
 
-  it('inserts a column after the column the handle names', () => {
-    const editor = labelled(WIDE_TABLE_HTML);
+  it('inserts a column after the column named, regardless of the caret', () => {
+    const { editor } = labelled(WIDE_TABLE_HTML);
     caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
 
-    const result = mousedownOn(editor, handleAt(editor, 'column', 2));
+    editor.commands.runTableHandleAction(tablePos, 'column', 2, 'addColumnAfter');
 
-    expect(result.handled).toBe(true);
     expect(serializeMarkdown(editor.getJSON())).toBe(
       '| a   | b   | c   |     |\n| --- | --- | --- | --- |\n| 1   | 2   | 3   |     |\n\n',
     );
@@ -252,40 +378,77 @@ describe('a handle acts on ITS OWN row or column, not the caret’s', () => {
     editor.destroy();
   });
 
-  it('inserts a column after the MIDDLE column when its handle is clicked', () => {
-    const editor = labelled(WIDE_TABLE_HTML);
+  it('inserts a column before the MIDDLE column when column 1 is named', () => {
+    const { editor } = labelled(WIDE_TABLE_HTML);
     caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
 
-    mousedownOn(editor, handleAt(editor, 'column', 1));
+    editor.commands.runTableHandleAction(tablePos, 'column', 1, 'addColumnBefore');
 
     expect(serializeMarkdown(editor.getJSON())).toBe(
-      '| a   | b   |     | c   |\n| --- | --- | --- | --- |\n| 1   | 2   |     | 3   |\n\n',
+      '| a   |     | b   | c   |\n| --- | --- | --- | --- |\n| 1   |     | 2   | 3   |\n\n',
     );
 
     editor.destroy();
   });
 
-  it('ignores a right-click', () => {
-    const editor = labelled(TABLE_HTML);
+  // The sharpest version of "acted on the named row/column, not the
+  // caret's": the caret sits in row 1, but `deleteRow` is asked to remove row
+  // 2 — the row the caret is IN must survive.
+  it('deletes the row named, leaving the caret’s own row intact', () => {
+    const { editor } = labelled(TABLE_HTML);
     caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
 
+    const result = editor.commands.runTableHandleAction(tablePos, 'row', 2, 'deleteRow');
+
+    expect(result).toBe(true);
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      '| a   | b   |\n| --- | --- |\n| 1   | 2   |\n\n',
+    );
+
+    editor.destroy();
+  });
+
+  it('deletes the column named, leaving the caret’s own column intact', () => {
+    const { editor } = labelled(WIDE_TABLE_HTML);
+    caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
+
+    const result = editor.commands.runTableHandleAction(tablePos, 'column', 2, 'deleteColumn');
+
+    expect(result).toBe(true);
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      '| a   | b   |\n| --- | --- |\n| 1   | 2   |\n\n',
+    );
+
+    editor.destroy();
+  });
+
+  it('returns false and mutates nothing for an out-of-range index', () => {
+    const { editor } = labelled(TABLE_HTML);
+    caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
     const before = serializeMarkdown(editor.getJSON());
-    const result = mousedownOn(editor, handleAt(editor, 'row', 2), { button: 2 });
 
-    expect(result.handled).toBe(false);
+    const result = editor.commands.runTableHandleAction(tablePos, 'row', 99, 'deleteRow');
+
+    expect(result).toBe(false);
     expect(serializeMarkdown(editor.getJSON())).toBe(before);
 
     editor.destroy();
   });
 
-  it('lets a click on the prose fall through to the editor', () => {
-    const editor = labelled(TABLE_HTML);
+  it('is a dry run under editor.can(), and mutates nothing', () => {
+    const { editor } = labelled(TABLE_HTML);
     caretInFirstBodyCell(editor);
+    const tablePos = tablePosAt(editor.state)!;
+    const before = serializeMarkdown(editor.getJSON());
 
-    const result = mousedownOn(editor, editor.view.dom);
+    const can = editor.can().runTableHandleAction(tablePos, 'row', 2, 'deleteRow');
 
-    expect(result.handled).toBe(false);
-    expect(result.defaultPrevented).toBe(false);
+    expect(can).toBe(true);
+    expect(serializeMarkdown(editor.getJSON())).toBe(before);
 
     editor.destroy();
   });
@@ -294,9 +457,9 @@ describe('a handle acts on ITS OWN row or column, not the caret’s', () => {
 describe('cellTextPos', () => {
   // The arithmetic the whole module turns on — three `+1`s, one past each of
   // the table's, the row's and the cell's own opening token. It is otherwise
-  // covered only transitively through the insert tests, where an off-by-one
-  // would surface as a mysteriously wrong Markdown string rather than as
-  // "this position is in the wrong cell".
+  // covered only transitively through the action tests above, where an
+  // off-by-one would surface as a mysteriously wrong Markdown string rather
+  // than as "this position is in the wrong cell".
   //
   // Asserted through the CELL'S OWN TEXT rather than as a number: a pinned
   // integer would be a restatement of the implementation, whereas "the
@@ -304,10 +467,10 @@ describe('cellTextPos', () => {
   // the callers actually need.
   //
   // It is asserted through `TextSelection.near` because that is precisely what
-  // `activate()` does with the result. The raw position lands inside the cell
-  // but BEFORE its paragraph, so reading `$pos.parent` off it would report the
-  // cell — true, and not the property that matters. `near` is what turns it
-  // into the caret the table commands then read.
+  // `moveSelectionAndRun` does with the result. The raw position lands inside
+  // the cell but BEFORE its paragraph, so reading `$pos.parent` off it would
+  // report the cell — true, and not the property that matters. `near` is what
+  // turns it into the caret the table commands then read.
   function cellTextAt(
     doc: ProseMirrorNode,
     tablePos: number,
@@ -334,7 +497,7 @@ describe('cellTextPos', () => {
     [1, 1, '2'],
     [1, 2, '3'],
   ])('resolves cell (%i, %i) to the cell reading %s', (row, column, text) => {
-    const editor = labelled(WIDE_TABLE_HTML);
+    const { editor } = labelled(WIDE_TABLE_HTML);
     caretInFirstBodyCell(editor);
     const tablePos = tablePosAt(editor.state)!;
 
@@ -355,7 +518,7 @@ describe('cellTextPos', () => {
     ['a negative column', 0, -1],
     ['a column past the end', 0, 3],
   ])('returns null for %s', (_name, row, column) => {
-    const editor = labelled(WIDE_TABLE_HTML);
+    const { editor } = labelled(WIDE_TABLE_HTML);
     caretInFirstBodyCell(editor);
     const tablePos = tablePosAt(editor.state)!;
 
@@ -365,7 +528,7 @@ describe('cellTextPos', () => {
   });
 
   it('returns null when the position is not a table', () => {
-    const editor = labelled('<p>plain</p>');
+    const { editor } = labelled('<p>plain</p>');
 
     expect(cellTextPos(editor.state.doc, 0, 0, 0)).toBeNull();
 
@@ -422,10 +585,11 @@ describe('the shape guard', () => {
   // no change and keeps the stale children. The buttons are then repositioned
   // by their DOM index — rows first, then columns — so the leftmost column
   // position ends up holding a button still marked `row`, and clicking it
-  // inserts a ROW. That is the "acts on the wrong thing" failure this whole
-  // module exists to prevent.
+  // would open a menu that claims to be about a row when the button now sits
+  // at a column edge. That is the "acts on the wrong thing" failure this
+  // whole module exists to prevent.
   it('rebuilds when a table transposes without changing its handle COUNT', () => {
-    const editor = labelled(TABLE_HTML);
+    const { editor } = labelled(TABLE_HTML);
     caretInFirstBodyCell(editor);
     expect(handleOrder(editor)).toEqual(['row0', 'row1', 'row2', 'column0', 'column1']);
 
@@ -436,21 +600,31 @@ describe('the shape guard', () => {
     editor.destroy();
   });
 
-  it('leaves the leftmost column handle inserting a COLUMN after a transpose', () => {
-    const editor = labelled(TABLE_HTML);
+  it('leaves the leftmost column handle reporting a COLUMN after a transpose', () => {
+    const { editor, requests } = labelled(TABLE_HTML);
     caretInFirstBodyCell(editor);
 
     transposeTable(editor, 2, 3);
+    const tablePos = tablePosAt(editor.state)!;
 
     // Addressed by POSITION in the layer — the first handle after the row
     // handles is the one drawn at the leftmost column — not by its own
     // `data-*`, which is the very thing that goes stale.
     const first = layer(editor)!.children[2]!;
     expect(mousedownOn(editor, first).handled).toBe(true);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ kind: 'column', index: 0 });
 
-    // A column was inserted after column 0: the new blank column sits between
-    // `r0c0` and `r0c1`. Had a stale `row` handle survived there, a blank ROW
-    // would have appeared instead and every row would still have three cells.
+    // Running the reported action confirms it targets a COLUMN, not a stale
+    // ROW: a blank column lands between `r0c0` and `r0c1`. Had a stale `row`
+    // handle survived there, this would either fail or insert a blank row
+    // instead, and every row would still have three cells.
+    editor.commands.runTableHandleAction(
+      tablePos,
+      requests[0]!.kind,
+      requests[0]!.index,
+      'addColumnAfter',
+    );
     expect(serializeMarkdown(editor.getJSON())).toBe(
       [
         // The blank column is padded to the alignment row's three-dash
@@ -469,31 +643,31 @@ describe('the shape guard', () => {
 
   // The other direction, and the sharper failure. Going 2×3 → 3×2 under a
   // sum-based guard leaves a button marked `column` sitting at the THIRD ROW's
-  // position, so clicking it does not merely decline — it succeeds and inserts
-  // a COLUMN where the user asked for a row. "Did nothing" is a bug; "did the
-  // other thing" is the bug this module exists to prevent.
-  it('leaves the last row handle inserting a ROW after the reverse transpose', () => {
-    const editor = labelled(WIDE_TABLE_HTML);
+  // position, so clicking it would report a column when the user pointed at a
+  // row. "Reports the wrong thing" is the bug this module exists to prevent.
+  it('leaves the last row handle reporting a ROW after the reverse transpose', () => {
+    const { editor, requests } = labelled(WIDE_TABLE_HTML);
     caretInFirstBodyCell(editor);
     expect(handleOrder(editor)).toEqual(['row0', 'row1', 'column0', 'column1', 'column2']);
 
     transposeTable(editor, 3, 2);
+    const tablePos = tablePosAt(editor.state)!;
 
     // Addressed by POSITION again: the third handle is the one drawn at the
     // last row's edge.
     const third = layer(editor)!.children[2]!;
     expect(mousedownOn(editor, third).handled).toBe(true);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ kind: 'row', index: 2 });
 
+    editor.commands.runTableHandleAction(
+      tablePos,
+      requests[0]!.kind,
+      requests[0]!.index,
+      'deleteRow',
+    );
     expect(serializeMarkdown(editor.getJSON())).toBe(
-      [
-        '| r0c0 | r0c1 |',
-        '| ---- | ---- |',
-        '| r1c0 | r1c1 |',
-        '| r2c0 | r2c1 |',
-        '|      |      |',
-        '',
-        '',
-      ].join('\n'),
+      ['| r0c0 | r0c1 |', '| ---- | ---- |', '| r1c0 | r1c1 |', '', ''].join('\n'),
     );
 
     editor.destroy();
