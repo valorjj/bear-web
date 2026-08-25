@@ -1,13 +1,30 @@
 import { Editor } from '@tiptap/core';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { EMPTY_FLAGS, editorFlagsSelector } from './editorState';
 import { editorExtensions } from './extensions';
 import { parseMarkdown } from './markdown';
 
+// Every test constructs a fresh editor through this shared helper and never
+// destroys it directly; an undestroyed `Editor` leaves ProseMirror's
+// `DOMObserver` polling on a `setTimeout` that outlives the test file's jsdom
+// environment, throwing "document is not defined" into an uncaught exception
+// once that environment tears down (see CLAUDE.md's jsdom toolchain note).
+// Tracking every instance here and destroying them all in `afterEach` fixes
+// that without touching each test's body.
+const createdEditors: Editor[] = [];
+
 function editorWith(markdown: string): Editor {
-  return new Editor({ extensions: editorExtensions, content: parseMarkdown(markdown) });
+  const editor = new Editor({ extensions: editorExtensions, content: parseMarkdown(markdown) });
+  createdEditors.push(editor);
+  return editor;
 }
+
+afterEach(() => {
+  for (const editor of createdEditors.splice(0)) {
+    editor.destroy();
+  }
+});
 
 describe('editorFlagsSelector', () => {
   it('reports bold when the caret sits inside a bold run', () => {

@@ -1,5 +1,5 @@
 import { Editor } from '@tiptap/core';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ContextMenu, contextMenuKey, type ContextMenuOptions } from './ContextMenu';
 import { editorExtensions } from './extensions';
@@ -30,12 +30,29 @@ Range.prototype.getClientRects = () =>
   }) as unknown as DOMRectList;
 document.elementFromPoint = () => null;
 
+// Every test constructs a fresh editor through this shared helper and never
+// destroys it directly; an undestroyed `Editor` leaves ProseMirror's
+// `DOMObserver` polling on a `setTimeout` that outlives the test file's jsdom
+// environment, throwing "document is not defined" into an uncaught exception
+// once that environment tears down (see CLAUDE.md's jsdom toolchain note).
+// Tracking every instance here and destroying them all in `afterEach` fixes
+// that without touching each test's body.
+const createdEditors: Editor[] = [];
+
 function editorWith(onOpen: ContextMenuOptions['onOpen'], markdown = 'hello world'): Editor {
-  return new Editor({
+  const editor = new Editor({
     extensions: [...editorExtensions, ContextMenu.configure({ onOpen })],
     content: parseMarkdown(markdown),
   });
+  createdEditors.push(editor);
+  return editor;
 }
+
+afterEach(() => {
+  for (const editor of createdEditors.splice(0)) {
+    editor.destroy();
+  }
+});
 
 describe('ContextMenu', () => {
   it('registers no plugin when nobody is listening', () => {
