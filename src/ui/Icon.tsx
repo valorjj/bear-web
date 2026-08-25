@@ -201,6 +201,7 @@ export function renderIconMarkup(glyph: LucideIcon, size: IconProps['size'] = 'm
 export type { LucideIcon };
 
 export {
+  Ban,
   FileText,
   Inbox,
   ListTodo,

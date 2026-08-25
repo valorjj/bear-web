@@ -105,6 +105,8 @@ export const en = {
   'editor.highlight.green': 'Green',
   'editor.highlight.pink': 'Pink',
   'editor.highlight.purple': 'Purple',
+  'editor.highlight.palette': 'Highlight colour',
+  'editor.highlight.remove': 'Remove highlight',
   'editor.toolbar.link': 'Link',
   'editor.toolbar.code': 'Code block',
   'editor.toolbar.table': 'Table',

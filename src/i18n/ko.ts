@@ -107,6 +107,8 @@ export const ko: Record<TranslationKey, string> = {
   'editor.highlight.green': '초록',
   'editor.highlight.pink': '분홍',
   'editor.highlight.purple': '보라',
+  'editor.highlight.palette': '형광펜 색상',
+  'editor.highlight.remove': '형광펜 지우기',
   'editor.toolbar.link': '링크',
   'editor.toolbar.code': '코드 블록',
   'editor.toolbar.table': '표',
