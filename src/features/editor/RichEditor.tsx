@@ -162,9 +162,11 @@ export function RichEditor({
   // in the `useState` initializer below and captures whatever identity this
   // ref holds at that moment, so the ref (stable) rather than `setContextMenu`
   // itself (also stable, but kept consistent with every other extension
-  // option here) is what gets threaded through.
+  // option here) is what gets threaded through. The REAL behaviour — moving
+  // the selection, per CONTROLLER RULING R12 — is assigned below, after
+  // `editor` exists; this initial value is only ever seen for the render
+  // before `editor` mounts, when no `contextmenu` event can fire yet.
   const contextMenuRef = useRef((request: ContextMenuRequest) => setContextMenu(request));
-  contextMenuRef.current = (request: ContextMenuRequest) => setContextMenu(request);
 
   const [extensions] = useState(() =>
     buildEditorExtensions({
@@ -266,6 +268,57 @@ export function RichEditor({
    */
   const flags = useEditorState({ editor, selector: editorFlagsSelector }) ?? EMPTY_FLAGS;
 
+  // CONTROLLER RULING R12: move the selection when the menu OPENS, not
+  // before each command. Reassigned every render (like every other ref-held
+  // callback in this file) so it always closes over the CURRENT `editor` —
+  // it cannot be assigned any earlier in this function, because `editor`
+  // does not exist yet at the point `contextMenuRef` itself is declared.
+  //
+  // The one conditional: if `request.pos` falls INSIDE the current
+  // non-empty selection, the selection is left alone. Right-clicking inside
+  // a selection to format it is standard behaviour in every editor, and an
+  // unconditional `setTextSelection` here would collapse that selection to
+  // a caret before the user's chosen command ever ran — Finding 3 from the
+  // fix-round review, reproduced directly: select a run, right-click inside
+  // it, choose Bold, and nothing got bolded because the selection was
+  // already gone by the time the command ran.
+  //
+  // Doing this at OPEN time rather than per-command (the previous shape)
+  // also fixes Finding 2 for free: `flags` is computed from
+  // `editor.state.selection` by `useEditorState`, so moving the selection
+  // here makes the menu's own displayed sections and checkmarks describe
+  // the RIGHT-CLICKED position instead of wherever the caret happened to
+  // already be — a right-click on a plain paragraph while the caret sat in
+  // a table no longer shows the Table section.
+  contextMenuRef.current = (request) => {
+    if (editor !== null) {
+      // `request.selection` (DOM-derived — see its own docblock on
+      // `ContextMenuRequest`), not `editor.state.selection`: reading the
+      // latter here reproduced Finding 3 intermittently, because it can
+      // still report a stale, already-collapsed position for a brief
+      // window after a pure keyboard (arrow-key) selection, and this
+      // handler running inside that window would conclude "not inside a
+      // selection" and collapse a selection that, on screen, the user still
+      // had.
+      const target = request.selection;
+      const posInsideSelection =
+        target !== null && request.pos >= target.from && request.pos <= target.to;
+      if (posInsideSelection) {
+        // Actively RESYNC to the real selection rather than merely
+        // skipping — `editor.state.selection` may still be the stale one
+        // described above, and leaving it untouched would leave that
+        // staleness in place for the command that runs next.
+        const current = editor.state.selection;
+        if (current.from !== target.from || current.to !== target.to) {
+          editor.commands.setTextSelection(target);
+        }
+      } else {
+        editor.commands.setTextSelection(request.pos);
+      }
+    }
+    setContextMenu(request);
+  };
+
   /**
    * Viewport position of the palette, measured off the highlight itself.
    *
@@ -292,20 +345,21 @@ export function RichEditor({
 
   /**
    * The context menu's `onAction` dispatch, kept as one function rather than
-   * inlined in the switch below: it is the one place `setTextSelection` is
-   * required before a table command runs, because a right-click does not
-   * move the caret (`ContextMenu.ts` resolves `pos` from the pointer, not
-   * from `state.selection`) — without it, a table command would act on
-   * whatever cell the caret already happened to sit in, not the one the user
-   * clicked. The eleven inline/block toggles below need no such fix: they
-   * apply to the caret/selection as-is, the same way the bottom toolbar's
-   * equivalent buttons do.
+   * inlined in the switch below.
+   *
+   * No `setTextSelection` here any more (CONTROLLER RULING R12) — the
+   * selection is already correct by the time any of this runs, moved once
+   * when the menu OPENED (`contextMenuRef.current`, above `flags`). Doing it
+   * per-command here as well was Finding 3: it unconditionally collapsed
+   * whatever selection the open-time logic had deliberately preserved,
+   * because `setTextSelection(pos)` with `pos` inside a real selection still
+   * collapses it to a caret at `pos` — so selecting a run, right-clicking
+   * inside it, and choosing Bold formatted nothing.
    */
   function handleContextMenuAction(action: ContextMenuAction): void {
     if (editor === null || contextMenu === null) return;
 
     if (isTableAction(action)) {
-      editor.commands.setTextSelection(contextMenu.pos);
       COMMANDS[action](editor.state, editor.view.dispatch);
       return;
     }
@@ -354,15 +408,13 @@ export function RichEditor({
   }
 
   /**
-   * `setTextSelection(contextMenu.pos)` before `setNode`, exactly the fix
-   * `HeadingMenu`'s own `onSetLevel` needed (`menu.pos + 1`, documented at its
-   * call site below): a right-click never moves the caret, so without this a
-   * heading change would land on whatever the caret already sat in rather
-   * than the heading the user actually clicked.
+   * No `setTextSelection` here either, for the same R12 reason as
+   * `handleContextMenuAction` above: the selection was already moved (or
+   * deliberately preserved) when the menu opened.
    */
   function handleSetContextHeading(level: 0 | 1 | 2 | 3 | 4 | 5 | 6): void {
     if (editor === null || contextMenu === null) return;
-    const chain = editor.chain().focus().setTextSelection(contextMenu.pos);
+    const chain = editor.chain().focus();
     if (level === 0) {
       chain.setNode('paragraph').run();
     } else {

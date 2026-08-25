@@ -30,6 +30,14 @@ import type { EditorFlags } from './editorState';
 import type { HighlightChoiceResult } from './HighlightPalette';
 import { HIGHLIGHT_CHOICES } from './highlightChoices';
 
+/**
+ * Gap kept between the menu and both the viewport's edges AND the pointer —
+ * matches the literal `4` the flip/clamp arithmetic used before this was
+ * named. Also what bounds `maxHeight` below: a menu exactly `MENU_GAP` from
+ * top and bottom can never be taller than `100vh - 2 * MENU_GAP`.
+ */
+const MENU_GAP = 4;
+
 const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
 const HEADING_GLYPHS = [Heading1, Heading2, Heading3, Heading4, Heading5, Heading6] as const;
 
@@ -116,7 +124,7 @@ export function EditorContextMenu({
   // or the caret's real rect for a keyboard open; both feed the same
   // flip/clamp below without a special case.
   const [position, setPosition] = useState(() => ({
-    top: request.rect.bottom + 4,
+    top: request.rect.bottom + MENU_GAP,
     left: request.rect.left,
   }));
 
@@ -133,17 +141,32 @@ export function EditorContextMenu({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // `getBoundingClientRect()` reads the RENDERED box, which the `maxHeight`
+    // style below (`MENU_GAP` on both edges) already clamps — so this is the
+    // CONSTRAINED height, never the natural one a five-section-plus-table
+    // menu would need (measured at ~530px, taller than a 720px viewport
+    // leaves room for either above or below the click point). Flipping and
+    // clamping against the constrained height is what keeps `top + height`
+    // inside the viewport in both branches below; against the natural
+    // height, a menu too tall for either placement would overflow no matter
+    // which one this picked.
     const menuRect = el.getBoundingClientRect();
 
-    const fitsBelow = request.rect.bottom + 4 + menuRect.height <= window.innerHeight;
+    const fitsBelow = request.rect.bottom + MENU_GAP + menuRect.height <= window.innerHeight;
     const top = fitsBelow
-      ? request.rect.bottom + 4
-      : Math.max(4, request.rect.top - 4 - menuRect.height);
+      ? request.rect.bottom + MENU_GAP
+      : Math.max(MENU_GAP, request.rect.top - MENU_GAP - menuRect.height);
 
-    const left = Math.min(request.rect.left, window.innerWidth - menuRect.width - 4);
+    const left = Math.min(request.rect.left, window.innerWidth - menuRect.width - MENU_GAP);
 
-    setPosition({ top, left: Math.max(4, left) });
-  }, [request]);
+    setPosition({ top, left: Math.max(MENU_GAP, left) });
+    // `flags.table` (not the whole `flags` object, which is a fresh object
+    // every transaction): the table section is the one conditional block
+    // that changes this menu's natural height after the initial mount, and
+    // — same shape as the highlight palette's R9 fix — nothing else in this
+    // effect re-runs when that flips true a render after `request` first
+    // arrived, which left a stale (pre-table-section) position uncorrected.
+  }, [request, flags.table]);
 
   // Neither listener can live on the menu's own React `onKeyDown`/`onClick`:
   // both must keep working after focus (or the click itself) has already
@@ -191,11 +214,24 @@ export function EditorContextMenu({
       role="menu"
       aria-label={t('editor.context.menu')}
       onKeyDown={onKeyDown}
-      style={{ top: position.top, left: position.left }}
+      style={{
+        top: position.top,
+        left: position.left,
+        // Bounds the menu's own rendered height to whatever fits between the
+        // two `MENU_GAP` margins, regardless of which edge it's measured
+        // from — this menu can be taller than the viewport (five sections
+        // plus a seven-row table section, ~530px, on a 720px-tall window),
+        // and no flip/clamp choice between "above" and "below" can rescue
+        // that; only a bounded height with its own scroll can. See Finding 1.
+        maxHeight: `calc(100vh - ${MENU_GAP * 2}px)`,
+      }}
       // `min-w-56`, wider than `HeadingMenu`'s `min-w-48`: five sections and a
       // table row list carry more content than a single level list, and
       // `min-w-48` visibly clipped the longer table row labels in a spike.
-      className="bg-surface border-border shadow-popover fixed z-20 min-w-56 rounded-md border p-1"
+      // `overflow-y-auto` is what makes the `maxHeight` above a scrollable
+      // clamp rather than a silent, unreachable crop — every row stays
+      // reachable by scrolling the menu itself.
+      className="bg-surface border-border shadow-popover fixed z-20 min-w-56 overflow-y-auto rounded-md border p-1"
     >
       {/* 1. Heading — an inline glyph row, then a labelled paragraph row. */}
       <div role="group" aria-label={t('editor.fold.level')} className="p-1">

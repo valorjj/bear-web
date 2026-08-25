@@ -426,3 +426,138 @@ test('a table row inserts from the menu at the right-clicked cell', async ({ pag
     '',
   ]);
 });
+
+// --- CONTROLLER RULING R12: move the selection when the menu opens ---------
+
+test('right-click a paragraph while the caret sits in a table shows no table section', async ({
+  page,
+}) => {
+  await openNoteWithTable(page);
+
+  // The caret is left inside the table's first cell by `insertTable` itself
+  // (Tiptap's own post-insert behaviour) — no click needed to put it there.
+  // Right-clicking the TITLE paragraph above the table, without an
+  // intervening left click, is the exact repro for Finding 2: before R12,
+  // `flags` reflected the stale (in-table) selection rather than the
+  // right-clicked position, so the Table section showed up somewhere it
+  // should not have been able to.
+  const title = page.locator('.ProseMirror > p').first();
+  await title.click({ button: 'right' });
+
+  await expect(page.getByRole('menu', CONTEXT_MENU)).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Table' })).toHaveCount(0);
+});
+
+test('right-clicking inside an existing selection preserves it, and Bold formats the whole run', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  // The same text `highlightWord` (Task 5, above) types, for the identical
+  // reason: `getByText` on a single-text-node paragraph resolves to the
+  // whole paragraph, not the word, so a pointer selection can't target
+  // "marked" on its own — a keyboard selection can.
+  await page.keyboard.type('plain marked plain');
+
+  const paragraph = page.locator('.ProseMirror > p').first();
+  await paragraph.click();
+  await page.keyboard.press('Home');
+  for (let i = 0; i < 'plain '.length; i += 1) {
+    await page.keyboard.press('ArrowRight');
+  }
+  for (let i = 0; i < 'marked'.length; i += 1) {
+    await page.keyboard.press('Shift+ArrowRight');
+  }
+  // Settled, not read once: ProseMirror's own selection lags the DOM's by
+  // up to a tick after a bare keyboard selection, and right-clicking before
+  // it catches up would race R12's own "is `pos` inside the selection?"
+  // check with a stale range — the same class of race the flip test above
+  // guards against with its own poll.
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ''))
+    .toBe('marked');
+
+  // Right-click ON the selected word itself — found by its own `Range`,
+  // the same technique `highlightWord` and the bottom-edge flip test both
+  // use, since the word has no element of its own to locate by role/text.
+  const wordRect = await page.evaluate(() => {
+    const walker = document.createTreeWalker(
+      document.querySelector('.ProseMirror')!,
+      NodeFilter.SHOW_TEXT,
+    );
+    let node: Text | null;
+    // eslint-disable-next-line no-cond-assign
+    while ((node = walker.nextNode() as Text | null)) {
+      const idx = node.textContent?.indexOf('marked') ?? -1;
+      if (idx !== -1) {
+        const range = document.createRange();
+        range.setStart(node, idx);
+        range.setEnd(node, idx + 'marked'.length);
+        const rect = range.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      }
+    }
+    return null;
+  });
+  expect(wordRect).not.toBeNull();
+  await page.mouse.click(wordRect!.x + wordRect!.width / 2, wordRect!.y + wordRect!.height / 2, {
+    button: 'right',
+  });
+
+  await page.getByRole('menuitemcheckbox', { name: 'Bold' }).click();
+
+  // The whole word is bold — not merely a caret's worth of it, which is
+  // what an unconditional `setTextSelection(request.pos)` at open time
+  // would have collapsed this selection down to (Finding 3).
+  await expect(page.locator('.ProseMirror strong')).toHaveText('marked');
+});
+
+test('the menu stays fully within the viewport at its tallest, opened low', async ({ page }) => {
+  // A short viewport, deliberately: on the suite's default 1280x720, this
+  // menu's natural height with its table section (~575px) always fits
+  // SOMEWHERE — clamped to the top edge if nothing else — so flip/clamp
+  // alone happens to hide the real defect there. A window this short is a
+  // realistic case (a squat browser window, or a laptop with the app not
+  // maximised), and on it, this menu's five sections plus a seven-row table
+  // section genuinely cannot fit above OR below the click point at all —
+  // only a height cap with its own scroll can, which is exactly Finding 1.
+  await page.setViewportSize({ width: 1280, height: 400 });
+  await openNoteWithTable(page);
+
+  const cell = page.locator('.ProseMirror td').first();
+  const cellBox = await cell.boundingBox();
+  expect(cellBox).not.toBeNull();
+
+  await page.mouse.click(cellBox!.x + cellBox!.width / 2, cellBox!.y + cellBox!.height / 2, {
+    button: 'right',
+  });
+
+  const menu = page.getByRole('menu', CONTEXT_MENU);
+  await expect(menu).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Table' })).toBeVisible();
+
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+
+  // Polled, not read once: this menu (like the one in the flip test above)
+  // has its own two-stage placement, and a stale first measurement — taken
+  // before the table section's own render lands — is exactly the timing
+  // Finding 1 caught. A single read could observe the same stale geometry
+  // and pass by accident even against the fixed code.
+  await expect
+    .poll(async () => {
+      const box = await menu.boundingBox();
+      return box === null ? null : box.y + box.height;
+    })
+    .toBeLessThanOrEqual(viewport!.height);
+
+  const menuBox = await menu.boundingBox();
+  expect(menuBox).not.toBeNull();
+  // Fully on-screen at BOTH edges, not just the bottom: a naive fix that
+  // only clamped `top` downward without bounding height could still push
+  // the top edge above y=0.
+  expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport!.height);
+});

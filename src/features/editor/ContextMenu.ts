@@ -13,6 +13,30 @@ export interface ContextMenuRequest {
    * has no pointer position at all) feeds the same field.
    */
   rect: DOMRect;
+  /**
+   * The real, non-collapsed selection the user made before opening this
+   * menu — `null` when there wasn't one. CONTROLLER RULING R12 (fix round 1):
+   * a right-click within a deliberate selection must format that whole
+   * selection, not collapse it to a caret at the click point.
+   *
+   * For the pointer route, this is read from the LIVE DOM `Selection`
+   * (`window.getSelection()`, translated through `view.posAtDOM`), not from
+   * `view.state.selection` — verified directly, `state.selection` can still
+   * be reporting a STALE, already-collapsed position for a brief window
+   * after a pure keyboard (arrow-key) selection, because ProseMirror
+   * resyncs its own model from a browser-handled selection change
+   * asynchronously. Trusting `state.selection` there reproduced this exact
+   * fix round's Finding 3 intermittently (selecting text, right-clicking
+   * inside it, and choosing Bold silently formatted nothing) even with the
+   * open-time selection-preserving logic in place, because the "is this
+   * already correct?" check itself was reading the stale value. Reading the
+   * DOM directly is the ground truth a real user is looking at.
+   *
+   * For the keyboard route, `state.selection` IS authoritative — a command
+   * executes synchronously against the current state, so there is no DOM
+   * lag to account for.
+   */
+  selection: { from: number; to: number } | null;
 }
 
 export interface ContextMenuOptions {
@@ -85,7 +109,15 @@ export const ContextMenu = Extension.create<ContextMenuOptions>({
         ({ state, view }) => {
           if (onOpen === null) return false;
           const { from, to } = state.selection;
-          onOpen({ pos: from, rect: posToDOMRect(view, from, to) });
+          onOpen({
+            pos: from,
+            rect: posToDOMRect(view, from, to),
+            // Authoritative here — see the field's own docblock — a command
+            // runs synchronously against the CURRENT state, so there is no
+            // DOM-vs-model lag to guard against the way the pointer route
+            // below must.
+            selection: from === to ? null : { from, to },
+          });
           return true;
         },
     };
@@ -108,6 +140,31 @@ export const ContextMenu = Extension.create<ContextMenuOptions>({
               const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
               const pos = at?.pos ?? view.state.selection.from;
 
+              // Read from the LIVE DOM Selection, not `view.state.selection`
+              // — see the field's own docblock on `ContextMenuRequest`.
+              // `state.selection` can still be reporting a stale, already
+              // -collapsed position for a brief window after a pure
+              // keyboard (arrow-key) selection, so it is not safe to trust
+              // here the way the keyboard route above safely does.
+              let selection: { from: number; to: number } | null = null;
+              const domSelection = view.dom.ownerDocument.getSelection();
+              if (
+                domSelection !== null &&
+                !domSelection.isCollapsed &&
+                domSelection.rangeCount > 0
+              ) {
+                const range = domSelection.getRangeAt(0);
+                try {
+                  const selFrom = view.posAtDOM(range.startContainer, range.startOffset);
+                  const selTo = view.posAtDOM(range.endContainer, range.endOffset);
+                  if (selFrom !== selTo) {
+                    selection = { from: Math.min(selFrom, selTo), to: Math.max(selFrom, selTo) };
+                  }
+                } catch {
+                  selection = null;
+                }
+              }
+
               event.preventDefault();
               onOpen({
                 pos,
@@ -116,6 +173,7 @@ export const ContextMenu = Extension.create<ContextMenuOptions>({
                 // else, so a degenerate rect anchors the menu exactly at the
                 // click point with no special case.
                 rect: new DOMRect(event.clientX, event.clientY, 0, 0),
+                selection,
               });
               return true;
             },

@@ -16,7 +16,7 @@ function renderMenu(overrides: Partial<Parameters<typeof EditorContextMenu>[0]> 
   const onSetHighlight = vi.fn();
   const onClose = vi.fn();
   const props = {
-    request: { pos: 0, rect: new DOMRect(10, 10, 0, 0) },
+    request: { pos: 0, rect: new DOMRect(10, 10, 0, 0), selection: null },
     flags: EMPTY_FLAGS,
     onAction,
     onSetHeading,

@@ -135,4 +135,74 @@ describe('ContextMenu', () => {
     const editor = editorWith(null);
     expect(editor.commands.openContextMenu()).toBe(false);
   });
+
+  // CONTROLLER RULING R12 (fix round 1): the menu must preserve a real
+  // selection the user right-clicks inside, rather than collapsing it to a
+  // caret. Both routes carry the selection they saw, in `request.selection`.
+  describe('R12: `request.selection`', () => {
+    it('keyboard route: a real selection is reported as `{ from, to }`, a collapsed one as `null`', () => {
+      const onOpen = vi.fn();
+      const editor = editorWith(onOpen, 'hello world');
+
+      editor.commands.setTextSelection({ from: 1, to: 6 });
+      editor.commands.openContextMenu();
+      expect(onOpen.mock.calls[0][0].selection).toEqual({ from: 1, to: 6 });
+
+      onOpen.mockClear();
+      editor.commands.setTextSelection(3);
+      editor.commands.openContextMenu();
+      expect(onOpen.mock.calls[0][0].selection).toBeNull();
+    });
+
+    // Pointer route: read from the LIVE DOM `Selection`, not
+    // `view.state.selection` — see `ContextMenuRequest.selection`'s own
+    // docblock for why `state.selection` is not safe to trust here. This
+    // sets a real DOM `Range`/`Selection` directly (jsdom supports both
+    // without a layout engine) rather than going through
+    // `editor.commands.setTextSelection`, so the test proves the handler
+    // reads the DOM, not ProseMirror's model — a version reading
+    // `state.selection` here would report `null` since nothing moved it.
+    it('pointer route: reports the live DOM selection even when it differs from `state.selection`', () => {
+      const onOpen = vi.fn();
+      const editor = editorWith(onOpen, 'hello world');
+
+      // jsdom's `Selection` silently refuses `addRange` on a node that isn't
+      // connected to the document — confirmed directly, `new Editor(...)`
+      // alone never attaches `view.dom` to `document.body`, and without this
+      // append the selection below reports `rangeCount: 0` no matter what
+      // range was added. Removed in `finally` so this test doesn't leak a
+      // detached node into the shared jsdom document.
+      document.body.appendChild(editor.view.dom);
+      try {
+        const textNode = editor.view.dom.querySelector('p')!.firstChild!;
+        const range = document.createRange();
+        range.setStart(textNode, 0);
+        range.setEnd(textNode, 5); // "hello"
+        const domSelection = document.getSelection();
+        domSelection?.removeAllRanges();
+        domSelection?.addRange(range);
+
+        const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+        editor.view.dom.dispatchEvent(event);
+
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        const request = onOpen.mock.calls[0][0];
+        expect(request.selection).not.toBeNull();
+        expect(request.selection.to - request.selection.from).toBe(5);
+      } finally {
+        editor.view.dom.remove();
+      }
+    });
+
+    it('pointer route: reports `null` when the DOM selection is collapsed', () => {
+      const onOpen = vi.fn();
+      const editor = editorWith(onOpen, 'hello world');
+
+      const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+      editor.view.dom.dispatchEvent(event);
+
+      expect(onOpen).toHaveBeenCalledTimes(1);
+      expect(onOpen.mock.calls[0][0].selection).toBeNull();
+    });
+  });
 });
