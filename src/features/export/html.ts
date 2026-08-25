@@ -259,9 +259,16 @@ export function renderNoteHtml(
 ${declarations}
     }
 
+    /*
+     * margin: 0 here, not 18mm 16mm. A page-box margin is Chromium's
+     * unpainted band - printBackground never reaches it, so a themed
+     * background stopped short of the paper edge and left a white border
+     * around a dark page. The inset moves onto body's own padding below,
+     * where it is inside the painted box like everything else.
+     */
     @page {
       size: A4;
-      margin: 18mm 16mm;
+      margin: 0;
     }
 
     /*
@@ -313,7 +320,12 @@ ${declarations}
 
     body {
       margin: 0 auto;
-      padding: 2.5rem 1.5rem;
+      /*
+       * The inset formerly lived on @page's margin, which Chromium never
+       * paints. It moved here so the theme's background covers the whole
+       * sheet and the text keeps the same distance from the paper edge.
+       */
+      padding: 18mm 16mm;
       max-width: var(--bear-line-width);
       background: var(--bear-bg);
       color: var(--bear-text);
@@ -623,9 +635,16 @@ ${declarations}
       padding: 0 0 0 1em;
     }
 
+    /*
+     * padding is NOT reset here. It used to be, back when @page carried the
+     * 18mm 16mm margin and body's own padding would have doubled it under a
+     * real browser print. Now @page's margin is 0, so body's padding is the
+     * only inset there is - zeroing it would run text to the paper edge.
+     * max-width still drops: the line-width cap is a screen reading measure,
+     * and a printed page should use its own full printable width.
+     */
     @media print {
       body {
-        padding: 0;
         max-width: none;
       }
     }

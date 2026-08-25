@@ -110,14 +110,15 @@ entirely. A Nord export is now a genuinely dark PDF, proven from the bytes.
 
 **Known debt from G, none of it blocking:**
 
-- **The `@page` margin is unpainted, so a dark export is a dark block on white
-  paper.** Measured: A4's MediaBox is 793 x 1123 px and the theme background
-  covers 673 x 986 — the content box. The 18mm/16mm margin band stays the
-  paper's own colour. Visible in all four `npm run shots:pdf` rasters and most
-  obvious in `nord` and `high-contrast`. It is a design decision, not a bug to
-  patch quietly: `@page { margin: 0 }` would put text on the paper edge, so
-  the fix is to keep the margin and paint the sheet, which CSS paged media
-  does not offer directly. **Nobody has decided which look is wanted.**
+- **RESOLVED 2026-08-25: the `@page` margin is now 0, and the 18mm/16mm inset
+  moved onto `body`'s own padding.** The unpainted margin band (measured: A4's
+  MediaBox 793 x 1123 px, theme background only 673 x 986 — the content box)
+  meant a dark export was a dark block on white paper, most visible in `nord`
+  and `high-contrast`. Decision: paint the sheet, not preserve the border —
+  `@page { margin: 0 }` plus equivalent `body` padding puts the inset inside
+  the painted box instead of outside it, so text keeps its distance from the
+  edge without leaving any paper colour showing. Verified visually against
+  `npm run shots:pdf`'s `nord` raster: dark edge to edge, no white band.
 - **The container-backed test runs only by hand.** CI has no renderer — the
   image is 3.92 GB — so `e2e/pdfExport.spec.ts`'s deepest test skips there.
   Deliberately NOT mirrored on `migrate.test.ts`'s "assert the env var under

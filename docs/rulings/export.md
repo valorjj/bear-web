@@ -100,6 +100,18 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   compares the PAINTED background (resolved; a `getPropertyValue` on a derived
   token hands back the literal `color-mix(…)`).
 
+- **The page is painted edge to edge; the inset lives on `body`'s padding,
+  never on `@page`'s margin.** `@page { margin }` is Chromium's own unpainted
+  band — `printBackground` never reaches it — so a nonzero `@page` margin
+  reintroduces the white border a themed PDF must not have (measured on Nord:
+  A4's MediaBox 793 x 1123 px vs. a 673 x 986 px painted content box, before
+  this was fixed). `@page`'s margin stays `0`; the 18mm/16mm inset is
+  `body`'s own `padding` in `html.ts`, inside the painted box like everything
+  else. The `@media print` block correspondingly does NOT zero that padding
+  (it would run text to the paper edge now that `@page` reserves nothing) —
+  it resets only `max-width`, since the line-width cap is a screen-reading
+  measure with no place on a printed page.
+
 - **A text extraction cannot see tofu, and this is the export suite's standing
   trap.** A PDF whose every Korean glyph rendered as a missing-glyph box still
   contains the right text — the string comes from the font's cmap, not from

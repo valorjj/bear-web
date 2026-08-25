@@ -237,9 +237,9 @@ test.describe('PDF export', () => {
     expect(luminance(background), 'a Nord export must be a dark PDF').toBeLessThan(0.1);
 
     // Independent of colour: under print media the export stylesheet zeroes
-    // `body`'s padding and its `max-width`, so the text would start exactly
-    // at the 16mm page margin. Under screen media the centred, padded column
-    // starts well inside it.
+    // `body`'s `max-width` (only), so the centred column would collapse to
+    // the page's full printable width. Under screen media the centred,
+    // padded column starts well inside the page edge.
     const x = leftmostTextX(content);
     expect(x, 'no text matrix in the content stream').not.toBeNull();
     if (x === null) return;
