@@ -250,4 +250,5 @@ export {
   Rows3,
   Columns3,
   Plus,
+  LoaderCircle,
 } from 'lucide-react';

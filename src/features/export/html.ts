@@ -589,6 +589,17 @@ ${declarations}
     th > p,
     td > p {
       text-indent: 0;
+      margin: 0;
+      /*
+       * DOMSerializer emits a bare <p></p> for an empty cell, with none of the
+       * trailing <br> ProseMirror inserts in the editor DOM so a caret has
+       * somewhere to sit. A <p> with no line box is zero height, so an empty
+       * row collapsed to padding alone (~20px) against the editor's ~40px.
+       * 1lh reproduces the missing line box directly from the same
+       * line-height token the editor uses, rather than a magic-number
+       * min-height that would silently drift from --bear-line-height.
+       */
+      min-height: 1lh;
     }
 
     hr {

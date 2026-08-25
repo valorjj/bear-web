@@ -119,6 +119,8 @@ export const ko: Record<TranslationKey, string> = {
   'export.html': 'HTML',
   'export.pdf': 'PDF',
   'export.pdf.requiresSignIn': 'PDF로 내보내려면 로그인하세요',
+  'export.pdf.pending': 'PDF 내보내는 중…',
+  'export.progress.label': 'PDF 내보내는 중',
   'export.failed': '이 메모를 내보낼 수 없습니다.',
   'export.failed.offline': 'PDF 내보내기에는 인터넷 연결이 필요합니다.',
   'export.failed.unauthorized': '세션이 만료되었습니다. PDF를 내보내려면 다시 로그인하세요.',
