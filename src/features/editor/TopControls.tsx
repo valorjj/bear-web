@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { useT } from '@/i18n';
 import { Bold, Download, Icon, Info, Italic } from '@/ui/Icon';
 
+import type { EditorFlags } from './editorState';
 import { pinAllSelectionStep } from './toolbarSelection';
 
 export interface TopControlsProps {
@@ -13,6 +14,8 @@ export interface TopControlsProps {
   /** Omit to render no export control at all — see `RichEditor`. */
   exportOpen?: boolean;
   onToggleExport?: () => void;
+  /** Live formatting state at the caret. See `editorState.ts`. */
+  flags: EditorFlags;
 }
 
 /**
@@ -39,6 +42,7 @@ export function TopControls({
   onToggleInfo,
   exportOpen,
   onToggleExport,
+  flags,
 }: TopControlsProps): ReactElement {
   const t = useT();
 
@@ -51,7 +55,7 @@ export function TopControls({
       <button
         type="button"
         aria-label={t('editor.toolbar.bold')}
-        aria-pressed={editor?.isActive('bold') ?? false}
+        aria-pressed={flags.bold}
         disabled={editor === null}
         onClick={() => editor?.chain().command(pinAllSelectionStep).focus().toggleBold().run()}
         className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
@@ -61,7 +65,7 @@ export function TopControls({
       <button
         type="button"
         aria-label={t('editor.toolbar.italic')}
-        aria-pressed={editor?.isActive('italic') ?? false}
+        aria-pressed={flags.italic}
         disabled={editor === null}
         onClick={() => editor?.chain().command(pinAllSelectionStep).focus().toggleItalic().run()}
         className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"

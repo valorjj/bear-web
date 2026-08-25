@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EditorView } from '@tiptap/pm/view';
 import { createRef } from 'react';
@@ -491,5 +491,33 @@ describe('the highlight colour menu', () => {
 
     expect(screen.queryByRole('menu', { name: 'Highlight colour' })).toBeNull();
     expect(handleRef.current?.getMarkdown()).toBe('word');
+  });
+});
+
+describe('live formatting state', () => {
+  it('repaints the toolbar when the selection moves, with no React state change', async () => {
+    // The regression this pins: `useEditor` does not re-render on transactions
+    // in Tiptap v3, so a toolbar reading `editor.isActive()` during render
+    // reports whatever was true when React last rendered for a reason of its
+    // own. Nothing in this test touches React state — the ONLY thing that can
+    // repaint the button is the editor-state subscription.
+    const { handleRef } = renderEditor('plain **bold** plain');
+    await screen.findByLabelText('Note text');
+    const editor = handleRef.current?.editor;
+    if (editor === null || editor === undefined) {
+      throw new Error('editor did not mount');
+    }
+
+    const boldButton = within(bottomToolbar()).getByRole('button', { name: 'Bold' });
+
+    act(() => {
+      editor.commands.setTextSelection(2);
+    });
+    await waitFor(() => expect(boldButton).toHaveAttribute('aria-pressed', 'false'));
+
+    act(() => {
+      editor.commands.setTextSelection(9);
+    });
+    await waitFor(() => expect(boldButton).toHaveAttribute('aria-pressed', 'true'));
   });
 });

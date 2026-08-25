@@ -1,11 +1,12 @@
 import { isMacOS } from '@tiptap/core';
-import { EditorContent, type Editor, useEditor } from '@tiptap/react';
+import { EditorContent, type Editor, useEditor, useEditorState } from '@tiptap/react';
 import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
 
 import { ExportMenu, type ExportFormat } from '@/features/export';
 import { useT } from '@/i18n';
 
 import { BottomToolbar } from './BottomToolbar';
+import { EMPTY_FLAGS, editorFlagsSelector } from './editorState';
 import { buildEditorExtensions } from './extensions';
 import { HeadingMenu } from './HeadingMenu';
 import { HighlightMenu } from './HighlightMenu';
@@ -190,6 +191,22 @@ export function RichEditor({
     },
   });
 
+  /**
+   * The single source of formatting state for every surface below.
+   *
+   * `useEditorState` subscribes to transactions but re-renders only when the
+   * SELECTED SLICE changes by `fast-deep-equal`. The alternative —
+   * `shouldRerenderOnTransaction: true` on the `useEditor` call above — is one
+   * line and is rejected: it re-renders this whole subtree on every keystroke
+   * the user types, and this is a notes app.
+   *
+   * `?? EMPTY_FLAGS` rather than a nullable: the overload that accepts a
+   * possibly-null editor returns `TSelectorResult | null`, and letting that
+   * null reach the toolbars would put a `?.` on every flag read — which is the
+   * kind of optionality that quietly turns back into "assume false".
+   */
+  const flags = useEditorState({ editor, selector: editorFlagsSelector }) ?? EMPTY_FLAGS;
+
   // `onEditorReady` is read through a ref, the same discipline as
   // `activateRef` above: the callback's IDENTITY must not be a dependency
   // here, or a caller that doesn't memoize it would tear this effect down
@@ -260,6 +277,7 @@ export function RichEditor({
         <div className="pointer-events-auto flex flex-col items-end gap-2">
           <TopControls
             editor={editor}
+            flags={flags}
             infoOpen={infoOpen}
             onToggleInfo={() => setInfoOpen((v) => !v)}
             // Passed only when the app supplied a handler, so the control is
@@ -339,6 +357,7 @@ export function RichEditor({
           )}
           <BottomToolbar
             editor={editor}
+            flags={flags}
             highlightColor={highlightColor}
             colorMenuOpen={colorMenuOpen}
             onToggleColorMenu={() => setColorMenuOpen((open) => !open)}

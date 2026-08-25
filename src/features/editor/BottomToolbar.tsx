@@ -21,6 +21,7 @@ import {
 } from '@/ui/Icon';
 import type { LucideIcon } from '@/ui/Icon';
 
+import type { EditorFlags } from './editorState';
 import type { HighlightColor } from './Highlight';
 import { pinAllSelectionStep } from './toolbarSelection';
 
@@ -37,6 +38,8 @@ export interface BottomToolbarProps {
   /** Whether the colour menu is open — drives `aria-expanded` on the chevron. */
   colorMenuOpen: boolean;
   onToggleColorMenu: () => void;
+  /** Live formatting state at the caret. See `editorState.ts`. */
+  flags: EditorFlags;
 }
 
 interface Action {
@@ -68,7 +71,17 @@ interface Action {
    * worth having.
    */
   run: (editor: Editor, t: Translate, highlightColor: HighlightColor | null) => void;
-  active: (editor: Editor) => boolean;
+  /**
+   * The `EditorFlags` key this action's pressed state reads.
+   *
+   * A KEY, not a predicate. A predicate would take an `Editor` and be called
+   * during render, which is exactly the shape that let this toolbar report
+   * stale state from M4 to H: `useEditor` does not re-render on transactions
+   * in Tiptap v3, so a render-time read is only as fresh as React's last
+   * unrelated reason to run. Reading a key off a subscribed object makes that
+   * mistake unavailable rather than merely discouraged.
+   */
+  active: keyof EditorFlags;
 }
 
 const ACTIONS: readonly Action[] = [
@@ -78,49 +91,49 @@ const ACTIONS: readonly Action[] = [
     glyph: Heading,
     run: (editor) =>
       editor.chain().command(pinAllSelectionStep).focus().toggleHeading({ level: 1 }).run(),
-    active: (editor) => editor.isActive('heading', { level: 1 }),
+    active: 'heading1',
   },
   {
     key: 'checklist',
     label: 'editor.toolbar.checklist',
     glyph: ListTodo,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleTaskList().run(),
-    active: (editor) => editor.isActive('taskList'),
+    active: 'taskList',
   },
   {
     key: 'bulletList',
     label: 'editor.toolbar.bulletList',
     glyph: List,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleBulletList().run(),
-    active: (editor) => editor.isActive('bulletList'),
+    active: 'bulletList',
   },
   {
     key: 'orderedList',
     label: 'editor.toolbar.orderedList',
     glyph: ListOrdered,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleOrderedList().run(),
-    active: (editor) => editor.isActive('orderedList'),
+    active: 'orderedList',
   },
   {
     key: 'bold',
     label: 'editor.toolbar.bold',
     glyph: Bold,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleBold().run(),
-    active: (editor) => editor.isActive('bold'),
+    active: 'bold',
   },
   {
     key: 'italic',
     label: 'editor.toolbar.italic',
     glyph: Italic,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleItalic().run(),
-    active: (editor) => editor.isActive('italic'),
+    active: 'italic',
   },
   {
     key: 'strike',
     label: 'editor.toolbar.strike',
     glyph: Strikethrough,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleStrike().run(),
-    active: (editor) => editor.isActive('strike'),
+    active: 'strike',
   },
   {
     key: 'highlight',
@@ -130,7 +143,7 @@ const ACTIONS: readonly Action[] = [
     // chevron beside it is the route to a different one.
     run: (editor, _t, color) =>
       editor.chain().command(pinAllSelectionStep).focus().toggleHighlight(color).run(),
-    active: (editor) => editor.isActive('highlight'),
+    active: 'highlight',
   },
   {
     key: 'link',
@@ -150,14 +163,14 @@ const ACTIONS: readonly Action[] = [
         .setLink({ href })
         .run();
     },
-    active: (editor) => editor.isActive('link'),
+    active: 'link',
   },
   {
     key: 'code',
     label: 'editor.toolbar.code',
     glyph: Code,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleCodeBlock().run(),
-    active: (editor) => editor.isActive('codeBlock'),
+    active: 'codeBlock',
   },
   {
     key: 'table',
@@ -172,14 +185,14 @@ const ACTIONS: readonly Action[] = [
         .focus()
         .insertTable({ rows: 2, cols: 3, withHeaderRow: true })
         .run(),
-    active: (editor) => editor.isActive('table'),
+    active: 'table',
   },
   {
     key: 'quote',
     label: 'editor.toolbar.quote',
     glyph: Quote,
     run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleBlockquote().run(),
-    active: (editor) => editor.isActive('blockquote'),
+    active: 'blockquote',
   },
 ];
 
@@ -201,6 +214,7 @@ export function BottomToolbar({
   highlightColor,
   colorMenuOpen,
   onToggleColorMenu,
+  flags,
 }: BottomToolbarProps): ReactElement {
   const t = useT();
 
@@ -215,7 +229,7 @@ export function BottomToolbar({
           <button
             type="button"
             aria-label={t(action.label)}
-            aria-pressed={editor !== null && action.active(editor)}
+            aria-pressed={flags[action.active] === true}
             disabled={editor === null}
             onClick={() => editor !== null && action.run(editor, t, highlightColor)}
             className={`h-7 shrink-0 rounded-sm text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40 ${
