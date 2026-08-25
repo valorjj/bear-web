@@ -199,6 +199,12 @@ cost bought.
   is a number it cannot inflate.
 - **Cap workers when the machine is shared:** `npm test -- --run --maxWorkers=4`.
   Six workers plus another session's six is what pins every core.
+- **The cheap tier is `typecheck`, `lint` AND `format`.** All three are
+  single-process and finish in seconds; only `npm test`, `test:e2e` and `build`
+  are worth deferring to CI. G's follow-up cut `format` along with the
+  expensive suites and CI went red on `Check formatting` for one file — a
+  two-second local check caught by a four-minute remote one. Prettier is not
+  in the same cost class as a six-worker Vitest run; do not group them.
 - **Full suite only at gate boundaries**, not per task. H ran e2e 3 times
   instead of 11 by naming three boundaries up front; the same logic was simply
   never applied to the unit suite.
