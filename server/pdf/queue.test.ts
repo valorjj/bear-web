@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createQueue } from './queue.ts';
+import { createQueue, QueueFullError } from './queue.ts';
 
 function deferred() {
   let resolve!: () => void;
@@ -71,6 +71,27 @@ describe('createQueue', () => {
     ).rejects.toThrow('boom');
 
     expect(queue.active).toBe(0);
+    await expect(queue.withSlot(async () => 'ok')).resolves.toBe('ok');
+  });
+
+  it('sheds past maxDepth rather than parking callers without limit', async () => {
+    const queue = createQueue({ maxConcurrent: 1, maxDepth: 2 });
+    const gate = deferred();
+
+    const running = queue.withSlot(() => gate.promise);
+    const parked = [queue.withSlot(async () => {}), queue.withSlot(async () => {})];
+
+    expect(queue.pending).toBe(3);
+    // The fourth caller is one past the depth and must be refused OUTRIGHT —
+    // a parked caller still holds its request body, which is the whole point.
+    await expect(queue.withSlot(async () => {})).rejects.toBeInstanceOf(QueueFullError);
+    expect(queue.pending).toBe(3);
+
+    gate.resolve();
+    await Promise.all([running, ...parked]);
+    expect(queue.pending).toBe(0);
+
+    // Depth is a live limit, not a fuse: the queue accepts work again.
     await expect(queue.withSlot(async () => 'ok')).resolves.toBe('ok');
   });
 });

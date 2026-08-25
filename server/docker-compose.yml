@@ -44,6 +44,29 @@ services:
       # interfaces this renderer is reachable from anything on the Mini's LAN,
       # which bypasses the session cookie and the rate limiter in one hop.
       - '127.0.0.1:8788:8788'
+    networks:
+      # Part of the spec's control 4, which publishing on 127.0.0.1 is NOT:
+      # that is an INBOUND restriction, and the two are independent.
+      #
+      # On the compose DEFAULT network the renderer sits beside mariadb and
+      # reaches `mariadb:3306` by service name. A dedicated network removes
+      # that: Docker's embedded DNS only resolves service names within a
+      # shared network, and mariadb is not on this one.
+      #
+      # `internal: true` was the first choice and is NOT usable here. It does
+      # deny egress completely — measured ENETUNREACH to 172.17.0.1:3308 and
+      # to 1.1.1.1:443, and EAI_AGAIN for every hostname — but it ALSO kills
+      # the published port, so `127.0.0.1:8788` answers nothing from the host
+      # and the API could never reach the renderer. The container healthcheck
+      # keeps passing throughout, because it runs inside the container against
+      # its own loopback, so the breakage is invisible to `docker ps`.
+      # Full egress denial needs the API and the renderer on one internal
+      # network, or a unix socket instead of TCP. See the report.
+      #
+      # What covers the gap meanwhile is the browser's own
+      # --host-resolver-rules (render.ts), measured to fail literal IPs as
+      # well as hostnames.
+      - pdf-isolated
     mem_limit: 1g
     pids_limit: 512
     security_opt:
@@ -59,6 +82,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+networks:
+  # mariadb stays on the compose `default` network, which this does not
+  # replace. Keeping the renderer off it is the point. Deliberately NOT
+  # `internal: true` — see the comment on the service.
+  pdf-isolated:
 
 volumes:
   markflowing-data:

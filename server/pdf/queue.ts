@@ -12,8 +12,28 @@ import { closeSharedBrowser } from './render.ts';
 export const MAX_CONCURRENT = 2;
 export const RESTART_EVERY = 50;
 
+/**
+ * Admission, which is a different thing from concurrency.
+ *
+ * The concurrency limit alone bounds how many renders run; it does NOT bound
+ * how many callers are parked waiting, each holding its request body. With a
+ * 2MB body cap and the container's 1g `mem_limit` — a kill, not a warning —
+ * roughly 500 parked requests is an OOM, reachable by one client. Past this
+ * depth callers are shed immediately rather than queued, which the spec's
+ * error table already maps to 503 "PDF export is unavailable right now".
+ */
+export const MAX_QUEUE_DEPTH = 8;
+
+export class QueueFullError extends Error {
+  constructor() {
+    super('render queue is full');
+    this.name = 'QueueFullError';
+  }
+}
+
 export interface QueueOptions {
   maxConcurrent?: number;
+  maxDepth?: number;
   restartEvery?: number;
   /** Injected so a test can observe the restart without launching Chromium. */
   restart?: () => Promise<void>;
@@ -22,10 +42,13 @@ export interface QueueOptions {
 export interface Queue {
   withSlot<T>(run: () => Promise<T>): Promise<T>;
   readonly active: number;
+  /** Running plus parked — what admission is judged on. */
+  readonly pending: number;
 }
 
 export function createQueue(options: QueueOptions = {}): Queue {
   const maxConcurrent = options.maxConcurrent ?? MAX_CONCURRENT;
+  const maxDepth = options.maxDepth ?? MAX_QUEUE_DEPTH;
   const restartEvery = options.restartEvery ?? RESTART_EVERY;
   const restart = options.restart ?? closeSharedBrowser;
 
@@ -51,6 +74,7 @@ export function createQueue(options: QueueOptions = {}): Queue {
       active += 1;
       return Promise.resolve();
     }
+    if (waiting.length >= maxDepth) return Promise.reject(new QueueFullError());
     return new Promise<void>((resolve) => waiting.push(resolve));
   }
 
@@ -80,6 +104,9 @@ export function createQueue(options: QueueOptions = {}): Queue {
     },
     get active() {
       return active;
+    },
+    get pending() {
+      return active + waiting.length;
     },
   };
 }

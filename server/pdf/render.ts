@@ -17,8 +17,26 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 
 let shared: Browser | null = null;
 
+/**
+ * `MAP * ~NOTFOUND` fails every hostname resolution inside the browser
+ * process, independently of the per-page route abort — a second, cheaper
+ * layer for whatever the first one misses.
+ *
+ * Measured inside the container on 2026-08-25, with the route abort removed
+ * so this layer was tested ALONE: with these args both
+ * `http://localhost:9999/` and `http://127.0.0.1:9999/` failed; with an empty
+ * args list both reached a listener. So it stops literal IPs as well as
+ * hostnames — Chromium routes literal addresses through its host resolver
+ * too — which is more than "a DNS control" would suggest, and worth knowing
+ * before anyone weakens the rule to a hostname pattern.
+ *
+ * It does NOT replace the route abort, which remains control 2 and the thing
+ * actually proven by fault injection. This is the layer underneath it.
+ */
+const EGRESS_DENY_ARGS = ['--host-resolver-rules=MAP * ~NOTFOUND'];
+
 export async function sharedBrowser(): Promise<Browser> {
-  shared ??= await chromium.launch();
+  shared ??= await chromium.launch({ args: EGRESS_DENY_ARGS });
   return shared;
 }
 
@@ -29,29 +47,40 @@ export async function closeSharedBrowser(): Promise<void> {
 }
 
 /**
- * Playwright signals its own timeouts with `TimeoutError`, whose message is
- * locale-independent but whose shape is not guaranteed across versions. Both
- * the name and the message are checked, because matching on the message alone
- * would silently reclassify a timeout as a 500 the day the wording changes,
- * and matching on the name alone would miss a timeout re-thrown by a wrapper.
+ * Name only. This deliberately does NOT also match /timeout/i against the
+ * message: the wall-clock deadline below is now the real timeout source, so
+ * the message match bought nothing and cost precision — any unrelated failure
+ * whose text happens to contain the word ("Navigation timeout of…", but also
+ * a page's own error string) would be reported to the client as 504 "try
+ * again shortly" when the truth is 500.
  */
 function isTimeout(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.name === 'TimeoutError' || /timeout/i.test(error.message);
+  return error instanceof Error && error.name === 'TimeoutError';
 }
 
 /**
  * Bounded, because a close that hangs would pin the very worker the deadline
- * below exists to reclaim. A context that outlives this is left for the
- * periodic browser restart in `queue.ts` to reap.
+ * below exists to reclaim.
+ *
+ * When the bound is hit the context is abandoned, which leaves a live renderer
+ * process behind. Waiting for the every-50-renders restart to reap it means up
+ * to 50 more renders sharing the machine with a runaway Chromium, so the
+ * shared browser is torn down immediately instead — the next render lazily
+ * relaunches it. An INJECTED browser (tests) is never closed here: it belongs
+ * to the caller, and killing it would take out the rest of the suite.
  */
 const CLOSE_TIMEOUT_MS = 5_000;
 
-async function closeContext(context: BrowserContext): Promise<void> {
-  await Promise.race([
-    context.close().catch(() => {}),
-    new Promise<void>((resolve) => setTimeout(resolve, CLOSE_TIMEOUT_MS)),
+async function closeContext(context: BrowserContext, owned: boolean): Promise<void> {
+  const closed = await Promise.race([
+    context.close().then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), CLOSE_TIMEOUT_MS)),
   ]);
+
+  if (!closed && owned) await closeSharedBrowser().catch(() => {});
 }
 
 /**
@@ -86,6 +115,7 @@ async function closeContext(context: BrowserContext): Promise<void> {
  * the worker.
  */
 export async function renderPdf(html: string, deps: RenderDeps = {}): Promise<Uint8Array> {
+  const owned = deps.browser === undefined;
   const browser = deps.browser ?? (await sharedBrowser());
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const context = await browser.newContext({ javaScriptEnabled: false });
@@ -122,6 +152,6 @@ export async function renderPdf(html: string, deps: RenderDeps = {}): Promise<Ui
     throw error;
   } finally {
     clearTimeout(deadlineTimer);
-    await closeContext(context);
+    await closeContext(context, owned);
   }
 }

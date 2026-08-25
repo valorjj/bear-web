@@ -15,7 +15,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --project='!pdf'",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "shots": "PW_HARNESS=1 playwright test --grep @shots",
@@ -31,7 +31,7 @@
     "server:migrate": "tsx --env-file=server/.env server/src/db/migrate.ts",
     "test:pdf": "vitest run --project pdf",
     "pdf:build": "docker compose -f server/docker-compose.yml build pdf",
-    "pdf:up": "docker compose -f server/docker-compose.yml up -d pdf",
+    "pdf:up": "npm run pdf:build && docker compose -f server/docker-compose.yml up -d pdf",
     "pdf:down": "docker compose -f server/docker-compose.yml down pdf",
     "pdf:verify:fonts": "docker compose -f server/docker-compose.yml run --rm --no-deps pdf node verify-fonts.mjs"
   },

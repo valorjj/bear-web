@@ -1,9 +1,10 @@
 import type { AddressInfo } from 'node:net';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createRenderServer, type RenderServerDeps } from './server.ts';
+import { QueueFullError } from './queue.ts';
 import { RenderTimeoutError } from './render.ts';
+import { createRenderServer, type RenderServerDeps } from './server.ts';
 
 const servers: ReturnType<typeof createRenderServer>[] = [];
 
@@ -21,6 +22,12 @@ async function start(deps: RenderServerDeps): Promise<string> {
 }
 
 const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]); // '%PDF-'
+
+const HTML = { 'content-type': 'text/html' };
+
+function post(base: string, body = '<p>x</p>', headers: Record<string, string> = HTML) {
+  return fetch(`${base}/render`, { method: 'POST', headers, body });
+}
 
 describe('createRenderServer', () => {
   it('answers /health', async () => {
@@ -74,11 +81,7 @@ describe('createRenderServer', () => {
       },
     });
 
-    const response = await fetch(`${base}/render`, {
-      method: 'POST',
-      headers: { 'content-type': 'text/html' },
-      body: 'x'.repeat(64 * 1024),
-    }).catch((error: Error) => error);
+    const response = await post(base, 'x'.repeat(64 * 1024)).catch((error: Error) => error);
 
     // Node may destroy the socket before the response is fully read, which
     // surfaces as a fetch rejection rather than a 413. Either is an acceptable
@@ -104,17 +107,82 @@ describe('createRenderServer', () => {
         throw new RenderTimeoutError();
       },
     });
-    expect(
-      (await fetch(`${timeoutBase}/render`, { method: 'POST', body: '<p>x</p>' })).status,
-    ).toBe(504);
+    expect((await post(timeoutBase)).status).toBe(504);
 
     const failBase = await start({
       render: async () => {
         throw new Error('chromium exploded');
       },
     });
-    expect((await fetch(`${failBase}/render`, { method: 'POST', body: '<p>x</p>' })).status).toBe(
-      500,
-    );
+    expect((await post(failBase)).status).toBe(500);
+  });
+
+  it('requires content-type: text/html, so a cross-origin page cannot reach it', async () => {
+    // `text/html` is not CORS-safelisted, so requiring it forces a preflight
+    // that this server never answers. Attempted with each content-type a
+    // simple cross-origin POST CAN set without one.
+    let rendered = 0;
+    const base = await start({
+      render: async () => {
+        rendered += 1;
+        return pdfBytes;
+      },
+    });
+
+    for (const type of [
+      'text/plain',
+      'application/x-www-form-urlencoded',
+      'multipart/form-data; boundary=x',
+      'application/json',
+    ]) {
+      expect((await post(base, '<p>x</p>', { 'content-type': type })).status, type).toBe(415);
+    }
+
+    // A missing header is refused too, and the real one still works — with the
+    // charset a fetch appends, which a naive equality check would reject.
+    expect((await fetch(`${base}/render`, { method: 'POST', body: '<p>x</p>' })).status).toBe(415);
+    expect(rendered, 'no refused request may reach the renderer').toBe(0);
+
+    expect(
+      (await post(base, '<p>x</p>', { 'content-type': 'text/html; charset=utf-8' })).status,
+    ).toBe(200);
+  });
+
+  it('sheds with 503 past the in-flight limit instead of buffering every body', async () => {
+    const release: (() => void)[] = [];
+    const base = await start({
+      maxInflight: 2,
+      render: () =>
+        new Promise<Uint8Array>((resolve) => {
+          release.push(() => resolve(pdfBytes));
+        }),
+    });
+
+    const held = [post(base), post(base)];
+    // Both must be admitted and parked in `render` before the third arrives,
+    // or this asserts nothing about the limit.
+    await vi.waitFor(() => expect(release.length).toBe(2));
+
+    expect((await post(base)).status).toBe(503);
+
+    for (const resolve of release) resolve();
+    expect((await Promise.all(held)).map((r) => r.status)).toEqual([200, 200]);
+
+    // The slot is returned, not leaked: a fourth request now succeeds.
+    expect(release.length).toBe(2);
+    const after = post(base);
+    await vi.waitFor(() => expect(release.length).toBe(3));
+    release[2]!();
+    expect((await after).status).toBe(200);
+  });
+
+  it('maps a full render queue to 503', async () => {
+    const base = await start({
+      render: async () => {
+        throw new QueueFullError();
+      },
+    });
+
+    expect((await post(base)).status).toBe(503);
   });
 });

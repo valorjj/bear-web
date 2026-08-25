@@ -1,20 +1,33 @@
 import { createServer, type Server } from 'node:http';
 
-import { withSlot } from './queue.ts';
+import { QueueFullError, withSlot } from './queue.ts';
 import { renderPdf, RenderTimeoutError } from './render.ts';
 
 export const DEFAULT_PORT = 8788;
 export const MAX_BYTES = 2 * 1024 * 1024;
 
+/**
+ * How many requests may be buffering a body at once.
+ *
+ * The queue bounds how many renders RUN; this bounds how many bodies are held
+ * in memory waiting to. Checked before a single byte is read, because a limit
+ * applied after buffering does not bound anything.
+ */
+export const MAX_INFLIGHT = 16;
+
 export interface RenderServerDeps {
   /** Injected so the HTTP contract can be tested without launching Chromium. */
   render?: (html: string) => Promise<Uint8Array>;
   maxBytes?: number;
+  maxInflight?: number;
 }
 
 export function createRenderServer(deps: RenderServerDeps = {}): Server {
   const render = deps.render ?? ((html: string) => withSlot(() => renderPdf(html)));
   const maxBytes = deps.maxBytes ?? MAX_BYTES;
+  const maxInflight = deps.maxInflight ?? MAX_INFLIGHT;
+
+  let inflight = 0;
 
   return createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
@@ -26,6 +39,35 @@ export function createRenderServer(deps: RenderServerDeps = {}): Server {
       res.writeHead(404).end();
       return;
     }
+
+    /*
+     * `text/html` is required, and the reason is not tidiness.
+     *
+     * It is not a CORS-safelisted request content-type, so demanding it means
+     * a simple cross-origin `fetch` or a plain HTML form cannot reach this
+     * endpoint — the browser must preflight, and the preflight gets no
+     * permissive response. That matters because this listens on 127.0.0.1 of a
+     * machine somebody browses on: without it, ANY page they visit can POST a
+     * 2MB layout bomb straight at the renderer, going around the API's auth
+     * and rate limiter completely. The response is unreadable cross-origin, so
+     * the prize is resource abuse rather than data — which on a fanless box is
+     * the attack that matters.
+     */
+    const contentType = req.headers['content-type'] ?? '';
+    if (!/^text\/html\s*(;|$)/i.test(contentType)) {
+      res.writeHead(415).end();
+      return;
+    }
+
+    // Before reading any of the body. See MAX_INFLIGHT.
+    if (inflight >= maxInflight) {
+      res.writeHead(503).end();
+      return;
+    }
+    inflight += 1;
+    res.on('close', () => {
+      inflight -= 1;
+    });
 
     const chunks: Buffer[] = [];
     let total = 0;
@@ -71,7 +113,9 @@ export function createRenderServer(deps: RenderServerDeps = {}): Server {
           const pdf = await render(Buffer.concat(chunks).toString('utf8'));
           res.writeHead(200, { 'content-type': 'application/pdf' }).end(Buffer.from(pdf));
         } catch (error) {
-          res.writeHead(error instanceof RenderTimeoutError ? 504 : 500).end();
+          if (error instanceof RenderTimeoutError) res.writeHead(504).end();
+          else if (error instanceof QueueFullError) res.writeHead(503).end();
+          else res.writeHead(500).end();
         }
       })();
     });

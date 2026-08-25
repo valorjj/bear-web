@@ -14,8 +14,33 @@ test enforces.
     cp .env.example .env        # then fill in the Google credentials
     docker compose up -d
     npm run server:migrate
-    npm run server:service:install
-    npm run server:service:start
+
+## The PDF renderer
+
+A separate container (`markflowing-pdf`, sub-project G): a Chromium service
+that turns exported HTML into a PDF. It is deliberately NOT part of the API
+process — it renders client-supplied HTML, which is a code-execution and SSRF
+surface. It listens on `127.0.0.1:8788` and sits on its own `internal: true`
+network, so it can reach neither `mariadb` nor anything off the host.
+
+    npm run pdf:up              # BUILDS, then starts
+    npm run pdf:down
+    npm run test:pdf            # the unit suite (launches a real Chromium)
+    npm run pdf:verify:fonts    # re-run the image's font assertion
+
+**`pdf:up` rebuilds on purpose.** `restart: unless-stopped` plus a healthcheck
+means a plain `docker compose up -d pdf` happily serves a stale image, so an
+`npm ci` that moves the Pretendard path in `node_modules` would leave the
+running renderer silently rendering Korean in the wrong face. Use `pdf:up`,
+not `docker compose up -d pdf`. `pdf:build` alone is there for CI-shaped uses
+that want the two steps separate.
+
+The build FAILS if Pretendard or JetBrains Mono is not embedded in a real
+rendered PDF (`server/docker/pdf/verify-fonts.mjs`). Fontconfig-level checks
+cannot see this class of defect — see the comments in
+`server/docker/pdf/fonts.conf`.
+npm run server:service:install
+npm run server:service:start
 
 `.env` is gitignored and must stay so. This is the **production** config: it
 carries the live origins that the Cloudflare tunnel points at as

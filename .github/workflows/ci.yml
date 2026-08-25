@@ -83,6 +83,14 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
+      # AFTER the browser install, and deliberately NOT folded into `npm test`.
+      # These tests drive a real Chromium; keeping them out of the default
+      # `vitest run` is what lets `npm test` stay one of six cheap local gates
+      # on a fanless machine. `scripts/ciCoverage.test.ts` fails if this step
+      # is ever dropped, because nothing else would notice.
+      - name: PDF renderer tests
+        run: npm run test:pdf
+
       - name: End-to-end tests
         run: npm run test:e2e
 
