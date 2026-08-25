@@ -221,6 +221,38 @@ cost bought.
   `vitest run` can exit 1 with every assertion passing; see the uncaught-error
   bullet below. Read the failure, then re-run once the machine is quiet.
 
+### Dispatching agents onto this machine
+
+Every rule here was bought by an incident on 2026-08-26, when a subagent asked
+to reproduce a load-sensitive CI failure took the Mac Mini to **load 107**.
+
+- **A subagent must NEVER generate synthetic load.** No busy-loops, no `yes >
+/dev/null`, no CPU hogs. Contention comes from co-running real test files or
+  not at all. The agent that invented twelve busy-loops was told to try
+  "co-running heavy test files, or shifting worker counts"; "shifting worker
+  counts" was read as licence to synthesise load, so say the prohibition
+  outright rather than relying on the positive instruction to imply it.
+- **A load ceiling is a HARD STOP, not a "wait".** "If load exceeds 20, wait"
+  invites a judgement call and was blown through at 38.9. Write "if load
+  exceeds N, stop and report".
+- **Anything spawned must be verified dead BY PID before the agent reports.**
+  `kill $(jobs -p)` silently does nothing in a non-interactive zsh — `jobs -p`
+  returns empty — so all twelve hogs reparented to PID 1 and kept spinning for
+  **ten minutes** after their run finished. The agent believed it had cleaned up.
+- **Tell a branch-scoped subagent that the CONTROLLER merges its work.** Agents
+  are told "commit on your branch, do not touch `main`" so they cannot merge
+  themselves unreviewed. One then read the reflog, saw a merge it had not
+  performed, and reported to the user that a second actor was in the repo and
+  the merge might not be theirs. It was the controller. One sentence prevents an
+  agent raising a false security alarm.
+- **Green-green-red across a merge is NOT a controlled comparison.** With an
+  intermittent failure it is exactly what a pre-existing flake looks like, and
+  reasoning from it attributed a real `useTagTree` bug to an unrelated merge.
+  What settled it cost two seconds: measuring the happy path at **61 ms against
+  the test's 5000 ms ceiling**. An 80x margin refutes "it was slow under load"
+  outright — if the wait is nowhere near its ceiling, the thing being waited for
+  never happened, and no timeout raise can fix a write that was never issued.
+
 ## Toolchain surprises
 
 These bit us once already. They are not mistakes.
@@ -548,6 +580,19 @@ dev` stuck on "loading" forever while the production build and all six gates
   the `useEditorState` **subscription** in `RichEditor.tsx`, not swapping one
   read back to `isActive`.
 
+- **Dispatching inside a Tiptap command throws `RangeError: Applying a
+mismatched transaction`.** `editor.commands.X()` already opens its own outer
+  transaction, so a `view.dispatch` inside the command body conflicts with it.
+  Work through the `tr`/`state`/`dispatch` the command is handed instead. Found
+  wiring the table handle menu; the error names the symptom, not the cause.
+
+- **Extension options are a FLAT merge, and colliding names fail silently.**
+  `buildEditorExtensions` spreads every extension's options into one object, so
+  `TableHandles`' `onOpenMenu` silently collided with `HeadingFold`'s — no error,
+  no type failure, one callback simply wins. It is now `onOpenTableMenu`. Prefix
+  a new option with its extension's name whenever the bare word is plausible
+  elsewhere.
+
 - **A near-vacuous assertion shape recurred three times in sub-project H, and
   is worth watching for repo-wide.** `toHaveProperty('pos')` asserted a
   context-menu command's position was _present_, never that it held the right
@@ -622,7 +667,7 @@ user_id FROM identities WHERE email = ?`, which reads `user_id` without
 
 ## Rules that must not be silently reversed
 
-**The rulings live in `docs/rulings/`, not here.** 265 bullets across 13 files,
+**The rulings live in `docs/rulings/`, not here.** 275 bullets across 13 files,
 every one a live constraint. They are NOT loaded into context automatically —
 this index is. Its job is to tell you which file to open before you touch
 something, so read the row before you write the diff, not after.
@@ -636,7 +681,7 @@ at the top; the rows here are abridged.
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/data/tags/` — `parseTags`, `findTagRanges`, `normalizeTag`, `MASK`, the fence and mask helpers; `TAG_INDEX_VERSION`; any prose introducing the mask character's escape sequence                                                                                                                                                                                                    | [tag-grammar.md](docs/rulings/tag-grammar.md)                                                                                          |
 | `src/data/migrations.ts`, `sweep.ts`, `persist.ts`, `backup.ts`, `db.ts`'s `stores({…})`; the `noteTags` writes in `repositories/notes.ts`; the boot sequence in `main.tsx`; a new `db.version(n).upgrade()`                                                                                                                                                                            | [tag-index-and-startup.md](docs/rulings/tag-index-and-startup.md)                                                                      |
-| `NoteEditor.tsx`, `useAutosave.ts`, `useNotes.ts`, `derive.ts`, `useFlushTriggers.ts`; `AppShell`'s `key={…}` / `seed`; any `useLiveQuery` whose deps are not `[]`; `notes.purge` / `notes.save` call sites                                                                                                                                                                             | [notes-lifecycle.md](docs/rulings/notes-lifecycle.md)                                                                                  |
+| `NoteEditor.tsx`, `useAutosave.ts`, `useNotes.ts`, `derive.ts`, `useFlushTriggers.ts`; `AppShell`'s `key={…}` / `seed`; any `useLiveQuery` whose deps are not `[]`, and any write GATED on one (`useTagTree.reveal`); `notes.purge` / `notes.save` call sites                                                                                                                           | [notes-lifecycle.md](docs/rulings/notes-lifecycle.md)                                                                                  |
 | `scope.ts` (`NoteScope`, `SMART_LIST_IDS`, `scopeKey`, `ScopeQuery`, the capability functions), `src/data/order.ts`, `ScopeMenu.tsx`, `useSetting.ts`, `smartLists.ts`, `useSmartListCounts.ts`, `search.ts`, `HighlightedText.tsx`, `ConfirmDialog.tsx`, `AppShell`'s scope/query state                                                                                                | [scopes-and-search.md](docs/rulings/scopes-and-search.md)                                                                              |
 | `src/features/editor/markdown.ts`, `extensions.ts`, `RawBlock.ts`, `toolbarSelection.ts`, `taskItemPromotion.ts`; the `CANONICAL` / `NON_CANONICAL` fixtures; a new import of `@tiptap/markdown`; a new extension, input rule, **or keyboard binding** (`useScopeShortcuts.ts` included)                                                                                                | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md)                                                                          |
 | `tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` entries in `extensions.ts`, `RawTable`, `table.test.ts`, any table fixture                                                                                                                                                                                                                 | [tables.md](docs/rulings/tables.md)                                                                                                    |

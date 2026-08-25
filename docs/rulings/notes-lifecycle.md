@@ -10,7 +10,8 @@ between the selected note and the database.
 / `seed` / `setSeed` lines in `src/app/AppShell.tsx`; the symbols `seedText`,
 `normalizedSeedText`, `hadTextAtMountRef`, `editedRef`, `pendingDiscards`,
 `discard`, `deriveTitle`, `persistedRef`, `attemptedRef`, `saveSeqRef`,
-`sanitize`, `foldEditor`, `lastFoldedKeysRef`, `FOLD_PERSIST_DELAY_MS`; any new
+`sanitize`, `foldEditor`, `lastFoldedKeysRef`, `FOLD_PERSIST_DELAY_MS`;
+`src/features/tags/useTagTree.ts`'s `reveal` and `collapsed`; any new
 `useLiveQuery(` call site whose dependency array is not `[]`; `folds.get` /
 `folds.set` call sites; the Backspace/Delete guard in
 `src/features/editor/HeadingFold.ts`'s `handleKeyDown`; and `notes.purge` /
@@ -183,3 +184,25 @@ between the selected note and the database.
   behind `isMacOS()` — `@tiptap/core` itself only binds those chords on Mac,
   so binding them unconditionally here would claim keys Windows/Linux never
   assign this meaning to.
+
+- **A `useLiveQuery` value is a CACHE, and must never gate a write.**
+  `useTagTree.reveal` opened a collapsed ancestor only `if
+  (collapsed.has(ancestor))`, where `collapsed` came from a `useLiveQuery`. That
+  is a read-modify-write against a cache that can lag the database, and when it
+  lagged the guard was false, so `reveal` wrote **nothing**. The row did not
+  appear late — it never appeared at all, which is why activating a tag
+  intermittently failed to reveal it and why two earlier attempts to fix the
+  symptom by raising a test timeout could not work: **no timeout can wait out a
+  write that was never issued.**
+  It now writes unconditionally through an idempotent `put` and no longer takes
+  `collapsed` as a dependency. Reads from `useLiveQuery` are for rendering;
+  a write decision must come from the database or be made unconditionally.
+  The test that guarded this asserted a **write count**, which was the wrong
+  invariant — it pinned the defect in place, because the buggy code's whole
+  behaviour was writing less often. It now asserts the resulting state after a
+  round trip. When a test breaks on a fix like this, check whether the assertion
+  was encoding the bug before changing the code to satisfy it.
+  Diagnosed 2026-08-26 after the third flake of
+  `AppShell.test.tsx > reveals a collapsed ancestor`. What identified it was
+  measuring the happy path at **61 ms against the test's 5000 ms ceiling**: an
+  80x margin means the thing being waited for is not slow, it is absent.
