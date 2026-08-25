@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { exportNote } from './exportNote';
 
@@ -13,23 +13,30 @@ interface Captured {
   blob: Blob;
 }
 
-function harness() {
-  const files: Captured[] = [];
-  const printed: string[] = [];
-
-  return {
-    files,
-    printed,
-    deps: {
-      download: (filename: string, blob: Blob): void => void files.push({ filename, blob }),
-      print: (frame: HTMLIFrameElement): void => void printed.push(frame.srcdoc),
-    },
-  };
-}
-
 /** `Blob.text()` is unavailable under the Node Blob the setup file installs. */
 async function readBlob(blob: Blob): Promise<string> {
   return new TextDecoder().decode(await blob.arrayBuffer());
+}
+
+const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]);
+
+function harness() {
+  const files: Captured[] = [];
+  // Stands in for the server: PDF is no longer a local print, so the fetch
+  // it now goes through is the seam, not an iframe's `print` callback.
+  const fetch = vi.fn(
+    async (_url: string | URL | Request, _init?: RequestInit) =>
+      new Response(pdfBytes, { status: 200 }),
+  );
+
+  return {
+    files,
+    fetch,
+    deps: {
+      download: (filename: string, blob: Blob): void => void files.push({ filename, blob }),
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    },
+  };
 }
 
 describe('exportNote', () => {
@@ -69,25 +76,27 @@ describe('exportNote', () => {
     expect(await readBlob(files[0]!.blob)).toContain('<html lang="ko">');
   });
 
-  it('prints the same document for PDF rather than downloading anything', async () => {
-    const { files, printed, deps } = harness();
+  it('sends the rendered document to the API and downloads what it returns, under a .pdf name', async () => {
+    const { files, fetch, deps } = harness();
     await exportNote(note, 'pdf', 'en', deps);
 
-    // No file: the browser's print pipeline owns the save step, which is the
-    // whole point of choosing it over a client-side generator.
-    expect(files).toEqual([]);
-    expect(printed).toHaveLength(1);
-    expect(printed[0]).toContain('<h1>US market daily</h1>');
-    expect(printed[0]).toContain('@page');
+    expect(files).toHaveLength(1);
+    expect(files[0]?.filename).toBe('US market daily.pdf');
+    expect(await readBlob(files[0]!.blob)).toBe('%PDF-');
+
+    // The document handed to the server is the same one `html` downloads —
+    // one renderer, two destinations.
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [, init] = fetch.mock.calls[0]!;
+    expect((init as RequestInit).body).toContain('<h1>US market daily</h1>');
   });
 
-  it('produces the same document for html and pdf', async () => {
-    const { files, printed, deps } = harness();
+  it('sends the same document to the server for pdf as it downloads for html', async () => {
+    const { files, fetch, deps } = harness();
     await exportNote(note, 'html', 'en', deps);
     await exportNote(note, 'pdf', 'en', deps);
 
-    // One renderer, two destinations. If these ever diverge, a user's PDF stops
-    // matching the HTML they were shown.
-    expect(printed[0]).toBe(await readBlob(files[0]!.blob));
+    const [, init] = fetch.mock.calls[0]!;
+    expect((init as RequestInit).body).toBe(await readBlob(files[0]!.blob));
   });
 });

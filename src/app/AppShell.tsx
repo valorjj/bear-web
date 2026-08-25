@@ -21,7 +21,7 @@ import { hasTag, TagSidebar, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
-import { AccountMenu } from '@/features/account';
+import { AccountMenu, SessionProvider } from '@/features/account';
 import { ThemePicker } from '@/features/appearance';
 import { Pane } from '@/ui/Pane';
 import { Resizer } from '@/ui/Resizer';
@@ -217,128 +217,132 @@ export function AppShell(): ReactElement {
   }, [pending]);
 
   return (
-    <main className="bg-canvas text-text flex h-full w-full gap-2 overflow-hidden p-2">
-      <Pane
-        label={t('pane.sidebar')}
-        width={widths.sidebarWidth}
-        // Not a card: in Soft Depth the sidebar dissolves into the ground and
-        // only the panes holding content float. Its `--bear-sidebar` equals
-        // `--bear-canvas` in the indigo themes for the same reason.
-        elevated={false}
-        className="bg-sidebar flex flex-col overflow-hidden"
-      >
-        {/*
+    <SessionProvider>
+      <main className="bg-canvas text-text flex h-full w-full gap-2 overflow-hidden p-2">
+        <Pane
+          label={t('pane.sidebar')}
+          width={widths.sidebarWidth}
+          // Not a card: in Soft Depth the sidebar dissolves into the ground and
+          // only the panes holding content float. Its `--bear-sidebar` equals
+          // `--bear-canvas` in the indigo themes for the same reason.
+          elevated={false}
+          className="bg-sidebar flex flex-col overflow-hidden"
+        >
+          {/*
           The scroller is inner, not the Pane itself, so the footer stays
           pinned while the tag tree scrolls under it.
         */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <SmartListSidebar scope={scope} onScopeChange={setScope} counts={counts} />
-          <TagSidebar
-            nodes={tree.nodes}
-            scope={scope}
-            onScopeChange={setScope}
-            isCollapsed={tree.isCollapsed}
-            onToggle={tree.toggle}
-          />
-        </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <SmartListSidebar scope={scope} onScopeChange={setScope} counts={counts} />
+            <TagSidebar
+              nodes={tree.nodes}
+              scope={scope}
+              onScopeChange={setScope}
+              isCollapsed={tree.isCollapsed}
+              onToggle={tree.toggle}
+            />
+          </div>
 
-        <div className="border-border flex shrink-0 items-center gap-1 border-t p-1">
-          <ThemePicker />
-          <AccountMenu />
-        </div>
-      </Pane>
+          <div className="border-border flex shrink-0 items-center gap-1 border-t p-1">
+            <ThemePicker />
+            <AccountMenu />
+          </div>
+        </Pane>
 
-      <Resizer
-        label={t('resizer.sidebar')}
-        width={widths.sidebarWidth}
-        min={MIN_PANE_WIDTH}
-        max={MAX_PANE_WIDTH}
-        onResize={widths.onSidebarResize}
-        onCommit={widths.onSidebarCommit}
-      />
-
-      <Pane label={t('pane.noteList')} width={widths.noteListWidth} className="bg-surface">
-        <NoteList
-          scope={scope}
-          items={visibleItems}
-          selectedNoteId={selectedNoteId}
-          onSelect={select}
-          onCreate={() => void handleCreate()}
-          onTrash={(id) => void handleTrash(id)}
-          onRestore={(id) => void handleRestore(id)}
-          onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
-          onPurge={(id) => setPending({ kind: 'purge', id })}
-          onEmptyTrash={() => setPending({ kind: 'empty' })}
-          // Gated on the UNFILTERED `items`, not `visibleItems`: a query that
-          // matches nothing in a full trash must not disable the button that
-          // empties it. Emptying always empties every trashed note regardless
-          // of the query — the dialog copy already says so — so what it
-          // needs to know is whether the trash itself is empty, not whether
-          // the current search happens to show anything.
-          emptyTrashDisabled={items === undefined || items.length === 0}
-          // Same reasoning, same source (the UNFILTERED `items`): whether the
-          // no-results empty state may override a scope's own special-cased
-          // empty copy (Locked, Trash) depends on whether the scope had
-          // anything before the query narrowed it, not on the narrowed view.
-          hasUnfilteredItems={items !== undefined && items.length > 0}
-          count={items?.length ?? 0}
-          scopeQuery={scopeQuery}
-          previewSize={previewSize}
-          onOrderChange={setOrder}
-          onPreviewSizeChange={setPreviewSize}
-          // The menu reports the new `includeDescendants`; the setting stores
-          // its inverse, so exactly one place does the flip.
-          onIncludeDescendantsChange={(next) => setHideSubTagNotes(!next)}
-          onScopeChange={setScope}
-          query={query}
-          onQueryChange={setQuery}
-          searchInputRef={searchRef}
+        <Resizer
+          label={t('resizer.sidebar')}
+          width={widths.sidebarWidth}
+          min={MIN_PANE_WIDTH}
+          max={MAX_PANE_WIDTH}
+          onResize={widths.onSidebarResize}
+          onCommit={widths.onSidebarCommit}
         />
-      </Pane>
 
-      <Resizer
-        label={t('resizer.noteList')}
-        width={widths.noteListWidth}
-        min={MIN_PANE_WIDTH}
-        max={MAX_PANE_WIDTH}
-        onResize={widths.onNoteListResize}
-        onCommit={widths.onNoteListCommit}
-      />
-
-      <Pane label={t('pane.editor')} className="bg-bg">
-        {selectedNote === undefined ? null : selectedNote === null ? (
-          <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
-        ) : (
-          // `key` is load-bearing, not an optimisation: it remounts the editor
-          // on every switch, so an instance only ever writes to one note and
-          // its unmount cleanup is the flush-on-switch.
-          <NoteEditor
-            key={selectedNote.id}
-            note={selectedNote}
-            seedText={seed?.id === selectedNote.id ? seed.text : undefined}
-            onActivateTag={handleActivateTag}
+        <Pane label={t('pane.noteList')} width={widths.noteListWidth} className="bg-surface">
+          <NoteList
+            scope={scope}
+            items={visibleItems}
+            selectedNoteId={selectedNoteId}
+            onSelect={select}
+            onCreate={() => void handleCreate()}
+            onTrash={(id) => void handleTrash(id)}
+            onRestore={(id) => void handleRestore(id)}
+            onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
+            onPurge={(id) => setPending({ kind: 'purge', id })}
+            onEmptyTrash={() => setPending({ kind: 'empty' })}
+            // Gated on the UNFILTERED `items`, not `visibleItems`: a query that
+            // matches nothing in a full trash must not disable the button that
+            // empties it. Emptying always empties every trashed note regardless
+            // of the query — the dialog copy already says so — so what it
+            // needs to know is whether the trash itself is empty, not whether
+            // the current search happens to show anything.
+            emptyTrashDisabled={items === undefined || items.length === 0}
+            // Same reasoning, same source (the UNFILTERED `items`): whether the
+            // no-results empty state may override a scope's own special-cased
+            // empty copy (Locked, Trash) depends on whether the scope had
+            // anything before the query narrowed it, not on the narrowed view.
+            hasUnfilteredItems={items !== undefined && items.length > 0}
+            count={items?.length ?? 0}
+            scopeQuery={scopeQuery}
+            previewSize={previewSize}
+            onOrderChange={setOrder}
+            onPreviewSizeChange={setPreviewSize}
+            // The menu reports the new `includeDescendants`; the setting stores
+            // its inverse, so exactly one place does the flip.
+            onIncludeDescendantsChange={(next) => setHideSubTagNotes(!next)}
+            onScopeChange={setScope}
+            query={query}
+            onQueryChange={setQuery}
+            searchInputRef={searchRef}
           />
-        )}
-      </Pane>
+        </Pane>
 
-      <ConfirmDialog
-        open={pending !== null}
-        destructive
-        title={
-          pending?.kind === 'empty'
-            ? t('confirm.emptyTrash.title')
-            : t('confirm.deleteForever.title')
-        }
-        body={
-          pending?.kind === 'empty' ? t('confirm.emptyTrash.body') : t('confirm.deleteForever.body')
-        }
-        confirmLabel={
-          pending?.kind === 'empty' ? t('noteList.emptyTrash') : t('noteList.deleteForever')
-        }
-        cancelLabel={t('confirm.cancel')}
-        onConfirm={() => void confirmPending()}
-        onCancel={() => setPending(null)}
-      />
-    </main>
+        <Resizer
+          label={t('resizer.noteList')}
+          width={widths.noteListWidth}
+          min={MIN_PANE_WIDTH}
+          max={MAX_PANE_WIDTH}
+          onResize={widths.onNoteListResize}
+          onCommit={widths.onNoteListCommit}
+        />
+
+        <Pane label={t('pane.editor')} className="bg-bg">
+          {selectedNote === undefined ? null : selectedNote === null ? (
+            <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
+          ) : (
+            // `key` is load-bearing, not an optimisation: it remounts the editor
+            // on every switch, so an instance only ever writes to one note and
+            // its unmount cleanup is the flush-on-switch.
+            <NoteEditor
+              key={selectedNote.id}
+              note={selectedNote}
+              seedText={seed?.id === selectedNote.id ? seed.text : undefined}
+              onActivateTag={handleActivateTag}
+            />
+          )}
+        </Pane>
+
+        <ConfirmDialog
+          open={pending !== null}
+          destructive
+          title={
+            pending?.kind === 'empty'
+              ? t('confirm.emptyTrash.title')
+              : t('confirm.deleteForever.title')
+          }
+          body={
+            pending?.kind === 'empty'
+              ? t('confirm.emptyTrash.body')
+              : t('confirm.deleteForever.body')
+          }
+          confirmLabel={
+            pending?.kind === 'empty' ? t('noteList.emptyTrash') : t('noteList.deleteForever')
+          }
+          cancelLabel={t('confirm.cancel')}
+          onConfirm={() => void confirmPending()}
+          onCancel={() => setPending(null)}
+        />
+      </main>
+    </SessionProvider>
   );
 }

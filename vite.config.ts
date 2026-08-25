@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // Served from the apex `markflowing.com`, so the base is the domain root in
@@ -52,8 +52,38 @@ export default defineConfig({
           // this project must run sequentially; the `app` project is
           // unaffected since it has its own config block.
           fileParallelism: false,
+          // The renderer service is its own directory and its own project.
+          // Spreads the defaults: a bare `exclude` REPLACES them, which would
+          // walk node_modules.
+          exclude: [...configDefaults.exclude, 'server/pdf/**'],
         },
       },
+      /*
+       * The renderer service, and it is GATED rather than merely filtered.
+       *
+       * Its tests launch a real Chromium. Excluding it with `--project='!pdf'`
+       * in the `test` script left `npx vitest run` and — the one that actually
+       * matters on a fanless machine — bare `npm run test:watch` still
+       * launching a browser, because neither passes that filter. Gating the
+       * project's very existence on an env var means no invocation can load it
+       * by accident; `npm run test:pdf` is the only thing that sets the flag.
+       *
+       * Like `server`, it deliberately does NOT `extend`: jsdom and the
+       * swapped global `Blob` would make these tests lie about the
+       * environment they prove.
+       */
+      ...(process.env.VITEST_PDF === '1'
+        ? [
+            {
+              test: {
+                name: 'pdf',
+                environment: 'node' as const,
+                include: ['server/pdf/**/*.test.ts'],
+                testTimeout: 30_000,
+              },
+            },
+          ]
+        : []),
     ],
   },
 });

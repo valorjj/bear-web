@@ -4,6 +4,7 @@ export interface Env {
   databaseUrl: string;
   googleClientId: string;
   googleClientSecret: string;
+  pdfRendererUrl: string;
 }
 
 type Source = Record<string, string | undefined>;
@@ -29,5 +30,6 @@ export function readEnv(source: Source): Env {
     databaseUrl: require_(source, 'DATABASE_URL'),
     googleClientId: require_(source, 'GOOGLE_CLIENT_ID'),
     googleClientSecret: require_(source, 'GOOGLE_CLIENT_SECRET'),
+    pdfRendererUrl: require_(source, 'PDF_RENDERER_URL'),
   };
 }

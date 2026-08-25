@@ -4,3 +4,6 @@ playwright-report
 test-results
 public/fonts
 docs
+
+# Not a format Prettier has a parser for.
+server/docker/pdf/fonts.conf

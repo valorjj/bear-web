@@ -18,6 +18,7 @@ const env = {
   databaseUrl: url ?? '',
   googleClientId: 'id',
   googleClientSecret: 'secret',
+  pdfRendererUrl: 'http://127.0.0.1:8788',
 };
 
 describe.skipIf(!url)('/sync', () => {

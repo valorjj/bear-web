@@ -118,7 +118,13 @@ export const ko: Record<TranslationKey, string> = {
   'export.markdown': '마크다운',
   'export.html': 'HTML',
   'export.pdf': 'PDF',
+  'export.pdf.requiresSignIn': 'PDF로 내보내려면 로그인하세요',
   'export.failed': '이 메모를 내보낼 수 없습니다.',
+  'export.failed.offline': 'PDF 내보내기에는 인터넷 연결이 필요합니다.',
+  'export.failed.unauthorized': '세션이 만료되었습니다. PDF를 내보내려면 다시 로그인하세요.',
+  'export.failed.tooLarge': '이 메모는 PDF로 내보내기에 너무 큽니다.',
+  'export.failed.rateLimited': '내보내기가 너무 많습니다. 잠시 후 다시 시도하세요.',
+  'export.failed.unavailable': '지금은 PDF 내보내기를 사용할 수 없습니다.',
 
   'editor.table.addRowHandle': '여기에 행 추가',
   'editor.table.addColumnHandle': '여기에 열 추가',

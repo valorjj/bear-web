@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '@/i18n';
 
 import { AccountMenu } from './AccountMenu';
+import { SessionProvider } from './SessionContext';
 import { SESSION_HINT_KEY } from './useSession';
 
 function mount(handler: (url: string) => Response) {
@@ -14,7 +15,9 @@ function mount(handler: (url: string) => Response) {
   );
   return render(
     <I18nProvider>
-      <AccountMenu />
+      <SessionProvider>
+        <AccountMenu />
+      </SessionProvider>
     </I18nProvider>,
   );
 }
@@ -90,7 +93,9 @@ describe('AccountMenu', () => {
     );
     render(
       <I18nProvider>
-        <AccountMenu />
+        <SessionProvider>
+          <AccountMenu />
+        </SessionProvider>
       </I18nProvider>,
     );
 

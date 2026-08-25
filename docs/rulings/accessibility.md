@@ -4,7 +4,8 @@ How this app's controls announce themselves to assistive tech, and which
 affordances a control must keep at rest.
 
 **Trigger:** any diff touching `aria-label`, `aria-hidden`, `aria-current`,
-`aria-pressed` or an accessible-name assertion; `src/features/editor/EditorContextMenu.tsx`
+`aria-pressed`, `aria-disabled` or an accessible-name assertion;
+`src/features/export/ExportMenu.tsx`'s disabled PDF item; `src/features/editor/EditorContextMenu.tsx`
 (the `menuitemcheckbox`/`menuitemradio`/`menuitem` roles and the `Shift+F10`
 route into it) and `src/features/editor/HighlightPalette.tsx`; `src/ui/Icon.tsx` (the sole
 `lucide-react` importer, which stamps `aria-hidden` on every glyph);
@@ -274,3 +275,21 @@ Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
   `headingLevel: number | null` (computed independently of the pre-existing
   `heading1`, which the toolbar's own `aria-pressed` still reads), and having
   the menu's radio row check `headingLevel === n` instead.
+
+- **An unavailable menu item is `aria-disabled`, never the HTML `disabled`
+  attribute — and Playwright then cannot click it at all.** `ExportMenu`'s PDF
+  item is unavailable when signed out, and the reason for a control to be
+  unavailable is exactly what the user needs to hear: an HTML-disabled button
+  leaves the tab order, so a keyboard user could never reach it to find out
+  why. `aria-disabled` keeps it reachable, `onClick` refuses the action itself,
+  and an `sr-only` span carries `export.pdf.requiresSignIn` so the accessible
+  name says what to do about it.
+
+  The consequence for tests is not obvious and cost a wrong first draft:
+  Playwright's actionability check treats `aria-disabled="true"` as "element is
+  not enabled" and waits out the full timeout rather than clicking. So the
+  obvious assertion — click it, expect nothing to happen — is impossible to
+  write, not merely wrong. Drive it the way the attribute exists to allow:
+  `Tab` to it, assert it is focused, press `Enter`. Reaching for
+  `click({ force: true })` instead synthesises an event no real user can
+  produce, and would pass on a control no keyboard user could reach.

@@ -3,7 +3,7 @@ import type { Editor } from '@tiptap/react';
 
 import { deriveTitle, folds, notes } from '@/data';
 import type { Note } from '@/data';
-import { exportNote, type ExportFormat } from '@/features/export';
+import { exportNote, PdfExportError, type ExportFormat, type PdfFailure } from '@/features/export';
 import {
   EMPTY_DOCUMENT_MARKDOWN,
   foldedKeys,
@@ -11,12 +11,28 @@ import {
   RichEditor,
   type RichEditorHandle,
 } from '@/features/editor';
-import { useLocale, useT } from '@/i18n';
+import { useLocale, useT, type TranslationKey } from '@/i18n';
 
 import { useAutosave } from './useAutosave';
 
 /** Matches `AUTOSAVE_DELAY_MS`; folds are persisted on the same rhythm. */
 const FOLD_PERSIST_DELAY_MS = 300;
+
+/**
+ * Every `PdfFailure` reason but `failed` gets its own sentence — a user with
+ * no connectivity and a user whose session expired need different copy, and
+ * a single "export failed" tells neither of them anything they can act on.
+ * `failed` itself is the generic "something else went wrong" case and is
+ * deliberately absent here, falling through to `export.failed` below exactly
+ * as an unrecognised reason would.
+ */
+const EXPORT_FAILURE_KEYS: Partial<Record<PdfFailure, TranslationKey>> = {
+  offline: 'export.failed.offline',
+  unauthorized: 'export.failed.unauthorized',
+  tooLarge: 'export.failed.tooLarge',
+  rateLimited: 'export.failed.rateLimited',
+  unavailable: 'export.failed.unavailable',
+};
 
 export interface NoteEditorProps {
   note: Note;
@@ -113,10 +129,12 @@ export function NoteEditor({
     }
   });
   const [serializeFailed, setSerializeFailed] = useState(initialSerializeFailed);
-  // Its own flag rather than reusing `serializeFailed`: an export failing says
+  // Its own state rather than reusing `serializeFailed`: an export failing says
   // nothing about whether the note can be saved, and the two messages must not
-  // be able to stand in for each other.
-  const [exportFailed, setExportFailed] = useState(false);
+  // be able to stand in for each other. Holds the REASON, not just a boolean,
+  // so a signed-out user and an offline user see different sentences —
+  // `EXPORT_FAILURE_KEYS` maps each reason to its own key below.
+  const [exportFailed, setExportFailed] = useState<PdfFailure | null>(null);
 
   const read = useCallback((): string => {
     try {
@@ -343,8 +361,8 @@ export function NoteEditor({
         { title: deriveTitle(text), text, updatedAt: note.updatedAt },
         format,
         locale,
-      ).catch(() => {
-        setExportFailed(true);
+      ).catch((error: unknown) => {
+        setExportFailed(error instanceof PdfExportError ? error.reason : 'failed');
       });
     },
     [locale, note.text, note.updatedAt],
@@ -365,12 +383,16 @@ export function NoteEditor({
         onEditorReady={setFoldEditor}
       />
 
-      {(failed || serializeFailed || exportFailed) && (
+      {(failed || serializeFailed || exportFailed !== null) && (
         // `status`, not `alert`: `alert` is the degraded-storage banner's role
         // and the e2e suite asserts there is exactly one of those.
         <p role="status" className="shrink-0 border-t border-border px-6 py-2 text-xs text-muted">
-          {exportFailed
-            ? t('export.failed')
+          {exportFailed !== null
+            ? // Every `PdfFailure` reason but `failed` itself has its own
+              // sentence; `failed` — the generic "something else went
+              // wrong" default — falls back to `export.failed`, same as an
+              // unrecognised reason would.
+              t(EXPORT_FAILURE_KEYS[exportFailed] ?? 'export.failed')
             : serializeFailed
               ? t('editor.serializeFailed')
               : t('editor.saveFailed')}

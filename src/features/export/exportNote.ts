@@ -2,13 +2,15 @@ import { downloadBlob } from '@/lib/download';
 
 import { exportFilename, type NamedNote } from './filename';
 import { readExportTokens, renderNoteHtml } from './html';
-import { printHtmlDocument, type PrintDeps } from './print';
+import { requestPdf } from './requestPdf';
 
 /**
- * `md` and `html` produce a file. `pdf` produces a print, because the browser's
- * own print pipeline is the only thing in a web page that can lay out paged
- * media, select real text and embed the fonts it used — a client-side generator
- * would mean re-implementing text layout and subsetting Pretendard for Korean.
+ * `md` and `html` produce a file straight from `downloadBlob`. `pdf` produces
+ * one too, but not by driving the browser's own print pipeline: laying out
+ * paged media, selecting real text and embedding the fonts it used is real
+ * work a client-side generator would have to reimplement (subsetting
+ * Pretendard for Korean among it) — so the server renders the same document
+ * with a real browser and hands back the bytes.
  */
 export type ExportFormat = 'md' | 'html' | 'pdf';
 
@@ -20,7 +22,8 @@ export interface ExportNoteDeps {
   document?: Document;
   /** Injected in tests; jsdom implements neither object URLs nor downloads. */
   download?: typeof downloadBlob;
-  print?: PrintDeps['print'];
+  /** Injected in tests, and passed through to `requestPdf`. */
+  fetch?: typeof globalThis.fetch;
 }
 
 const MIME: Record<'md' | 'html', string> = {
@@ -62,5 +65,6 @@ export async function exportNote(
     return;
   }
 
-  await printHtmlDocument(html, { document: doc, print: deps.print });
+  const blob = await requestPdf(html, { fetch: deps.fetch });
+  download(exportFilename(note, 'pdf'), blob, doc);
 }

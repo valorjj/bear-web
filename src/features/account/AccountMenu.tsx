@@ -6,8 +6,8 @@ import { Icon, UserRound } from '@/ui/Icon';
 import { Popover } from '@/ui/Popover';
 
 import { AdoptNotesDialog } from './AdoptNotesDialog';
+import { useSessionValue } from './SessionContext';
 import { Status, SyncStatus } from './SyncStatus';
-import { useSession } from './useSession';
 import { useSync } from './useSync';
 
 /** Matches the previous `w-64`, kept so the visual size is unchanged. */
@@ -27,7 +27,7 @@ const GAP = 8;
  */
 export function AccountMenu(): ReactElement {
   const t = useT();
-  const { state, signIn, signOut } = useSession();
+  const { state, signIn, signOut } = useSessionValue();
   const sync = useSync(state);
   const [open, setOpen] = useState(false);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);

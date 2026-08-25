@@ -71,6 +71,72 @@ Still open, and deliberately not F: a custom-theme editor (letting a user
 supply their own eight colours), and per-theme syntax palettes, which **C
 will need** — that is why C is queued after F rather than before it.
 
+### G. PDF export — SHIPPED 2026-08-25
+
+Spec: `docs/superpowers/specs/2026-08-25-g-pdf-export-design.md`.
+Plan: `docs/superpowers/plans/2026-08-25-g-pdf-export.md`.
+Rulings touched: `docs/rulings/export.md` (the "PDF is the browser's print
+pipeline" bullet is gone, replaced by six) and `docs/rulings/accessibility.md`
+(the `aria-disabled` menu item, and why Playwright cannot click one).
+
+Eight tasks. PDF export left the browser: `src/features/export/print.ts` is
+deleted, `requestPdf` POSTs the document `renderNoteHtml` already builds to an
+authenticated `POST /export/pdf`, and a separate Chromium container
+(`server/pdf/`, `markflowing-pdf`) renders it. **The reason was fidelity, not
+capability** — the print dialog let the user produce a document the app did not
+design, and the reference app's PDF export ignores the selected theme
+entirely. A Nord export is now a genuinely dark PDF, proven from the bytes.
+
+**Findings worth carrying forward:**
+
+- **The two options the whole claim rests on had no test for four tasks.**
+  `emulateMedia({ media: 'screen' })` and `preferCSSPageSize: true` are
+  invisible to a `%PDF-` prefix check, a byte length, and a text extraction —
+  flip either and all three still pass. They are now pinned twice, by
+  `server/pdf/fidelity.test.ts` (a probe document whose page size, page colour
+  and text indent each differ between the two media) and by
+  `e2e/pdfExport.spec.ts` (a real Nord export, from the real container).
+  Both were verified by fault injection, four separate injections.
+- **A PDF content stream is in CSS pixels from the page content box; the
+  MediaBox is in points.** Recorded in `CLAUDE.md`. The first version of the
+  page-background check compared the two and reported a dark export as
+  luminance 0.86, matching a rectangle painted in a glyph's own space.
+- **Control 4 was never built and the spec now says so in place.** The
+  container keeps a route to the internet that the browser inside it cannot
+  use. `internal: true` denies egress AND kills the published port, while the
+  container healthcheck goes on reporting `healthy`. Closing it properly needs
+  the API and the renderer on one internal network, or a unix socket instead
+  of TCP.
+
+**Known debt from G, none of it blocking:**
+
+- **RESOLVED 2026-08-25: the `@page` margin is now 0, and the 18mm/16mm inset
+  moved onto `body`'s own padding.** The unpainted margin band (measured: A4's
+  MediaBox 793 x 1123 px, theme background only 673 x 986 — the content box)
+  meant a dark export was a dark block on white paper, most visible in `nord`
+  and `high-contrast`. Decision: paint the sheet, not preserve the border —
+  `@page { margin: 0 }` plus equivalent `body` padding puts the inset inside
+  the painted box instead of outside it, so text keeps its distance from the
+  edge without leaving any paper colour showing. Verified visually against
+  `npm run shots:pdf`'s `nord` raster: dark edge to edge, no white band.
+- **The container-backed test runs only by hand.** CI has no renderer — the
+  image is 3.92 GB — so `e2e/pdfExport.spec.ts`'s deepest test skips there.
+  Deliberately NOT mirrored on `migrate.test.ts`'s "assert the env var under
+  CI", which would simply turn `main` red. What CI does run unconditionally is
+  the fidelity suite and the print-media guard; the command for the rest is in
+  `server/README.md`.
+- **`readCappedBody`'s cap and the renderer's own `MAX_BYTES` are both
+  2 MiB and are declared independently** in `server/src/routes/export.ts` and
+  `server/pdf/server.ts`. Nothing keeps them in step.
+
+**The follow-up G points at is a FORMAT ROSTER, not more PDF.** The renderer
+is a general document service now, and the formats it could add with no new
+architecture are DOCX (via a converter in the same container), plain-text and
+RTF (client-side, no server at all), an EPUB of a whole tag, and a multi-note
+PDF — a tag or a smart list as one paginated document, which is the only one
+of the four that needs a new endpoint shape. Unspecced, unscheduled, and it
+does not block image storage.
+
 ### H. Editor interaction surfaces — SHIPPED 2026-08-25
 
 Spec: `docs/superpowers/specs/2026-08-25-h-editor-interaction-surfaces-design.md`.

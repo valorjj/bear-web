@@ -116,7 +116,13 @@ export const en = {
   'export.markdown': 'Markdown',
   'export.html': 'HTML',
   'export.pdf': 'PDF',
+  'export.pdf.requiresSignIn': 'Sign in to export PDF',
   'export.failed': 'This note could not be exported.',
+  'export.failed.offline': 'PDF export needs a connection.',
+  'export.failed.unauthorized': 'Your session expired. Sign in again to export PDF.',
+  'export.failed.tooLarge': 'This note is too large to export as PDF.',
+  'export.failed.rateLimited': 'Too many exports — try again shortly.',
+  'export.failed.unavailable': 'PDF export is unavailable right now.',
 
   // The two edge handles' accessible names. They point AT a row or column,
   // so "here" is the whole meaning — the bar these replaced had to say which

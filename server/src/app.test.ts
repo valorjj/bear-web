@@ -9,6 +9,7 @@ const ENV = {
   DATABASE_URL: 'mysql://root:root@127.0.0.1:3308/markflowing',
   GOOGLE_CLIENT_ID: 'test-client-id',
   GOOGLE_CLIENT_SECRET: 'test-client-secret',
+  PDF_RENDERER_URL: 'http://127.0.0.1:8788',
 };
 
 function app() {
