@@ -117,6 +117,8 @@ export const en = {
   'export.html': 'HTML',
   'export.pdf': 'PDF',
   'export.pdf.requiresSignIn': 'Sign in to export PDF',
+  'export.pdf.pending': 'Exporting PDF…',
+  'export.progress.label': 'Exporting PDF',
   'export.failed': 'This note could not be exported.',
   'export.failed.offline': 'PDF export needs a connection.',
   'export.failed.unauthorized': 'Your session expired. Sign in again to export PDF.',

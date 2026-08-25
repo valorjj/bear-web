@@ -904,9 +904,50 @@
  * durations for exactly this: one block disables every animation in the app,
  * including animations added long after it was written.
  */
+/*
+ * The PDF export loader's own animations: a sweeping highlight for the
+ * top-of-window progress bar, and a spin for the PDF menu item's icon.
+ * Neither is a `transition`, so neither is reachable through the
+ * `--bear-duration*` tokens below — they get their own rule inside the SAME
+ * `@media (prefers-reduced-motion: reduce)` block (`scripts/sourceLint.test.ts`
+ * asserts there is exactly one such block in this file, so a second one
+ * fails the build rather than being silently ignored), following the same
+ * shape: disable the animation, keep the element. `ProgressBar` unmounts
+ * itself when idle, and the spinner glyph is `aria-hidden`, so what is left
+ * under reduced motion is a static bar and a static glyph — the busy state
+ * still reads from `aria-busy`, not from motion.
+ */
+@keyframes bear-progress-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.bear-progress-bar {
+  animation: bear-progress-sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes bear-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bear-spin {
+  animation: bear-spin 0.8s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --bear-duration-fast: 0ms;
     --bear-duration: 0ms;
+  }
+
+  .bear-progress-bar,
+  .bear-spin {
+    animation: none;
   }
 }

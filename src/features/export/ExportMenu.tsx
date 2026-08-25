@@ -2,9 +2,10 @@ import { type ReactElement, useEffect, useRef } from 'react';
 
 import { useSessionValue } from '@/features/account';
 import { useT } from '@/i18n';
-import { Download, FileCode, FileText, Icon, type LucideIcon } from '@/ui/Icon';
+import { Download, FileCode, FileText, Icon, LoaderCircle, type LucideIcon } from '@/ui/Icon';
 
 import type { ExportFormat } from './exportNote';
+import { useExportProgress } from './ExportProgressContext';
 
 export interface ExportMenuProps {
   onChoose: (format: ExportFormat) => void;
@@ -39,6 +40,7 @@ const CHOICES: readonly Choice[] = [
 export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactElement {
   const t = useT();
   const { state } = useSessionValue();
+  const { pending } = useExportProgress();
   const first = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -64,11 +66,20 @@ export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactEleme
       className="flex min-w-40 flex-col gap-0.5 rounded-lg bg-surface p-1 shadow-popover"
     >
       {CHOICES.map((choice, index) => {
+        // `busy` is the PDF item specifically: the flag is global (one
+        // render can only ever have one PDF in flight from the user's point
+        // of view — see `ExportProgressContext`), but Markdown and HTML are
+        // synchronous downloads with nothing to be busy about, so they must
+        // stay clickable while a PDF renders in the background.
+        const busy = choice.format === 'pdf' && pending;
         // `aria-disabled`, not `disabled` the HTML attribute: an HTML-disabled
         // button leaves the tab order, so a keyboard user could never reach
         // it to discover why PDF is off. `aria-disabled` keeps it reachable;
-        // `onClick` below refuses the action itself.
-        const disabled = choice.disabledWhenSignedOut === true && state.status !== 'signedIn';
+        // `onClick` below refuses the action itself. `busy` reuses the same
+        // pattern for the same reason — a user re-clicking PDF mid-render
+        // should find out why nothing happens, not lose the control.
+        const disabled =
+          (choice.disabledWhenSignedOut === true && state.status !== 'signedIn') || busy;
 
         return (
           <button
@@ -77,6 +88,7 @@ export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactEleme
             type="button"
             role="menuitem"
             aria-disabled={disabled ? 'true' : undefined}
+            aria-busy={busy ? 'true' : undefined}
             onClick={() => {
               if (disabled) return;
               onChoose(choice.format);
@@ -84,10 +96,19 @@ export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactEleme
             className={`flex items-center gap-2 rounded-sm px-2 py-1 text-left text-ui transition-colors duration-[var(--bear-duration-fast)] ease-bear ${disabled ? 'text-faint' : 'text-text hover:bg-hover'}`}
           >
             <span className="text-faint">
-              <Icon glyph={choice.glyph} size="sm" />
+              {busy ? (
+                <Icon glyph={LoaderCircle} size="sm" className="bear-spin" />
+              ) : (
+                <Icon glyph={choice.glyph} size="sm" />
+              )}
             </span>
             {t(choice.label)}
-            {disabled && <span className="sr-only"> {t('export.pdf.requiresSignIn')}</span>}
+            {disabled && (
+              <span className="sr-only">
+                {' '}
+                {busy ? t('export.pdf.pending') : t('export.pdf.requiresSignIn')}
+              </span>
+            )}
           </button>
         );
       })}

@@ -1,6 +1,6 @@
-import { act, screen, waitFor, type RenderResult } from '@testing-library/react';
+import { act, render, screen, waitFor, type RenderResult } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createRef, type RefObject } from 'react';
+import { createRef, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import '@/styles/editor.css';
@@ -9,9 +9,52 @@ import { db, folds, notes } from '@/data';
 import type { Note } from '@/data';
 import * as editor from '@/features/editor';
 import { foldedKeys, headingSections, type RichEditorHandle } from '@/features/editor';
-import { renderWithI18n } from '@/i18n/testing';
+import {
+  exportNote,
+  ExportProgressProvider,
+  PdfExportError,
+  useExportProgress,
+} from '@/features/export';
+import { I18nProvider } from '@/i18n';
+import type { Locale } from '@/i18n';
 
 import { NoteEditor } from './NoteEditor';
+
+// `exportNote` is the only thing about `@/features/export` this file needs to
+// control directly (to make a PDF export fail on demand); everything else —
+// `ExportProgressProvider`, `useExportProgress`, `PdfExportError` — passes
+// through to the real module, the same technique `normalizeMarkdown` below
+// uses via `vi.spyOn` rather than a full mock.
+vi.mock('@/features/export', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/export')>();
+  return { ...actual, exportNote: vi.fn(actual.exportNote) };
+});
+
+/**
+ * `NoteEditor` now reads `useExportProgress()` (for the PDF loader's
+ * begin/end pair), which throws without an `ExportProgressProvider` above
+ * it. Every render in this file goes through `renderWithI18n` already, so
+ * wrapping it here — rather than touching each of the ~25 call sites —
+ * keeps every existing call site unchanged. Shadows the imported helper
+ * deliberately, not renamed, so nothing else in the file has to change.
+ *
+ * Built on RTL's own `render` with a `wrapper` option, NOT by wrapping `ui`
+ * inline: RTL's `rerender` reapplies whatever `wrapper` a render was given,
+ * but only what was passed as `wrapper` — a provider wrapped around `ui` by
+ * hand is captured in that FIRST call's tree only, and vanishes on
+ * `rerender(<NoteEditor .../>)`, which several tests below do directly.
+ * This file's own "keyed remount" tests caught exactly that when this was
+ * first written as the simpler inline-wrap version.
+ */
+function renderWithI18n(ui: ReactNode, locale: Locale = 'en'): RenderResult {
+  return render(ui, {
+    wrapper: ({ children }) => (
+      <I18nProvider locale={locale}>
+        <ExportProgressProvider>{children}</ExportProgressProvider>
+      </I18nProvider>
+    ),
+  });
+}
 
 // jsdom has no layout engine, so ProseMirror's caret/scroll math
 // (`coordsAtPos`, `posAtCoords`) throws on APIs jsdom never implements.
@@ -716,6 +759,107 @@ describe('fold persistence', () => {
 
     await waitFor(() => {
       expect(set).toHaveBeenCalledWith(note.id, ['2:0:A']);
+    });
+  });
+});
+
+/** Reads the global flag directly, so a test can assert its VALUE rather
+ * than infer it from a side effect (the error message alone would prove the
+ * `catch` ran, not that the `finally` ever cleared the flag). */
+function ProgressProbe(): ReactElement {
+  const { pending } = useExportProgress();
+  return <div data-testid="progress-probe" data-pending={pending ? 'true' : 'false'} />;
+}
+
+describe('PDF export progress', () => {
+  /**
+   * The load-bearing test: a PDF export that fails must still clear the
+   * global pending flag. `NoteEditor.handleExport` pairs `beginExportProgress()`
+   * with `endExportProgress()` through `try`/`finally` for exactly this — if
+   * that `finally` were a plain statement after the `await` (or removed
+   * outright), a rejection would skip it and this assertion would see
+   * `pending` stuck `true` forever, which is the "worse than no loader"
+   * failure mode this task exists to prevent.
+   */
+  it('clears the pending flag after a rejected PDF export, via the finally', async () => {
+    const note = await notes.create('hello');
+    vi.mocked(exportNote).mockRejectedValueOnce(new PdfExportError('offline'));
+    // Spied BEFORE render: `vi.spyOn` does not retroactively record calls
+    // that already happened, so this has to be in place while `NoteEditor`
+    // first renders `RichEditor` — the same ordering
+    // "passes its onActivateTag prop through to RichEditor unchanged" uses.
+    const richEditorSpy = vi.spyOn(editor, 'RichEditor');
+
+    render(
+      <I18nProvider>
+        <ExportProgressProvider>
+          <ProgressProbe />
+          <NoteEditor note={note} />
+        </ExportProgressProvider>
+      </I18nProvider>,
+    );
+    await screen.findByRole('textbox');
+    // Captures the real `onExport` prop `NoteEditor` hands to `RichEditor`
+    // and calls it directly, rather than driving `ExportMenu`'s UI (which
+    // needs a signed-in session this test has no reason to fake).
+    const onExport = richEditorSpy.mock.calls.at(-1)?.[0].onExport;
+    expect(onExport).toBeDefined();
+
+    expect(screen.getByTestId('progress-probe')).toHaveAttribute('data-pending', 'false');
+
+    act(() => {
+      onExport!('pdf');
+    });
+
+    // `beginExportProgress()` runs synchronously — before `exportNote`'s
+    // returned promise has any chance to settle — so the flag is already up
+    // by the time this synchronous `act` returns.
+    expect(screen.getByTestId('progress-probe')).toHaveAttribute('data-pending', 'true');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('progress-probe')).toHaveAttribute('data-pending', 'false');
+    });
+
+    // The failure is also visible to the user, through the existing
+    // `role="status"` banner — proving the `catch` ran, distinct from
+    // proving the `finally` cleared the flag above.
+    expect(screen.getByRole('status')).toHaveTextContent(/connection/i);
+  });
+
+  it('sets and clears the pending flag around a successful PDF export too', async () => {
+    const note = await notes.create('hello');
+    let resolveExport: (() => void) | undefined;
+    vi.mocked(exportNote).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveExport = () => resolve();
+        }),
+    );
+    const richEditorSpy = vi.spyOn(editor, 'RichEditor');
+
+    render(
+      <I18nProvider>
+        <ExportProgressProvider>
+          <ProgressProbe />
+          <NoteEditor note={note} />
+        </ExportProgressProvider>
+      </I18nProvider>,
+    );
+    await screen.findByRole('textbox');
+    const onExport = richEditorSpy.mock.calls.at(-1)?.[0].onExport;
+
+    act(() => {
+      onExport!('pdf');
+    });
+    expect(screen.getByTestId('progress-probe')).toHaveAttribute('data-pending', 'true');
+
+    await act(async () => {
+      resolveExport?.();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('progress-probe')).toHaveAttribute('data-pending', 'false');
     });
   });
 });

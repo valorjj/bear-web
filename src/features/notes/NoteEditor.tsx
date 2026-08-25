@@ -3,7 +3,13 @@ import type { Editor } from '@tiptap/react';
 
 import { deriveTitle, folds, notes } from '@/data';
 import type { Note } from '@/data';
-import { exportNote, PdfExportError, type ExportFormat, type PdfFailure } from '@/features/export';
+import {
+  exportNote,
+  PdfExportError,
+  useExportProgress,
+  type ExportFormat,
+  type PdfFailure,
+} from '@/features/export';
 import {
   EMPTY_DOCUMENT_MARKDOWN,
   foldedKeys,
@@ -353,19 +359,38 @@ export function NoteEditor({
   // by the autosave debounce, so exporting the record would silently hand the
   // user a file missing their last few seconds of typing. The title is derived
   // from the same live text for the same reason.
+  const { begin: beginExportProgress, end: endExportProgress } = useExportProgress();
+
   const handleExport = useCallback(
     (format: ExportFormat): void => {
       const text = handleRef.current?.getMarkdown() ?? note.text;
 
-      void exportNote(
-        { title: deriveTitle(text), text, updatedAt: note.updatedAt },
-        format,
-        locale,
-      ).catch((error: unknown) => {
-        setExportFailed(error instanceof PdfExportError ? error.reason : 'failed');
-      });
+      const run = async (): Promise<void> => {
+        // Only PDF is a round trip worth a global "busy" signal — Markdown
+        // and HTML are synchronous downloads. `begin()`/`end()` MUST be
+        // paired through `finally`, not just after the `await`: `exportNote`
+        // can reject at any of several points (`renderNoteHtml` throwing
+        // synchronously, `requestPdf`'s six failure reasons, `downloadBlob`
+        // itself throwing) and every one of them has to clear the flag or
+        // the top bar spins forever and the PDF menu item stays `aria-busy`
+        // permanently — worse than shipping no loader at all.
+        if (format === 'pdf') beginExportProgress();
+        try {
+          await exportNote(
+            { title: deriveTitle(text), text, updatedAt: note.updatedAt },
+            format,
+            locale,
+          );
+        } catch (error) {
+          setExportFailed(error instanceof PdfExportError ? error.reason : 'failed');
+        } finally {
+          if (format === 'pdf') endExportProgress();
+        }
+      };
+
+      void run();
     },
-    [locale, note.text, note.updatedAt],
+    [locale, note.text, note.updatedAt, beginExportProgress, endExportProgress],
   );
 
   return (
