@@ -148,7 +148,6 @@ test('the palette flips below the highlight when there is no room above it', asy
       NodeFilter.SHOW_TEXT,
     );
     let node: Text | null;
-    // eslint-disable-next-line no-cond-assign
     while ((node = walker.nextNode() as Text | null)) {
       const idx = node.textContent?.indexOf('marked') ?? -1;
       if (idx !== -1 && node.textContent === 'plain marked plain') {

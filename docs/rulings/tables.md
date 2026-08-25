@@ -4,7 +4,7 @@ Governs how Markdown tables are represented in the editor schema and how they ar
 
 **Trigger:** `src/features/editor/TableHandles.ts` (the edge-handle widgets and
 their `data-shape` rebuild guard), `src/features/editor/tablePos.ts`
-(`tablePosAt`), `src/features/editor/tableCommands.ts` (`TABLE_COMMANDS`, the
+(`tablePosAt`), `src/features/editor/tableCommands.ts` (`TABLE_ACTIONS`, the
 seven-action `COMMANDS` map),
 `src/features/editor/tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` imports and `MarkdownTable`/`TableRow`/`TableHeader`/`TableCell` entries in `src/features/editor/extensions.ts`, `RawTable` in `src/features/editor/RawBlock.ts`, `src/features/editor/table.test.ts`, and any table fixture in `markdown.test.ts`'s `CANONICAL` or `stability.test.ts`'s `NON_CANONICAL`.
 
@@ -85,7 +85,7 @@ seven-action `COMMANDS` map),
   of a right-click menu and edge handles, and the reason for the gap went with
   it: the menu has no width budget to protect, so it carries both `Insert row
   above`/`Insert row below` and `Insert column before`/`Insert column after` as
-  named rows (`tableCommands.ts`'s `TABLE_COMMANDS`). The edge handles need
+  named rows (`tableCommands.ts`'s `TABLE_ACTIONS`). The edge handles need
   neither direction at all — a handle inserts adjacent to the edge it sits on,
   so which edge the user clicked already says "before" or "after" without a
   choice to make.
@@ -96,12 +96,12 @@ seven-action `COMMANDS` map),
   deepest depth up and the innermost match wins. Pinned by a test using a
   blockquote-wrapped table.
 
-- **The pinned strings in `tableControls.test.ts` are padded and use a
+- **The pinned strings in `tableCommands.test.ts` are padded and use a
   three-dash alignment row, and that is not a typo.** Every expectation there
   is the serializer's real output, per the alignment-row bullet above. The
   caret sits in the first BODY cell throughout, which is what makes each
   expectation specific rather than merely "something changed": `deleteRow`
-  takes the body row and leaves the header, and `addColumn` inserts after
+  takes the body row and leaves the header, and `addColumnAfter` inserts after
   column 0 so the new column lands in the MIDDLE. A trailing blank line in
   each is `TrailingNode`'s paragraph, not the table's.
 

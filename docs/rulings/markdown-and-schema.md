@@ -9,7 +9,7 @@ not able to prove.
 `RawBlock.ts` (`createRawBlock`, `RawDefinition`, `RawHtmlBlock`, `RawImage`,
 `createRawInlineHtmlNode`), `toolbarSelection.ts`, `taskItemPromotion.ts`,
 `Highlight.ts` (`HIGHLIGHT_COLORS`, `highlightClass`, the `color` attribute,
-the tokenizer's two branches), `TableControls.ts`,
+the tokenizer's two branches), `TableHandles.ts`, `ContextMenu.ts`,
 `HeadingFold.ts` (`headingFoldKey`, `foldedKeys`, `toggleElement`, `badgeElement`,
 `markerElement`), `headingSections.ts` (`foldKeyOf`, `headingSections`,
 `hiddenRangesFor`, `serializeFoldKey`), or `HeadingMenu.tsx`; any edit
@@ -17,9 +17,10 @@ to `markdown.test.ts`'s `CANONICAL`, `stability.test.ts`'s `NON_CANONICAL`,
 `rawBlock.test.ts`, `characterization.test.ts`, `extensions.test.ts` or
 `headingFold.test.ts`; a new import of `@tiptap/markdown` anywhere; a new or
 removed Tiptap extension, input rule or `markdownTokenName`; a new or changed
-`Mod-Alt-*` keymap entry; any `normalizeMarkdown` / `parseMarkdown` /
-`serializeMarkdown` call site; `src/features/editor/lowlight.ts` (`lowlight`,
-`lowlightForEditor`), `src/features/editor/codeLanguages.ts`
+`Mod-Alt-*` keymap entry **or any other keyboard binding** (`ContextMenu.ts`'s
+`Shift-F10` and `ContextMenu` key included); any `normalizeMarkdown` /
+`parseMarkdown` / `serializeMarkdown` call site; `src/features/editor/lowlight.ts`
+(`lowlight`, `lowlightForEditor`), `src/features/editor/codeLanguages.ts`
 (`resolveLanguage`), `src/features/editor/highlightClasses.ts`
 (`roleOfFlattenedClasses`, `KNOWN_FLATTENED_COLLISIONS`), and
 `src/features/editor/CodeLanguageControls.ts`.
@@ -308,16 +309,44 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   `Mod-Alt-N` toggles: these are `menuitemradio`s, and toggling off from a
   checked radio contradicts the mark the user is looking at.
 
-- **`TableControls` is an `Extension`, like `HeadingFold`, and registers
-  nothing in the schema.** The bar is one `Decoration.widget` placed before
-  the table the selection is inside; the document is never mutated, so every
-  Markdown round-trip test in the suite is blind to whether the plugin runs at
-  all. `tableControls.test.ts` asserts on the decoration set and drives the
-  plugin's own `mousedown` handler, because nothing else in the suite can see
-  it. With no `labels` option it registers **no plugin at all** rather than a
-  bar of unlabelled buttons — the same "nobody is listening" shape as
-  `TagPill`'s `onActivate` and `HeadingFold`'s `foldHint`, and for the same
-  reason: no user-facing string may be hardcoded in this app.
+- **`TableHandles` is an `Extension`, like `HeadingFold`, and registers
+  nothing in the schema.** H deleted the floating bar this bullet used to
+  describe (`TableControls`, one `Decoration.widget` placed before the table)
+  in favour of `⊕` edge handles rendered from the table's own row/column
+  boxes. The document is still never mutated by either shape, so every
+  Markdown round-trip test in the suite stays blind to whether the plugin
+  runs at all — `tableHandles.test.ts` asserts on the decoration set and on
+  command dispatch, because nothing else in the suite can see this plugin,
+  and asserts on neither position nor rect, because jsdom has no layout
+  engine (that coverage is Playwright's, in `e2e/editorContext.spec.ts` and
+  `e2e/editorAffordances.spec.ts`). With no `labels` option `TableHandles`
+  registers **no plugin at all** rather than a layer of unlabelled buttons —
+  the same "nobody is listening" shape as `TagPill`'s `onActivate` and
+  `HeadingFold`'s `foldHint`, and for the same reason: no user-facing string
+  may be hardcoded in this app. See `docs/rulings/tables.md` for the
+  shape-guard defect this rebuild logic was fixed against.
+
+- **`ContextMenu` is the same shape again: an `Extension`, event source only,
+  no schema footprint.** It owns the `contextmenu` DOM event and the
+  `openContextMenu` command, and hands a request UP through an `onOpen`
+  callback captured at construction — React draws the actual menu
+  (`EditorContextMenu.tsx`). `null` `onOpen` means nobody is listening, the
+  same absent-not-inert convention as `TableHandles.labels` and
+  `TagPill.onActivate`, and in that state the plugin registers nothing, so
+  the browser's native context menu is left untouched. `contextMenu.test.ts`
+  is the only thing in the unit suite that can see this plugin run.
+
+- **Two new keyboard bindings reach the context menu, and both are required by
+  `docs/rulings/accessibility.md`, not optional convenience.**
+  `ContextMenu.ts`'s `addKeyboardShortcuts` wires `Shift-F10` and the
+  dedicated `ContextMenu` key (present on many Windows keyboards) to the same
+  `openContextMenu` command the pointer route's `contextmenu` handler calls.
+  Without them a keyboard-only user has no route to this menu at all — the
+  pointer is otherwise the only way in. The command reads `state.selection`
+  directly and is authoritative doing so, unlike the pointer route below it in
+  the same file, which reads the live DOM `Selection` instead: a command runs
+  synchronously against the current state, so there is no DOM-vs-model lag to
+  guard against the way a `contextmenu` DOM event must.
 
 - **`codeBlock: false` on `StarterKit.configure` (`extensions.ts`) is
   load-bearing beside `underline: false` next to it, for the identical

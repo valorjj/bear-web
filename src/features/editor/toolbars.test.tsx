@@ -516,6 +516,30 @@ describe('the highlight colour menu', () => {
     expect(screen.queryByRole('menu', { name: 'Highlight colour' })).toBeNull();
     expect(handleRef.current?.getMarkdown()).toBe('word');
   });
+
+  // `HighlightMenu` (this chevron) and `HighlightPalette` (floats at the
+  // caret inside a highlight) are two independent surfaces that both use the
+  // string "Highlight colour" as their accessible name. The palette is
+  // gated on `contextMenu === null`, but nothing gates it against the
+  // toolbar's own colour menu — so with the caret already inside a
+  // highlight, opening the chevron's menu risks rendering both at once,
+  // which makes `getByRole('menu', { name: 'Highlight colour' })`
+  // strict-mode-ambiguous for any test (including every `openColourMenu()`
+  // call above) that runs with the caret inside a highlight.
+  it('renders exactly one "Highlight colour" surface when the caret is inside a highlight', async () => {
+    const { handleRef } = renderEditor('<mark class="hl-green">word</mark>');
+    await screen.findByLabelText('Note text');
+
+    // Caret inside the mark, not a selection spanning it — this is what
+    // makes `HighlightPalette` pop via `flags.highlightRange`.
+    handleRef.current?.editor?.commands.setTextSelection(2);
+
+    await userEvent.click(
+      within(bottomToolbar()).getByRole('button', { name: 'Highlight colour' }),
+    );
+
+    expect(screen.getAllByRole('menu', { name: 'Highlight colour' })).toHaveLength(1);
+  });
 });
 
 describe('live formatting state', () => {

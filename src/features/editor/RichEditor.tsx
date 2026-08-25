@@ -620,12 +620,12 @@ export function RichEditor({
             <HighlightMenu
               // What the cursor is actually sitting in wins over the sticky
               // button colour: with the caret inside a green highlight, the
-              // menu that opens must say green.
-              current={
-                editor?.isActive('highlight') === true
-                  ? ((editor.getAttributes('highlight').color as HighlightColor | null) ?? null)
-                  : highlightColor
-              }
+              // menu that opens must say green. Read through `flags`, the
+              // editor-state subscription, rather than `editor.isActive` in
+              // this render body — `useEditor` does not re-render on
+              // transactions in Tiptap v3, so an `isActive` call made during
+              // render is stale from the moment the caret moves.
+              current={flags.highlight ? flags.highlightColor : highlightColor}
               onChoose={(color) => {
                 // The document mutation runs FIRST, before any React state
                 // change. Closing the menu unmounts `HighlightMenu`, which
@@ -677,8 +677,14 @@ export function RichEditor({
        * once. The context menu's swatch row covers the same need while it is
        * open, so the palette simply steps aside rather than needing a
        * z-index fight.
+       *
+       * Also gated on `!colorMenuOpen`, for the identical reason: the
+       * toolbar's own `HighlightMenu` and this palette are two independent
+       * surfaces that both carry the accessible name "Highlight colour", and
+       * with the caret already inside a highlight, opening the chevron's
+       * menu renders both at once with nothing else to distinguish them.
        */}
-      {paletteAt !== null && editor !== null && contextMenu === null && (
+      {paletteAt !== null && editor !== null && contextMenu === null && !colorMenuOpen && (
         // `top`/`left` are the box's own literal edges now (set by the
         // flip/clamp arithmetic above), not an anchor point plus a CSS
         // transform — so no `-translate-x-1/2 -translate-y-full` here,
