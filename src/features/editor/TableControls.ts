@@ -1,13 +1,11 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
-import {
-  addColumnAfter,
-  addRowAfter,
-  deleteColumn,
-  deleteRow,
-  deleteTable,
-} from '@tiptap/pm/tables';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
+
+import { tablePosAt } from './tablePos';
+import { COMMANDS as TABLE_COMMANDS } from './tableCommands';
+
+export { tablePosAt };
 
 /**
  * The five actions the bar offers, in the order it shows them.
@@ -29,6 +27,7 @@ export const TABLE_ACTIONS = [
 export type TableAction = (typeof TABLE_ACTIONS)[number];
 
 /**
+ * The bar's own five actions, mapped onto `tableCommands.ts`'s seven —
  * `prosemirror-tables`' own commands, not Tiptap's wrappers. The plugin has a
  * `view` and therefore a `state`/`dispatch` pair, but no `Editor` — reaching
  * for one from inside a plugin would be the editor learning about the layer
@@ -38,11 +37,11 @@ const COMMANDS: Record<
   TableAction,
   (state: EditorState, dispatch?: EditorView['dispatch']) => boolean
 > = {
-  addRow: addRowAfter,
-  deleteRow,
-  addColumn: addColumnAfter,
-  deleteColumn,
-  deleteTable,
+  addRow: TABLE_COMMANDS.addRowAfter,
+  deleteRow: TABLE_COMMANDS.deleteRow,
+  addColumn: TABLE_COMMANDS.addColumnAfter,
+  deleteColumn: TABLE_COMMANDS.deleteColumn,
+  deleteTable: TABLE_COMMANDS.deleteTable,
 };
 
 export interface TableControlsOptions {
@@ -61,22 +60,6 @@ export interface TableControlsOptions {
 }
 
 export const tableControlsKey = new PluginKey('tableControls');
-
-/**
- * The document position of the table the selection is inside, or `null`.
- *
- * Walks OUTWARD from the cursor rather than scanning the document, so a table
- * nested in a blockquote or a list item resolves to itself and not to an
- * ancestor. The innermost match wins because `$from.node(depth)` is checked
- * from the deepest depth up.
- */
-export function tablePosAt(state: EditorState): number | null {
-  const { $from } = state.selection;
-  for (let depth = $from.depth; depth > 0; depth -= 1) {
-    if ($from.node(depth).type.name === 'table') return $from.before(depth);
-  }
-  return null;
-}
 
 function barElement(
   view: EditorView,
