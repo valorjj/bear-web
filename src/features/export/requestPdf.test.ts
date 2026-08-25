@@ -20,6 +20,10 @@ describe('requestPdf', () => {
     expect(String(url)).toMatch(/\/export\/pdf$/);
     expect((init as RequestInit).credentials).toBe('include');
     expect((init as RequestInit).body).toBe('<p>x</p>');
+    // `text/html` is not a CORS-safelisted content type, which is what keeps
+    // the renderer unreachable by a simple cross-origin `fetch` — the route
+    // depends on this header being exactly this value.
+    expect((init as RequestInit).headers).toMatchObject({ 'content-type': 'text/html' });
   });
 
   it.each([

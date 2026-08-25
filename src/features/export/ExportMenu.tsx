@@ -1,7 +1,8 @@
 import { type ReactElement, useEffect, useRef } from 'react';
 
+import { useSessionValue } from '@/features/account';
 import { useT } from '@/i18n';
-import { Download, FileCode, Icon, type LucideIcon, Printer } from '@/ui/Icon';
+import { Download, FileCode, FileText, Icon, type LucideIcon } from '@/ui/Icon';
 
 import type { ExportFormat } from './exportNote';
 
@@ -15,15 +16,14 @@ interface Choice {
   format: ExportFormat;
   label: 'export.markdown' | 'export.html' | 'export.pdf';
   glyph: LucideIcon;
+  /** PDF export renders server-side and needs the signed-in session to reach it. */
+  disabledWhenSignedOut?: true;
 }
 
 const CHOICES: readonly Choice[] = [
   { format: 'md', label: 'export.markdown', glyph: Download },
   { format: 'html', label: 'export.html', glyph: FileCode },
-  // A printer, not a document icon: PDF goes through the browser's print
-  // pipeline and the user will see a print dialog. Promising a file and opening
-  // a dialog would be the affordance lying about what happens next.
-  { format: 'pdf', label: 'export.pdf', glyph: Printer },
+  { format: 'pdf', label: 'export.pdf', glyph: FileText, disabledWhenSignedOut: true },
 ];
 
 /**
@@ -38,6 +38,7 @@ const CHOICES: readonly Choice[] = [
  */
 export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactElement {
   const t = useT();
+  const { state } = useSessionValue();
   const first = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -62,21 +63,34 @@ export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactEleme
       aria-label={t('export.label')}
       className="flex min-w-40 flex-col gap-0.5 rounded-lg bg-surface p-1 shadow-popover"
     >
-      {CHOICES.map((choice, index) => (
-        <button
-          key={choice.format}
-          ref={index === 0 ? first : undefined}
-          type="button"
-          role="menuitem"
-          onClick={() => onChoose(choice.format)}
-          className="flex items-center gap-2 rounded-sm px-2 py-1 text-left text-ui text-text transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover"
-        >
-          <span className="text-faint">
-            <Icon glyph={choice.glyph} size="sm" />
-          </span>
-          {t(choice.label)}
-        </button>
-      ))}
+      {CHOICES.map((choice, index) => {
+        // `disabled`, not `disabled` the HTML attribute: an HTML-disabled
+        // button leaves the tab order, so a keyboard user could never reach
+        // it to discover why PDF is off. `aria-disabled` keeps it reachable;
+        // `onClick` below refuses the action itself.
+        const disabled = choice.disabledWhenSignedOut === true && state.status !== 'signedIn';
+
+        return (
+          <button
+            key={choice.format}
+            ref={index === 0 ? first : undefined}
+            type="button"
+            role="menuitem"
+            aria-disabled={disabled ? 'true' : undefined}
+            onClick={() => {
+              if (disabled) return;
+              onChoose(choice.format);
+            }}
+            className={`flex items-center gap-2 rounded-sm px-2 py-1 text-left text-ui transition-colors duration-[var(--bear-duration-fast)] ease-bear ${disabled ? 'text-faint' : 'text-text hover:bg-hover'}`}
+          >
+            <span className="text-faint">
+              <Icon glyph={choice.glyph} size="sm" />
+            </span>
+            {t(choice.label)}
+            {disabled && <span className="sr-only"> {t('export.pdf.requiresSignIn')}</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }
