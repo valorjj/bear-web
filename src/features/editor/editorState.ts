@@ -20,6 +20,8 @@ export interface EditorFlags {
   link: boolean;
   highlight: boolean;
   heading1: boolean;
+  /** The heading level under the caret, or `null` when it is not a heading. */
+  headingLevel: number | null;
   taskList: boolean;
   bulletList: boolean;
   orderedList: boolean;
@@ -43,6 +45,7 @@ export const EMPTY_FLAGS: EditorFlags = {
   link: false,
   highlight: false,
   heading1: false,
+  headingLevel: null,
   taskList: false,
   bulletList: false,
   orderedList: false,
@@ -82,6 +85,9 @@ export function editorFlagsSelector({ editor }: { editor: Editor }): EditorFlags
     link: editor.isActive('link'),
     highlight,
     heading1: editor.isActive('heading', { level: 1 }),
+    headingLevel: editor.isActive('heading')
+      ? (editor.getAttributes('heading').level as number)
+      : null,
     taskList: editor.isActive('taskList'),
     bulletList: editor.isActive('bulletList'),
     orderedList: editor.isActive('orderedList'),

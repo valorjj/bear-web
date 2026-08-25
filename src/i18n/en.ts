@@ -128,7 +128,6 @@ export const en = {
   'editor.context.menu': 'Editing options',
   'editor.context.paragraph': 'Body text',
   'editor.context.table': 'Table',
-  'editor.context.heading': 'Heading level',
   'editor.context.format': 'Format',
   'editor.context.blocks': 'Blocks',
   'editor.table.addRowBefore': 'Insert row above',

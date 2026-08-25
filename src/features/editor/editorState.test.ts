@@ -67,9 +67,37 @@ describe('editorFlagsSelector', () => {
     expect(editorFlagsSelector({ editor }).table).toBe(true);
   });
 
+  it('reports the heading level under the caret, and heading1 in step with it', () => {
+    const editor = editorWith('# one\n\nplain');
+    editor.commands.setTextSelection(2);
+
+    const flags = editorFlagsSelector({ editor });
+    expect(flags.headingLevel).toBe(1);
+    expect(flags.heading1).toBe(true);
+  });
+
+  it('reports a non-H1 heading level, with heading1 false', () => {
+    const editor = editorWith('### three\n\nplain');
+    editor.commands.setTextSelection(2);
+
+    const flags = editorFlagsSelector({ editor });
+    expect(flags.headingLevel).toBe(3);
+    expect(flags.heading1).toBe(false);
+  });
+
+  it('reports a null heading level outside a heading', () => {
+    const editor = editorWith('# one\n\nplain');
+    // "plain" sits in the second block; find its position past the heading.
+    const paragraphPos = editor.state.doc.content.size - 2;
+    editor.commands.setTextSelection(paragraphPos);
+
+    expect(editorFlagsSelector({ editor }).headingLevel).toBeNull();
+  });
+
   it('EMPTY_FLAGS has every boolean false and every nullable null', () => {
     expect(EMPTY_FLAGS.bold).toBe(false);
     expect(EMPTY_FLAGS.table).toBe(false);
+    expect(EMPTY_FLAGS.headingLevel).toBeNull();
     expect(EMPTY_FLAGS.highlightColor).toBeNull();
     expect(EMPTY_FLAGS.highlightRange).toBeNull();
   });

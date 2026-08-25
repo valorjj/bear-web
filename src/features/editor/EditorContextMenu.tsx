@@ -192,10 +192,13 @@ export function EditorContextMenu({
       aria-label={t('editor.context.menu')}
       onKeyDown={onKeyDown}
       style={{ top: position.top, left: position.left }}
+      // `min-w-56`, wider than `HeadingMenu`'s `min-w-48`: five sections and a
+      // table row list carry more content than a single level list, and
+      // `min-w-48` visibly clipped the longer table row labels in a spike.
       className="bg-surface border-border shadow-popover fixed z-20 min-w-56 rounded-md border p-1"
     >
       {/* 1. Heading — an inline glyph row, then a labelled paragraph row. */}
-      <div role="group" aria-label={t('editor.context.heading')} className="p-1">
+      <div role="group" aria-label={t('editor.fold.level')} className="p-1">
         <div className="flex items-center gap-1">
           {HEADING_LEVELS.map((level, index) => {
             const Glyph = HEADING_GLYPHS[index];
@@ -204,7 +207,7 @@ export function EditorContextMenu({
                 key={level}
                 type="button"
                 role="menuitemradio"
-                aria-checked={level === 1 && flags.heading1}
+                aria-checked={flags.headingLevel === level}
                 aria-label={`${t('editor.fold.headingLevel')} ${level}`}
                 onClick={() => {
                   onSetHeading(level);

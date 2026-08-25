@@ -130,7 +130,6 @@ export const ko: Record<TranslationKey, string> = {
   'editor.context.menu': '편집 옵션',
   'editor.context.paragraph': '본문',
   'editor.context.table': '표',
-  'editor.context.heading': '제목 수준',
   'editor.context.format': '서식',
   'editor.context.blocks': '블록',
   'editor.table.addRowBefore': '위에 행 추가',

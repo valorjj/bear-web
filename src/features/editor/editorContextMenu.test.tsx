@@ -54,6 +54,12 @@ describe('EditorContextMenu', () => {
 
   it('has no nested submenus', () => {
     renderMenu({ flags: { ...EMPTY_FLAGS, table: true } });
+    // A nested flyout would necessarily add a second `role="menu"` element;
+    // `queryByRole('menuitem', { expanded: false })` alone is weak — it only
+    // matches an item carrying an explicit `aria-expanded`, so it would pass
+    // against many sabotaged (submenu-bearing) implementations that simply
+    // never set that attribute.
+    expect(document.querySelectorAll('[role="menu"]')).toHaveLength(1);
     expect(screen.queryByRole('menuitem', { expanded: false })).toBeNull();
     expect(document.querySelectorAll('[aria-haspopup="menu"]')).toHaveLength(0);
   });
@@ -68,6 +74,12 @@ describe('EditorContextMenu', () => {
     const { onAction } = renderMenu();
     await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Bold' }));
     expect(onAction).toHaveBeenCalledWith('bold');
+  });
+
+  it('checks the heading row matching flags.headingLevel, not just level 1', () => {
+    renderMenu({ flags: { ...EMPTY_FLAGS, heading1: false, headingLevel: 3 } });
+    expect(screen.getByRole('menuitemradio', { name: 'Heading 3' })).toBeChecked();
+    expect(screen.getByRole('menuitemradio', { name: 'Heading 1' })).not.toBeChecked();
   });
 
   it('reports a heading level from the inline row', async () => {
