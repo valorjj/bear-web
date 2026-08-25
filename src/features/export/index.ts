@@ -5,5 +5,7 @@ export { ExportProgressProvider, useExportProgress } from './ExportProgressConte
 export type { ExportProgress } from './ExportProgressContext';
 export { exportFilename } from './filename';
 export { renderNoteHtml, readExportTokens, EXPORT_TOKEN_NAMES } from './html';
+export { useExportRunner } from './useExportRunner';
+export type { ExportRunner } from './useExportRunner';
 export { PdfExportError, requestPdf } from './requestPdf';
 export type { PdfFailure } from './requestPdf';

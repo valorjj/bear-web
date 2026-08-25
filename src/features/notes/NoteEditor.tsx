@@ -3,13 +3,7 @@ import type { Editor } from '@tiptap/react';
 
 import { deriveTitle, folds, notes } from '@/data';
 import type { Note } from '@/data';
-import {
-  exportNote,
-  PdfExportError,
-  useExportProgress,
-  type ExportFormat,
-  type PdfFailure,
-} from '@/features/export';
+import { useExportRunner, type ExportFormat } from '@/features/export';
 import {
   EMPTY_DOCUMENT_MARKDOWN,
   foldedKeys,
@@ -17,28 +11,12 @@ import {
   RichEditor,
   type RichEditorHandle,
 } from '@/features/editor';
-import { useLocale, useT, type TranslationKey } from '@/i18n';
+import { useT } from '@/i18n';
 
 import { useAutosave } from './useAutosave';
 
 /** Matches `AUTOSAVE_DELAY_MS`; folds are persisted on the same rhythm. */
 const FOLD_PERSIST_DELAY_MS = 300;
-
-/**
- * Every `PdfFailure` reason but `failed` gets its own sentence — a user with
- * no connectivity and a user whose session expired need different copy, and
- * a single "export failed" tells neither of them anything they can act on.
- * `failed` itself is the generic "something else went wrong" case and is
- * deliberately absent here, falling through to `export.failed` below exactly
- * as an unrecognised reason would.
- */
-const EXPORT_FAILURE_KEYS: Partial<Record<PdfFailure, TranslationKey>> = {
-  offline: 'export.failed.offline',
-  unauthorized: 'export.failed.unauthorized',
-  tooLarge: 'export.failed.tooLarge',
-  rateLimited: 'export.failed.rateLimited',
-  unavailable: 'export.failed.unavailable',
-};
 
 export interface NoteEditorProps {
   note: Note;
@@ -94,7 +72,6 @@ export function NoteEditor({
   handleRef: externalHandleRef,
 }: NoteEditorProps): ReactElement {
   const t = useT();
-  const { locale } = useLocale();
 
   const internalHandleRef = useRef<RichEditorHandle | null>(null);
   const handleRef = externalHandleRef ?? internalHandleRef;
@@ -135,12 +112,12 @@ export function NoteEditor({
     }
   });
   const [serializeFailed, setSerializeFailed] = useState(initialSerializeFailed);
-  // Its own state rather than reusing `serializeFailed`: an export failing says
-  // nothing about whether the note can be saved, and the two messages must not
-  // be able to stand in for each other. Holds the REASON, not just a boolean,
-  // so a signed-out user and an offline user see different sentences —
-  // `EXPORT_FAILURE_KEYS` maps each reason to its own key below.
-  const [exportFailed, setExportFailed] = useState<PdfFailure | null>(null);
+  // Its own channel rather than reusing `serializeFailed`: an export failing
+  // says nothing about whether the note can be saved, and the two messages
+  // must not be able to stand in for each other. The runner reports a KEY, not
+  // a boolean, so a signed-out user and an offline user see different
+  // sentences.
+  const exportRunner = useExportRunner();
 
   const read = useCallback((): string => {
     try {
@@ -359,38 +336,20 @@ export function NoteEditor({
   // by the autosave debounce, so exporting the record would silently hand the
   // user a file missing their last few seconds of typing. The title is derived
   // from the same live text for the same reason.
-  const { begin: beginExportProgress, end: endExportProgress } = useExportProgress();
+  // Exports what is ON SCREEN, not `note.text`. The stored text lags the
+  // editor by the autosave debounce, so exporting the record would silently
+  // hand the user a file missing their last few seconds of typing. The title
+  // is derived from the same live text for the same reason. (The note list's
+  // row menu has no live editor to read and exports the record — correct
+  // there, because a row the user is not editing has nothing pending.)
+  const { run: runExport } = exportRunner;
 
   const handleExport = useCallback(
     (format: ExportFormat): void => {
       const text = handleRef.current?.getMarkdown() ?? note.text;
-
-      const run = async (): Promise<void> => {
-        // Only PDF is a round trip worth a global "busy" signal — Markdown
-        // and HTML are synchronous downloads. `begin()`/`end()` MUST be
-        // paired through `finally`, not just after the `await`: `exportNote`
-        // can reject at any of several points (`renderNoteHtml` throwing
-        // synchronously, `requestPdf`'s six failure reasons, `downloadBlob`
-        // itself throwing) and every one of them has to clear the flag or
-        // the top bar spins forever and the PDF menu item stays `aria-busy`
-        // permanently — worse than shipping no loader at all.
-        if (format === 'pdf') beginExportProgress();
-        try {
-          await exportNote(
-            { title: deriveTitle(text), text, updatedAt: note.updatedAt },
-            format,
-            locale,
-          );
-        } catch (error) {
-          setExportFailed(error instanceof PdfExportError ? error.reason : 'failed');
-        } finally {
-          if (format === 'pdf') endExportProgress();
-        }
-      };
-
-      void run();
+      runExport({ title: deriveTitle(text), text, updatedAt: note.updatedAt }, format);
     },
-    [locale, note.text, note.updatedAt, beginExportProgress, endExportProgress],
+    [runExport, note.text, note.updatedAt],
   );
 
   return (
@@ -408,16 +367,12 @@ export function NoteEditor({
         onEditorReady={setFoldEditor}
       />
 
-      {(failed || serializeFailed || exportFailed !== null) && (
+      {(failed || serializeFailed || exportRunner.failureKey !== null) && (
         // `status`, not `alert`: `alert` is the degraded-storage banner's role
         // and the e2e suite asserts there is exactly one of those.
         <p role="status" className="shrink-0 border-t border-border px-6 py-2 text-xs text-muted">
-          {exportFailed !== null
-            ? // Every `PdfFailure` reason but `failed` itself has its own
-              // sentence; `failed` — the generic "something else went
-              // wrong" default — falls back to `export.failed`, same as an
-              // unrecognised reason would.
-              t(EXPORT_FAILURE_KEYS[exportFailed] ?? 'export.failed')
+          {exportRunner.failureKey !== null
+            ? t(exportRunner.failureKey)
             : serializeFailed
               ? t('editor.serializeFailed')
               : t('editor.saveFailed')}

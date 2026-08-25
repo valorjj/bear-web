@@ -23,6 +23,11 @@ export interface ListByTagOptions {
 
 export interface NotesRepository {
   create(text?: string): Promise<Note>;
+  /**
+   * A fresh, unpinned note holding a copy of `id`'s text. Rejects if `id` is
+   * gone, the same as every other method that names an existing note.
+   */
+  duplicate(id: string): Promise<Note>;
   get(id: string): Promise<Note | undefined>;
   save(id: string, text: string): Promise<Note>;
   setPinned(id: string, pinned: boolean): Promise<void>;
@@ -77,27 +82,45 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     };
   }
 
+  async function create(text = ''): Promise<Note> {
+    const timestamp = now();
+    const note: Note = {
+      id: generateId(),
+      title: deriveTitle(text),
+      text,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    };
+
+    await db.transaction('rw', db.notes, db.noteTags, db.syncState, async () => {
+      await db.notes.add(note);
+      await reindexNote(db, note.id, text, parseTags);
+      await markDirty(db, 'note', note.id, timestamp);
+    });
+
+    return note;
+  }
+
   return {
-    async create(text = '') {
-      const timestamp = now();
-      const note: Note = {
-        id: generateId(),
-        title: deriveTitle(text),
-        text,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        pinned: false,
-        trashedAt: null,
-        archivedAt: null,
-      };
+    create,
 
-      await db.transaction('rw', db.notes, db.noteTags, db.syncState, async () => {
-        await db.notes.add(note);
-        await reindexNote(db, note.id, text, parseTags);
-        await markDirty(db, 'note', note.id, timestamp);
-      });
-
-      return note;
+    /**
+     * The copy is a NEW note in every respect the row shows: its own id, its
+     * own timestamps, and unpinned regardless of the source. Duplicating a
+     * pinned note to another pinned note would put the copy directly above
+     * the original at the top of the list, where the two are indistinguishable
+     * — and the user pinned one note, not two.
+     *
+     * The text is copied verbatim, tags included. A tag is part of what the
+     * note SAYS in this app's grammar, so stripping them would be editing the
+     * user's words; the tag index picks the copy up through `create`.
+     */
+    async duplicate(id) {
+      const source = await requireNote(id);
+      return create(source.text);
     },
 
     async get(id) {

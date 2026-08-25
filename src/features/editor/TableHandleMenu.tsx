@@ -1,18 +1,9 @@
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
+import { useAnchoredMenu } from '@/lib/useAnchoredMenu';
 
 import type { TableHandleAction, TableHandleMenuRequest } from './TableHandles';
-
-/**
- * Everything focusable, NOT `'button'` — copied verbatim from `HeadingMenu`.
- * See that file's docblock: `ConfirmDialog`'s `'button'`-only trap is a
- * documented gap, harmless there only because it holds exactly two buttons;
- * copying it here would silently skip any future non-button item, leaving it
- * invisible to both the initial-focus effect and the Tab-wrap arithmetic.
- */
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 export interface TableHandleMenuProps {
   request: TableHandleMenuRequest;
@@ -50,7 +41,6 @@ export function TableHandleMenu({
   onClose,
 }: TableHandleMenuProps): ReactElement {
   const t = useT();
-  const ref = useRef<HTMLDivElement | null>(null);
 
   const isRow = request.kind === 'row';
   const label = t(isRow ? 'editor.table.rowHandle' : 'editor.table.columnHandle');
@@ -61,74 +51,12 @@ export function TableHandleMenu({
   const afterAction: TableHandleAction = isRow ? 'addRowAfter' : 'addColumnAfter';
   const deleteAction: TableHandleAction = isRow ? 'deleteRow' : 'deleteColumn';
 
-  // Anchored below the handle until proven otherwise — same two-stage
-  // approach `HeadingMenu` uses and for the same reason: `request.rect` is
-  // the only geometry known before mount.
-  const [position, setPosition] = useState(() => ({
-    top: request.rect.bottom + 4,
-    left: request.rect.left,
-  }));
-
-  useEffect(() => {
-    ref.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
-  }, []);
-
-  // Flips above the handle when there is no room below, and clamps
-  // horizontally into the viewport — copied verbatim from `HeadingMenu`'s own
-  // flip/clamp effect. A row near the bottom of a long table is exactly where
-  // this menu gets used, so opening off-screen is the common case here too.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const menuRect = el.getBoundingClientRect();
-
-    const fitsBelow = request.rect.bottom + 4 + menuRect.height <= window.innerHeight;
-    const top = fitsBelow
-      ? request.rect.bottom + 4
-      : Math.max(4, request.rect.top - 4 - menuRect.height);
-
-    const left = Math.min(request.rect.left, window.innerWidth - menuRect.width - 4);
-
-    setPosition({ top, left: Math.max(4, left) });
-  }, [request]);
-
-  // Neither listener can live on the menu's own React `onKeyDown`/`onClick`:
-  // both must keep working after focus (or the click itself) has already left
-  // this subtree. Copied verbatim from `HeadingMenu`.
-  useEffect(() => {
-    function handleOutsideMouseDown(event: MouseEvent): void {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        onClose();
-      }
-    }
-    function handleDocumentKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'Escape') onClose();
-    }
-    // Capture, not bubble — same reason `HeadingMenu` gives: a click on
-    // another handle is itself what opens (or re-opens) a menu, and
-    // `TableHandles`' own mousedown handler runs during the BUBBLE phase.
-    document.addEventListener('mousedown', handleOutsideMouseDown, true);
-    document.addEventListener('keydown', handleDocumentKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideMouseDown, true);
-      document.removeEventListener('keydown', handleDocumentKeyDown);
-    };
-  }, [onClose]);
-
-  // Tab-trapping only — Escape is handled at the document level above so it
-  // keeps working once focus has left this subtree.
-  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
-    if (event.key !== 'Tab') return;
-
-    const items = [...(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
-    if (items.length === 0) return;
-    const index = items.indexOf(document.activeElement as HTMLElement);
-    const next = event.shiftKey ? index - 1 : index + 1;
-    if (next < 0 || next >= items.length) {
-      event.preventDefault();
-      items[event.shiftKey ? items.length - 1 : 0]?.focus();
-    }
-  }
+  // Placement, initial focus, Escape/outside dismissal and the Tab trap all
+  // come from `useAnchoredMenu`, which is where the reasoning behind each now
+  // lives — including why the outside-click listener must be a CAPTURE
+  // listener, which matters here because `TableHandles`' own mousedown handler
+  // runs during the bubble phase.
+  const { ref, position, onKeyDown } = useAnchoredMenu<HTMLDivElement>(request.rect, onClose);
 
   return (
     <div

@@ -42,6 +42,10 @@ export const en = {
   'note.noText': 'No additional text',
   'note.pin': 'Pin note',
   'note.unpin': 'Unpin note',
+  'note.menu.label': 'Note actions',
+  'note.duplicate': 'Duplicate',
+  'note.copyText': 'Copy text',
+  'note.copyText.failed': 'This note could not be copied.',
 
   'noteList.create': 'New note',
   'noteList.trash': 'Delete',

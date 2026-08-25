@@ -44,6 +44,10 @@ export const ko: Record<TranslationKey, string> = {
   'note.noText': '추가 내용 없음',
   'note.pin': '메모 고정',
   'note.unpin': '고정 해제',
+  'note.menu.label': '메모 작업',
+  'note.duplicate': '복제',
+  'note.copyText': '텍스트 복사',
+  'note.copyText.failed': '메모를 복사하지 못했습니다.',
 
   'noteList.create': '새 메모',
   'noteList.trash': '삭제',

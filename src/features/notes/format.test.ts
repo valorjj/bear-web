@@ -28,6 +28,36 @@ describe('deriveSnippet', () => {
     // `deriveTitle` strips heading syntax, and only from the title line.
     expect(deriveSnippet('Groceries\n## Dairy')).toBe('## Dairy');
   });
+
+  it('joins the body lines into one run of prose', () => {
+    // The row clamps to two lines and reserves the height whether or not
+    // there is text to fill it, so a preview that stopped at the first body
+    // line left half of that reserved space permanently blank.
+    expect(deriveSnippet('Groceries\nmilk\nbread\ncoffee')).toBe('milk bread coffee');
+  });
+
+  it('closes up the blank lines between paragraphs when joining', () => {
+    expect(deriveSnippet('Trip\n\nDay one.\n\nDay two.')).toBe('Day one. Day two.');
+  });
+
+  it('caps the joined body so the accessible name cannot read out a whole note', () => {
+    const snippet = deriveSnippet(`Long\n${'word '.repeat(200)}`);
+
+    expect(snippet.length).toBeLessThanOrEqual(240);
+    expect(snippet.startsWith('word word')).toBe(true);
+  });
+
+  it('drops image syntax, which the row draws as a thumbnail instead', () => {
+    expect(deriveSnippet('Trip\n![beach](https://example.com/a.png)\nwe went last week')).toBe(
+      'we went last week',
+    );
+  });
+
+  it('keeps the prose around an inline image', () => {
+    expect(deriveSnippet('Trip\nbefore ![a](https://example.com/a.png) after')).toBe(
+      'before after',
+    );
+  });
 });
 
 describe('formatNoteDate', () => {
@@ -68,11 +98,11 @@ describe('deriveSnippet with a query', () => {
   const text = 'Groceries\nfirst line\nsecond line\nmilk and bread';
 
   it('is unchanged when no query is given', () => {
-    expect(deriveSnippet(text)).toBe('first line');
+    expect(deriveSnippet(text)).toBe('first line second line milk and bread');
   });
 
   it('is unchanged when the query is blank', () => {
-    expect(deriveSnippet(text, '  ')).toBe('first line');
+    expect(deriveSnippet(text, '  ')).toBe('first line second line milk and bread');
   });
 
   it('returns the first line containing the match', () => {
@@ -88,7 +118,7 @@ describe('deriveSnippet with a query', () => {
   // the snippet) with its raw syntax exposed. Falls back to the ordinary
   // snippet instead, exactly like the no-query path.
   it('does not repeat the title as the snippet when the title is the only match', () => {
-    expect(deriveSnippet(text, 'Groceries')).toBe('first line');
+    expect(deriveSnippet(text, 'Groceries')).toBe('first line second line milk and bread');
   });
 
   // The paired case: a match on the title line does NOT suppress a genuine
@@ -105,6 +135,6 @@ describe('deriveSnippet with a query', () => {
   });
 
   it('falls back to the ordinary snippet when nothing matches', () => {
-    expect(deriveSnippet(text, 'zzz')).toBe('first line');
+    expect(deriveSnippet(text, 'zzz')).toBe('first line second line milk and bread');
   });
 });

@@ -2,7 +2,7 @@
 
 Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline renders it, what the exported document is allowed to change, and how it gets its colours and its print behaviour.
 
-**Trigger:** any change under `src/features/export/` — `html.ts` (`renderNoteBody`, `renderNoteHtml`, `readExportTokens`, `EXPORT_TOKEN_NAMES`, `FALLBACKS`, the inline `<style>` block), `exportNote.ts` (`exportNote`, `MIME`), `requestPdf.ts` (`requestPdf`, `PdfFailure`, `BY_STATUS`), `filename.ts`, `ExportMenu.tsx`; `NoteEditor.handleExport` in `src/features/notes/NoteEditor.tsx`; `server/src/routes/export.ts`, `server/pdf/` (`render.ts`'s `emulateMedia`/`preferCSSPageSize`, `inspectPdf.ts`, `fidelity.test.ts`); the `export.*` keys in `src/i18n/en.ts` / `ko.ts` and the `ALLOWED_IDENTICAL` list in `i18n.test.tsx`; the export blocks in `e2e/notes.spec.ts` and `e2e/pdfExport.spec.ts`; and any new import of `marked` or `@tiptap/markdown` outside `src/features/editor/markdown.ts`.
+**Trigger:** any change under `src/features/export/` — `html.ts` (`renderNoteBody`, `renderNoteHtml`, `readExportTokens`, `EXPORT_TOKEN_NAMES`, `FALLBACKS`, the inline `<style>` block), `exportNote.ts` (`exportNote`, `MIME`), `requestPdf.ts` (`requestPdf`, `PdfFailure`, `BY_STATUS`), `filename.ts`, `ExportMenu.tsx`, `useExportRunner.ts`; `NoteEditor.handleExport` in `src/features/notes/NoteEditor.tsx` and the export group in `src/features/notes/NoteRowMenu.tsx`; `server/src/routes/export.ts`, `server/pdf/` (`render.ts`'s `emulateMedia`/`preferCSSPageSize`, `inspectPdf.ts`, `fidelity.test.ts`); the `export.*` keys in `src/i18n/en.ts` / `ko.ts` and the `ALLOWED_IDENTICAL` list in `i18n.test.tsx`; the export blocks in `e2e/notes.spec.ts` and `e2e/pdfExport.spec.ts`; and any new import of `marked` or `@tiptap/markdown` outside `src/features/editor/markdown.ts`.
 
 - **Export renders through the EDITOR'S OWN SCHEMA, never a second Markdown
   pipeline.** `renderNoteBody` parses with `parseMarkdown` — the single importer
@@ -179,3 +179,30 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   height cannot be asserted) and requires the margin reset and an explicit
   non-zero `min-height` on the export side. It goes red if either rule
   regresses — verified against the pre-fix stylesheet.
+
+
+- **Running an export lives in `useExportRunner`, not in the component that
+  offers it.** Two places can start one now: the editor's own export button
+  and the note list's row menu. The hook owns the progress pairing and the
+  failure-reason table, because the pairing is exactly the kind of thing that
+  ends up correct in one copy and wrong in the other — `begin()`/`end()` must
+  be paired through `finally`, not merely after the `await`, or a rejection
+  anywhere in `exportNote` leaves the top bar spinning and the PDF item
+  `aria-busy` forever, which is worse than shipping no loader at all.
+
+- **The row menu exports the STORED record; the editor exports what is on
+  screen. Both are right.** The editor's text lags the record by the autosave
+  debounce, so exporting `note.text` there would hand the user a file missing
+  their last few seconds of typing. A row the user is not editing has nothing
+  pending, and the note list has no live editor to read from in any case.
+
+- **`useExportRunner` imports `exportNote` from `./exportNote`, not from its
+  own barrel — so a test that mocks `@/features/export` mocks a binding
+  nothing under test reads.** This bit once: `NoteEditor.test.tsx` had mocked
+  the barrel since G, and the mock silently stopped applying the moment the
+  call moved into the hook. The failure was not an error — the real
+  `exportNote` ran, rejected for its own reasons, and the assertion on the
+  failure SENTENCE was what noticed. Mock the deep module
+  (`@/features/export/exportNote`); the barrel re-exports whatever it
+  resolves to, so `vi.mocked(exportNote)` imported from the barrel is still
+  the same spy.

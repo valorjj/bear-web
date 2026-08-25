@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -35,6 +35,7 @@ function renderItem(
     selected: false,
     onSelect: vi.fn(),
     onTogglePin: vi.fn(),
+    onOpenMenu: vi.fn(),
     now: DEFAULT_NOW,
     ...overrides,
   };
@@ -78,6 +79,7 @@ describe('NoteListItem', () => {
         selected
         onSelect={vi.fn()}
         onTogglePin={vi.fn()}
+        onOpenMenu={vi.fn()}
         now={DEFAULT_NOW}
       />,
     );
@@ -293,5 +295,131 @@ describe('preview size', () => {
   it('reserves the snippet height at medium, so rows stay uniform', () => {
     const { container } = renderItem({ size: 'medium', note: makeNote({ text: 'Groceries' }) });
     expect(container.querySelector('.line-clamp-1')?.className).toContain('min-h-[1.03125rem]');
+  });
+});
+
+describe('row layout', () => {
+  /**
+   * The DOM order IS the visual order here — the row is a flex column — so
+   * asserting on positions in the rendered text is asserting on the layout the
+   * M9c redesign specified: title, then the note's own words, then the date on
+   * a footer line. Before M9c the date sat between the title and the preview.
+   */
+  it('puts the date after the preview, not between it and the title', () => {
+    const { container } = renderItem({
+      note: makeNote({ title: 'Groceries', text: 'Groceries\nmilk and bread' }),
+    });
+
+    const text = container.textContent ?? '';
+    expect(text.indexOf('Groceries')).toBeLessThan(text.indexOf('milk and bread'));
+    expect(text.indexOf('milk and bread')).toBeLessThan(text.indexOf('Aug 6, 2026'));
+  });
+});
+
+describe('thumbnail', () => {
+  const withImage = makeNote({
+    title: 'Trip',
+    text: 'Trip\n![beach](https://example.com/a.png)\nwe went last week',
+  });
+
+  it('renders the note’s first image', () => {
+    renderItem({ note: withImage });
+
+    const img = screen.getByRole('presentation');
+    expect(img).toHaveAttribute('src', 'https://example.com/a.png');
+  });
+
+  it('renders no image for a note that names none', () => {
+    renderItem({ note: makeNote() });
+
+    expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
+  });
+
+  it('keeps the thumbnail out of the accessible name', () => {
+    // `alt=""` is what does this. A filename read out between the preview and
+    // the date is noise, and the image is derived from text the snippet
+    // already carries — the same reasoning that made `ThemeDialog`'s card
+    // previews `aria-hidden`.
+    renderItem({ note: withImage });
+
+    const name = screen.getByRole('button', { name: /Trip/ }).getAttribute('aria-label') ?? '';
+    expect(name).not.toContain('example.com');
+    expect(name).not.toContain('beach');
+  });
+
+  it('shows the prose rather than the image URL in the preview', () => {
+    renderItem({ note: withImage });
+
+    expect(screen.getByText('we went last week')).toBeInTheDocument();
+  });
+
+  it('drops the image once it fails to load, rather than keeping a broken box', () => {
+    renderItem({ note: withImage });
+
+    fireEvent.error(screen.getByRole('presentation'));
+
+    expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
+  });
+
+  it('shows no thumbnail at the small density, which shows no preview either', () => {
+    renderItem({ note: withImage, size: 'small' });
+
+    expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
+  });
+});
+
+describe('row menu', () => {
+  it('opens on right-click, anchored at the pointer, without selecting the row', () => {
+    const onOpenMenu = vi.fn();
+    const onSelect = vi.fn();
+    renderItem({ onOpenMenu, onSelect });
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Groceries/ }), {
+      clientX: 120,
+      clientY: 240,
+    });
+
+    // The POSITION is asserted, not merely its presence: a request that
+    // carried the row's own rect instead of the pointer would still have a
+    // `rect`, and `toHaveProperty('rect')` would pass against it. jsdom
+    // reports 0 for every measured rect, so 120/240 can only have come from
+    // the pointer.
+    expect(onOpenMenu).toHaveBeenCalledTimes(1);
+    const request = onOpenMenu.mock.calls[0][0];
+    expect(request.noteId).toBe('n1');
+    expect(request.rect.left).toBe(120);
+    expect(request.rect.top).toBe(240);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('reports the row’s pinned and trashed state, which decide the menu’s items', () => {
+    const onOpenMenu = vi.fn();
+    renderItem({ note: makeNote({ pinned: true, trashedAt: 123 }), onOpenMenu });
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Groceries/ }));
+
+    expect(onOpenMenu.mock.calls[0][0]).toMatchObject({ pinned: true, trashed: true });
+  });
+
+  it('opens on Shift+F10, the keyboard route', async () => {
+    const onOpenMenu = vi.fn();
+    const user = userEvent.setup();
+    renderItem({ onOpenMenu });
+
+    screen.getByRole('button', { name: /Groceries/ }).focus();
+    await user.keyboard('{Shift>}{F10}{/Shift}');
+
+    expect(onOpenMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves plain F10 alone', async () => {
+    const onOpenMenu = vi.fn();
+    const user = userEvent.setup();
+    renderItem({ onOpenMenu });
+
+    screen.getByRole('button', { name: /Groceries/ }).focus();
+    await user.keyboard('{F10}');
+
+    expect(onOpenMenu).not.toHaveBeenCalled();
   });
 });

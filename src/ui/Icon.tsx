@@ -275,4 +275,7 @@ export {
   GripHorizontal,
   GripVertical,
   LoaderCircle,
+  Copy,
+  ClipboardCopy,
+  RotateCcw,
 } from 'lucide-react';
