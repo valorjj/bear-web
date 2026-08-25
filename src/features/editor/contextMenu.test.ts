@@ -55,11 +55,79 @@ describe('ContextMenu', () => {
     expect(onOpen.mock.calls[0][0]).toHaveProperty('pos');
   });
 
+  // Regression guard for the pointer-over-selection requirement itself.
+  // `jsdom` has no `elementFromPoint`, so `view.posAtCoords` can't be driven
+  // through real hit-testing (see the module header for why the two Range
+  // stubs and the `elementFromPoint` stub above exist at all) — spying on
+  // `posAtCoords` directly asserts which SOURCE the handler reads, not any
+  // geometry, and goes red the instant the handler is changed to read
+  // `state.selection` instead. Confirmed against a deliberately sabotaged
+  // implementation (`const pos = view.state.selection.from`, pointer
+  // ignored) that the earlier version of this suite passed unchanged; see
+  // `task-6-report.md`'s fix-round-1 section for that run's output.
+  it('resolves the position from the pointer, not the selection', () => {
+    const onOpen = vi.fn();
+    const editor = editorWith(onOpen, 'hello world');
+
+    // Selection sits somewhere specific and known...
+    editor.commands.setTextSelection(5);
+    const selectionPos = editor.state.selection.from;
+
+    // ...and the pointer reports a DIFFERENT, known position.
+    const SENTINEL = 2;
+    expect(SENTINEL).not.toBe(selectionPos);
+    vi.spyOn(editor.view, 'posAtCoords').mockReturnValue({ pos: SENTINEL, inside: -1 });
+
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    editor.view.dom.dispatchEvent(event);
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onOpen.mock.calls[0][0].pos).toBe(SENTINEL);
+    expect(onOpen.mock.calls[0][0].pos).not.toBe(selectionPos);
+  });
+
+  it('falls back to the selection when the pointer resolves to nothing', () => {
+    const onOpen = vi.fn();
+    const editor = editorWith(onOpen, 'hello world');
+
+    editor.commands.setTextSelection(5);
+    const selectionPos = editor.state.selection.from;
+
+    // What `posAtCoords` actually returns for a point outside the document.
+    vi.spyOn(editor.view, 'posAtCoords').mockReturnValue(null);
+
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    editor.view.dom.dispatchEvent(event);
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onOpen.mock.calls[0][0].pos).toBe(selectionPos);
+  });
+
   it('opens on Shift-F10', () => {
     const onOpen = vi.fn();
     const editor = editorWith(onOpen);
 
     expect(editor.commands.openContextMenu()).toBe(true);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  // Drives the actual keyboard binding through the view rather than calling
+  // the command directly, so `addKeyboardShortcuts`' `'Shift-F10'` entry
+  // itself is exercised, not just the command it points at.
+  it('opens via a real Shift-F10 keydown dispatched at the view', () => {
+    const onOpen = vi.fn();
+    const editor = editorWith(onOpen);
+    editor.view.focus();
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'F10',
+      code: 'F10',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    editor.view.dom.dispatchEvent(event);
+
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
