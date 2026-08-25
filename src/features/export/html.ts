@@ -288,17 +288,22 @@ ${declarations}
 
     /*
      * Backgrounds are part of the document, not decoration the printer may
-     * discard. Chrome defaults to print-color-adjust: economy, which drops
-     * EVERY painted background - a code block's surface, a highlight mark, a
-     * tag pill, a table's header row - and leaves their text sitting on bare
-     * paper. The user could tick "Background graphics" in the print dialog to
-     * get them back, but a checkbox buried in a browser dialog is not where
-     * this document's design lives. The exact keyword is inherited, so
-     * declaring it on the root covers every descendant.
+     * discard. The PDF pipeline forces backgrounds via printBackground: true
+     * and never applies print media at all (emulateMedia sets media: 'screen'
+     * in server/pdf/render.ts), so this declaration does nothing for that path.
+     * It still matters for a different reader: someone who downloads the HTML
+     * export and prints it from their own browser gets Chrome's default
+     * print-color-adjust: economy, which drops EVERY painted background - a
+     * code block's surface, a highlight mark, a tag pill, a table's header row
+     * - and leaves their text sitting on bare paper. They could tick
+     * "Background graphics" in the print dialog to get it back, but a
+     * checkbox buried in a browser dialog is not where this document's design
+     * lives. The exact keyword is inherited, so declaring it on the root
+     * covers every descendant.
      *
-     * This does NOT force the PAGE background: the @media print block below
-     * still clears html/body, so a dark theme exports onto white paper rather
-     * than flooding a sheet with ink.
+     * The page background itself is no longer cleared under @media print: the
+     * theme owns the page, printed or not, so a dark theme prints a dark page
+     * with its own light text rather than near-white text onto white paper.
      */
     html {
       background: var(--bear-bg);
@@ -619,10 +624,6 @@ ${declarations}
     }
 
     @media print {
-      html, body {
-        background: none;
-      }
-
       body {
         padding: 0;
         max-width: none;

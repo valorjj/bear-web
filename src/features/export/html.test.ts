@@ -249,11 +249,15 @@ describe('renderNoteHtml', () => {
   });
 
   it('opts into printing backgrounds, so a code block keeps its surface on paper', () => {
-    // Chrome's default is print-color-adjust: economy, which silently drops
-    // every painted background and prints the text onto bare paper. Nothing in
-    // the unit suite can see a real print, so this asserts the declaration
-    // itself - and it must be on the ROOT, because the property is inherited
-    // and every painted descendant depends on that inheritance.
+    // This declaration does nothing for the server-rendered PDF path, which
+    // forces backgrounds via printBackground: true and never applies print
+    // media at all. It still governs a reader who downloads the HTML export
+    // and prints it from their own browser: Chrome's default is
+    // print-color-adjust: economy, which silently drops every painted
+    // background and prints the text onto bare paper. Nothing in the unit
+    // suite can see a real print, so this asserts the declaration itself -
+    // and it must be on the ROOT, because the property is inherited and every
+    // painted descendant depends on that inheritance.
     const html = renderNoteHtml(note, tokens);
     const root = html.match(/\n    html \{([^}]*)\}/);
 
@@ -268,12 +272,13 @@ describe('renderNoteHtml', () => {
     expect(root?.[1]).toContain('-webkit-print-color-adjust: exact');
   });
 
-  it('still clears the PAGE background when printing, so a dark theme does not flood the sheet', () => {
-    // The pairing matters: `exact` above means backgrounds are honoured, so
-    // without this rule a Nord export would print a full sheet of #2e3440.
-    expect(renderNoteHtml(note, tokens)).toMatch(
-      /@media print \{\s*html, body \{\s*background: none;/,
-    );
+  it('lets the theme own the page background even when printed', () => {
+    // G's ruling: a PDF matches the app exactly, dark page and all. The old
+    // @media print reset cleared html/body and left --bear-text alone, so a
+    // Nord export printed near-white text onto white paper - the defect that
+    // motivated G, not a feature being removed.
+    const html = renderNoteHtml(note, tokens);
+    expect(html).not.toMatch(/@media print \{[^}]*html, body \{[^}]*background: none/);
   });
 
   it('has no reference to any external host', () => {
