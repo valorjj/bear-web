@@ -28,7 +28,12 @@
     "server:service:stop": "launchctl bootout gui/$(id -u)/com.markflowing.api && echo stopped",
     "server:service:status": "launchctl print gui/$(id -u)/com.markflowing.api | grep -E \"state|pid|last exit\" || echo \"not loaded\"",
     "server:service:log": "tail -f ~/Library/Logs/markflowing-api.log",
-    "server:migrate": "tsx --env-file=server/.env server/src/db/migrate.ts"
+    "server:migrate": "tsx --env-file=server/.env server/src/db/migrate.ts",
+    "test:pdf": "vitest run --project pdf",
+    "pdf:build": "docker compose -f server/docker-compose.yml build pdf",
+    "pdf:up": "docker compose -f server/docker-compose.yml up -d pdf",
+    "pdf:down": "docker compose -f server/docker-compose.yml down pdf",
+    "pdf:verify:fonts": "docker compose -f server/docker-compose.yml run --rm --no-deps pdf node verify-fonts.mjs"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",

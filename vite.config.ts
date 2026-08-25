@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // Served from the apex `markflowing.com`, so the base is the domain root in
@@ -52,6 +52,26 @@ export default defineConfig({
           // this project must run sequentially; the `app` project is
           // unaffected since it has its own config block.
           fileParallelism: false,
+          // The renderer service is its own directory and its own project.
+          // Spreads the defaults: a bare `exclude` REPLACES them, which would
+          // walk node_modules.
+          exclude: [...configDefaults.exclude, 'server/pdf/**'],
+        },
+      },
+      {
+        /*
+         * The renderer service. A third project rather than a folder of the
+         * `server` one because these tests drive a real Chromium: they are
+         * slow, they must not run alongside the DB tests' sequential file
+         * lock, and like `server` they deliberately do NOT `extend` — jsdom
+         * and the swapped global `Blob` would make them lie about the
+         * environment they prove.
+         */
+        test: {
+          name: 'pdf',
+          environment: 'node',
+          include: ['server/pdf/**/*.test.ts'],
+          testTimeout: 30_000,
         },
       },
     ],

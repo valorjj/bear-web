@@ -1,0 +1,11 @@
+# Only the PDF renderer image builds from this repo. It needs `server/pdf`,
+# `server/docker/pdf` and two font directories under node_modules; everything
+# excluded here is context transferred for nothing.
+.git
+.claude
+.superpowers
+dist
+docs
+e2e
+test-results
+playwright-report
