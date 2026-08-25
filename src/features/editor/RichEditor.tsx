@@ -665,7 +665,20 @@ export function RichEditor({
         </div>
       </div>
 
-      {paletteAt !== null && editor !== null && (
+      {/*
+       * Gated on `contextMenu === null` too (fix round 2, Finding 5): R12
+       * moves the selection when the context menu opens, so a right-click
+       * inside a highlight now puts the caret inside the mark — which is
+       * exactly what `paletteAt`'s own effect (below) watches for. Before
+       * R12 a right-click never moved the selection, so this collision
+       * could not happen; now, without this gate, right-clicking highlighted
+       * text pops BOTH the palette (anchored above the mark) and the context
+       * menu (anchored at the pointer, with its own redundant swatch row) at
+       * once. The context menu's swatch row covers the same need while it is
+       * open, so the palette simply steps aside rather than needing a
+       * z-index fight.
+       */}
+      {paletteAt !== null && editor !== null && contextMenu === null && (
         // `top`/`left` are the box's own literal edges now (set by the
         // flip/clamp arithmetic above), not an anchor point plus a CSS
         // transform — so no `-translate-x-1/2 -translate-y-full` here,

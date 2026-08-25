@@ -53,14 +53,25 @@ test('a row handle sits outside the table it belongs to, and a column handle sit
   await openNoteWithTable(page);
 
   const table = page.locator('.ProseMirror table');
-  // Revealed on hovering the TABLE, not the (invisible, one-pixel-tall)
-  // handle layer itself — see `.bear-table-handles:has(+ table:hover)` in
-  // `editor.css`. Real user behaviour, and what makes `toBeVisible()` below
-  // meaningful rather than trivially true regardless of the CSS.
-  await table.hover();
-
   const rowHandle = page.locator('[data-table-handle="row"][data-index="0"]');
   const columnHandle = page.locator('[data-table-handle="column"][data-index="0"]');
+
+  // Hidden by `opacity: 0` before the hover — checked directly, not assumed:
+  // Playwright's own `toBeVisible()` ignores `opacity` entirely (only
+  // `visibility`/`display` count), so `toBeVisible()` below would pass
+  // whether or not the CSS reveal rule
+  // (`.bear-table-handles:has(+ table:hover)` in `editor.css`) actually
+  // fires — it asserts only that the button EXISTS and has layout, which is
+  // true regardless of hover. Reading `opacity` before and after the hover
+  // is what actually exercises the reveal.
+  await expect(rowHandle).toHaveCSS('opacity', '0');
+
+  // Revealed on hovering the TABLE, not the (invisible, one-pixel-tall)
+  // handle layer itself.
+  await table.hover();
+
+  await expect(rowHandle).toHaveCSS('opacity', '1');
+  await expect(columnHandle).toHaveCSS('opacity', '1');
   await expect(rowHandle).toBeVisible();
   await expect(columnHandle).toBeVisible();
 
