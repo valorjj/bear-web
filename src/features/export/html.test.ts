@@ -487,9 +487,7 @@ describe('readExportTokens', () => {
  * in either stylesheet fails the test loudly instead of comparing nothing.
  */
 function ruleBody(css: string, selector: string): string {
-  const escaped = selector
-    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    .replace(/\s+/g, '\\s+');
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
   const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`));
   if (!match) throw new Error(`rule not found for selector: ${selector}`);
   return match[1] ?? '';
@@ -517,7 +515,10 @@ describe('table-cell paragraph rules stay parallel between editor and export', (
     expect(editorRule).toMatch(/margin\s*:\s*0\b/);
 
     const html = renderNoteHtml(note, tokens);
-    const exportCss = html.slice(html.indexOf('<style>') + '<style>'.length, html.indexOf('</style>'));
+    const exportCss = html.slice(
+      html.indexOf('<style>') + '<style>'.length,
+      html.indexOf('</style>'),
+    );
     const exportRule = ruleBody(exportCss, 'th > p,\ntd > p');
     expect(exportRule).toMatch(/margin\s*:\s*0\b/);
   });
@@ -529,7 +530,10 @@ describe('table-cell paragraph rules stay parallel between editor and export', (
     // box itself -- min-height, 1lh, or an equivalent -- or an empty row
     // collapses to padding alone.
     const html = renderNoteHtml(note, tokens);
-    const exportCss = html.slice(html.indexOf('<style>') + '<style>'.length, html.indexOf('</style>'));
+    const exportCss = html.slice(
+      html.indexOf('<style>') + '<style>'.length,
+      html.indexOf('</style>'),
+    );
     const exportRule = ruleBody(exportCss, 'th > p,\ntd > p');
 
     expect(exportRule).toMatch(/min-height\s*:\s*\S/);
