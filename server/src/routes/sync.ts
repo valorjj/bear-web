@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 
 import type { AppDeps } from '../app.ts';
 import { authenticator } from '../auth/authenticate.ts';
+import { readCappedBody } from '../http/body.ts';
 import {
   pull,
   push,
@@ -24,50 +25,6 @@ import {
  * parse it was supposed to prevent.
  */
 export const MAX_BODY_BYTES = 3 * 10 * 1024 * 1024;
-
-/**
- * Reads the request body, or returns `null` if it exceeds `MAX_BODY_BYTES`.
- *
- * `Content-Length` is the fast path and is deliberately not trusted as the
- * only one: it is absent from a chunked request and can simply be wrong, so
- * the stream is counted as it arrives and abandoned the moment it crosses the
- * cap. That is what makes this a cap rather than a request to be polite.
- */
-async function readCappedBody(request: Request): Promise<string | null> {
-  const declared = Number(request.headers.get('content-length'));
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
-
-  const stream = request.body;
-  if (stream === null) return '';
-
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_BODY_BYTES) {
-        await reader.cancel();
-        return null;
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
-  return new TextDecoder().decode(bytes);
-}
 
 /**
  * Shape-checks the push body.
@@ -139,7 +96,7 @@ export function syncRoutes(deps: AppDeps): Hono {
     // Read under a cap BEFORE parsing. `c.req.json()` would buffer and parse
     // whatever arrives, and the quota that bounds an account's stored bytes
     // runs inside `push()`, long after the object graph exists.
-    const text = await readCappedBody(c.req.raw);
+    const text = await readCappedBody(c.req.raw, MAX_BODY_BYTES);
     if (text === null) {
       return c.json({ error: 'body too large', limit: MAX_BODY_BYTES }, 413);
     }

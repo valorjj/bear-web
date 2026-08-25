@@ -6,6 +6,7 @@ import type { Env } from './env.ts';
 import { originGuard } from './middleware/origin.ts';
 import { clientIp, rateLimit } from './middleware/rateLimit.ts';
 import { accountRoutes } from './routes/account.ts';
+import { exportRoutes } from './routes/export.ts';
 import { syncRoutes } from './routes/sync.ts';
 
 /** A parameterised SQL call. The only shape route code may use. */
@@ -95,12 +96,23 @@ export function createApp(deps: AppDeps): Hono {
       key: (c) => readCookie(c.req.header('cookie'), sessionCookieName) ?? clientIp(c),
     }),
   );
+  // Far tighter than /sync's 120: one render costs orders of magnitude more
+  // than a sync round-trip, and it runs a browser rather than a query.
+  app.use(
+    '/export/*',
+    rateLimit({
+      limit: 10,
+      windowMs: 60_000,
+      key: (c) => readCookie(c.req.header('cookie'), sessionCookieName) ?? clientIp(c),
+    }),
+  );
   app.use('*', rateLimit({ limit: 300, windowMs: 60_000, key: clientIp }));
 
   app.get('/health', (c) => c.json({ ok: true }));
   app.route('/', authRoutes(deps));
   app.route('/', accountRoutes(deps));
   app.route('/', syncRoutes(deps));
+  app.route('/', exportRoutes(deps));
 
   return app;
 }

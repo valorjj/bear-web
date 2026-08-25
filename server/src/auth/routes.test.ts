@@ -14,6 +14,7 @@ const ENV = {
   DATABASE_URL: url ?? 'mysql://unused',
   GOOGLE_CLIENT_ID: 'test-client-id',
   GOOGLE_CLIENT_SECRET: 'test-client-secret',
+  PDF_RENDERER_URL: 'http://127.0.0.1:8788',
 };
 
 /** An id_token with the claims we want and a signature nobody checks. See google.ts. */

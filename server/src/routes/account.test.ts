@@ -16,6 +16,7 @@ const ENV = {
   DATABASE_URL: url ?? 'mysql://unused',
   GOOGLE_CLIENT_ID: 'id',
   GOOGLE_CLIENT_SECRET: 'secret',
+  PDF_RENDERER_URL: 'http://127.0.0.1:8788',
 };
 
 // secureCookies is false for these tests, so the cookie name is the bare
