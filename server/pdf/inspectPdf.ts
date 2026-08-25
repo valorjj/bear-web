@@ -123,7 +123,13 @@ function walk(content: string): { fills: FilledRect[]; textOrigins: { x: number;
   const fills: FilledRect[] = [];
   const textOrigins: { x: number; y: number }[] = [];
 
-  let fill: Rgb = { r: 0, g: 0, b: 0 };
+  // Starts unknown, not black: a colour op this walker does not recognise
+  // (CMYK `k`, a pattern `scn`, a `cs`-scoped space with a different
+  // component count) must not be read as an explicit black fill — that made
+  // a rectangle covering the page under an unparsed colour report as a
+  // passing "dark" background by accident. `f`/`F`/`f*` below only records a
+  // fill when the colour was actually parsed.
+  let fill: Rgb | null = null;
   let pending: Omit<FilledRect, 'r' | 'g' | 'b'> | null = null;
 
   const numbersBefore = (index: number, count: number): number[] | null => {
@@ -171,7 +177,7 @@ function walk(content: string): { fills: FilledRect[]; textOrigins: { x: number;
     // `f`/`F`/`f*` paint the pending rectangle. `re` followed by `W n`
     // (a clip) paints nothing and must not be recorded as a background.
     if (op === 'f' || op === 'F' || op === 'f*') {
-      if (pending !== null) fills.push({ ...pending, ...fill });
+      if (pending !== null && fill !== null) fills.push({ ...pending, ...fill });
       pending = null;
       continue;
     }

@@ -61,16 +61,22 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   a theme id — only one self-contained HTML document and only from a
   signed-in session.
 
-- **Five security controls stand between that POST and the machine**, and one
-  of them was not built. Named in full in `server/README.md`: every subresource
-  request aborted, `--host-resolver-rules=MAP * ~NOTFOUND`,
-  `javaScriptEnabled: false`, `setContent` and never `goto`, and bounded
-  resources (a fresh context per render closed in a `finally`, a wall-clock
-  deadline, a queue, `mem_limit`, `pids_limit`). The spec's control 4 — "the
-  container has no route off the host" — **is NOT satisfied**: `internal: true`
-  denies egress and also kills the published port, so the API could never
-  reach the renderer. The container keeps a route to the internet that the
-  browser inside it cannot use. Do not read the three layers as control 4.
+- **Four of the spec's five security controls are built; the fifth is not.**
+  The four: every subresource request aborted (`page.route('**', …)` in
+  `render.ts`), `javaScriptEnabled: false` on the render context,
+  `setContent` and never `goto` (no client-controlled URL and no `file://`),
+  and bounded resources (a fresh context per render closed in a `finally`, a
+  wall-clock deadline, a queue, `mem_limit: 1g`, `pids_limit: 512` in
+  `server/docker-compose.yml`). The spec's control 4 — "the container has no
+  route off the host" — **is NOT satisfied**: `internal: true` denies egress
+  and also kills the published port, so the API could never reach the
+  renderer, and was rejected for that reason. `--host-resolver-rules=MAP *
+  ~NOTFOUND` at browser launch is a mitigation layer on top of that gap, not
+  control 4 itself — it blocks the renderer's own DNS/IP resolution, but the
+  container keeps a real route to the internet that only the browser is kept
+  off. See `server/README.md`'s "What actually contains it" for the egress
+  layers in detail; the four controls above are not enumerated there as a
+  list.
 
 - **`emulateMedia({ media: 'screen' })` and `preferCSSPageSize: true` are the
   whole fidelity claim, and nothing cheaper can see them.** `page.pdf()`
@@ -81,7 +87,10 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   size, page colour and text indent each differ between the two media, and
   reads them back out of the content stream with `server/pdf/inspectPdf.ts`;
   `e2e/pdfExport.spec.ts` does the same to a real Nord export from the real
-  container. Flip either option and both go red.
+  container, by hand — CI has no renderer (the image is 3.92 GB), so that
+  test skips there without `PDF_RENDERER_URL`. Flip either option and
+  `fidelity.test.ts` goes red in CI; `e2e/pdfExport.spec.ts` goes red too, but
+  only where the container is actually running.
 
 - **The theme owns the page, printed or not.** `@media print` in the export
   stylesheet must not reset `html`/`body`'s background — a dark theme prints a

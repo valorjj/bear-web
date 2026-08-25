@@ -64,7 +64,7 @@ export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactEleme
       className="flex min-w-40 flex-col gap-0.5 rounded-lg bg-surface p-1 shadow-popover"
     >
       {CHOICES.map((choice, index) => {
-        // `disabled`, not `disabled` the HTML attribute: an HTML-disabled
+        // `aria-disabled`, not `disabled` the HTML attribute: an HTML-disabled
         // button leaves the tab order, so a keyboard user could never reach
         // it to discover why PDF is off. `aria-disabled` keeps it reachable;
         // `onClick` below refuses the action itself.

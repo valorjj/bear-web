@@ -95,6 +95,16 @@ New `server/src/routes/export.ts`:
   of magnitude more than a sync round-trip
 - request body capped (2 MB) and rejected before the renderer is touched
 - consults the renderer's health before forwarding
+
+  > **NOT BUILT — read this before citing a health check.** `server/src/routes/export.ts`
+  > does not probe `/health` before forwarding; it goes straight from the
+  > size-check to the render request and derives its 503 from the `fetch`
+  > throwing. This is not a regression to fix: a separate health probe would
+  > add a round-trip and still race the real request, so the thrown-fetch 503
+  > is equivalent-or-better at the one thing the health check was for. The
+  > renderer's `/health` endpoint exists (compose uses it), just not from this
+  > route.
+
 - streams `application/pdf` back
 
 It holds no state and writes no rows, so it touches no user-scoped table and
@@ -135,6 +145,10 @@ way in — the same ruling, for the same reason.
 2. Client renders the standalone HTML from the live token cascade.
 3. `POST /export/pdf`, `credentials: 'include'`, body `{ html }`.
 4. Hono: authenticate → rate-limit → size-check → health-check → forward.
+
+   > **NOT BUILT — see the annotation on "consults the renderer's health"
+   > above.** The route goes size-check → forward directly; there is no
+   > separate health-check step. The thrown-fetch 503 stands in for it.
 5. Renderer: fresh context, JS denied, all requests aborted, `setContent`,
    screen media, `pdf()`.
 6. Hono streams the bytes back as `application/pdf`.

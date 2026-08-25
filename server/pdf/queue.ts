@@ -47,7 +47,7 @@ export interface QueueOptions {
 export interface Queue {
   withSlot<T>(run: () => Promise<T>): Promise<T>;
   readonly active: number;
-  /** Running plus parked — what admission is judged on. */
+  /** Running plus parked. Admission is judged on `waiting.length` alone. */
   readonly pending: number;
 }
 
