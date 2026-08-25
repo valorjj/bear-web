@@ -1,5 +1,5 @@
-/** The formats a single note can be exported as. `pdf` goes through the browser's print pipeline and never reaches this. */
-export type ExportExtension = 'md' | 'html';
+/** The formats a single note can be exported as. */
+export type ExportExtension = 'md' | 'html' | 'pdf';
 
 /** Just enough of a note to name a file after it. */
 export interface NamedNote {

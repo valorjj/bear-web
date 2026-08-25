@@ -3,7 +3,7 @@ import type { Editor } from '@tiptap/react';
 
 import { deriveTitle, folds, notes } from '@/data';
 import type { Note } from '@/data';
-import { exportNote, type ExportFormat } from '@/features/export';
+import { exportNote, PdfExportError, type ExportFormat, type PdfFailure } from '@/features/export';
 import {
   EMPTY_DOCUMENT_MARKDOWN,
   foldedKeys,
@@ -113,10 +113,13 @@ export function NoteEditor({
     }
   });
   const [serializeFailed, setSerializeFailed] = useState(initialSerializeFailed);
-  // Its own flag rather than reusing `serializeFailed`: an export failing says
+  // Its own state rather than reusing `serializeFailed`: an export failing says
   // nothing about whether the note can be saved, and the two messages must not
-  // be able to stand in for each other.
-  const [exportFailed, setExportFailed] = useState(false);
+  // be able to stand in for each other. Holds the REASON, not just a boolean,
+  // so a signed-out user and an offline user can eventually see different
+  // sentences — Task 6 adds the per-reason keys; until then every reason
+  // renders `export.failed`.
+  const [exportFailed, setExportFailed] = useState<PdfFailure | null>(null);
 
   const read = useCallback((): string => {
     try {
@@ -343,8 +346,8 @@ export function NoteEditor({
         { title: deriveTitle(text), text, updatedAt: note.updatedAt },
         format,
         locale,
-      ).catch(() => {
-        setExportFailed(true);
+      ).catch((error: unknown) => {
+        setExportFailed(error instanceof PdfExportError ? error.reason : 'failed');
       });
     },
     [locale, note.text, note.updatedAt],
@@ -365,12 +368,15 @@ export function NoteEditor({
         onEditorReady={setFoldEditor}
       />
 
-      {(failed || serializeFailed || exportFailed) && (
+      {(failed || serializeFailed || exportFailed !== null) && (
         // `status`, not `alert`: `alert` is the degraded-storage banner's role
         // and the e2e suite asserts there is exactly one of those.
         <p role="status" className="shrink-0 border-t border-border px-6 py-2 text-xs text-muted">
-          {exportFailed
-            ? t('export.failed')
+          {exportFailed !== null
+            ? // Task 6 adds a key per `PdfFailure` reason; until then every
+              // reason renders the same sentence, so this compiles and the
+              // suite stays green without yet promising a message it can't show.
+              t('export.failed')
             : serializeFailed
               ? t('editor.serializeFailed')
               : t('editor.saveFailed')}
