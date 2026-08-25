@@ -1,4 +1,4 @@
-import { isMacOS } from '@tiptap/core';
+import { isMacOS, posToDOMRect } from '@tiptap/core';
 import { EditorContent, type Editor, useEditor, useEditorState } from '@tiptap/react';
 import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
 
@@ -10,6 +10,7 @@ import { EMPTY_FLAGS, editorFlagsSelector } from './editorState';
 import { buildEditorExtensions } from './extensions';
 import { HeadingMenu } from './HeadingMenu';
 import { HighlightMenu } from './HighlightMenu';
+import { HighlightPalette, type HighlightChoiceResult } from './HighlightPalette';
 import type { HighlightColor } from './Highlight';
 import { pinAllSelectionStep } from './toolbarSelection';
 import type { HeadingMenuRequest } from './HeadingFold';
@@ -54,6 +55,29 @@ export interface RichEditorProps {
    * instead of a ref read at a single moment.
    */
   onEditorReady?: (editor: Editor | null) => void;
+}
+
+/**
+ * The three-outcome switch `HighlightPalette` (and, later, the context menu)
+ * hands back: a colour SETS it, `null` sets the default tint, and `'remove'`
+ * unsets the mark entirely.
+ *
+ * `extendMarkRange('highlight')` before `unsetMark` is load-bearing: with a
+ * collapsed caret, `unsetMark` alone affects the stored marks and not the
+ * existing range, so the visible highlight would survive the click.
+ *
+ * The document mutation runs against the caret's own mark; no
+ * `setTextSelection` is needed and none should be added — the selection never
+ * left the highlight, because clicking chrome outside the editor does not
+ * move it.
+ */
+function applyHighlightChoice(editor: Editor, result: HighlightChoiceResult): void {
+  const chain = editor.chain().command(pinAllSelectionStep).focus();
+  if (result === 'remove') {
+    chain.extendMarkRange('highlight').unsetMark('highlight').run();
+  } else {
+    chain.setHighlightColor(result).run();
+  }
 }
 
 /**
@@ -206,6 +230,48 @@ export function RichEditor({
    * kind of optionality that quietly turns back into "assume false".
    */
   const flags = useEditorState({ editor, selector: editorFlagsSelector }) ?? EMPTY_FLAGS;
+
+  /**
+   * Viewport position of the palette, measured off the highlight itself.
+   *
+   * `fixed` chrome anchored to a document range has one hazard `HeadingMenu`
+   * does not: that menu closes on the next click, so it cannot outlive its
+   * anchor's position. This one stays up for as long as the caret is inside
+   * the mark, so it MUST re-measure on scroll and on resize or it drifts away
+   * from its own text. That is the accepted cost of not being a widget — an
+   * inline widget would be laid out in the text flow and shove the sentence
+   * sideways.
+   */
+  const [paletteAt, setPaletteAt] = useState<{ top: number; left: number } | null>(null);
+
+  const highlightRange = flags.highlightRange;
+
+  useEffect(() => {
+    if (editor === null || highlightRange === null) {
+      setPaletteAt(null);
+      return;
+    }
+
+    const measure = (): void => {
+      const rect = posToDOMRect(editor.view, highlightRange.from, highlightRange.to);
+      setPaletteAt({ top: rect.top, left: rect.left + rect.width / 2 });
+    };
+
+    measure();
+
+    // `capture: true` on scroll: the editor's own scroller is a descendant,
+    // and scroll does not bubble. Without capture the palette tracks window
+    // scroll only, which in a three-pane app is the case that never happens.
+    window.addEventListener('scroll', measure, true);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('resize', measure);
+    };
+    // `highlightRange.from`/`.to` rather than `highlightRange`: the selector
+    // rebuilds the object each call, so depending on its identity would
+    // re-run this effect on every transaction.
+  }, [editor, highlightRange?.from, highlightRange?.to]);
 
   // `onEditorReady` is read through a ref, the same discipline as
   // `activateRef` above: the callback's IDENTITY must not be a dependency
@@ -364,6 +430,19 @@ export function RichEditor({
           />
         </div>
       </div>
+
+      {paletteAt !== null && editor !== null && (
+        <div
+          className="fixed z-20 -translate-x-1/2 -translate-y-full pt-0 pb-2"
+          style={{ top: paletteAt.top, left: paletteAt.left }}
+        >
+          <HighlightPalette
+            current={flags.highlightColor}
+            onChoose={(result) => applyHighlightChoice(editor, result)}
+            onDismiss={() => editor.commands.focus()}
+          />
+        </div>
+      )}
 
       {/*
        * `HeadingMenu` is `fixed`-positioned off the badge's own

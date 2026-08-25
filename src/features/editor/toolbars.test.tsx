@@ -8,6 +8,30 @@ import { renderWithI18n } from '@/i18n/testing';
 
 import { RichEditor, type RichEditorHandle } from './RichEditor';
 
+// Task 5's palette-placement effect calls `posToDOMRect`, which resolves to
+// `EditorView.coordsAtPos` and, for a non-collapsed range, `Range.getClientRects`.
+// jsdom has no layout engine and implements neither; see the same stub in
+// `NoteEditor.test.tsx` and the toolchain note in CLAUDE.md about jsdom lacking
+// `coordsAtPos`/`posAtCoords` support.
+const emptyRect: DOMRect = {
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  toJSON: () => ({}),
+};
+Range.prototype.getBoundingClientRect = () => emptyRect;
+Range.prototype.getClientRects = () =>
+  ({
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: function* () {},
+  }) as unknown as DOMRectList;
+
 // A block-level toggle (list, blockquote, code block) calls ProseMirror's
 // `tr.scrollIntoView()` internally, and clicking a toolbar button blurs the
 // editor, so the pending `.focus()` this project's toolbars chain schedules
