@@ -58,6 +58,19 @@ export interface RichEditorProps {
 }
 
 /**
+ * Fallback size for the palette's very first measurement, before it has
+ * ever mounted and `getBoundingClientRect()` has nothing real to read —
+ * matches `HighlightPalette`'s row of six `size-5` (20px) swatches plus its
+ * `p-1` padding and 1px border. See the placement effect below for why this
+ * is only ever wrong for one frame.
+ */
+const PALETTE_ESTIMATED_HEIGHT = 36;
+const PALETTE_ESTIMATED_WIDTH = 192;
+
+/** Gap between the palette and the highlight it's anchored to, either side. */
+const PALETTE_GAP = 8;
+
+/**
  * The three-outcome switch `HighlightPalette` (and, later, the context menu)
  * hands back: a colour SETS it, `null` sets the default tint, and `'remove'`
  * unsets the mark entirely.
@@ -241,8 +254,15 @@ export function RichEditor({
    * from its own text. That is the accepted cost of not being a widget — an
    * inline widget would be laid out in the text flow and shove the sentence
    * sideways.
+   *
+   * `top`/`left` here are the box's own literal edges (not an anchor point
+   * plus a CSS transform): flipping needs the palette's real rendered size,
+   * which only exists once it has mounted, so the arithmetic below reads it
+   * back off `paletteRef` the same way `HeadingMenu` reads its own menu's
+   * `getBoundingClientRect()`.
    */
   const [paletteAt, setPaletteAt] = useState<{ top: number; left: number } | null>(null);
+  const paletteRef = useRef<HTMLDivElement | null>(null);
 
   const highlightRange = flags.highlightRange;
 
@@ -254,7 +274,41 @@ export function RichEditor({
 
     const measure = (): void => {
       const rect = posToDOMRect(editor.view, highlightRange.from, highlightRange.to);
-      setPaletteAt({ top: rect.top, left: rect.left + rect.width / 2 });
+
+      // Real size once mounted; a reasonable guess for the very first paint,
+      // when `paletteRef.current` doesn't exist yet — matches
+      // `HighlightPalette`'s row of six `size-5` (20px) swatches plus its
+      // `p-1` padding and border. Wrong by a few pixels for exactly one
+      // frame is the same "good enough until measured" contract `HeadingMenu`
+      // accepts for its own initial position.
+      const size = paletteRef.current?.getBoundingClientRect();
+      const height = size?.height ?? PALETTE_ESTIMATED_HEIGHT;
+      const width = size?.width ?? PALETTE_ESTIMATED_WIDTH;
+
+      // Flips BELOW the highlight when there is no room above it — the same
+      // reasoning `HeadingMenu` documents for its own badge, verbatim:
+      // `fixed` positioning means scrolling can never bring an off-screen
+      // menu back, so a highlight in the TOP band of a long note (this
+      // palette anchors above by default, unlike `HeadingMenu`'s below-first
+      // default) is exactly where that matters, and ending up unreachable
+      // there is the common case, not an edge case.
+      //
+      // Unlike `HeadingMenu`, which measures once per menu open (keyed on
+      // `request`), this must be re-evaluated on every `measure()` call —
+      // the mark can scroll between the top and bottom band repeatedly while
+      // the palette stays open, and each scroll event calls this again.
+      const fitsAbove = rect.top - PALETTE_GAP - height >= 0;
+      const top = fitsAbove ? rect.top - PALETTE_GAP - height : rect.bottom + PALETTE_GAP;
+
+      // Clamped horizontally into the viewport, the same way `HeadingMenu`
+      // clamps its own `left` — a highlight near the pane's right edge would
+      // otherwise push the centred palette off-screen sideways.
+      const left = Math.min(
+        Math.max(4, rect.left + rect.width / 2 - width / 2),
+        window.innerWidth - width - 4,
+      );
+
+      setPaletteAt({ top, left });
     };
 
     measure();
@@ -432,8 +486,13 @@ export function RichEditor({
       </div>
 
       {paletteAt !== null && editor !== null && (
+        // `top`/`left` are the box's own literal edges now (set by the
+        // flip/clamp arithmetic above), not an anchor point plus a CSS
+        // transform — so no `-translate-x-1/2 -translate-y-full` here,
+        // unlike an always-above popover would need.
         <div
-          className="fixed z-20 -translate-x-1/2 -translate-y-full pt-0 pb-2"
+          ref={paletteRef}
+          className="fixed z-20"
           style={{ top: paletteAt.top, left: paletteAt.left }}
         >
           <HighlightPalette
