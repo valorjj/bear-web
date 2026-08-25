@@ -231,7 +231,20 @@ beforeEach(async () => {
   // `settings` too, from A onward: the note-list sort and preview density are
   // durable preferences, so a test that changes one would otherwise leak it
   // into every test that runs after it.
-  await Promise.all([db.notes.clear(), db.noteTags.clear(), db.files.clear(), db.settings.clear()]);
+  //
+  // `tags` for the same reason, and it was missing: that table holds tag
+  // collapse state, so the one test here that collapses a tag left `work`
+  // shut for every test that ran after it. Nothing depended on it yet, which
+  // is exactly why it was worth closing before something did — a later test
+  // that renders a nested tag would have passed or failed on its position in
+  // the file.
+  await Promise.all([
+    db.notes.clear(),
+    db.noteTags.clear(),
+    db.tags.clear(),
+    db.files.clear(),
+    db.settings.clear(),
+  ]);
 });
 
 describe('AppShell notes', () => {

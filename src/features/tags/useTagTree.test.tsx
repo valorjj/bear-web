@@ -150,18 +150,25 @@ describe('reveal', () => {
     expect(result.current.isCollapsed('home')).toBe(false);
   });
 
-  it('writes nothing when the ancestor is already expanded', async () => {
+  it('leaves an already-expanded ancestor expanded', async () => {
     // Distinct from the two tests above: this ancestor genuinely EXISTS (a
-    // real, rendered node `reveal` could open), it just is not collapsed —
-    // the `collapsed.has(ancestor)` guard on `useTagTree.ts`'s `reveal` is
-    // what this pins, not "no ancestors to consider" at all.
+    // real, rendered node `reveal` could open), it just is not collapsed.
+    //
+    // This used to assert `setCollapsed` was never CALLED, pinning a
+    // `collapsed.has(ancestor)` guard that has been deliberately removed — see
+    // `useTagTree.ts`'s comment on `reveal`. That guard read a live-query
+    // cache to decide whether to write, so whenever the cache lagged the
+    // database `reveal` silently wrote nothing and the row it was asked to
+    // reveal never appeared. A write count is the wrong invariant to pin here:
+    // the ancestor's resulting STATE is what the caller and the user can
+    // observe, and one redundant idempotent `put` is not a defect. So this now
+    // asserts the outcome, and asserts it after a full round trip so a wrong
+    // value would have landed rather than merely not been observed yet.
     await notes.create('#work/urgent');
 
     const { result } = renderHook(() => useTagTree());
     await waitFor(() => expect(result.current.nodes).toBeDefined());
     expect(result.current.isCollapsed('work')).toBe(false);
-
-    const setCollapsed = vi.spyOn(tags, 'setCollapsed');
 
     await act(async () => {
       result.current.reveal('work/urgent');
@@ -170,6 +177,38 @@ describe('reveal', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(setCollapsed).not.toHaveBeenCalled();
+    expect(result.current.isCollapsed('work')).toBe(false);
+    // `reveal` must not expand the tag it was pointed AT either, only its
+    // ancestors — the same invariant the first test in this block pins from
+    // the collapsed side.
+    expect(result.current.isCollapsed('work/urgent')).toBe(false);
+  });
+
+  it('opens a collapsed ancestor even when the cached collapse state is stale', async () => {
+    // The regression test for the removed guard, and the only one that can
+    // fail against it. `reveal` is called with a `collapsed` cache that has
+    // NOT yet seen the write collapsing `work`: the ancestor really is shut in
+    // the database, and the guard's cache says otherwise. The guard version
+    // issues zero writes here and `work` stays collapsed forever; the
+    // unconditional version opens it.
+    await notes.create('#work/urgent');
+
+    const { result } = renderHook(() => useTagTree());
+    await waitFor(() => expect(result.current.nodes).toBeDefined());
+
+    // Written straight through the repository, so the hook's live query has
+    // had no chance to deliver it and `collapsed` is provably stale. Awaiting
+    // the write itself (rather than the hook's view of it) is what makes the
+    // staleness deterministic instead of a timing game.
+    await tags.setCollapsed('work', true);
+    expect(result.current.isCollapsed('work')).toBe(false);
+
+    await act(async () => {
+      result.current.reveal('work/urgent');
+    });
+
+    await waitFor(() => expect(result.current.isCollapsed('work')).toBe(false));
+    const meta = await tags.allMeta();
+    expect(meta.find((m) => m.tag === 'work')?.collapsed).toBe(false);
   });
 });

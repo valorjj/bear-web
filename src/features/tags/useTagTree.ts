@@ -48,16 +48,32 @@ export function useTagTree(): TagTreeState {
     [collapsed],
   );
 
-  const reveal = useCallback(
-    (tag: string) => {
-      const segments = tag.split('/');
-      for (let i = 1; i < segments.length; i += 1) {
-        const ancestor = segments.slice(0, i).join('/');
-        if (collapsed.has(ancestor)) void tags.setCollapsed(ancestor, false);
-      }
-    },
-    [collapsed],
-  );
+  // Writes `collapsed: false` for every ancestor UNCONDITIONALLY, and the
+  // absence of a `collapsed.has(ancestor)` guard is the whole point.
+  //
+  // The guard that used to be here read `collapsed`, which is derived from a
+  // live query — so `reveal` was a read-modify-write against a cache that can
+  // lag the database it is deciding about. When it lagged, `reveal` wrote
+  // NOTHING and the ancestor stayed shut: the row the caller asked to reveal
+  // never rendered at all, silently and permanently, rather than late. That is
+  // a real user-facing failure (Mod-click a nested tag pill within a frame of
+  // collapsing its parent and nothing happens) and it is what made
+  // `AppShell.test.tsx`'s "reveals a collapsed ancestor" test flake on loaded
+  // CI runners three times, each previously mis-diagnosed as a slow wait and
+  // patched with a bigger timeout — a ceiling cannot fix a write that was
+  // never issued. Verified by injection: forcing the guard's set to be empty
+  // reproduces that test's exact CI error, `Unable to find role="button" and
+  // name /^urgent\b/`, after exhausting its full 5000ms ceiling.
+  //
+  // The cost is one idempotent `put` per already-expanded ancestor. `reveal`
+  // no longer depends on `collapsed` at all, so it is also stable across
+  // renders, which the guard version never was.
+  const reveal = useCallback((tag: string) => {
+    const segments = tag.split('/');
+    for (let i = 1; i < segments.length; i += 1) {
+      void tags.setCollapsed(segments.slice(0, i).join('/'), false);
+    }
+  }, []);
 
   return { nodes, isCollapsed, toggle, reveal };
 }
