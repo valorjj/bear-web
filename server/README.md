@@ -95,6 +95,35 @@ surface.
     npm run test:pdf            # the unit suite (launches a real Chromium)
     npm run pdf:verify:fonts    # re-run the image's font assertion
 
+Its address is `PDF_RENDERER_URL`, which `src/env.ts` REQUIRES — the API
+refuses to boot without it. Set to `http://127.0.0.1:8788` in all three of
+`server/.env`, `server/.env.local` and `server/.env.example`. And the usual
+trap first: **`npm run server:service:stop` before `npm run server:dev:local`**,
+because the launchd job's `KeepAlive` is unconditional and it will hold 8787.
+
+The image is **3.92 GB**, built from a pinned, digest-locked
+`mcr.microsoft.com/playwright:v1.62.1-noble` (see
+`server/docker/pdf/Dockerfile`). That size is why CI does not build it: the
+renderer suite CI runs (`npm run test:pdf`) drives a local Chromium instead,
+with no container in the loop.
+
+### Proving it end to end
+
+Neither `npm test` nor `npm run test:e2e` touches the container. The one test
+that does is gated, and it is the only place the whole feature is exercised at
+once — the app builds the document under a real theme, the real container
+renders it, and the PDF bytes are asserted DARK:
+
+    lsof -ti:4173 | xargs -r kill -9      # a stale preview server is reused silently
+    npm run pdf:up
+    PDF_RENDERER_URL=http://127.0.0.1:8788 npx playwright test e2e/pdfExport.spec.ts
+    PDF_RENDERER_URL=http://127.0.0.1:8788 npm run shots:pdf   # 4 reference rasters
+    npm run pdf:down
+
+`npm run shots:pdf` writes four PNGs to `docs/design/shots/pdf/` (paper,
+sepia, nord, high-contrast) with poppler's `pdftoppm`. **Count the files, do
+not trust the exit code** — the same rule `npm run shots` carries.
+
 ### What actually contains it
 
 Three layers, and **a route off the host remains** — none of these is a

@@ -47,11 +47,34 @@ feature and is not yet scheduled.
 | D2 server: the sync protocol                                      | complete |
 | C code block language + highlighting                              | complete |
 | H editor interaction surfaces                                     | complete |
+| G export: PDF, rendered server-side                               | complete |
 | M9b callout blocks                                                | deferred |
 
-1646 unit tests (plus 84 server tests, 55 of which are integration tests that
-skip when `TEST_DATABASE_URL` is unset), 120 end-to-end tests. `main` is
-always green and auto-deploys.
+1668 unit tests (plus 92 server tests, 55 of which are integration tests that
+skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
+`npm run test:pdf`), 123 end-to-end tests. `main` is always green and
+auto-deploys.
+
+**G moved PDF export off the client entirely, and it is the first capability
+in this app that does not exist without an account.** It shipped because the
+browser's own print pipeline could not keep the promise: a print dialog gives
+the user a dozen ways to produce a document the app did not design — wrong
+paper, scaled, backgrounds stripped — and the reference app's PDF export
+ignores the selected theme outright, which is the gap G exists to close.
+`src/features/export/print.ts` is deleted. `requestPdf` POSTs the document
+`renderNoteHtml` already built to `POST /export/pdf`, an authenticated
+pass-through in front of a **separate Chromium container** (`server/pdf/`,
+`markflowing-pdf`) that is not reachable from the browser at all. The client
+still builds the document, and must: it reads the live theme off the cascade,
+and `server/` may import nothing from `src/` but `src/data/types.ts`. **The
+network is now needed for two things, not one** — sync since D2, and PDF
+export since G. Everything else still works offline exactly as before.
+`ExportMenu` marks the PDF item `aria-disabled` when signed out and names the
+reason in its accessible name. Four of the spec's five security controls are
+built; **control 4 ("the container has no route off the host") is NOT**, and
+the spec says so in place — `internal: true` denies egress and also kills the
+published port, so the API could never reach the renderer. See
+`docs/rulings/export.md` and `server/README.md`.
 
 **D reverses the "no backend, no account" premise above.** D1 shipped
 `server/`: a Hono service on Node against its own MariaDB container on the Mac
@@ -104,7 +127,7 @@ scheduled** — not by a milestone and not by the three sub-projects above. It i
 larger than all three together and none of them block it. Treat its absence
 from this table as an open decision, not as a ruling.
 
-**Two further Playwright entry points exist and are deliberately not in that
+**Three further Playwright entry points exist and are deliberately not in that
 count, because they assert nothing.** Both drive the fixed corpus in
 `e2e/fixtures/corpus.ts`, and `grepInvert` on `@shots|@measure` in
 `playwright.config.ts` keeps both out of `npm run test:e2e`:
@@ -126,6 +149,14 @@ count, because they assert nothing.** Both drive the fixed corpus in
   default theme changed.
 - `npm run measure` → `e2e/measure.spec.ts` writes the app's real geometry and
   typography for 27 surfaces to `docs/design/measurements.md` and `.json`.
+- `npm run shots:pdf` → `e2e/shots-pdf.spec.ts` renders the corpus note to a
+  real PDF through the **containerised** renderer in four themes spanning the
+  roster (`paper`, `sepia`, `nord`, `high-contrast`) and rasterises page 1
+  into `docs/design/shots/pdf/` with poppler's `pdftoppm` (4 files). It needs
+  `PDF_RENDERER_URL` and `npm run pdf:up`, and it SKIPS silently without them
+  — **count the files.** It is not folded into `npm run shots`: sixteen A4
+  container renders is not a cost that harness should carry, and the existing
+  export-HTML shot is a picture of the document, not of the paginated PDF.
 
 They exist because **nothing in the test suite can see "renders wrong"**: the unit
 suite has no layout engine and `e2e/appearance.spec.ts` is deliberately relative.
@@ -436,6 +467,53 @@ dev` stuck on "loading" forever while the production build and all six gates
   `editor.css` and the export stylesheet exist so the two paths agree despite
   this — see `docs/rulings/markdown-and-schema.md`.
 
+- **`page.pdf()` accepts NO `timeout` option, and `setContent` returns before
+  layout has happened.** The option is a `tsc` error (TS2353) and is silently
+  ignored in plain JS, so a hostile document is unbounded by anything
+  Playwright offers: measured on 2026-08-25, `setContent` returned in **15 ms**
+  on a CSS-only layout bomb — layout is lazy — and `page.pdf({ timeout: 300 })`
+  on the same document was still running after **15 seconds**. What actually
+  reclaims the worker is closing the context, which aborts the print job in
+  ~5 ms. `server/pdf/render.ts` therefore races the whole render against a
+  wall-clock deadline and closes the context in a `finally`; do not "simplify"
+  that into the per-call timeouts.
+
+- **Chromium rejects WOFF2 system fonts and ignores fontconfig `<alias>`.**
+  Both failures are silent: `fc-match` reported the right family while every
+  code block in a rendered PDF came out in a fallback face, with no error
+  anywhere. This is why `server/docker/pdf/verify-fonts.mjs` asserts the
+  `/BaseFont` names embedded in a really-rendered PDF at **build** time, and
+  why the build FAILS rather than warns. A fontconfig-level check cannot see
+  this class of defect.
+
+- **A PDF's content stream is in CSS PIXELS with its origin at the page
+  CONTENT box, while `/MediaBox` is in POINTS.** Chromium wraps the page in a
+  0.75 scale, so A4 reads `595 x 842` in the MediaBox and its own background
+  rectangle reads `0 0 673 986` — the content box, in pixels, with the `@page`
+  margin already subtracted. Consequence: text under print media sits at
+  `x = 0`, not at the page margin. Sizing a "does this cover the page" test
+  against the MediaBox therefore compares two units AND two boxes, and it
+  passed here by accident (673 > 595 × 0.95) while also matching a
+  `2102 x 3082` rectangle painted in a GLYPH's own coordinate space at the
+  document's text colour — reporting a genuinely dark Nord export as luminance
+  0.86. `server/pdf/inspectPdf.ts` identifies the page background by being
+  anchored at the origin, not by size, for exactly this reason.
+
+- **Playwright refuses to click an `aria-disabled="true"` element** — its
+  actionability check reports "element is not enabled" and waits out the whole
+  timeout. So the obvious assertion for a menu item disabled the accessible
+  way is not merely wrong, it is impossible: drive it by keyboard (`Tab` to
+  it, then `Enter`) rather than reaching for `{ force: true }`, which
+  synthesises an event no user can produce. See `e2e/pdfExport.spec.ts`.
+
+- **A text extraction cannot see tofu, and no test in this repo can.** A PDF
+  whose every Korean glyph rendered as a missing-glyph box still contains the
+  right text — the string comes from the font's cmap, not from what was drawn
+  — so a `toContain('자산화')` passes on a page of empty rectangles. Same shape
+  as white-on-white passing a text assertion, and the same shape as
+  `parseColour`'s `NaN`. Only a rasteriser or an embedded-font assertion can
+  see it: `npm run shots:pdf` and `verify-fonts.mjs` respectively.
+
 - **`CodeBlockLowlight` applies its `.hljs-*` classes as ProseMirror
   DECORATIONS, which live in the `EditorView` and are never part of the
   document `DOMSerializer` walks.** Exporting a note by serializing the
@@ -557,7 +635,7 @@ at the top; the rows here are abridged.
 | `src/features/editor/markdown.ts`, `extensions.ts`, `RawBlock.ts`, `toolbarSelection.ts`, `taskItemPromotion.ts`; the `CANONICAL` / `NON_CANONICAL` fixtures; a new import of `@tiptap/markdown`; a new extension, input rule, **or keyboard binding** (`useScopeShortcuts.ts` included)                                                                                                | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md)                                                                          |
 | `tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` entries in `extensions.ts`, `RawTable`, `table.test.ts`, any table fixture                                                                                                                                                                                                                 | [tables.md](docs/rulings/tables.md)                                                                                                    |
 | `TagPill.ts` (`tagDecorations`, `tagRangeAt`, the `mousedown` handler), `blockText.ts` (`maskedBlockText`), `RichEditor`'s `activateRef` / `data-mod-held`, `AppShell.handleActivateTag`, `--bear-tag-fill*`, `tagAgreement.test.ts`                                                                                                                                                    | [tag-pills.md](docs/rulings/tag-pills.md)                                                                                              |
-| `src/features/export/` — `html.ts`, `exportNote.ts`, `print.ts`, `filename.ts`, `ExportMenu.tsx`; `NoteEditor.handleExport`; the `export.*` i18n keys and `ALLOWED_IDENTICAL`                                                                                                                                                                                                           | [export.md](docs/rulings/export.md)                                                                                                    |
+| `src/features/export/` — `html.ts`, `exportNote.ts`, `requestPdf.ts`, `filename.ts`, `ExportMenu.tsx`; `NoteEditor.handleExport`; `server/src/routes/export.ts`, `server/pdf/`; the `export.*` i18n keys and `ALLOWED_IDENTICAL`                                                                                                                                                        | [export.md](docs/rulings/export.md)                                                                                                    |
 | `src/styles/*.css`, `themes.ts`, `app/theme.ts`, `index.html`'s inline script, `Pane.tsx`, `Resizer.tsx`, `Button.tsx`, `ThemePicker.tsx`, `RichEditor.tsx`; a new `--bear-*` property, `[data-theme]` block, spacing / radius / shadow / `outline-none` utility                                                                                                                        | [design-tokens-and-layout.md](docs/rulings/design-tokens-and-layout.md)                                                                |
 | `src/data/sync/` (`config.ts`, `transport.ts`, `engine.ts`, `markDirty.ts`), `syncState` in `db.ts`, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`, `server/migrations/002_sync.sql`, `LAST_PULLED_REV_KEY`, `SYNCED_ACCOUNT_KEY`, `useSync.ts`, `markAllDirty`, `reindexNote`                                                                                         | [sync.md](docs/rulings/sync.md)                                                                                                        |
 | `Highlight.ts` (`HIGHLIGHT_COLORS`, `highlightClass`, the `color` attribute, the tokenizer's two branches), `HighlightMenu.tsx`, `--bear-hl-*`, `BottomToolbar`'s colour chevron                                                                                                                                                                                                        | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md), [design-tokens-and-layout.md](docs/rulings/design-tokens-and-layout.md) |

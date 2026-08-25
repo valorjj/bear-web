@@ -158,6 +158,22 @@ Five controls, strongest first:
 3. **`setContent`, never `goto`.** No client-controlled URL, and no `file://`.
 4. **The container has no route off the host.** Defence in depth for whatever
    1–3 miss.
+
+   > **NOT IMPLEMENTED — read this before citing control 4.** Ruling G-R6
+   > accepted three weaker layers in its place, and they are not the same
+   > thing: the per-page route abort, `--host-resolver-rules=MAP *
+   > ~NOTFOUND` at browser launch (measured to deny literal IPs as well as
+   > hostnames), and a dedicated compose network that makes `mariadb`
+   > unresolvable. **The container retains a route to the internet; what
+   > cannot use it is the browser inside the container.** `internal: true`
+   > does deny egress completely and was tried and rejected, because it also
+   > kills the published port — `127.0.0.1:8788` then answers nothing and the
+   > API can never reach the renderer, while the container healthcheck goes
+   > on reporting `healthy` because it runs against the container's own
+   > loopback. Closing control 4 literally needs the API and the renderer on
+   > one internal network, or a unix socket instead of TCP, neither of which
+   > this spec asked for. Do not relabel the three layers as "control 4
+   > satisfied".
 5. **Bounded resources.** A fresh `BrowserContext` per render closed in a
    `finally`; a 10-second timeout; at most 2 concurrent renders behind a queue;
    `mem_limit` and `pids_limit` in compose as the hard stop. The browser is

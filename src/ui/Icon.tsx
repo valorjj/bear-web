@@ -238,7 +238,6 @@ export {
   Palette,
   Download,
   FileCode,
-  Printer,
   Table as TableGlyph,
   Heading1,
   Heading2,
