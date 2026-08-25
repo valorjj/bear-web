@@ -148,6 +148,42 @@ npm run build
 All six must pass before any commit. `npm run shots` and `npm run measure` are
 not part of the gate — see above.
 
+### The full suite is expensive; budget it
+
+This machine is a fanless Mac Mini that also hosts the API service, a browser,
+and often a second agent session. A full `npm test -- --run` is ~15s of wall
+clock but **~80 CPU-seconds** — 104 files across six Vitest workers (the run
+summary's `tests 39.27s, environment 41.76s` are sums across workers, not wall
+time). Sub-project H spent roughly **50 CPU-minutes** on one verification that
+needed three, and drove the machine to 110°C. The rules below are what that
+cost bought.
+
+- **Repetition targets FILES, never the suite.** Flake-hunting is the one thing
+  that must never run everything: `npx vitest run src/features/editor/foo.test.ts`
+  is ~2-3s on one worker against ~80 CPU-seconds. H's undestroyed-`Editor` bug
+  fired at **per-file** environment teardown, so a single-file run reproduced it
+  exactly — 38 full-suite runs proved nothing the 2 affected files would not.
+- **Give an exact count, never "at least N".** "At least 5" became 18. A
+  dispatched agent reads "at least" as licence to keep going; "run it 5 times"
+  is a number it cannot inflate.
+- **Cap workers when the machine is shared:** `npm test -- --run --maxWorkers=4`.
+  Six workers plus another session's six is what pins every core.
+- **Full suite only at gate boundaries**, not per task. H ran e2e 3 times
+  instead of 11 by naming three boundaries up front; the same logic was simply
+  never applied to the unit suite.
+- **Let CI do the exhaustive sweep.** Both workflows are `runs-on: ubuntu-latest`
+  (`ci.yml:17`, `deploy.yml:19`/`:39`) — they cost this machine **nothing**.
+  Deleting CI to cool the Mac would remove the safety net and save zero heat;
+  that diagnosis was made once and was wrong.
+- **Two things genuinely need the full suite** and are worth their cost: the
+  merged-result check before integrating, and a base-vs-merged comparison when
+  deciding whether a failure is a regression. H's `NoteEditor` race appears
+  ONLY under full-suite parallel load, so no scoped run can see it — but three
+  runs each side is as decisive as five.
+- **Before concluding a diff broke the suite, check `uptime`.** Under load,
+  `vitest run` can exit 1 with every assertion passing; see the uncaught-error
+  bullet below. Read the failure, then re-run once the machine is quiet.
+
 ## Toolchain surprises
 
 These bit us once already. They are not mistakes.
