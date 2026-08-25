@@ -692,3 +692,19 @@ found only that way.
   Global git config is the work identity and must stay untouched.
 - The first 33 commits carry the work address. Left deliberately; not worth a
   force-push on a public repo.
+- **`gh` does NOT use the SSH key, and it is the work account.** Git operations
+  authenticate with the key above and work fine; `gh`'s API calls carry an
+  OAuth token, and the only account in the keyring is the work one
+  (`jeongjin1992`), which is not a collaborator here. So `git push` succeeds
+  while `gh pr create` fails with `GraphQL: must be a collaborator` — a
+  confusing pair, because the push proves "SSH works" and the PR still cannot
+  be opened. Reads on this public repo (`gh run list`) work as either account,
+  which hides the problem until the first write.
+  Fixing it needs an interactive `gh auth login --hostname github.com
+--git-protocol ssh` as `valorjj`, then `gh auth switch`; `gh`'s account is
+  per-host, not per-repo, so work repos need switching back. Until then, a
+  branch can be pushed and merged from the CLI but a PR must be opened in the
+  browser: `https://github.com/valorjj/bear-web/compare/main...<branch>`.
+  Consequence for CI: `ci.yml` triggers on `pull_request` and on `push` to
+  `main` only, so with no PR the only way to get CI to verify a branch is to
+  merge it — which deploys at the same time rather than before.
