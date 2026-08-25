@@ -1,27 +1,72 @@
 import { Extension } from '@tiptap/core';
-import { Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state';
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 
-import { renderIconMarkup, Plus } from '@/ui/Icon';
+import { renderIconMarkup, GripHorizontal, GripVertical } from '@/ui/Icon';
 
 import { tablePosAt } from './tablePos';
 import { COMMANDS } from './tableCommands';
 
 export interface TableHandlesOptions {
   /**
-   * The two handle labels — one for the row edge, one for the column edge.
-   * `null` when nobody supplied them, which is the state of the schema-only
-   * `editorExtensions` constant, and in that state no plugin is registered at
-   * all and no handle is drawn.
+   * Accessible name for a handle button, one per kind. It is also the menu's
+   * own `aria-label` (`TableHandleMenu`'s `role="menu"`) — the button's whole
+   * job is "open this menu", so one string covers both, the way `HeadingFold`'s
+   * `foldHint` doubles as the toggle's name. `null` when nobody supplied them,
+   * which is the state of the schema-only `editorExtensions` constant, and in
+   * that state no plugin is registered at all and no handle is drawn.
    *
    * Absent rather than unlabelled, deliberately: no user-facing string may be
    * hardcoded in this app, and an icon-only button with no accessible name is
-   * invisible to a screen reader. Same shape as `HeadingFold`'s `foldHint`
-   * and `TagPill`'s `onActivate`, for the same reason.
+   * invisible to a screen reader. Same shape as `HeadingFold`'s `foldHint` and
+   * `TagPill`'s `onActivate`, for the same reason.
    */
-  labels: { addRow: string; addColumn: string } | null;
+  labels: { row: string; column: string } | null;
+  /**
+   * Called when the user clicks a row or column handle, with enough for the
+   * app to open a menu scoped to that handle: which table, which kind, which
+   * index, the button's own rect (for anchoring) and the button itself (so the
+   * app can flip `aria-expanded` and return focus on close without a second
+   * DOM lookup). `null` when nobody is listening — same "nobody is listening"
+   * contract as `HeadingFold.onOpenMenu`, and for the same reason a raw plugin
+   * cannot reach for React on its own. Named `onOpenTableMenu`, not
+   * `onOpenMenu`, because `HeadingFoldOptions` and `TableHandlesOptions` are
+   * merged into one options object at the call site
+   * (`buildSupportedExtensions`'s `Partial<... & HeadingFoldOptions &
+   * TableHandlesOptions & ...>`) — sharing the name would have one silently
+   * shadow the other.
+   */
+  onOpenTableMenu: ((request: TableHandleMenuRequest) => void) | null;
 }
+
+export interface TableHandleMenuRequest {
+  /** Document position of the table node the clicked handle belongs to. */
+  tablePos: number;
+  kind: HandleKind;
+  /** The row or column index the handle names — NOT the caret's. */
+  index: number;
+  /** Viewport rectangle of the handle, for anchoring the menu. */
+  rect: DOMRect;
+  /** The handle button itself, for `aria-expanded` bookkeeping and focus return. */
+  anchor: HTMLButtonElement;
+}
+
+/**
+ * The three actions a row or column handle's menu can run, restricted from
+ * `TableAction`'s full seven — a handle names one row or column, so
+ * `deleteTable` (which needs neither) is not offered here. Typed as a literal
+ * subset rather than the bare `TableAction` so a future menu item cannot pass
+ * an action the handle's own `runTableHandleAction` command was never meant to
+ * receive.
+ */
+export type TableHandleAction =
+  | 'addRowBefore'
+  | 'addRowAfter'
+  | 'deleteRow'
+  | 'addColumnBefore'
+  | 'addColumnAfter'
+  | 'deleteColumn';
 
 export const tableHandlesKey = new PluginKey('tableHandles');
 
@@ -37,7 +82,7 @@ export const tableHandlesKey = new PluginKey('tableHandles');
  */
 const ROW_GAP = 4;
 
-type HandleKind = 'row' | 'column';
+export type HandleKind = 'row' | 'column';
 
 /**
  * The document position of the first text position inside cell (`row`,
@@ -83,6 +128,17 @@ export function cellTextPos(
   return cellAt + 1;
 }
 
+// Computed ONCE at module init, not per render — `renderIconMarkup` touches
+// the DOM on every call, and `handlesLayer.measure()`/the rebuild guard below
+// call `handleElement` far more often than the glyph itself ever changes. Two
+// glyphs, not one shared between kinds: `GripHorizontal`'s three-wide,
+// two-tall dot cluster reads as a WIDE shape (a row), `GripVertical`'s
+// two-wide, three-tall cluster reads as a TALL one (a column) — the same
+// "shape says what it names" reasoning `Rows3`/`Columns3` already use
+// elsewhere in this editor.
+const ROW_HANDLE_MARKUP = renderIconMarkup(GripHorizontal, 'sm');
+const COLUMN_HANDLE_MARKUP = renderIconMarkup(GripVertical, 'sm');
+
 function handleElement(kind: HandleKind, index: number, label: string): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
@@ -90,13 +146,21 @@ function handleElement(kind: HandleKind, index: number, label: string): HTMLButt
   button.contentEditable = 'false';
   button.setAttribute('data-table-handle', kind);
   button.setAttribute('data-index', String(index));
-  // Icon-only, and therefore labelled: unlike the bar this replaces, neither
-  // handle destroys anything, so a glyph is honest here where a glyph on
-  // "Delete column" would not have been. The words for deletion moved to the
-  // context menu.
+  // Icon-only, and therefore labelled. The glyph changed from `+` to a grip
+  // because this button no longer inserts on click — it OPENS A MENU, and a
+  // `+` that opens a menu instead of adding something is a lie the user
+  // discovers the moment they click it. `docs/rulings/tables.md` is amended
+  // alongside this change to say so.
   button.setAttribute('aria-label', label);
   button.setAttribute('title', label);
-  button.innerHTML = renderIconMarkup(Plus, 'sm');
+  // A button that opens a menu says so. `aria-expanded` starts `false` and is
+  // flipped imperatively by the app when the menu opens/closes (see
+  // `RichEditor`'s `onOpenTableMenu`/`onClose` for the table handle menu) — this
+  // plugin has no view of whether React's menu is currently mounted, only the
+  // moment a click asks to open one.
+  button.setAttribute('aria-haspopup', 'menu');
+  button.setAttribute('aria-expanded', 'false');
+  button.innerHTML = kind === 'row' ? ROW_HANDLE_MARKUP : COLUMN_HANDLE_MARKUP;
   return button;
 }
 
@@ -170,8 +234,8 @@ function handlesLayer(
     if (layer.getAttribute('data-shape') !== signature) {
       layer.setAttribute('data-shape', signature);
       layer.replaceChildren(
-        ...rows.map((_row, index) => handleElement('row', index, labels.addRow)),
-        ...columns.map((_cell, index) => handleElement('column', index, labels.addColumn)),
+        ...rows.map((_row, index) => handleElement('row', index, labels.row)),
+        ...columns.map((_cell, index) => handleElement('column', index, labels.column)),
       );
     }
 
@@ -202,15 +266,44 @@ function handlesLayer(
   return { dom: layer, measure };
 }
 
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    tableHandles: {
+      /**
+       * Runs one of the three row/column handle actions against the row or
+       * column NAMED by `tablePos`/`kind`/`index` — never the caret's. This is
+       * the command `TableHandleMenu`'s buttons call, through
+       * `editor.commands`, so the menu itself needs no access to `view` or to
+       * `cellTextPos`.
+       */
+      runTableHandleAction: (
+        tablePos: number,
+        kind: HandleKind,
+        index: number,
+        action: TableHandleAction,
+      ) => ReturnType;
+    };
+  }
+}
+
 /**
- * `⊕` handles on a table's row and column edges, revealed on hover.
+ * `⣿` grip handles on a table's row and column edges, revealed on hover, that
+ * open a menu scoped to the row or column they sit on.
  *
  * NOT the bar this replaces, and the difference is the point. The bar was five
  * words floating above the user's prose — a control that named the table
  * rather than pointing at a part of it, and one the user rejected outright
  * ("I do not want a text-written button"). These handles put the control where
- * the thing is: the `⊕` beside row three inserts a row after row three, with
- * no reading and no aiming at a shared bar.
+ * the thing is: the handle beside row three opens a menu scoped to row three,
+ * with no reading and no aiming at a shared bar.
+ *
+ * A handle used to insert directly on click (`+`, "add after"); it now opens a
+ * menu instead, because deletion had nowhere discoverable to live. Right-click
+ * has no affordance anywhere in this app, so a user who saw only `+` handles
+ * had no way to find `Delete row`/`Delete column` at all — see
+ * `docs/rulings/tables.md`'s amended entry on this. The glyph changed from
+ * `+` to a grip for the same reason: a `+` that opens a menu instead of adding
+ * something is a lie the moment it is clicked.
  *
  * The bar was built as a `Decoration.widget` for a stated reason: a widget
  * lives INSIDE the scrolling content, so it tracks the table with no geometry
@@ -226,16 +319,73 @@ function handlesLayer(
  * asserts on the decoration set and on command dispatch, because nothing else
  * in the suite can see this plugin — and it asserts on neither position nor
  * rect, because jsdom has no layout engine. Positioning is Playwright's.
+ *
+ * The plugin never reaches for `Editor` or for React, same boundary
+ * `HeadingFold.onOpenMenu` and `TagPill.onActivate` both keep: a click reports
+ * a request upward (`onOpenTableMenu`), and the app draws the menu. What DOES run
+ * inside the plugin's own command (`runTableHandleAction`, above) is the
+ * selection-then-command sequence a menu choice ultimately triggers — that is
+ * `state`/`dispatch`/`view`, all things a `prosemirror-tables` command already
+ * needed, not a new dependency on the layer above.
  */
 export const TableHandles = Extension.create<TableHandlesOptions>({
   name: 'tableHandles',
 
   addOptions() {
-    return { labels: null };
+    return { labels: null, onOpenTableMenu: null };
+  },
+
+  addCommands() {
+    return {
+      /**
+       * Moves the selection into the cell (`tablePos`, `kind`, `index`) names,
+       * then runs `action`. The two steps are not interchangeable and the
+       * order is the bug this whole module exists to avoid:
+       * `prosemirror-tables`' commands read the selection, so running one
+       * first acts on the CARET — which is almost never the row or column the
+       * user pointed at, and which a test asserting only "a row changed"
+       * would pass. This is the ONLY route to a row/column action now that a
+       * click opens a menu instead of acting directly — `TableHandleMenu`'s
+       * buttons reach here through `editor.commands.runTableHandleAction`.
+       *
+       * Deliberately does NOT call `view.dispatch` itself. `editor.commands.X`
+       * builds ONE outer transaction (`CommandManager.commands`'s `tr`) and
+       * dispatches it once, after this function returns — a manual
+       * `view.dispatch` in here would apply a SECOND, competing transaction
+       * mid-command and throw "Applying a mismatched transaction" the moment
+       * Tiptap tried to apply its own stale outer `tr` on top of an
+       * already-advanced `view.state`. So this works entirely through the
+       * `tr`/`state`/`dispatch` this command was HANDED — the same shared
+       * transaction `COMMANDS[action]` below builds on.
+       */
+      runTableHandleAction:
+        (tablePos: number, kind: HandleKind, index: number, action: TableHandleAction) =>
+        ({ state, tr, dispatch }) => {
+          const row = kind === 'row' ? index : 0;
+          const column = kind === 'row' ? 0 : index;
+          const target = cellTextPos(state.doc, tablePos, row, column);
+          if (target === null) return false;
+
+          // A dry run (`editor.can()`) must not move the selection either.
+          if (!dispatch) return true;
+
+          tr.setSelection(TextSelection.near(tr.doc.resolve(target)));
+          // Tiptap's chainable `state` (`createChainableState`) caches
+          // `selection`/`doc` off the transaction and only resyncs them when
+          // `.tr` itself is accessed — and `prosemirror-tables`' commands
+          // (`selectedRect`, `isInTable`) read `state.selection` BEFORE ever
+          // touching `.tr`. Without this second access, `COMMANDS[action]`
+          // below would still see the selection this command started with,
+          // not the one just set two lines up.
+          void state.tr;
+
+          return COMMANDS[action](state, dispatch);
+        },
+    };
   },
 
   addProseMirrorPlugins() {
-    const { labels } = this.options;
+    const { labels, onOpenTableMenu } = this.options;
     if (labels === null) return [];
 
     /**
@@ -301,8 +451,7 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
               if (event.button !== 0) return false;
 
               // Stops the caret from being placed into the widget and stops
-              // the editor losing focus, so the command below runs against the
-              // selection this handler is about to set.
+              // the editor losing focus.
               event.preventDefault();
 
               const kind = button.getAttribute('data-table-handle');
@@ -314,7 +463,26 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
               const index = Number.parseInt(button.getAttribute('data-index') ?? '', 10);
               if ((kind !== 'row' && kind !== 'column') || !Number.isInteger(index)) return false;
 
-              return activate(view, kind, index);
+              if (onOpenTableMenu === null) return false;
+
+              const tablePos = tablePosAt(view.state);
+              if (tablePos === null) return false;
+
+              const anchor = button as HTMLButtonElement;
+              // Flipped back to `false` by the app when the menu closes (see
+              // `RichEditor`'s `onClose` for this menu) — the plugin has no
+              // signal of its own for "the menu closed", since the menu is
+              // React state, not plugin state.
+              anchor.setAttribute('aria-expanded', 'true');
+
+              onOpenTableMenu({
+                tablePos,
+                kind,
+                index,
+                rect: anchor.getBoundingClientRect(),
+                anchor,
+              });
+              return true;
             },
           },
         },
@@ -337,39 +505,3 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
     ];
   },
 });
-
-/**
- * Moves the selection into the cell the handle names, then inserts after it.
- *
- * The two steps are not interchangeable and the order is the bug this whole
- * module exists to avoid: `addRowAfter`/`addColumnAfter` read the selection,
- * so running them first inserts next to the CARET — which is almost never the
- * row or column the user pointed at, and which a test asserting only "a row
- * was added" would pass.
- */
-function activate(view: EditorView, kind: HandleKind, index: number): boolean {
-  const tablePos = tablePosAt(view.state);
-  if (tablePos === null) return false;
-
-  // A row handle acts through that row's first cell; a column handle through
-  // the first row's cell in that column. Either identifies the target
-  // rectangle `prosemirror-tables` needs, and neither depends on where the
-  // caret was.
-  const target =
-    kind === 'row'
-      ? cellTextPos(view.state.doc, tablePos, index, 0)
-      : cellTextPos(view.state.doc, tablePos, 0, index);
-  if (target === null) return false;
-
-  const tr = view.state.tr;
-  tr.setSelection(TextSelection.near(tr.doc.resolve(target)));
-  view.dispatch(tr);
-
-  // `view.state` is the post-dispatch state, so the command below sees the
-  // selection just set rather than the one the user left behind.
-  const command: (state: EditorState, dispatch?: EditorView['dispatch']) => boolean =
-    kind === 'row' ? COMMANDS.addRowAfter : COMMANDS.addColumnAfter;
-  command(view.state, view.dispatch);
-  view.focus();
-  return true;
-}

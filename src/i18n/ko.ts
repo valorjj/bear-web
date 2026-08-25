@@ -128,8 +128,8 @@ export const ko: Record<TranslationKey, string> = {
   'export.failed.rateLimited': '내보내기가 너무 많습니다. 잠시 후 다시 시도하세요.',
   'export.failed.unavailable': '지금은 PDF 내보내기를 사용할 수 없습니다.',
 
-  'editor.table.addRowHandle': '여기에 행 추가',
-  'editor.table.addColumnHandle': '여기에 열 추가',
+  'editor.table.rowHandle': '행 옵션',
+  'editor.table.columnHandle': '열 옵션',
   'editor.table.deleteRow': '행 삭제',
   'editor.table.deleteColumn': '열 삭제',
   'editor.table.deleteTable': '표 삭제',

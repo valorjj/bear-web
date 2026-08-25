@@ -1,7 +1,8 @@
 import {
   ChevronDown,
   ChevronRight,
-  Plus,
+  GripHorizontal,
+  GripVertical,
   Heading1,
   Heading2,
   Heading3,
@@ -101,12 +102,34 @@ type IconNode = readonly (readonly [tag: string, attrs: Readonly<Record<string, 
 const ICON_NODES = new Map<LucideIcon, IconNode>([
   [ChevronDown, [['path', { d: 'm6 9 6 6 6-6' }]]],
   [ChevronRight, [['path', { d: 'm9 18 6-6-6-6' }]]],
-  // The row/column edge handles' `⊕` (`TableHandles.ts`).
+  // The table row handle's grip (`TableHandles.ts`) — a WIDE, short dot
+  // cluster, matching the shape of the row it names. Replaced `Plus` when the
+  // handle stopped inserting directly on click and started opening a menu: a
+  // `+` that opens a menu instead of adding something is a lie the moment
+  // it's clicked. See `docs/rulings/tables.md`.
   [
-    Plus,
+    GripHorizontal,
     [
-      ['path', { d: 'M5 12h14' }],
-      ['path', { d: 'M12 5v14' }],
+      ['circle', { cx: '12', cy: '9', r: '1' }],
+      ['circle', { cx: '19', cy: '9', r: '1' }],
+      ['circle', { cx: '5', cy: '9', r: '1' }],
+      ['circle', { cx: '12', cy: '15', r: '1' }],
+      ['circle', { cx: '19', cy: '15', r: '1' }],
+      ['circle', { cx: '5', cy: '15', r: '1' }],
+    ],
+  ],
+  // The table column handle's grip, for the same reason above `GripHorizontal`
+  // gives — a TALL, narrow dot cluster this time, matching the column it
+  // names.
+  [
+    GripVertical,
+    [
+      ['circle', { cx: '9', cy: '12', r: '1' }],
+      ['circle', { cx: '9', cy: '5', r: '1' }],
+      ['circle', { cx: '9', cy: '19', r: '1' }],
+      ['circle', { cx: '15', cy: '12', r: '1' }],
+      ['circle', { cx: '15', cy: '5', r: '1' }],
+      ['circle', { cx: '15', cy: '19', r: '1' }],
     ],
   ],
   // The six below draw the fold gutter's level indicator. Their shared first
@@ -249,6 +272,7 @@ export {
   Pilcrow,
   Rows3,
   Columns3,
-  Plus,
+  GripHorizontal,
+  GripVertical,
   LoaderCircle,
 } from 'lucide-react';

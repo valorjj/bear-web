@@ -17,7 +17,9 @@ buttons; `src/ui/Button.tsx`'s `VARIANTS` map (`default` / `ghost` / `danger`);
 `src/features/notes/preview.ts`'s `snippetLines`; `src/ui/ConfirmDialog.tsx`'s
 Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
 (the `Decoration.node` call and its `aria-label`) and its `.focus()` /
-`tabindex` handling; and the hover/name tests in `e2e/appearance.spec.ts`,
+`tabindex` handling; `src/features/editor/TableHandles.ts`'s handle buttons
+(`aria-haspopup`, `aria-expanded`) and `src/features/editor/
+TableHandleMenu.tsx`; and the hover/name tests in `e2e/appearance.spec.ts`,
 `src/ui/ui.test.tsx` and `src/features/notes/NoteListItem.test.tsx`.
 
 - **Never rely on a CSS `gap` to separate text for assistive tech.**
@@ -275,6 +277,31 @@ Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
   `headingLevel: number | null` (computed independently of the pre-existing
   `heading1`, which the toolbar's own `aria-pressed` still reads), and having
   the menu's radio row check `headingLevel === n` instead.
+
+- **A table row/column handle is a button that OPENS A MENU, and says so with
+  real ARIA — `aria-haspopup="menu"` plus `aria-expanded`, flipped
+  imperatively rather than left at rest.** `TableHandles.ts` is a plain-DOM
+  ProseMirror widget with no React state of its own, so it cannot re-render
+  `aria-expanded` the way a `Button`-backed menu trigger would; `mousedown`
+  sets it `true` when the request fires, and `RichEditor`'s `onClose` for
+  `TableHandleMenu` sets it back `false` on the same element (via
+  `TableHandleMenuRequest.anchor`, carried through the request for exactly
+  this — the same "hand the app a DOM rect" pattern `HeadingMenuRequest.rect`
+  already used, extended to a full element reference). This replaced a `+`
+  handle that inserted directly on click and needed neither attribute: a
+  button that immediately acts is not a disclosure control, but a button that
+  opens a menu is, and CLAUDE.md's `Button.ariaHasPopup`/`ariaExpanded` rule
+  applies here even though this handle is not a `Button` component.
+
+  **Focus return after closing uses the handle itself, not the editor — proven
+  safe by the widget-focus bullet immediately above, not assumed.** A table
+  handle is also a `Decoration.widget`, also `contenteditable="false"`, also
+  inside the ProseMirror DOM, and the measured finding right above this bullet
+  already establishes that such a button focuses normally (`e2e/
+editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
+  `HeadingMenu`'s badge — which cannot return focus to itself and falls back
+  to `editor.commands.focus()` — `TableHandleMenu`'s `onClose` calls
+  `tableMenu.anchor.focus()` directly.
 
 - **An unavailable menu item is `aria-disabled`, never the HTML `disabled`
   attribute — and Playwright then cannot click it at all.** `ExportMenu`'s PDF

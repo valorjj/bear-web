@@ -14,6 +14,8 @@ import { HeadingMenu } from './HeadingMenu';
 import { HighlightMenu } from './HighlightMenu';
 import { HighlightPalette, type HighlightChoiceResult } from './HighlightPalette';
 import type { HighlightColor } from './Highlight';
+import { TableHandleMenu } from './TableHandleMenu';
+import type { TableHandleMenuRequest } from './TableHandles';
 import { COMMANDS, TABLE_ACTIONS, type TableAction } from './tableCommands';
 import { pinAllSelectionStep } from './toolbarSelection';
 import type { HeadingMenuRequest } from './HeadingFold';
@@ -130,6 +132,7 @@ export function RichEditor({
   const [exportOpen, setExportOpen] = useState(false);
   const [menu, setMenu] = useState<HeadingMenuRequest | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
+  const [tableMenu, setTableMenu] = useState<TableHandleMenuRequest | null>(null);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   /**
    * The colour the toolbar's Highlight button applies. Sticky across clicks so
@@ -167,6 +170,12 @@ export function RichEditor({
   // `editor` exists; this initial value is only ever seen for the render
   // before `editor` mounts, when no `contextmenu` event can fire yet.
   const contextMenuRef = useRef((request: ContextMenuRequest) => setContextMenu(request));
+
+  // Same discipline again, for `TableHandles.onOpenTableMenu`: the extension
+  // array is built once below and captures whatever identity this ref holds
+  // at that moment.
+  const tableMenuRef = useRef((request: TableHandleMenuRequest) => setTableMenu(request));
+  tableMenuRef.current = (request: TableHandleMenuRequest) => setTableMenu(request);
 
   const [extensions] = useState(() =>
     buildEditorExtensions({
@@ -206,9 +215,13 @@ export function RichEditor({
       // by note id and rebuilt on a language change, so there is no live
       // language switch for these to miss.
       labels: {
-        addRow: t('editor.table.addRowHandle'),
-        addColumn: t('editor.table.addColumnHandle'),
+        row: t('editor.table.rowHandle'),
+        column: t('editor.table.columnHandle'),
       },
+      // Unconditionally wired, same as `onOpenMenu`/`onOpen` above and for the
+      // same reason: the table handle menu is a built-in editor affordance,
+      // not an opt-in prop the app may omit.
+      onOpenTableMenu: (request) => tableMenuRef.current(request),
       // Read once at mount like every option above it — the editor is keyed
       // by note id and rebuilt on a language change, so there is no live
       // locale switch for these to miss.
@@ -761,6 +774,43 @@ export function RichEditor({
           onClose={() => {
             setContextMenu(null);
             editor.commands.focus();
+          }}
+        />
+      )}
+
+      {/*
+       * Rendered by the app, never by the plugin — same boundary as
+       * `HeadingMenu`/`EditorContextMenu` above: `TableHandles.ts` owns the
+       * DOM event and hands a request up through `onOpenTableMenu`, and this
+       * is the only place that turns a menu choice into
+       * `runTableHandleAction`.
+       */}
+      {tableMenu !== null && editor !== null && (
+        <TableHandleMenu
+          request={tableMenu}
+          onAction={(action) =>
+            editor.commands.runTableHandleAction(
+              tableMenu.tablePos,
+              tableMenu.kind,
+              tableMenu.index,
+              action,
+            )
+          }
+          onClose={() => {
+            setTableMenu(null);
+            // `aria-expanded` is plugin-drawn plain DOM, not React state, so
+            // it has to be flipped back imperatively here — the plugin has no
+            // signal of its own for "the menu closed" (see `TableHandles.ts`'s
+            // `handleDOMEvents.mousedown`).
+            tableMenu.anchor.setAttribute('aria-expanded', 'false');
+            // Unlike `HeadingMenu`'s badge, a table handle button focuses
+            // normally after closing — `docs/rulings/accessibility.md`
+            // measured that the Chromium widget-focus block is specific to
+            // HEADING widgets and does NOT generalise to every
+            // `Decoration.widget`, so returning focus to the button the user
+            // actually clicked (rather than the editor) is both possible and
+            // the more useful destination here.
+            tableMenu.anchor.focus();
           }}
         />
       )}
