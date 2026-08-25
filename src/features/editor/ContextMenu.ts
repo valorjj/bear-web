@@ -22,7 +22,7 @@ export interface ContextMenuOptions {
    * registered at all, so the browser's own menu is untouched.
    *
    * Absent rather than inert, the same rule `TagPillOptions.onActivate` and
-   * `TableControlsOptions.labels` both follow: an affordance that does nothing
+   * `TableHandlesOptions.labels` both follow: an affordance that does nothing
    * is worse than no affordance, and here "does nothing" would mean silently
    * suppressing the browser menu and offering nothing in its place.
    */

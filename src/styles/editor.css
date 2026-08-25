@@ -722,52 +722,91 @@
  * overlay), so a bar hanging outside the flow would be cut off above a table
  * at the top of a note.
  */
-.bear-table-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  margin-bottom: 0.375rem;
+/*
+ * The table's edge handles — a `⊕` on each row's left edge and each column's
+ * top edge (see `TableHandles.ts`). This replaced a bar of five words that
+ * floated above the user's prose.
+ *
+ * The layer is a zero-height box sitting immediately before the table in flow,
+ * so it inherits the table's top-left corner as its own origin and every
+ * offset the plugin writes is a small relative number. `pointer-events: none`
+ * here and `auto` on the buttons is what stops an invisible full-width layer
+ * from shadowing the prose beneath it.
+ */
+.bear-table-handles {
+  position: relative;
+  /*
+   * Above the table, not merely before it. The layer precedes the table in
+   * flow, so without a stacking context the header row's own background
+   * painted over the bottom half of every column handle — which read as a
+   * washed-out glyph rather than as an occlusion, and which only a screenshot
+   * could show.
+   */
+  z-index: 1;
+  height: 0;
+  pointer-events: none;
   user-select: none;
 }
 
-.bear-table-control {
-  padding: 0.125rem 0.5rem;
+.bear-table-handle {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  padding: 0;
   border: var(--bear-border-width) solid var(--bear-border);
   border-radius: var(--bear-radius-sm);
   background: var(--bear-surface);
   color: var(--bear-muted);
-  font-family: var(--bear-font-sans);
-  font-size: var(--bear-text-ui-xs);
-  line-height: 1.6;
   cursor: pointer;
+  opacity: 0;
+  pointer-events: auto;
   transition:
+    opacity var(--bear-duration-fast),
     background-color var(--bear-duration-fast),
     color var(--bear-duration-fast);
 }
 
-.bear-table-control:hover {
+/*
+ * A row handle hangs off the table's left edge; a column handle straddles its
+ * top border rather than sitting above it, because the prose runs right up to
+ * the table and a handle placed fully above one overlapped the heading before
+ * it. Each is centred along the other axis.
+ */
+.bear-table-handle[data-table-handle='row'] {
+  transform: translate(-100%, -50%);
+}
+
+.bear-table-handle[data-table-handle='column'] {
+  transform: translate(-50%, -50%);
+}
+
+/*
+ * Revealed on hover of the TABLE, not of the layer: the layer is invisible and
+ * one pixel tall, so hovering it is not something a user can aim at. The
+ * layer immediately precedes the table in the DOM, which is why this reads
+ * forwards through `:has(+ …)`; the table extension may wrap the table in a
+ * scroll container, so both siblings are named.
+ *
+ * `:focus-visible` is not a nicety here — it is the only thing that makes the
+ * handles reachable without a pointer at all.
+ */
+.bear-table-handles:has(+ table:hover) .bear-table-handle,
+.bear-table-handles:has(+ .tableWrapper:hover) .bear-table-handle,
+.bear-table-handles:hover .bear-table-handle,
+.bear-table-handle:focus-visible {
+  opacity: 1;
+}
+
+.bear-table-handle:hover {
   background: var(--bear-hover);
   color: var(--bear-text);
 }
 
-/*
- * Destructive controls read as destructive at REST, not only on hover — the
- * bar sits inline with the user's prose and a row-deleting button that looks
- * exactly like a row-adding one is a mis-click waiting to happen. The fill
- * stays quiet; only the word takes the danger colour, which is the same
- * treatment the note list gives "Move to trash".
- */
-.bear-table-control[data-destructive] {
-  color: var(--bear-danger);
-}
-
-.bear-table-control[data-destructive]:hover {
-  background: var(--bear-hover);
-  color: var(--bear-danger);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .bear-table-control {
+  .bear-table-handle {
     transition: none;
   }
 }
@@ -775,7 +814,7 @@
 /*
  * The code-block language picker — a `Decoration.widget` placed just before
  * the code block the caret is in (see `CodeLanguageControls.ts`). Same
- * `position` reasoning as `.bear-table-controls` immediately above: it lives
+ * `position` reasoning the table bar once used: it lives
  * inside the scrolling content so it tracks the block with no geometry code,
  * and stays in flow rather than `absolute` because the editor's own
  * `overflow-auto` clips anything hanging outside it.

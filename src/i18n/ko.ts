@@ -120,10 +120,9 @@ export const ko: Record<TranslationKey, string> = {
   'export.pdf': 'PDF',
   'export.failed': '이 메모를 내보낼 수 없습니다.',
 
-  'editor.table.controls': '표',
-  'editor.table.addRow': '행 추가',
+  'editor.table.addRowHandle': '여기에 행 추가',
+  'editor.table.addColumnHandle': '여기에 열 추가',
   'editor.table.deleteRow': '행 삭제',
-  'editor.table.addColumn': '열 추가',
   'editor.table.deleteColumn': '열 삭제',
   'editor.table.deleteTable': '표 삭제',
 

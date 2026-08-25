@@ -118,11 +118,15 @@ export const en = {
   'export.pdf': 'PDF',
   'export.failed': 'This note could not be exported.',
 
-  'editor.table.controls': 'Table',
-  'editor.table.addRow': '+ Row',
-  'editor.table.deleteRow': '− Row',
-  'editor.table.addColumn': '+ Column',
-  'editor.table.deleteColumn': '− Column',
+  // The two edge handles' accessible names. They point AT a row or column,
+  // so "here" is the whole meaning — the bar these replaced had to say which
+  // table it acted on.
+  'editor.table.addRowHandle': 'Insert row here',
+  'editor.table.addColumnHandle': 'Insert column here',
+  // Full sentences, because these are context-menu rows now rather than
+  // buttons on a bar that already named the table.
+  'editor.table.deleteRow': 'Delete row',
+  'editor.table.deleteColumn': 'Delete column',
   'editor.table.deleteTable': 'Delete table',
 
   'editor.context.menu': 'Editing options',

@@ -178,12 +178,8 @@ export function RichEditor({
       // by note id and rebuilt on a language change, so there is no live
       // language switch for these to miss.
       labels: {
-        toolbar: t('editor.table.controls'),
-        addRow: t('editor.table.addRow'),
-        deleteRow: t('editor.table.deleteRow'),
-        addColumn: t('editor.table.addColumn'),
-        deleteColumn: t('editor.table.deleteColumn'),
-        deleteTable: t('editor.table.deleteTable'),
+        addRow: t('editor.table.addRowHandle'),
+        addColumn: t('editor.table.addColumnHandle'),
       },
       // Read once at mount like every option above it — the editor is keyed
       // by note id and rebuilt on a language change, so there is no live
