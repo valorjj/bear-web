@@ -238,4 +238,7 @@ export {
   Heading5,
   Heading6,
   UserRound,
+  Pilcrow,
+  Rows3,
+  Columns3,
 } from 'lucide-react';

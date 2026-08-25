@@ -126,6 +126,18 @@ export const ko: Record<TranslationKey, string> = {
   'editor.table.addColumn': '열 추가',
   'editor.table.deleteColumn': '열 삭제',
   'editor.table.deleteTable': '표 삭제',
+
+  'editor.context.menu': '편집 옵션',
+  'editor.context.paragraph': '본문',
+  'editor.context.table': '표',
+  'editor.context.heading': '제목 수준',
+  'editor.context.format': '서식',
+  'editor.context.blocks': '블록',
+  'editor.table.addRowBefore': '위에 행 추가',
+  'editor.table.addRowAfter': '아래에 행 추가',
+  'editor.table.addColumnBefore': '앞에 열 추가',
+  'editor.table.addColumnAfter': '뒤에 열 추가',
+
   'editor.code.language': '코드 언어',
   'editor.code.none': '일반 텍스트',
   'editor.code.filter': '언어 검색',

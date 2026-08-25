@@ -124,6 +124,18 @@ export const en = {
   'editor.table.addColumn': '+ Column',
   'editor.table.deleteColumn': '− Column',
   'editor.table.deleteTable': 'Delete table',
+
+  'editor.context.menu': 'Editing options',
+  'editor.context.paragraph': 'Body text',
+  'editor.context.table': 'Table',
+  'editor.context.heading': 'Heading level',
+  'editor.context.format': 'Format',
+  'editor.context.blocks': 'Blocks',
+  'editor.table.addRowBefore': 'Insert row above',
+  'editor.table.addRowAfter': 'Insert row below',
+  'editor.table.addColumnBefore': 'Insert column before',
+  'editor.table.addColumnAfter': 'Insert column after',
+
   'editor.code.language': 'Code language',
   'editor.code.none': 'Plain text',
   'editor.code.filter': 'Filter languages',
