@@ -51,21 +51,39 @@ TableHandleMenu.tsx`; and the hover/name tests in `e2e/appearance.spec.ts`,
   `"work3"`, and `NoteListItem` concatenating three spans into
   `"Groceries14:32milk"`.
 
-- **Destructive controls keep their WORDS — that rule stands. What M9a
-  reversed is their CHROME, and only in the note-list header.** "Move to
-  trash", "Restore", "Delete forever" and "Empty trash" are still text, never
-  glyphs: an icon-only control for an irreversible action against a database
-  with no server copy asks the user to recall a glyph before destroying data,
-  and Bear hides these in menus where we deliberately do not. But "New note",
-  "Move to trash" and "Restore" are now `ghost` rather than `default` — no
-  border, no resting fill — because the bordered row read as a set of form
-  controls and was the single thing that most dated the app. **"Delete forever"
-  and "Empty trash" keep `danger`'s solid fill**, and `ConfirmDialog`'s Cancel
-  keeps `default`, so M6's reasoning stays live exactly where a control must
-  read at rest.
+- **Destructive controls keep their WORDS — that rule stands, unconditionally.**
+  "Move to trash", "Restore", "Delete forever" and "Empty trash" are text,
+  never glyphs: an icon-only control for an irreversible action against a
+  database with no server copy asks the user to recall a glyph before
+  destroying data.
 
-- **A quiet control's hover fill is now load-bearing, and it is the affordance
-  this project has already lost once in silence.** `--color-hover` was absent
+- **A control's resting chrome depends on the POINTER, and M9a's borderless
+  ruling was rewritten in J2 rather than given an exception.**
+
+  M9a made the note-list header `ghost` — no border, no resting fill —
+  because the bordered row read as a set of form controls and was the single
+  thing that most dated the app. What replaced the resting affordance was
+  "position, familiarity, and a hover fill". **That last clause is what does
+  not survive a touch screen**: there is no pointer to cross the control, so a
+  quiet control is quiet forever, and on a phone the header's two icon buttons
+  were invisible affordances rather than restrained ones.
+
+  So the rule is now stated in terms of the condition that actually decides
+  it, rather than as a blanket preference:
+
+  - **Hover exists (desktop, `≥1024`):** quiet at rest, fill on hover.
+    `ghost`. M9a's reasoning holds here unchanged.
+  - **Hover does not exist (phone and tablet):** a resting fill. `soft`, a
+    44×44 circular target. The reference app does the same, and the
+    alternative is a control the user must guess at.
+
+  **"Delete forever" and "Empty trash" keep `danger`'s solid fill at every
+  size**, and `ConfirmDialog`'s Cancel keeps `default`, so M6's reasoning
+  stays live exactly where a control must read at rest.
+
+- **A quiet control's hover fill is load-bearing ON DESKTOP, and it is the
+  affordance this project has already lost once in silence.** (On touch it is
+  no affordance at all — see the pointer rule above.) `--color-hover` was absent
   from the theme block for two milestones, so every `hover:bg-hover` compiled to
   nothing with no warning. A `ghost` control whose hover does not compile is
   invisible in every state — strictly worse than the M6 defect. `e2e/appearance.spec.ts`
@@ -382,3 +400,18 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   narrower trap would reintroduce the gap `ConfirmDialog` documented and lived
   with: a trap that skips a focusable lets Tab walk out into the page behind,
   where the user cannot see where focus went.
+
+
+- **Touch targets are 44×44 below the desktop breakpoint.** `Button`'s `touch`
+  size, which is the iOS minimum and WCAG 2.5.8's. Its radius lives in the
+  SIZES map rather than the base class list, so `touch` can be a circle by
+  OMITTING `rounded-sm` — two `rounded-*` utilities in the same layer are
+  resolved by stylesheet order, not by the class attribute's order.
+
+- **The compact header is 56px with a centred 16px title, and that is a
+  correction rather than a preference.** It shipped in J1 as the desktop strip
+  with two buttons swapped in: `h-9` (36px) with 28px controls and a 13px
+  left-aligned title, all sized for a mouse. On a real iPhone it read as a
+  caption bar. The title centres via a three-column grid, so it centres
+  against the BAR rather than against whatever the left group happens to
+  measure — with a flex row it drifts as the scope name changes length.

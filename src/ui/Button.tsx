@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 
-export type ButtonVariant = 'default' | 'primary' | 'danger' | 'ghost';
-export type ButtonSize = 'sm' | 'md';
+export type ButtonVariant = 'default' | 'primary' | 'danger' | 'ghost' | 'soft';
+export type ButtonSize = 'sm' | 'md' | 'touch';
 
 export interface ButtonProps {
   onClick: () => void;
@@ -38,11 +38,28 @@ const VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-accent text-bg hover:opacity-90',
   danger: 'bg-danger text-bg hover:opacity-90',
   ghost: 'text-muted hover:bg-hover hover:text-text',
+  // A resting fill, for a control on a TOUCH surface. `ghost` is defined as
+  // quiet-until-hovered, which on a touch device means quiet forever — there
+  // is no pointer to cross it. M9a made the note-list header `ghost` because
+  // a bordered row "read as a set of form controls" and dated the app; that
+  // reasoning was about a mouse-driven header and does not transfer to a
+  // phone, where the alternative is an invisible affordance.
+  soft: 'bg-hover text-text hover:bg-selected',
 };
 
+/**
+ * Radius lives HERE, not in the base class list, so `touch` can be a circle
+ * without an overriding utility. Two `rounded-*` utilities in the same layer
+ * are resolved by stylesheet order, not by the order the class attribute lists
+ * them — the trap `Pane`'s `shadow-none` cost this project a day. A size that
+ * omits `rounded-sm` is the only reliable way not to have it.
+ */
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'h-6 px-2 text-ui-sm',
-  md: 'h-7 px-2 text-ui',
+  sm: 'h-6 px-2 text-ui-sm rounded-sm',
+  md: 'h-7 px-2 text-ui rounded-sm',
+  // 44x44 — the iOS and WCAG 2.5.8 minimum target. Square and circular,
+  // because at this size it holds one glyph and nothing else.
+  touch: 'h-11 w-11 rounded-full',
 };
 
 export function Button({
@@ -64,7 +81,7 @@ export function Button({
       aria-expanded={ariaExpanded}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex shrink-0 items-center justify-center rounded-sm transition-colors duration-[var(--bear-duration-fast)] ease-bear disabled:pointer-events-none disabled:opacity-40 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center transition-colors duration-[var(--bear-duration-fast)] ease-bear disabled:pointer-events-none disabled:opacity-40 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
     >
       {children}
     </button>

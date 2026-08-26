@@ -51,6 +51,7 @@ export const en = {
   'sidebar.drawer': 'Tags and lists',
   'nav.backToList': 'Back to notes',
   'search.open': 'Show search',
+  'search.close': 'Close search',
   'noteList.create': 'New note',
   'noteList.trash': 'Delete',
   'noteList.restore': 'Restore',

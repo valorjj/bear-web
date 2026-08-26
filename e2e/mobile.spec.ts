@@ -202,3 +202,39 @@ test.describe('on a narrow desktop', () => {
     expect(box.width).toBeGreaterThanOrEqual(160);
   });
 });
+
+test.describe('phone header proportions', () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  test('the bar and its controls are touch-sized, measured not asserted', async ({ page }) => {
+    // Computed boxes, not class names: this shipped as a 36px bar with 28px
+    // controls and looked wrong on a real iPhone while every unit test passed.
+    await page.goto('/');
+
+    const menu = page.getByRole('button', { name: 'Show tags' });
+    const search = page.getByRole('button', { name: 'Show search' });
+
+    for (const control of [menu, search]) {
+      const box = (await control.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+
+    // The bar itself has to be tall enough to hold them with breathing room.
+    const bar = page.locator('.h-14').first();
+    expect((await bar.boundingBox())!.height).toBe(56);
+  });
+
+  test('the scope title is centred on the bar', async ({ page }) => {
+    await page.goto('/');
+
+    const title = page.getByRole('button', { name: /List options/ });
+    const box = (await title.boundingBox())!;
+    const centre = box.x + box.width / 2;
+
+    // Within a couple of pixels of the viewport's centre. A flex layout with
+    // `ml-auto` puts it wherever the left group ends, which drifts with the
+    // scope name's length — this is what catches that.
+    expect(Math.abs(centre - PHONE.width / 2)).toBeLessThanOrEqual(2);
+  });
+});

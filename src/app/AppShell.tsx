@@ -398,9 +398,14 @@ export function AppShell(): ReactElement {
                 is no longer rendered.
               */}
               {mode === 'phone' && selectedNote != null && (
-                <div className="border-border flex h-9 shrink-0 items-center border-b px-1">
-                  <Button variant="ghost" onClick={backToList} label={t('nav.backToList')}>
-                    <Icon glyph={ChevronLeft} size="sm" />
+                <div className="flex h-14 shrink-0 items-center px-2">
+                  <Button
+                    variant="soft"
+                    size="touch"
+                    onClick={backToList}
+                    label={t('nav.backToList')}
+                  >
+                    <Icon glyph={ChevronLeft} />
                   </Button>
                 </div>
               )}

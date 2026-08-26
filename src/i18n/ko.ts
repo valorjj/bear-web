@@ -53,6 +53,7 @@ export const ko: Record<TranslationKey, string> = {
   'sidebar.drawer': '태그 및 목록',
   'nav.backToList': '메모 목록으로',
   'search.open': '검색 열기',
+  'search.close': '검색 닫기',
   'noteList.create': '새 메모',
   'noteList.trash': '삭제',
   'noteList.restore': '복원',
