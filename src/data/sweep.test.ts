@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Note } from './types';
-import { sweepBlankNotes } from './sweep';
+import { sweepBlankNotes, sweepOrphanFiles } from './sweep';
 
 const note = (overrides: Partial<Note>): Note => ({
   id: 'n',
@@ -129,5 +129,117 @@ describe('sweepBlankNotes', () => {
       }),
     });
     await expect(sweepBlankNotes(d)).resolves.toBe(0);
+  });
+});
+
+describe('sweepOrphanFiles', () => {
+  const base = { createdBefore: 1000, remove: vi.fn(async () => {}) };
+
+  function file(id: string, noteId = 'n1', createdAt = 500) {
+    return { id, noteId, createdAt };
+  }
+
+  it('removes a file no note references any more', async () => {
+    const remove = vi.fn(async () => {});
+
+    const count = await sweepOrphanFiles({
+      ...base,
+      remove,
+      listFiles: async () => [file('a')],
+      noteText: async () => 'the image is gone from this text',
+    });
+
+    expect(count).toBe(1);
+    expect(remove).toHaveBeenCalledWith('a');
+  });
+
+  it('keeps a file the note still references', async () => {
+    const remove = vi.fn(async () => {});
+
+    await sweepOrphanFiles({
+      ...base,
+      remove,
+      listFiles: async () => [file('a')],
+      noteText: async () => 'before ![](files/a.webp) after',
+    });
+
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('removes a file whose note is gone', async () => {
+    // `notes.purge` already reclaims a purged note's files; this is the
+    // belt-and-braces case where that did not complete.
+    const remove = vi.fn(async () => {});
+
+    await sweepOrphanFiles({
+      ...base,
+      remove,
+      listFiles: async () => [file('a')],
+      noteText: async () => null,
+    });
+
+    expect(remove).toHaveBeenCalledWith('a');
+  });
+
+  it('never touches a file stored after the sweep was decided on', async () => {
+    // The time-of-check gate. The sweep is unawaited and the app is
+    // interactive while it runs, so an image pasted in that window must be out
+    // of reach — the same hazard `createdBefore` closes for blank notes.
+    const remove = vi.fn(async () => {});
+
+    await sweepOrphanFiles({
+      ...base,
+      remove,
+      listFiles: async () => [file('a', 'n1', 1500)],
+      noteText: async () => 'no reference',
+    });
+
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('reads each note once however many files it owns', async () => {
+    const noteText = vi.fn(async () => 'no references at all');
+
+    await sweepOrphanFiles({
+      ...base,
+      listFiles: async () => [file('a'), file('b'), file('c')],
+      noteText,
+    });
+
+    expect(noteText).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps going when one removal throws, and reports it', async () => {
+    const onError = vi.fn();
+    const remove = vi.fn(async (id: string) => {
+      if (id === 'a') throw new Error('locked');
+    });
+
+    const count = await sweepOrphanFiles({
+      ...base,
+      remove,
+      onError,
+      listFiles: async () => [file('a'), file('b')],
+      noteText: async () => 'nothing referenced',
+    });
+
+    expect(count).toBe(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('never rejects when listing fails', async () => {
+    const onError = vi.fn();
+
+    const count = await sweepOrphanFiles({
+      ...base,
+      onError,
+      listFiles: async () => {
+        throw new Error('database gone');
+      },
+      noteText: async () => null,
+    });
+
+    expect(count).toBe(0);
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 });
