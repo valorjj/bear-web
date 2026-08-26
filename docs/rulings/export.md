@@ -206,3 +206,53 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   (`@/features/export/exportNote`); the barrel re-exports whatever it
   resolves to, so `vi.mocked(exportNote)` imported from the barrel is still
   the same spy.
+
+
+## Images in export (K3)
+
+- **HTML and PDF INLINE their images as `data:` URIs.** Not a convenience: the
+  PDF renderer runs in a container with deliberately no route off the host
+  (G's control 4 reasoning), so it could not fetch `files/<id>.webp` even if
+  the path were absolute. Inlining is what lets that isolation stay intact
+  while the image still arrives.
+
+- **An image whose bytes are missing is REMOVED from the output**, never left
+  pointing at a dead path. A note synced before its image arrived still
+  exports, without a broken-image icon in the middle of it.
+
+- **`MAX_EXPORT_BYTES` is 20 MiB, and the number is arithmetic.** A stored
+  image is 2048px at q80 — 200–600 KB — and base64 adds a third, so ~800 KB
+  each. At the old 2 MiB a note with three screenshots was already refused. 20
+  MiB carries roughly 25 images and still bounds what one request can push into
+  a Mac Mini's memory.
+
+- **`html.ts` still imports nothing from `src/data/`.** The image map is
+  resolved by `exportNote` and handed in, the same boundary `readExportTokens`
+  keeps by taking the document rather than reaching for it.
+
+- **K1's privacy rule survives export.** A remote URL renders as source, never
+  an `<img>`, in the exported file too — an exported document that fetches from
+  a third-party host when opened is the same beacon, just posted somewhere
+  else. There is a test.
+
+- **Markdown exports a store-only `.zip` when the note has images, and a plain
+  `.md` when it does not.** A zip holding one file would make every ordinary
+  export worse to serve one case. The text goes in VERBATIM so
+  `files/<id>.webp` survives — that relative path is the whole reason the
+  folder resolves its images in Obsidian, and it is why K1 chose a relative
+  path over a scheme.
+
+- **`src/lib/zip.ts` is hand-written, and its correctness rests on an EXTERNAL
+  unzipper.** Every entry is a WebP, already compressed, so deflate would spend
+  CPU to save nothing — which leaves four record types and no algorithm, small
+  enough to own rather than import. `src/lib/zip.test.ts` reads the archive
+  back with our own parser, which proves only that reader and writer share
+  whatever misunderstanding they have; `e2e/imageExport.spec.ts` runs
+  `unzip -t`, and that is the only thing in the repo that can catch a wrong
+  CRC-32 — a perfectly-shaped archive that reports itself corrupt.
+
+- **The PDF's image is asserted STRUCTURALLY, not by text.** A text extraction
+  cannot see a missing image any more than it can see tofu: the surrounding
+  words are present either way. `server/pdf/fidelity.test.ts` asserts an
+  embedded image XObject with a real `/Width`, which exists only when Chromium
+  decoded the inlined bytes.

@@ -492,3 +492,41 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   serializes a text node with escaping, so inserted Markdown round-trips to
   `!\[\](files/…)` — a broken reference that then renders as source. The
   round-trip fixtures in `markdown.test.ts` are what catch it.
+
+
+## The image display width (K3)
+
+- **A width rides in the ALT TEXT: `![alt|640](files/<id>.webp)`.** Obsidian's
+  convention, chosen over a `displayWidth` column so the size travels with the
+  note — sync carries it, an exported bundle carries it, another device lays
+  the note out the same way — and so it is per-USE: one screenshot can be full
+  width in one note and a thumbnail in another. The cost is real and accepted:
+  this is not standard Markdown, and a strict reader shows `alt|640` as the alt
+  text.
+
+- **A NON-numeric suffix stays part of the alt text.** `a|b` is what every
+  other reader will display, so treating it as a malformed width would silently
+  swallow a character the user typed. Zero, negatives, decimals and units are
+  all "not a width" for the same reason.
+
+- **The pipe is OMITTED when no width is set**, so an image nobody resized
+  round-trips byte-identically to what K1 wrote — and `Mod-Alt-0` resets to
+  `null` rather than `|0`, which would parse back the same but serialise
+  differently.
+
+- **The width applies as a CSS width, never the HTML `width` attribute.** The
+  attribute carries the STORED dimensions so the box can be reserved before the
+  blob resolves; a display width must override that without two sources of
+  truth fighting over one box.
+
+- **A top-level inline node is re-wrapped in a paragraph, and this fixed a
+  shipped bug.** `doc` accepts block content only, so an inline node as its
+  direct child is an INVALID document and every transaction on it throws
+  `Called contentMatchAt on a node with invalid content` — surfacing as an
+  editor that silently refuses to be typed into. `@tiptap/extension-paragraph`
+  unwraps a paragraph whose only token is an image, so K1's
+  `![](files/<id>.webp)` alone on a line produced exactly that: paste an image
+  into an EMPTY note, reload, and the note was frozen. `rawBlock.test.ts` had
+  asserted the unwrapped shape and called it correct — the assertion recorded
+  the upstream fact and hid the consequence, because nothing ever tried to EDIT
+  such a document.

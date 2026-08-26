@@ -146,7 +146,13 @@ test('a remote image URL still renders as source, never as a picture', async ({ 
   await expect(page.getByRole('textbox', { name: 'Note text' })).toBeVisible();
 
   await expect(page.locator('.ProseMirror [data-raw-inline="rawImage"]')).toHaveCount(1);
-  await expect(page.locator('.ProseMirror img')).toHaveCount(0);
+  // `img.bear-stored-image`, not any `img`: ProseMirror inserts its own
+  // `<img class="ProseMirror-separator">` into a paragraph holding only an
+  // inline atom, so a bare `img` selector matches the editor's plumbing rather
+  // than a rendered picture. That separator appeared once K3 started wrapping
+  // a top-level inline node in a paragraph, and it is not a regression — the
+  // request counter below is the assertion that actually protects the user.
+  await expect(page.locator('.ProseMirror img.bear-stored-image')).toHaveCount(0);
   // The assertion that actually protects the user: no request left the page.
   //
   // This FAILED when first written, and the failure was real. The note-list
