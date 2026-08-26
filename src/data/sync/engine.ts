@@ -227,6 +227,43 @@ export function createEngine(deps: EngineDeps) {
     return applied;
   }
 
+  /**
+   * Uploads every image this device has not yet sent.
+   *
+   * One failure never aborts the rest, and never aborts the sync: an account
+   * at quota, or one image the server refuses, must not stop the others or
+   * leave the run looking broken. A refused image stays DIRTY and stays
+   * LOCAL — dropping it would destroy data because the server declined to
+   * hold a copy of it.
+   */
+  async function uploadImages(): Promise<number> {
+    const dirty = await db.syncState.where('dirty').equals(1).toArray();
+    let uploaded = 0;
+
+    for (const row of dirty) {
+      if (row.kind !== 'image') continue;
+
+      const file = await db.files.get(row.key);
+      if (file === undefined) {
+        // Reclaimed locally before it was ever uploaded. Nothing to send and
+        // nothing to remember.
+        await db.syncState.delete(['image', row.key]);
+        continue;
+      }
+
+      try {
+        await transport.uploadImage(file.id, file.noteId, file.blob, file.width, file.height);
+        await db.syncState.put({ ...row, dirty: 0 });
+        uploaded += 1;
+      } catch {
+        // Left dirty on purpose: quota, offline, or a server that is down are
+        // all states the next sync should retry from.
+      }
+    }
+
+    return uploaded;
+  }
+
   /** Collects everything dirty, with the revision each row last saw as its `baseRev`. */
   async function collect(): Promise<{
     notes: PushNote[];
@@ -243,6 +280,11 @@ export function createEngine(deps: EngineDeps) {
     const snapshots = new Map<string, PushSnapshot>();
 
     for (const row of dirty) {
+      // Images are pushed by `uploadImages`, not by the JSON batch: they carry
+      // bytes, no revision, and no conflict story. Skipped here so they never
+      // reach `snapshotKey`, which is typed for the two kinds that do.
+      if (row.kind === 'image') continue;
+
       snapshots.set(snapshotKey(row.kind, row.key), {
         markedAt: row.markedAt,
         deleted: row.deleted,
@@ -446,7 +488,13 @@ export function createEngine(deps: EngineDeps) {
       await db.settings.put({ key: LAST_PULLED_REV_KEY, value: remote.rev });
 
       const { notes, tags, snapshots } = await collect();
+
+      // NOT an early return any more. An account whose only dirty rows are
+      // images must still upload them, and returning here skipped that
+      // entirely — the images would sit dirty until the user happened to edit
+      // a note.
       if (notes.length === 0 && tags.length === 0) {
+        await uploadImages();
         return { pulled, pushed: 0, conflicts: 0, rev: remote.rev };
       }
 
@@ -529,6 +577,14 @@ export function createEngine(deps: EngineDeps) {
 
       await resolveConflicts(result.conflicts.notes);
       await resolveTagConflicts(result.conflicts.tags);
+
+      // AFTER the note push, deliberately. Either order leaves a recoverable
+      // state — a note whose image has not arrived shows the placeholder, and
+      // so does an image whose note has not — so the order is chosen for a
+      // different reason: pushing notes first means a quota refusal on an
+      // image cannot stop the note's own TEXT from ever reaching the server.
+      // Text matters more than pixels.
+      await uploadImages();
 
       // The cursor is the PULL's rev and nothing else. It was already written
       // above, immediately after the pull was applied, and this run's push

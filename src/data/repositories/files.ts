@@ -1,4 +1,5 @@
 import type { BearDatabase } from '../db';
+import { markDirty } from '../sync/markDirty';
 import { newId } from '../ids';
 import type { FileRecord } from '../types';
 
@@ -44,7 +45,13 @@ export function createFilesRepository(deps: FilesRepositoryDeps): FilesRepositor
         bytes: blob.size,
         createdAt: now(),
       };
-      await db.files.add(record);
+      await db.transaction('rw', db.files, db.syncState, async () => {
+        await db.files.add(record);
+        // Queued for upload by the sync engine rather than uploaded here: a
+        // paste must not wait on the network, and an offline paste must still
+        // work exactly as it does today.
+        await markDirty(db, 'image', record.id, record.createdAt);
+      });
       return record;
     },
     async get(id) {
