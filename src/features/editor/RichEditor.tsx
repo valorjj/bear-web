@@ -222,6 +222,10 @@ export function RichEditor({
       // same reason: the table handle menu is a built-in editor affordance,
       // not an opt-in prop the app may omit.
       onOpenTableMenu: (request) => tableMenuRef.current(request),
+      // Read once at mount like every option above it. A stored image whose
+      // bytes are not on this device says so in the user's language rather
+      // than showing an empty box.
+      missingLabel: t('editor.image.missing'),
       // Read once at mount like every option above it — the editor is keyed
       // by note id and rebuilt on a language change, so there is no live
       // locale switch for these to miss.

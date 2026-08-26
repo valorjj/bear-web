@@ -85,6 +85,8 @@ export const en = {
   'trash.empty.title': 'Trash is empty',
   'trash.empty.body': 'Notes you delete appear here until you remove them for good.',
 
+  'editor.image.missing': 'Image not on this device yet',
+  'editor.image.tooLarge': 'That image is too large (25 MB maximum).',
   'editor.textarea': 'Note text',
   'editor.saveFailed': 'This note could not be saved. Keep typing — bear-web will keep trying.',
   'editor.serializeFailed':

@@ -13,6 +13,7 @@ import { TableHandles, type TableHandlesOptions } from './TableHandles';
 import { Highlight } from './Highlight';
 import { lowlightForEditor } from './lowlight';
 import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
+import { StoredImage, type StoredImageOptions } from './StoredImage';
 import type { TagPillOptions } from './TagPill';
 import { TagPill } from './TagPill';
 import { MarkdownTable } from './tableMarkdown';
@@ -174,13 +175,18 @@ export function buildEditorExtensions(
       HeadingFoldOptions &
       TableHandlesOptions &
       ContextMenuOptions &
-      CodeLanguageControlsOptions
+      CodeLanguageControlsOptions &
+      StoredImageOptions
   > = {},
 ): Extensions {
   return [
     ...buildSupportedExtensions(options),
     RawDefinition,
     RawHtmlBlock,
+    // `StoredImage` before `RawImage` is not what decides the branch —
+    // `RawImage.parseMarkdown` does that explicitly — but the node type must
+    // be in the schema before anything can emit it.
+    StoredImage.configure({ missingLabel: options.missingLabel ?? null }),
     RawImage,
     createRawInlineHtmlNode(computeRecognizedHtmlTags()),
   ];

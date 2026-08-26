@@ -41,6 +41,12 @@ const CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   { name: 'strikethrough', markdown: 'Some ~~struck~~ text.' },
   { name: 'inline code', markdown: 'Some `code` text.' },
   { name: 'link', markdown: 'A [link](https://example.com) here.' },
+  // K1. The round trip is the whole guarantee for the stored-image path: the
+  // `fidelity` and `totality` suites below both iterate CANONICAL.
+  { name: 'stored image', markdown: '![beach](files/abc123.webp)' },
+  { name: 'stored image, no alt', markdown: '![](files/abc123.webp)' },
+  // Still a RAW inline, and must stay one — see the privacy ruling.
+  { name: 'remote image', markdown: '![remote](https://example.com/a.png)' },
   { name: 'blockquote', markdown: '> Quoted text.' },
   { name: 'horizontal rule', markdown: '---' },
   { name: 'bullet list', markdown: '- first\n- second' },

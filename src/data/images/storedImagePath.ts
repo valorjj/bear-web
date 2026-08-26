@@ -1,6 +1,13 @@
 /**
  * The Markdown reference for a stored image: `files/<id>.webp`.
  *
+ * Lives in `src/data/`, NOT `src/features/`, for the same reason `parseTags`
+ * does: the data layer needs it — the reclamation sweep in `notes.save` reads
+ * a note's referenced ids — and `src/data/` must not import from
+ * `src/features/`. Putting it under the editor would also make
+ * `features/editor` import `features/notes`, which already imports
+ * `features/editor`.
+ *
  * A relative path rather than a `bear://` scheme or an absolute URL, and the
  * choice is IRREVERSIBLE — it cannot change without rewriting every note that
  * has an image. Two properties pay for it. Sync moves note text verbatim, so a

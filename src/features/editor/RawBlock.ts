@@ -1,6 +1,8 @@
 import { Node } from '@tiptap/core';
 import type { MarkdownToken } from '@tiptap/core';
 
+import { storedImageId } from '@/data';
+
 /**
  * Holds the raw Markdown source of any construct this editor has no extension
  * for, and serializes it back byte-identically.
@@ -306,7 +308,31 @@ export const RawDefinition = createRawBlock('rawDefinition', 'def');
 export const RawHtmlBlock = createRawBlock('rawHtmlBlock', 'html');
 
 /** Claims `marked`'s inline `image` token. No image extension exists until M4b. */
-export const RawImage = createRawInline('rawImage', 'image');
+/**
+ * The `image` token's ONE handler, which branches.
+ *
+ * A stored image (`files/<id>.webp`) becomes a `storedImage` node with a real
+ * `<img>`; every other destination stays a raw inline rendering its own
+ * monospace source, exactly as it did before K1 — deliberately, because a note
+ * that fetches from a third-party host the moment it opens turns a pasted
+ * tracking pixel into a beacon.
+ *
+ * Branching HERE rather than registering `StoredImage` with the same
+ * `markdownTokenName`: two extensions claiming one token leaves the winner to
+ * the manager's iteration order, which is not a contract anyone wrote down.
+ */
+export const RawImage = createRawInline('rawImage', 'image').extend({
+  parseMarkdown: (token: MarkdownToken) => {
+    const href = typeof token.href === 'string' ? token.href : '';
+    if (storedImageId(href) !== null) {
+      return {
+        type: 'storedImage',
+        attrs: { src: href, alt: typeof token.text === 'string' ? token.text : '' },
+      };
+    }
+    return { type: 'rawImage', attrs: { source: token.raw ?? '' } };
+  },
+});
 
 /**
  * Factory, not a ready-made const like the others: the set of tags it must
