@@ -1,5 +1,5 @@
 /** The formats a single note can be exported as. */
-export type ExportExtension = 'md' | 'html' | 'pdf';
+export type ExportExtension = 'md' | 'html' | 'pdf' | 'zip';
 
 /** Just enough of a note to name a file after it. */
 export interface NamedNote {

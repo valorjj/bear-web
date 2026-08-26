@@ -1,5 +1,6 @@
-import { files, storedImageIds } from '@/data';
+import { files, storedImagePath, storedImageIds } from '@/data';
 import { downloadBlob } from '@/lib/download';
+import { createZip, type ZipEntry } from '@/lib/zip';
 
 import { exportFilename, type NamedNote } from './filename';
 import { readExportTokens, renderNoteHtml } from './html';
@@ -62,6 +63,28 @@ async function collectImages(text: string): Promise<Map<string, string>> {
   return entries;
 }
 
+/**
+ * The stored images a note references, as zip entries under `files/`.
+ *
+ * An image this device does not have is skipped rather than failing the
+ * export: a note synced before its bytes arrived should still produce a
+ * bundle, just a smaller one.
+ */
+async function collectBundleFiles(text: string): Promise<ZipEntry[]> {
+  const entries: ZipEntry[] = [];
+
+  for (const id of storedImageIds(text)) {
+    const record = await files.get(id);
+    if (record === undefined) continue;
+    entries.push({
+      path: storedImagePath(id),
+      bytes: new Uint8Array(await record.blob.arrayBuffer()),
+    });
+  }
+
+  return entries;
+}
+
 /** `FileReader` rather than `btoa`: the latter needs a binary string and mangles bytes above 0x7f. */
 function blobToDataUri(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -82,7 +105,25 @@ export async function exportNote(
   const download = deps.download ?? downloadBlob;
 
   if (format === 'md') {
-    download(exportFilename(note, 'md'), new Blob([note.text], { type: MIME.md }), doc);
+    const entries = await collectBundleFiles(note.text);
+
+    // A plain `.md` when the note has no images. A zip holding one file would
+    // make every ordinary export worse to serve one case.
+    if (entries.length === 0) {
+      download(exportFilename(note, 'md'), new Blob([note.text], { type: MIME.md }), doc);
+      return;
+    }
+
+    // The note's text VERBATIM inside the bundle: `files/<id>.webp` must
+    // survive untouched, because that relative path is the whole reason the
+    // folder opens in Obsidian with the images resolving. This is what K1's
+    // path decision was for.
+    const name = exportFilename(note, 'md');
+    download(
+      exportFilename(note, 'zip'),
+      createZip([{ path: name, bytes: new TextEncoder().encode(note.text) }, ...entries]),
+      doc,
+    );
     return;
   }
 

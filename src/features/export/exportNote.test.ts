@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { db, files as filesRepo, storedImagePath } from '@/data';
 
 import { exportNote } from './exportNote';
 
@@ -98,5 +100,75 @@ describe('exportNote', () => {
 
     const [, init] = fetch.mock.calls[0]!;
     expect((init as RequestInit).body).toBe(await readBlob(files[0]!.blob));
+  });
+});
+
+describe('a note with stored images', () => {
+  beforeEach(async () => {
+    await db.open();
+    await Promise.all([db.files.clear(), db.syncState.clear()]);
+  });
+
+  async function storeImage(): Promise<string> {
+    const record = await filesRepo.add(
+      'n1',
+      new Blob([new Uint8Array([1, 2, 3, 4])], {
+        type: 'image/webp',
+      }),
+      { mime: 'image/webp', width: 40, height: 20 },
+    );
+    return record.id;
+  }
+
+  it('exports a plain .md when the note has no images', async () => {
+    // A zip holding one file would make every ordinary export worse to serve
+    // one case.
+    const { files, deps } = harness();
+
+    await exportNote(note, 'md', 'en', deps);
+
+    expect(files[0]!.filename).toMatch(/\.md$/);
+  });
+
+  it('exports a .zip when the note has one', async () => {
+    const id = await storeImage();
+    const { files, deps } = harness();
+
+    await exportNote({ ...note, text: `Trip\n\n![](${storedImagePath(id)})` }, 'md', 'en', deps);
+
+    expect(files[0]!.filename).toMatch(/\.zip$/);
+  });
+
+  it('keeps the Markdown VERBATIM inside the bundle', async () => {
+    // `files/<id>.webp` must survive untouched — that relative path is the
+    // whole reason the folder opens in Obsidian with images resolving.
+    const id = await storeImage();
+    const text = `Trip\n\n![](${storedImagePath(id)})`;
+    const { files, deps } = harness();
+
+    await exportNote({ ...note, text }, 'md', 'en', deps);
+
+    const bytes = new Uint8Array(await files[0]!.blob.arrayBuffer());
+    expect(new TextDecoder().decode(bytes)).toContain(text);
+  });
+
+  it('puts the image bytes in the bundle under files/', async () => {
+    const id = await storeImage();
+    const { files, deps } = harness();
+
+    await exportNote({ ...note, text: `Trip\n\n![](${storedImagePath(id)})` }, 'md', 'en', deps);
+
+    const bytes = new Uint8Array(await files[0]!.blob.arrayBuffer());
+    expect(new TextDecoder().decode(bytes)).toContain(storedImagePath(id));
+  });
+
+  it('still exports when an image’s bytes are missing', async () => {
+    // A note synced before its image arrived must not fail to export.
+    const { files, deps } = harness();
+
+    await exportNote({ ...note, text: 'Trip\n\n![](files/nothere.webp)' }, 'md', 'en', deps);
+
+    expect(files).toHaveLength(1);
+    expect(files[0]!.filename).toMatch(/\.md$/);
   });
 });
