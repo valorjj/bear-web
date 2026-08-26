@@ -611,3 +611,67 @@ was needed to start using either.
 - The "known gaps" list in `docs/rulings/sync.md` — none block anything
   queued, all are named there rather than here so they stay next to the
   constraints they qualify.
+
+
+## J. Mobile — J1 SHIPPED 2026-08-26, J2–J4 named and unscheduled
+
+**The starting point was worse than "cramped".** Measured at 390×844 before
+anything was written: sidebar 240 + note list 320 + two resizers laid out wider
+than the screen, so the editor pane sat entirely off it, and `<main>`'s
+`overflow-hidden` meant `scrollWidth === clientWidth === 390` — the page could
+not be scrolled to reach it. A phone user could tap a note and never see one.
+`src/styles/` contained no responsive rules whatsoever.
+
+Decomposed into four sub-projects because it is far too large for one spec, and
+because J1 alone converts "unusable" into "usable" while nothing else is even
+testable until it exists.
+
+### J1. Responsive shell and navigation — SHIPPED
+
+Spec: `docs/superpowers/specs/2026-08-26-j1-mobile-shell-design.md`.
+Plan: `docs/superpowers/plans/2026-08-26-j1-mobile-shell.md`.
+
+Three modes (`phone` < 640, `tablet` < 1024, `desktop`), a `Dialog` drawer for
+the tag sidebar, a derived phone screen, and one history entry per overlay so
+the platform back gesture works without a router.
+
+**Findings worth carrying forward:**
+
+- **1024 is chosen against Playwright's viewport, not by taste.** Seven
+  existing assertions that the shell has three panes depend on it.
+- **`document.scrollWidth` cannot see an overflowing pane** when the container
+  is `overflow-hidden` — it reads the viewport width either way. That is the
+  very reason the original defect was invisible, and the first version of the
+  e2e guard was vacuous because of it. Measure each pane's box instead.
+- **Reproducing the original defect needs BOTH a rendered sidebar and a
+  fixed-width list.** Either alone passes, because flex children shrink.
+- **`SHELL_CHROME_WIDTH` shipped wrong (56, forgetting one of two resizers)
+  and one e2e test caught it on its first run.** A constant made falsifiable
+  is worth more than a constant asserted to be right.
+- **Two existing appearance tests changed MEANING rather than going stale.**
+  The toolbar-overflow test's 900px premise disappeared (that width is now a
+  two-pane tablet with a ~556px editor) and the defect moved to 390px; the
+  prose-floor test's ~96px editor pane became unreachable, because
+  `maxPaneWidth` now stops the resizers squeezing it below 160.
+
+### J2. Touch parity — NOT STARTED
+
+Every hover-only affordance and every right-click route needs a touch
+equivalent, and tap targets need to reach 44px. The note row's pin shipped
+hover-revealed on 2026-08-26 with the row context menu as its non-hover route;
+on a phone there is no right-click either, so long-press is the likely answer
+and J2 is where that gets ruled on. The fold chevron, the table handles and the
+resizer's hit area are in the same position.
+
+### J3. The editor on a phone — NOT STARTED
+
+`visualViewport` and the virtual keyboard, the floating top and bottom
+toolbars, selection handles, the code-language popover, tables. The J1
+screenshots already show the top control pill overlapping the note title at
+390px, which is J3's first item.
+
+### J4. Platform chrome — NOT STARTED
+
+Safe-area insets throughout, `100dvh`, installability, pull-to-refresh, and
+whether an installed PWA changes J1's answer on routing. J1 carved out one
+exception and only one: the FAB's own `env(safe-area-inset-bottom)`.

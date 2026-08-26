@@ -48,12 +48,13 @@ feature and is not yet scheduled.
 | C code block language + highlighting                              | complete |
 | H editor interaction surfaces                                     | complete |
 | I note-list row redesign + row context menu                       | complete |
+| J1 responsive shell: phone, tablet, desktop                       | complete |
 | G export: PDF, rendered server-side                               | complete |
 | M9b callout blocks                                                | deferred |
 
-1761 unit tests (plus 92 server tests, 55 of which are integration tests that
+1847 unit tests (plus 92 server tests, 55 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 126 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 136 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **G moved PDF export off the client entirely, and it is the first capability
@@ -76,6 +77,27 @@ built; **control 4 ("the container has no route off the host") is NOT**, and
 the spec says so in place — `internal: true` denies egress and also kills the
 published port, so the API could never reach the renderer. See
 `docs/rulings/export.md` and `server/README.md`.
+
+**J1 made the app usable on a phone, and the starting point was worse than
+"cramped".** At 390px the sidebar (240) plus the note list (320) plus two
+resizers laid out wider than the screen, so the editor pane sat entirely
+off it — and `<main>`'s `overflow-hidden` meant `scrollWidth === clientWidth
+=== 390`, so the page could not be scrolled to reach it. A phone user could
+tap a note and never see one. There were no responsive rules at all: the only
+`@media` blocks in `src/styles/` were `prefers-color-scheme` and
+`prefers-reduced-motion`.
+
+There are now three modes behind `src/lib/useLayoutMode.ts` — `phone` below
+640, `tablet` to 1023, `desktop` at 1024 and up, where the layout is
+unchanged. The phone's screen is DERIVED from `selectedNoteId` rather than
+stored, `src/lib/useOverlayHistory.ts` gives the drawer and the editor screen
+one history entry each so Android's back button and iOS's edge-swipe work
+without a router, and the tag sidebar becomes a `Dialog` drawer rendering
+`SidebarContent` — the same component the desktop pane renders. **Mobile is
+four sub-projects and only J1 is done**: J2 is touch parity (hover-only
+affordances, long-press, 44px targets), J3 the editor on a phone (virtual
+keyboard, floating toolbars), J4 platform chrome (safe areas, `100dvh`,
+installability). See `docs/rulings/design-tokens-and-layout.md`'s J1 section.
 
 **I redesigned the note-list row and gave it a right-click menu.** The row is
 now title → preview → thumbnail → a footer line carrying the pin and the date,
@@ -312,6 +334,26 @@ These bit us once already. They are not mistakes.
   belong in Playwright.
 - `erasableSyntaxOnly` forbids `enum`, parameter properties, and namespaces.
   `verbatimModuleSyntax` requires `import type` / `export type`.
+- **jsdom implements NO `matchMedia` — the property is absent, not stubbed.**
+  A component calling it throws `TypeError: window.matchMedia is not a
+function`, so every test rendering the shell needs the stub
+  `vitest.setup.ts` now installs, driven by `globalThis.__setViewportWidth`.
+  Two things about it are not obvious. It cannot name `MediaQueryList`:
+  `vitest.setup.ts` is in the `node` tsconfig project (`lib: ["ES2023"]`,
+  `types: ["node"]`, no DOM) precisely so browser and Node globals cannot leak
+  into each other, so it declares its own shape. And a `declare global` there
+  is INVISIBLE to `src/`, which the `app` project owns — `vitest run` does not
+  typecheck, so a test using the undeclared global passes locally and fails
+  only in `npm run build`, where `tsc -b` compiles `src/` including its test
+  files. The declaration lives in `src/testGlobals.d.ts` for that reason.
+
+- **Seven e2e assertions silently depend on Playwright's viewport being at
+  least 1024.** `codePalette.spec.ts:19,39,107`, `contrast.spec.ts:138` and
+  `appearance.spec.ts:302,418,901` all assert the shell has three panes, which
+  is now viewport-dependent. Lowering the configured viewport turns all seven
+  into confusing failures about missing panes; `e2e/mobile.spec.ts` carries one
+  named assertion that fails honestly instead.
+
 - **A component defined inside a render body is a new type every render.**
   `NoteRowMenu`'s `Item` was written there first: React then unmounts and
   remounts every row on each render, and this menu DOES re-render while open
