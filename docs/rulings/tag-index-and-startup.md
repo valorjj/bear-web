@@ -75,3 +75,16 @@ or an `onError` callback losing its `try`/`catch`.
   Both write inside transactions over `notes`; sequencing removes the question
   of what a rebuild sees mid-purge.
 
+
+
+- **`db.version(4)` is IndexedDB version 40, and `e2e/fixtures/seed.ts` moved
+  with it in the same commit.** K1 added image metadata to `files`. No
+  `.upgrade()` hook, and that is safe rather than lazy: the `files` repository
+  had no call sites before K1, so no row of that shape was ever written.
+  `db.test.ts` pins the number and failing on a bump is it working — the bump
+  is the licensed edit, and the seed moving with it is the rule it enforces.
+
+- **`runStartupFileSweep` is sequenced AFTER `runStartupSweep`, not alongside
+  it.** The blank-note sweep purges notes, and purging already reclaims their
+  files, so running both at once would have the image sweep reading notes the
+  other is deleting.

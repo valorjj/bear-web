@@ -675,3 +675,54 @@ screenshots already show the top control pill overlapping the note title at
 Safe-area insets throughout, `100dvh`, installability, pull-to-refresh, and
 whether an installed PWA changes J1's answer on routing. J1 carved out one
 exception and only one: the FAB's own `env(safe-area-inset-bottom)`.
+
+
+## K. Image storage — K1 SHIPPED 2026-08-26, K2–K4 named and unscheduled
+
+The goal's one clause that had never been scheduled by any milestone or
+sub-project. Decomposed into four, because it touches the data layer, the
+editor, sync, export and the server.
+
+Spec: `docs/superpowers/specs/2026-08-26-k1-image-capture-design.md`.
+Plan: `docs/superpowers/plans/2026-08-26-k1-image-capture.md`.
+
+### K1. Capture and display, locally — SHIPPED
+
+Paste or drop a screenshot; one downscaled WebP in IndexedDB;
+`![](files/<id>.webp)` in the Markdown; a `StoredImage` node with a
+reference-counted object URL. Offline, one device.
+
+**Findings worth carrying forward:**
+
+- **The save-time reclamation sweep in the spec would have destroyed data**,
+  and the test written to guard it caught that: autosave's debounce is a few
+  hundred milliseconds, which is not an undo window. Reclamation moved to
+  startup. The test discriminates — it fails against the original design.
+- **The note-list thumbnail was making third-party requests.** It read the
+  first REMOTE image URL out of the Markdown and rendered it, so the app did
+  exactly what K1's privacy rule forbids, one pane over, for the whole of
+  sub-project I. Found by an e2e test routing the host. K4's thumbnail rewire
+  was pulled forward because of it.
+- **The bundle ceiling was 89 bytes from being breached** before K1 started
+  (323,911 against 324,000). All of K1 cost 1,555 B gzipped.
+- **Typing Markdown never parses as Markdown** — serializing a text node
+  escapes it. Tests must seed; inserting code must insert a node.
+
+### K2. The Mac Mini — NOT STARTED
+
+Upload endpoint, on-disk storage, auth, a 2 GB account quota, pull-on-demand.
+`bytes` and `createdAt` were added to `FileRecord` in K1 for this. The missing
+-image placeholder already exists and is deliberately quiet rather than an
+error, because after K2 it is the ordinary look of an image whose bytes have
+not arrived.
+
+### K3. Resize and export — NOT STARTED
+
+Drag-to-resize (a width in the Markdown, so it touches the schema), and images
+in Markdown (as a bundle), HTML (inlined) and PDF. The last is the hard one:
+the renderer is a separate container with deliberately no route off the host.
+
+### K4. The thumbnail — MOSTLY DONE IN K1
+
+The privacy half shipped early. What remains is cosmetic: the row currently
+shows the first stored image, and could show a smarter choice.

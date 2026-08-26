@@ -206,3 +206,27 @@ between the selected note and the database.
   `AppShell.test.tsx > reveals a collapsed ancestor`. What identified it was
   measuring the happy path at **61 ms against the test's 5000 ms ceiling**: an
   80x margin means the thing being waited for is not slow, it is absent.
+
+
+- **Orphaned images are reclaimed at STARTUP, never on save — and the
+  save-time design was tried, tested, and found to destroy data.** The K1 spec
+  put the sweep inside `notes.save`, reasoning that autosave's debounce left an
+  undo window. It does not: the debounce is a few hundred milliseconds and a
+  person reaching for Cmd-Z takes seconds, so deleting an image and undoing
+  restored the reference to a blob that had already been deleted — a
+  permanently broken image with no copy anywhere. `NoteEditor.test.tsx`'s "an
+  image deleted and then undone is still stored" failed against that design and
+  passes against the current one, so it genuinely discriminates between them.
+
+  `sweepOrphanFiles` runs at boot beside `sweepBlankNotes`, with the same
+  `createdBefore` time-of-check gate: the sweep is unawaited and the app is
+  interactive while it runs, so an image pasted in that window must be out of
+  reach. The undo window becomes however long the tab stays open. The cost is
+  an orphaned blob surviving until the next launch — a few hundred KB,
+  invisible — and it is worth far more than the alternative.
+
+  It is scoped to the OWNING note's files. A sweep written against `db.files`
+  as a whole passes every obvious test and destroys every other note's images;
+  `sweep.test.ts` fails under exactly that mistake. `notes.purge` still
+  reclaims a purged note's files immediately, because there the note is gone
+  and the case is unambiguous.

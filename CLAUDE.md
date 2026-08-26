@@ -50,12 +50,13 @@ feature and is not yet scheduled.
 | I note-list row redesign + row context menu                       | complete |
 | J1 responsive shell: phone, tablet, desktop                       | complete |
 | J2a phone header proportions and 44px targets                     | complete |
+| K1 image capture and display, locally                             | complete |
 | G export: PDF, rendered server-side                               | complete |
 | M9b callout blocks                                                | deferred |
 
-1851 unit tests (plus 92 server tests, 55 of which are integration tests that
+1892 unit tests (plus 92 server tests, 55 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 138 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 141 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **G moved PDF export off the client entirely, and it is the first capability
@@ -168,7 +169,21 @@ question, not a ruling — nobody has decided whether either blocks the other.
 **M9b callout blocks is deferred, not dropped** — specced in M9a's
 decomposition, deliberately not chosen this round, still unblocked.
 
-**Image storage is named in this project's goal and has never been
+**Image storage is no longer entirely unscheduled: K1 shipped on 2026-08-26.**
+Pasting or dropping a screenshot into a note now stores one downscaled WebP in
+IndexedDB (`files`, the table that had existed unused since M1), references it
+as `![](files/<id>.webp)` — a relative path, so sync needs no rewriting and an
+exported folder is a portable Markdown bundle — and renders it through a
+`StoredImage` node whose object URLs are reference-counted in
+`src/lib/objectUrls.ts`. It works entirely offline on one device. **K2 (the Mac
+Mini as a sync target), K3 (drag-to-resize and images in export) and K4 are
+not built**; K4's thumbnail rewire was pulled forward into K1 because it turned
+out to be a privacy hole rather than a cosmetic gap — see below.
+
+**The historical note below is kept because its reasoning still applies to
+K2–K4.**
+
+**Image storage is named in this project's goal and had never been
 scheduled** — not by a milestone and not by the three sub-projects above. It is
 larger than all three together and none of them block it. Treat its absence
 from this table as an open decision, not as a ruling.
@@ -346,6 +361,27 @@ These bit us once already. They are not mistakes.
   scoped runs, 3 full-suite runs (one at load 24), or two deliberate attempts
   to plant a hostile caret. Revert an edit with `commands.undo()`, which reads
   no caret at all, rather than with a keystroke that does.
+
+- **jsdom implements neither `createImageBitmap` nor `OffscreenCanvas`**, so
+  `downscaleImage` takes both as injected dependencies and the unit tests
+  supply fakes. The only REAL WebP encode in the whole suite happens in
+  `e2e/images.spec.ts`. The unit tests cover the arithmetic and the refusals,
+  which is where the bugs are.
+
+- **jsdom has no `DataTransfer` and no `ClipboardEvent` that accepts one**, so
+  a paste has to be synthesised by hand — and a payload carrying only `files`
+  is not enough. ProseMirror runs EVERY plugin's `handleDOMEvents.paste` in
+  turn, and `@tiptap/core`'s own handler calls `clipboardData.getData` before
+  yours is reached; without a `getData` the throw stops your handler running at
+  all, which presents as "my plugin does nothing" rather than as an error in
+  the harness. It took a stack trace to tell the two apart.
+
+- **Typing Markdown into the editor does not parse it as Markdown.** There are
+  no input rules for images, so typing `![x](url)` puts literal characters in a
+  text node — and serializing a text node ESCAPES them, so the note
+  round-trips to `!\[x\](url)`. Any test about how a construct parses must
+  SEED the note (or reload), never type it; and any code inserting Markdown
+  must insert a node rather than text, which is why `ImagePaste` does.
 
 - **jsdom implements NO `matchMedia` — the property is absent, not stubbed.**
   A component calling it throws `TypeError: window.matchMedia is not a

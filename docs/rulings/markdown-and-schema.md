@@ -460,3 +460,35 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   **Inline marks are deliberately left alone.** `**bold**` and `` `code` ``
   read as light emphasis rather than as structure, and removing them means
   parsing rather than trimming a prefix.
+
+
+## Stored images (K1)
+
+- **A stored image is `![alt](files/<id>.webp)` — a relative path, and the
+  choice is irreversible.** It cannot change without rewriting every note that
+  has an image. Two properties pay for it: sync moves note text verbatim, so a
+  device-independent path needs no rewriting in either direction; and a note
+  exported beside a `files/` directory is a Markdown bundle that opens in any
+  editor, with no app-specific syntax to strip. `src/data/images/` owns the
+  pattern, anchored at both ends so `https://x/files/a.webp` does NOT match.
+
+- **`RawImage` owns the `image` token and BRANCHES; `StoredImage` does not
+  compete for it.** Two extensions declaring the same `markdownTokenName`
+  leaves the winner to the manager's iteration order, which is not a contract
+  anyone wrote down. `RawImage.parseMarkdown` checks the destination and emits
+  a `storedImage` node or a raw inline explicitly.
+
+- **A REMOTE image URL renders as monospace source, and that is a privacy
+  decision rather than an unfinished feature.** A note that fetches from a
+  third-party host the moment it opens turns a pasted tracking pixel into a
+  beacon and spends a phone's data unasked. Changing it should be its own
+  decision with its own setting. **The note list broke this rule for a whole
+  sub-project without anyone noticing** — `thumbnail.ts` read the first remote
+  URL and rendered it, so the app made exactly those requests one pane over.
+  Found by an e2e test that routed the host and watched the request happen;
+  `e2e/images.spec.ts` keeps that assertion.
+
+- **Insert a `storedImage` NODE, never the text `![](path)`.** ProseMirror
+  serializes a text node with escaping, so inserted Markdown round-trips to
+  `!\[\](files/…)` — a broken reference that then renders as source. The
+  round-trip fixtures in `markdown.test.ts` are what catch it.
