@@ -1,8 +1,8 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { db, files, storedImagePath } from '@/data';
+import { db, files, MAX_DISPLAY_WIDTH, storedImagePath } from '@/data';
 import { renderWithI18n } from '@/i18n/testing';
 
 import { RichEditor, type RichEditorHandle } from './RichEditor';
@@ -30,7 +30,10 @@ Range.prototype.getClientRects = () =>
   }) as unknown as DOMRectList;
 document.elementFromPoint = () => null;
 
-function renderEditor(markdown: string): { unmount: () => void } {
+function renderEditor(markdown: string): {
+  unmount: () => void;
+  handleRef: React.RefObject<RichEditorHandle | null>;
+} {
   const handleRef = createRef<RichEditorHandle>();
   const result = renderWithI18n(
     <RichEditor
@@ -43,7 +46,7 @@ function renderEditor(markdown: string): { unmount: () => void } {
       updatedAt={0}
     />,
   );
-  return { unmount: result.unmount };
+  return { unmount: result.unmount, handleRef };
 }
 
 beforeEach(async () => {
@@ -92,7 +95,11 @@ describe('StoredImage', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-raw-inline="rawImage"]')).not.toBeNull();
     });
-    expect(document.querySelector('img')).toBeNull();
+    // `img.bear-stored-image`, not any `img`: ProseMirror inserts its own
+    // `<img class="ProseMirror-separator">` into a paragraph holding only an
+    // inline atom, so a bare `img` selector matches the editor's plumbing
+    // rather than a rendered picture.
+    expect(document.querySelector('img.bear-stored-image')).toBeNull();
   });
 
   it('renders at the width the Markdown asks for', async () => {
@@ -157,5 +164,111 @@ describe('StoredImage', () => {
     // The ONLY thing that can see a leak. Nothing else in the app, the suite
     // or the browser reports an object URL that is never revoked.
     await waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:gone'));
+  });
+});
+
+describe('keyboard resize', () => {
+  /** Mounts an editor with one stored image and selects it. */
+  async function withSelectedImage(markdown: string) {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:resize');
+    const { handleRef } = renderEditor(markdown);
+    await waitFor(() => expect(handleRef.current?.editor).toBeTruthy());
+
+    const editor = handleRef.current!.editor!;
+    // Select the image node itself. A caret in prose is the state the
+    // shortcuts must decline, so the tests have to be explicit about which
+    // one they are in.
+    let imagePos: number | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'storedImage') imagePos = pos;
+    });
+    expect(imagePos).not.toBeNull();
+    act(() => {
+      editor.commands.setNodeSelection(imagePos!);
+    });
+
+    return { editor, handleRef };
+  }
+
+  function widthOf(handleRef: React.RefObject<RichEditorHandle | null>): number | null {
+    const markdown = handleRef.current!.getMarkdown();
+    const match = /!\[[^\]]*\|(\d+)\]/.exec(markdown);
+    return match === null ? null : Number(match[1]);
+  }
+
+  it('narrows a selected image', async () => {
+    const { editor, handleRef } = await withSelectedImage(
+      'Note\n\ntext ![beach|400](files/abc.webp) more',
+    );
+
+    act(() => {
+      editor.commands.keyboardShortcut('Mod-Alt-ArrowLeft');
+    });
+
+    // Asserted through the SERIALIZED markdown, not the DOM: a resize that
+    // moved the element and never reached the document would look identical
+    // on screen and be lost on reload.
+    expect(widthOf(handleRef)!).toBeLessThan(400);
+  });
+
+  it('widens a selected image', async () => {
+    const { editor, handleRef } = await withSelectedImage(
+      'Note\n\ntext ![beach|400](files/abc.webp) more',
+    );
+
+    act(() => {
+      editor.commands.keyboardShortcut('Mod-Alt-ArrowRight');
+    });
+
+    expect(widthOf(handleRef)!).toBeGreaterThan(400);
+  });
+
+  it('never goes below 1 or above the maximum', async () => {
+    const { editor, handleRef } = await withSelectedImage(
+      'Note\n\ntext ![beach|100](files/abc.webp) more',
+    );
+
+    for (let i = 0; i < 40; i += 1) {
+      act(() => {
+        editor.commands.keyboardShortcut('Mod-Alt-ArrowLeft');
+      });
+    }
+    expect(widthOf(handleRef)!).toBeGreaterThanOrEqual(1);
+
+    for (let i = 0; i < 60; i += 1) {
+      act(() => {
+        editor.commands.keyboardShortcut('Mod-Alt-ArrowRight');
+      });
+    }
+    expect(widthOf(handleRef)!).toBeLessThanOrEqual(MAX_DISPLAY_WIDTH);
+  });
+
+  it('resets to full column, losing the pipe entirely', async () => {
+    const { editor, handleRef } = await withSelectedImage(
+      'Note\n\ntext ![beach|400](files/abc.webp) more',
+    );
+
+    act(() => {
+      editor.commands.keyboardShortcut('Mod-Alt-0');
+    });
+
+    // `null`, never `|0`: the reset must round-trip to exactly what an
+    // unresized image writes.
+    expect(handleRef.current!.getMarkdown()).toContain('![beach](files/abc.webp)');
+  });
+
+  it('declines when the caret is in prose rather than on an image', async () => {
+    // Otherwise the chords swallow themselves everywhere in a note, which is
+    // most of the time.
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:prose');
+    const { handleRef } = renderEditor('just words, no image');
+    await waitFor(() => expect(handleRef.current?.editor).toBeTruthy());
+    const before = handleRef.current!.getMarkdown();
+
+    act(() => {
+      handleRef.current!.editor!.commands.keyboardShortcut('Mod-Alt-ArrowLeft');
+    });
+
+    expect(handleRef.current!.getMarkdown()).toBe(before);
   });
 });

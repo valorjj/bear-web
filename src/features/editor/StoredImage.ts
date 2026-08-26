@@ -1,6 +1,8 @@
 import { Node } from '@tiptap/core';
+import { NodeSelection } from '@tiptap/pm/state';
+import type { EditorState, Transaction } from '@tiptap/pm/state';
 
-import { files, formatImageAlt, loadImageBlob, storedImageId } from '@/data';
+import { files, formatImageAlt, loadImageBlob, MAX_DISPLAY_WIDTH, storedImageId } from '@/data';
 
 import { acquireObjectUrl, releaseObjectUrl } from '@/lib/objectUrls';
 
@@ -34,6 +36,9 @@ export interface StoredImageOptions {
  * widget here (`HeadingFold`, `TableHandles`) is plain DOM too. A React view
  * for one `<img>` would need a portal and buy nothing.
  */
+/** Where a keyboard resize starts when the image has no width yet. */
+const DEFAULT_STEP_BASE = 640;
+
 export const StoredImage = Node.create<StoredImageOptions>({
   name: 'storedImage',
   group: 'inline',
@@ -91,6 +96,55 @@ export const StoredImage = Node.create<StoredImageOptions>({
 
   renderMarkdown: (node: { attrs?: { src?: string; alt?: string; width?: number | null } }) =>
     `![${formatImageAlt(node.attrs?.alt ?? '', node.attrs?.width ?? null)}](${node.attrs?.src ?? ''})`,
+
+  /**
+   * The width the keyboard steps from when none is set yet.
+   *
+   * The node view has no layout to measure in jsdom and the real column width
+   * is not knowable from here, so the first keypress adopts a sensible size
+   * and every later one is relative to it. 640 is the middle of the range the
+   * editor's own measure allows.
+   */
+  addKeyboardShortcuts() {
+    /** 10% of the current width, floored so a step is always visible. */
+    const step = (from: number, direction: 1 | -1): number => {
+      const delta = Math.max(16, Math.round(from * 0.1));
+      return Math.min(MAX_DISPLAY_WIDTH, Math.max(1, from + delta * direction));
+    };
+
+    const resize =
+      (direction: 1 | -1 | 0) =>
+      ({ state, dispatch }: { state: EditorState; dispatch?: (tr: Transaction) => void }) => {
+        const { selection } = state;
+        // Only a selected IMAGE. Without this the chords would swallow
+        // themselves whenever the caret sits in prose, which is most of the
+        // time.
+        if (!(selection instanceof NodeSelection)) return false;
+        if (selection.node.type.name !== 'storedImage') return false;
+
+        const current = (selection.node.attrs.width as number | null) ?? DEFAULT_STEP_BASE;
+        // `null`, not 0: `formatImageAlt` omits the pipe entirely for null, so
+        // a reset round-trips to exactly what an unresized image writes. `|0`
+        // would parse back as no width anyway and is a different byte string.
+        const next = direction === 0 ? null : step(current, direction);
+
+        if (dispatch) {
+          dispatch(
+            state.tr.setNodeMarkup(selection.from, undefined, {
+              ...selection.node.attrs,
+              width: next,
+            }),
+          );
+        }
+        return true;
+      };
+
+    return {
+      'Mod-Alt-ArrowRight': () => this.editor.commands.command(resize(1)),
+      'Mod-Alt-ArrowLeft': () => this.editor.commands.command(resize(-1)),
+      'Mod-Alt-0': () => this.editor.commands.command(resize(0)),
+    };
+  },
 
   addNodeView() {
     const { missingLabel } = this.options;

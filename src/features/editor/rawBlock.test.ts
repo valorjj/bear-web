@@ -90,19 +90,32 @@ describe('structural check: the raw node actually does the work', () => {
     expect(node?.attrs?.source).toBe(markdown);
   });
 
-  it('parses a standalone image into a rawImage node, not a dropped image', () => {
-    // @tiptap/extension-paragraph's own parseMarkdown special-cases a paragraph
-    // whose only token is an image: it unwraps the paragraph and parses the
-    // image as a direct child (`helpers.parseChildren([tokens[0]])`) rather
-    // than wrapping it — the same promotion a real Image node would get. So
-    // the rawImage node lands as a direct doc child, not nested in a
-    // paragraph; asserting a paragraph wrapper here would fail for the wrong
-    // reason and give false confidence.
+  it('parses a standalone image into a rawImage node WRAPPED in a paragraph', () => {
+    // The upstream fact this test has always recorded is unchanged:
+    // `@tiptap/extension-paragraph`'s own parseMarkdown special-cases a
+    // paragraph whose only token is an image, unwrapping it and parsing the
+    // image as a DIRECT doc child (`helpers.parseChildren([tokens[0]])`).
+    //
+    // What this test used to assert — and what it accepted as correct — was
+    // that unwrapped shape. That was WRONG, and the assertion hid it: `doc`
+    // takes block content only, so an inline node as its direct child is an
+    // invalid document, and every later transaction on it throws
+    // `Called contentMatchAt on a node with invalid content`. The symptom is
+    // an editor that silently refuses to be typed into. Reachable since K1:
+    // paste an image into an empty note, reload, and the note is frozen.
+    //
+    // `parseMarkdown` now re-wraps a top-level inline node, so this asserts
+    // the valid shape. The old comment's warning that "asserting a paragraph
+    // wrapper here would fail for the wrong reason" was true of the parser
+    // alone and is no longer true of ours.
     const markdown = '![alt text](https://example.com/cat.png)';
     const doc = parseMarkdown(markdown);
 
     expect(doc.content).toHaveLength(1);
-    const [node] = doc.content ?? [];
+    const [paragraph] = doc.content ?? [];
+    expect(paragraph?.type).toBe('paragraph');
+
+    const [node] = paragraph?.content ?? [];
     expect(node?.type).toBe('rawImage');
     expect(node?.attrs?.source).toBe(markdown);
   });
