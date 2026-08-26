@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -74,6 +74,8 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
     onTogglePin: vi.fn(),
     onPurge: vi.fn(),
     onDuplicate: vi.fn(),
+    mode: 'desktop',
+    onOpenDrawer: vi.fn(),
     onEmptyTrash: vi.fn(),
     emptyTrashDisabled: false,
     hasUnfilteredItems: true,
@@ -592,5 +594,62 @@ describe('row context menu', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
 
     expect(screen.queryByRole('menu', { name: 'Note actions' })).not.toBeInTheDocument();
+  });
+});
+
+describe('phone header', () => {
+  it('offers the drawer, and does not on desktop', () => {
+    renderList(<NoteList {...props({ mode: 'phone' })} />);
+    expect(screen.getByRole('button', { name: 'Show tags' })).toBeInTheDocument();
+
+    cleanup();
+    renderList(<NoteList {...props({ mode: 'desktop' })} />);
+    expect(screen.queryByRole('button', { name: 'Show tags' })).not.toBeInTheDocument();
+  });
+
+  it('drops the selection actions, which act on a note the phone has navigated away from', () => {
+    // Not "the header is smaller": the specific claim is that Delete and
+    // Restore are gone, because on a phone selecting a note leaves the list.
+    // They live in the row's context menu instead.
+    renderList(<NoteList {...props({ mode: 'phone', selectedNoteId: 'a' })} />);
+
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the selection actions on desktop', () => {
+    renderList(<NoteList {...props({ mode: 'desktop', selectedNoteId: 'a' })} />);
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+  });
+
+  it('still offers Empty trash in the trash scope on a phone', () => {
+    // Deliberately NOT moved into ScopeMenu: an irreversible action reads
+    // worse buried in a menu of view preferences.
+    renderList(<NoteList {...props({ mode: 'phone', scope: TRASHED_SCOPE })} />);
+
+    expect(screen.getByRole('button', { name: 'Empty trash' })).toBeInTheDocument();
+  });
+
+  it('creates a note from the floating button below desktop', async () => {
+    const onCreate = vi.fn();
+    const user = userEvent.setup();
+    renderList(<NoteList {...props({ mode: 'phone', onCreate })} />);
+
+    await user.click(screen.getByRole('button', { name: 'New note' }));
+
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the floating button exactly as the desktop button names itself', () => {
+    // One action must not announce two different ways depending on viewport.
+    renderList(<NoteList {...props({ mode: 'phone' })} />);
+    const fab = screen.getByRole('button', { name: 'New note' });
+
+    cleanup();
+    renderList(<NoteList {...props({ mode: 'desktop' })} />);
+
+    expect(screen.getByRole('button', { name: 'New note' }).getAttribute('aria-label')).toBe(
+      fab.getAttribute('aria-label'),
+    );
   });
 });

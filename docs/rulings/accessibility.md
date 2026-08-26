@@ -354,3 +354,31 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   aloud between the preview and the date is noise — the same reasoning that
   made `ThemeDialog`'s card previews `aria-hidden`. Pinned by a test asserting
   the URL and the alt text are both absent from the row's accessible name.
+
+
+- **The phone's back control is a real focusable button, not a gesture.** A
+  swipe-driven shell was considered and rejected partly for this: there would
+  be no visible control to name, and the keyboard and screen-reader routes
+  this project has been strict about would have nothing to land on. Focus
+  moves to the back control when the editor screen opens and returns to the
+  row when it closes — a screen swap has no `Dialog`-style focus restore, so
+  without it a screen-reader user is parked on a row that is no longer
+  rendered.
+
+- **The FAB reuses `noteList.create`.** One action must not announce two
+  different ways depending on the viewport, and a phone user and a desktop
+  user are describing the same button to each other. Pinned by a test that
+  compares the two accessible names directly rather than asserting a literal.
+
+- **`search.open` is "Show search", NOT "Search notes".** The field is already
+  named "Search notes" (`search.label`), and two controls sharing an
+  accessible name is ambiguous to anyone reaching for either — the same rule
+  that makes the scope button "List options: {scope}" rather than "Notes".
+  This was caught while writing the key, not by a test: nothing in the suite
+  compares accessible names across components for collisions.
+
+- **The sidebar drawer is a `Dialog`, and must stay one.** It inherits the
+  wide-selector focus trap, `aria-modal`, Escape, and focus restore. A second,
+  narrower trap would reintroduce the gap `ConfirmDialog` documented and lived
+  with: a trap that skips a focusable lets Tab walk out into the page behind,
+  where the user cannot see where focus went.

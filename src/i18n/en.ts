@@ -47,6 +47,10 @@ export const en = {
   'note.copyText': 'Copy text',
   'note.copyText.failed': 'This note could not be copied.',
 
+  'sidebar.open': 'Show tags',
+  'sidebar.drawer': 'Tags and lists',
+  'nav.backToList': 'Back to notes',
+  'search.open': 'Show search',
   'noteList.create': 'New note',
   'noteList.trash': 'Delete',
   'noteList.restore': 'Restore',

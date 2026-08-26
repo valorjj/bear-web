@@ -30,9 +30,25 @@ export interface DialogProps {
   labelledBy?: string;
   /** Id of an element inside the dialog that describes it. */
   describedBy?: string;
+  /**
+   * `center` is a modal box; `start` is a drawer anchored to the inline start
+   * edge, full height.
+   *
+   * A prop that OMITS classes, never a caller appending overriding ones: the
+   * centring lives on the backdrop wrapper rather than the panel, and even the
+   * panel's own `mx-4`/`rounded-lg` are utilities in the same layer as anything
+   * appended — which the stylesheet's order decides, not the class attribute's.
+   * `Pane`'s `shadow-none` cost this project a day proving that.
+   */
+  placement?: 'center' | 'start';
   /** Panel classes, so a caller controls its own width and padding. */
   className?: string;
 }
+
+const PLACEMENT = {
+  center: { wrapper: 'items-center justify-center', panel: 'mx-4 rounded-lg' },
+  start: { wrapper: 'items-stretch justify-start', panel: 'rounded-none' },
+} as const;
 
 /**
  * A modal surface: backdrop, focus trap, Escape to close, focus restored to
@@ -53,6 +69,7 @@ export function Dialog({
   label,
   labelledBy,
   describedBy,
+  placement = 'center',
   className = '',
 }: DialogProps): ReactElement | null {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -109,7 +126,7 @@ export function Dialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className={`fixed inset-0 z-50 flex ${PLACEMENT[placement].wrapper}`}>
       {/*
         The backdrop closes on click. It carries no accessible role: the panel
         is `aria-modal`, so assistive tech already treats everything outside it
@@ -129,7 +146,7 @@ export function Dialog({
         aria-label={label}
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}
-        className={`bg-bg shadow-dialog relative z-10 mx-4 flex flex-col rounded-lg ${className}`}
+        className={`bg-bg shadow-dialog relative z-10 flex flex-col ${PLACEMENT[placement].panel} ${className}`}
       >
         {children}
       </div>

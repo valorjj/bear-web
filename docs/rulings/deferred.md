@@ -203,3 +203,10 @@ with is not resolved; only code can retire one.
   one that could not fail for the reason it existed. **When writing an editor
   fixture, start it the way a real note starts.** `docFor` in
   `headingSections.test.ts` and `headingFold.test.ts` carries this as a comment.
+
+- **Pane-width persistence gained a viewport dimension in J1**, and the ruling
+  above about `usePaneWidths`' flush is unchanged by it. What changed:
+  `clampPaneWidth` takes an optional third `max`, `maxPaneWidth(viewport,
+  otherPane)` supplies it, and widths are WRITTEN in desktop mode only. The
+  bug this closed was pre-existing and reachable: both panes dragged wide in a
+  1024px window left the editor a negative width.

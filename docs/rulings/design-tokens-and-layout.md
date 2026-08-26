@@ -26,7 +26,9 @@ spacing, `rounded-*`, `shadow-*` or `outline-none` utility; a plain CSS
 `scripts/sourceLint.test.ts`, `scripts/contrast.ts`, `scripts/contrast.test.ts`,
 `scripts/fonts.test.ts`, `e2e/appearance.spec.ts`, `e2e/contrast.spec.ts` and
 `e2e/smoke.spec.ts`; `src/features/notes/NoteListItem.tsx`'s row structure and
-`src/features/notes/thumbnail.ts`.
+`src/features/notes/thumbnail.ts`; `src/lib/useLayoutMode.ts`'s breakpoints,
+`src/app/SidebarDrawer.tsx`, `src/ui/Dialog.tsx`'s `placement`, and
+`src/app/paneWidths.ts`'s `SHELL_CHROME_WIDTH` / `maxPaneWidth`.
 
 - **Tokens sit in THREE TIERS, and the split is what the theme system rests
   on.** Tier 1, palette (16 tokens): `bg` `surface` `sidebar` `canvas` `text`
@@ -751,3 +753,76 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   src>` on the grounds that today's browsers ignore it is not a bet worth
   taking. A URL that fails to load unmounts itself (`onError`), keyed on the
   URL so an edited note gets a fresh attempt.
+
+
+## The responsive shell (J1)
+
+- **Three modes, two breakpoints, and 1024 is chosen against a CONSTRAINT
+  rather than by taste.** `phone` below 640, `tablet` 640–1023, `desktop` at
+  1024 and above. `playwright.config.ts` runs `devices['Desktop Chrome']` at
+  1280×720, so a desktop breakpoint at or below 1280 keeps valid the seven
+  existing e2e assertions that the shell has three panes
+  (`codePalette.spec.ts:19,39,107`, `contrast.spec.ts:138`,
+  `appearance.spec.ts:302,418,901`). Lowering the configured viewport below
+  1024 would turn all seven into confusing failures about missing panes;
+  `e2e/mobile.spec.ts` carries one named assertion that fails honestly
+  instead. 640 is a comfort threshold and says so: two panes physically fit
+  from ~520px, but at 640 the editor gets ~280px, the narrowest column worth
+  writing a sentence in.
+
+- **The mode comes from a hook, not from CSS, for four reasons CSS cannot
+  address.** The resizers must not MOUNT; the drawer needs open state and a
+  focus trap; `Pane`'s width is an inline style; and the shell renders a
+  different set of children per mode. `useLayoutMode` seeds from `matchMedia`
+  during the FIRST render, never an effect — there is no SSR here, and an
+  effect-seeded value paints one frame of the wrong layout on every load. Its
+  test asserts the first value the hook ever returns, which is the only
+  assertion that can see that.
+
+- **A resizer is NOT RENDERED below desktop, never hidden.** `Resizer` is a
+  focusable `separator` carrying `aria-valuenow`; `display: none` takes it off
+  the screen while leaving it in the tab order and the accessibility tree,
+  which is worse than either showing it or not building it.
+
+- **A tablet's note list keeps its STORED width; only a phone's fills.**
+  `Pane` treats `width={undefined}` as `flex-1`, so giving every sub-desktop
+  pane `undefined` makes the list and the editor both `flex-1` and split the
+  screen in half — a 400px note list beside a 400px editor. Caught in the spec
+  review, before it shipped.
+
+- **Pane widths are WRITTEN in desktop mode only.** They are read in every
+  mode, so a phone session cannot overwrite the widths chosen on a desktop and
+  returning to a wide window restores them exactly.
+
+- **`SHELL_CHROME_WIDTH` is a constant, and one e2e test is what makes it
+  falsifiable.** 16 of padding + 32 of gaps + 16 for the two `w-2` resizer
+  tracks = 64. It shipped as 56, forgetting one resizer, and
+  `e2e/mobile.spec.ts`'s narrow-desktop test caught it on its first run: the
+  editor measured 152px against a 160 floor. If the shell's padding or gaps
+  ever change, that test fails and this constant is what to fix.
+
+- **`Dialog` gained a `placement` prop; the drawer must not append overriding
+  utilities.** The centring lives on the backdrop wrapper rather than the
+  panel, and the panel's own `mx-4`/`rounded-lg` are utilities in the same
+  layer as anything appended — resolved by stylesheet order, not by the class
+  attribute's. `placement` OMITS classes instead, which is the same rule
+  `Pane`'s `elevated` follows.
+
+- **The search input is 16px at every width, and that is a bug fix rather
+  than a typography choice.** `--bear-text-ui` is 13px, and **iOS Safari zooms
+  the whole page when an input below 16px takes focus**, leaving the user
+  zoomed in with no way back but pinching. `--bear-text-ui-lg` is exactly
+  1rem. It is applied unconditionally rather than at the phone breakpoint: a
+  desktop field at 16px costs nothing, and branching on layout mode would make
+  the rule invisible at exactly the size where it matters. The unit test can
+  only check the class name; `e2e/mobile.spec.ts` asserts the COMPUTED
+  `font-size`, which is what fails if the token moves.
+
+- **The FAB carries `env(safe-area-inset-bottom)`, and the list carries
+  padding to scroll past it.** General safe-area handling is J4, but a
+  floating control placed in the exact spot the OS reserves for the home
+  indicator cannot wait for it. The list's bottom padding is a `style` rather
+  than a utility because the needed 64px is off `sourceLint`'s permitted
+  spacing scale and because it must add the same inset. **Found in a
+  screenshot, not by a test:** without it the FAB permanently covers the last
+  row's preview, and nothing in the suite can see that.
