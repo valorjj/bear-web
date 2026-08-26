@@ -5,6 +5,22 @@ export interface Env {
   googleClientId: string;
   googleClientSecret: string;
   pdfRendererUrl: string;
+  /**
+   * Where image bytes are written.
+   *
+   * A real filesystem path on the host, NOT a Docker volume: the API runs as a
+   * launchd service (`com.markflowing.api`) and only MariaDB and the PDF
+   * renderer are containers. Two constraints follow, and both have bitten this
+   * project before:
+   *
+   * - It must live OUTSIDE the repo, or a `git clean` throws away every image.
+   * - It must not be under `~/Documents`, `~/Desktop` or `~/Downloads`. Those
+   *   are TCC-protected, and a launchd job reading one does not fail — it
+   *   HANGS, forever, with an empty log (CLAUDE.md).
+   *
+   * Defaulted so local development needs no configuration to boot.
+   */
+  imageRoot: string;
 }
 
 type Source = Record<string, string | undefined>;
@@ -31,5 +47,6 @@ export function readEnv(source: Source): Env {
     googleClientId: require_(source, 'GOOGLE_CLIENT_ID'),
     googleClientSecret: require_(source, 'GOOGLE_CLIENT_SECRET'),
     pdfRendererUrl: require_(source, 'PDF_RENDERER_URL'),
+    imageRoot: source.IMAGE_ROOT ?? './data/images',
   };
 }
