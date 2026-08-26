@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { SESSION_HINT_KEY } from '@/data';
+
 import { type Account, fetchAccount, postLogout, startGoogleSignIn } from './api';
 
 export type SessionState =
@@ -41,7 +43,10 @@ export const PENDING_LOGOUT_KEY = 'bear-web:account:pendingLogout';
  * It gates only `/me`. A pending revocation is retried regardless: an owed
  * logout matters more than a saved request.
  */
-export const SESSION_HINT_KEY = 'bear-web:account:hasSession';
+// Re-exported, not redefined: the canonical constant lives in
+// `src/data/sync/config.ts` because the data layer needs it too and cannot
+// import from here.
+export { SESSION_HINT_KEY };
 
 /**
  * `localStorage` throws outright in some contexts (private windows, blocked

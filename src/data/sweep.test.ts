@@ -135,9 +135,11 @@ describe('sweepBlankNotes', () => {
 describe('sweepOrphanFiles', () => {
   const base = { createdBefore: 1000, remove: vi.fn(async () => {}) };
 
-  function file(id: string, noteId = 'n1', createdAt = 500) {
-    return { id, noteId, createdAt };
-  }
+  const file = (id: string, createdAt = 500) => ({ id, createdAt });
+  const referencing =
+    (...ids: string[]) =>
+    async () =>
+      new Set(ids);
 
   it('removes a file no note references any more', async () => {
     const remove = vi.fn(async () => {});
@@ -146,39 +148,44 @@ describe('sweepOrphanFiles', () => {
       ...base,
       remove,
       listFiles: async () => [file('a')],
-      noteText: async () => 'the image is gone from this text',
+      referencedIds: referencing(),
     });
 
     expect(count).toBe(1);
     expect(remove).toHaveBeenCalledWith('a');
   });
 
-  it('keeps a file the note still references', async () => {
+  it('keeps a file a note still references', async () => {
     const remove = vi.fn(async () => {});
 
     await sweepOrphanFiles({
       ...base,
       remove,
       listFiles: async () => [file('a')],
-      noteText: async () => 'before ![](files/a.webp) after',
+      referencedIds: referencing('a'),
     });
 
     expect(remove).not.toHaveBeenCalled();
   });
 
-  it('removes a file whose note is gone', async () => {
-    // `notes.purge` already reclaims a purged note's files; this is the
-    // belt-and-braces case where that did not complete.
+  it('keeps a file referenced by a DUPLICATE of the note that owns it', async () => {
+    // The bug this test exists for, found while writing K2: `notes.duplicate`
+    // copies a note's text verbatim, so two notes can reference one image
+    // while the file row names only the original. The first version of this
+    // sweep asked the OWNING note, so deleting the image from the original
+    // destroyed the duplicate's copy too. A file is orphaned only when
+    // NOTHING references it.
     const remove = vi.fn(async () => {});
 
     await sweepOrphanFiles({
       ...base,
       remove,
       listFiles: async () => [file('a')],
-      noteText: async () => null,
+      // The owner no longer references it; a copy does.
+      referencedIds: referencing('a'),
     });
 
-    expect(remove).toHaveBeenCalledWith('a');
+    expect(remove).not.toHaveBeenCalled();
   });
 
   it('never touches a file stored after the sweep was decided on', async () => {
@@ -190,23 +197,23 @@ describe('sweepOrphanFiles', () => {
     await sweepOrphanFiles({
       ...base,
       remove,
-      listFiles: async () => [file('a', 'n1', 1500)],
-      noteText: async () => 'no reference',
+      listFiles: async () => [file('a', 1500)],
+      referencedIds: referencing(),
     });
 
     expect(remove).not.toHaveBeenCalled();
   });
 
-  it('reads each note once however many files it owns', async () => {
-    const noteText = vi.fn(async () => 'no references at all');
+  it('reads the reference set ONCE, however many files there are', async () => {
+    const referencedIds = vi.fn(async () => new Set<string>());
 
     await sweepOrphanFiles({
       ...base,
       listFiles: async () => [file('a'), file('b'), file('c')],
-      noteText,
+      referencedIds,
     });
 
-    expect(noteText).toHaveBeenCalledTimes(1);
+    expect(referencedIds).toHaveBeenCalledTimes(1);
   });
 
   it('keeps going when one removal throws, and reports it', async () => {
@@ -220,7 +227,7 @@ describe('sweepOrphanFiles', () => {
       remove,
       onError,
       listFiles: async () => [file('a'), file('b')],
-      noteText: async () => 'nothing referenced',
+      referencedIds: referencing(),
     });
 
     expect(count).toBe(1);
@@ -236,7 +243,7 @@ describe('sweepOrphanFiles', () => {
       listFiles: async () => {
         throw new Error('database gone');
       },
-      noteText: async () => null,
+      referencedIds: referencing(),
     });
 
     expect(count).toBe(0);

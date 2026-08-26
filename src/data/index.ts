@@ -2,7 +2,8 @@ export { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, exportDatabase, importDatabase } 
 export type { ImportDeps, ImportResult } from './backup';
 export { BearDatabase, DATABASE_NAME, db } from './db';
 export { deriveTitle } from './derive';
-export { storedImageId, storedImageIds, storedImagePath } from './images';
+export { loadImageBlob, storedImageId, storedImageIds, storedImagePath } from './images';
+export { hasSignedInBefore, SESSION_HINT_KEY } from './sync/config';
 export { newId } from './ids';
 export { compareNotes, DEFAULT_NOTE_ORDER, isNoteOrder } from './order';
 export type { NoteOrder, NoteOrderField } from './order';

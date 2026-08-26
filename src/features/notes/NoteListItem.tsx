@@ -1,6 +1,6 @@
 import { type ReactElement, useEffect, useState } from 'react';
 
-import { files, type Note } from '@/data';
+import { loadImageBlob, type Note } from '@/data';
 import { useLocale, useT } from '@/i18n';
 import { Icon, Pin } from '@/ui/Icon';
 
@@ -68,18 +68,16 @@ export function NoteListItem({
     }
 
     let active = true;
-    void acquireObjectUrl(imageId, async (id) => (await files.get(id))?.blob ?? null).then(
-      (url) => {
-        // The row can be unmounted while the blob is in flight — scrolling a
-        // long list does it — and releasing then would decrement a count this
-        // row no longer holds.
-        if (!active) {
-          if (url !== null) releaseObjectUrl(imageId);
-          return;
-        }
-        setImageUrl(url);
-      },
-    );
+    void acquireObjectUrl(imageId, loadImageBlob).then((url) => {
+      // The row can be unmounted while the blob is in flight — scrolling a
+      // long list does it — and releasing then would decrement a count this
+      // row no longer holds.
+      if (!active) {
+        if (url !== null) releaseObjectUrl(imageId);
+        return;
+      }
+      setImageUrl(url);
+    });
 
     return () => {
       active = false;

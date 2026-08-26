@@ -1,6 +1,6 @@
 import { Node } from '@tiptap/core';
 
-import { files, storedImageId } from '@/data';
+import { files, loadImageBlob, storedImageId } from '@/data';
 
 import { acquireObjectUrl, releaseObjectUrl } from '@/lib/objectUrls';
 
@@ -104,10 +104,10 @@ export const StoredImage = Node.create<StoredImageOptions>({
 
       let released = false;
       void (async () => {
-        const url = await acquireObjectUrl(id, async (fileId) => {
-          const record = await files.get(fileId);
-          return record?.blob ?? null;
-        });
+        // `loadImageBlob` reads locally and, on a miss, asks the server once
+        // (K2). `acquireObjectUrl` already de-duplicates in-flight loads, so
+        // the editor and a list row wanting the same image make ONE request.
+        const url = await acquireObjectUrl(id, loadImageBlob);
 
         // The view can be destroyed while the blob is in flight — a fast
         // scroll does it. Releasing here would decrement a count this view no
