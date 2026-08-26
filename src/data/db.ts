@@ -68,6 +68,21 @@ export class BearDatabase extends Dexie {
     this.version(3).stores({
       syncState: '[kind+key], dirty, kind, deleted',
     });
+
+    // Version 4 adds image metadata to `files` (`width`, `height`, `bytes`,
+    // `createdAt`). The store's KEYS are unchanged — only the record shape
+    // grows — but Dexie needs a version to notice at all.
+    //
+    // No `.upgrade()` hook, and that is safe rather than lazy: the `files`
+    // repository had no call sites before K1, so no row of this shape has ever
+    // been written. Inventing dimensions for a hypothetical row would be a
+    // guess; the node view treats absent dimensions as an unknown ratio.
+    //
+    // Dexie multiplies declared versions by ten, so this is IndexedDB version
+    // 40, and `e2e/fixtures/seed.ts` MUST move with it in the same commit.
+    this.version(4).stores({
+      files: 'id, noteId',
+    });
   }
 }
 

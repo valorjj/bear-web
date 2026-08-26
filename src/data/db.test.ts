@@ -4,11 +4,11 @@ import { BearDatabase } from './db';
 import { createTestDatabase } from './testing';
 
 describe('BearDatabase', () => {
-  it('opens at schema version 3', async () => {
+  it('opens at schema version 4', async () => {
     const db = createTestDatabase();
     await db.open();
 
-    expect(db.verno).toBe(3);
+    expect(db.verno).toBe(4);
 
     db.close();
   });
@@ -89,13 +89,17 @@ describe('BearDatabase', () => {
     database.close();
   });
 
-  it('declares version 3, which is IndexedDB version 30', async () => {
+  it('declares version 4, which is IndexedDB version 40', async () => {
     // e2e/fixtures/seed.ts opens at the RAW IndexedDB number and must move with
     // this. Seeding at the wrong number leaves a connection blocking the
     // upgrade forever and the app boots to a bare <div id="root"> with no error.
+    //
+    // This test failing during a version bump is it doing its job: the bump is
+    // the licensed edit, and the seed moving in the SAME commit is the rule it
+    // exists to enforce. K1 raised it from 3 to 4 for image metadata.
     const database = new BearDatabase(`test-${crypto.randomUUID()}`);
     await database.open();
-    expect(database.verno).toBe(3);
+    expect(database.verno).toBe(4);
     database.close();
   });
 });

@@ -37,6 +37,10 @@ async function seed(db: BearDatabase): Promise<void> {
     noteId: 'n1',
     blob: new Blob([new Uint8Array([0, 1, 2, 253, 254, 255])], { type: 'image/png' }),
     mime: 'image/png',
+    width: 40,
+    height: 20,
+    bytes: 6,
+    createdAt: 1000,
   });
   await db.settings.add({ key: 'theme', value: 'dark' });
 }

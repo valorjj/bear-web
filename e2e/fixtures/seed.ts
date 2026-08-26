@@ -20,8 +20,8 @@ import type { Corpus } from './corpus.ts';
  *   schema against the one it finds and throws `SchemaError` on a mismatch, so
  *   a drift fails loudly on the first shot rather than silently.
  * - **The IndexedDB version is Dexie's version times ten.** Dexie's
- *   `version(3)` (added in D2 for sync bookkeeping) is IndexedDB version 30,
- *   not 3. Seeding at the wrong number leaves Dexie wanting to upgrade further while
+ *   `version(4)` (K1's image metadata, on top of D2's sync bookkeeping) is
+ *   IndexedDB version 40, not 4. Seeding at the wrong number leaves Dexie wanting to upgrade further while
  *   this script still holds a connection open, which blocks the upgrade
  *   forever: `openDatabase` never settles, so `main.tsx` never calls
  *   `createRoot` and the page stays a blank `#root` with one console warning
@@ -38,9 +38,9 @@ import type { Corpus } from './corpus.ts';
  */
 export async function seedDatabase(page: Page, corpus: Corpus): Promise<void> {
   await page.addInitScript((data: Corpus) => {
-    // Mirrors `src/data/db.ts`'s `version(1)`, `version(2)` and `version(3)`
-    // stores together; 30 is how Dexie encodes version 3. See the docblock.
-    const request = indexedDB.open('bear-web', 30);
+    // Mirrors `src/data/db.ts`'s `version(1)` through `version(4)` stores
+    // together; 40 is how Dexie encodes version 4. See the docblock.
+    const request = indexedDB.open('bear-web', 40);
 
     request.onupgradeneeded = () => {
       const database = request.result;
