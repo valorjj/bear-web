@@ -95,6 +95,49 @@ describe('StoredImage', () => {
     expect(document.querySelector('img')).toBeNull();
   });
 
+  it('renders at the width the Markdown asks for', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:sized');
+    const record = await files.add('n1', new Blob(['x'], { type: 'image/webp' }), {
+      mime: 'image/webp',
+      width: 800,
+      height: 400,
+    });
+
+    renderEditor(`![beach|120](${storedImagePath(record.id)})`);
+
+    const img = await waitFor(() => {
+      const found = document.querySelector('img.bear-stored-image') as HTMLImageElement | null;
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    // The CSS width, not the attribute: the attribute carries the STORED
+    // dimensions so the box can be reserved, and a display width has to
+    // override that without the two disagreeing.
+    expect(img.style.width).toBe('120px');
+    // The pipe belongs to the width, never to the alt text the reader hears.
+    expect(img.alt).toBe('beach');
+  });
+
+  it('fills the column when no width is set', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:unsized');
+    const record = await files.add('n1', new Blob(['x'], { type: 'image/webp' }), {
+      mime: 'image/webp',
+      width: 800,
+      height: 400,
+    });
+
+    renderEditor(`![beach](${storedImagePath(record.id)})`);
+
+    const img = await waitFor(() => {
+      const found = document.querySelector('img.bear-stored-image') as HTMLImageElement | null;
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    // Not `0px`, which a careless `${width}px` on a null would produce and
+    // which renders as an invisible image with no error anywhere.
+    expect(img.style.width).toBe('');
+  });
+
   it('revokes the object URL when the editor goes away', async () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:gone');
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});

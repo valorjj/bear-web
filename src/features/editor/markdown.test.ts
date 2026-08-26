@@ -45,6 +45,10 @@ const CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   // `fidelity` and `totality` suites below both iterate CANONICAL.
   { name: 'stored image', markdown: '![beach](files/abc123.webp)' },
   { name: 'stored image, no alt', markdown: '![](files/abc123.webp)' },
+  // K3's display width. The unresized shapes above are the byte-identical
+  // guarantee — an image nobody touched must not gain a `|` on save.
+  { name: 'stored image with width', markdown: '![beach|640](files/abc123.webp)' },
+  { name: 'stored image, width only', markdown: '![|640](files/abc123.webp)' },
   // Still a RAW inline, and must stay one — see the privacy ruling.
   { name: 'remote image', markdown: '![remote](https://example.com/a.png)' },
   { name: 'blockquote', markdown: '> Quoted text.' },

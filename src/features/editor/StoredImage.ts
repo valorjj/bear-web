@@ -1,6 +1,6 @@
 import { Node } from '@tiptap/core';
 
-import { files, loadImageBlob, storedImageId } from '@/data';
+import { files, formatImageAlt, loadImageBlob, storedImageId } from '@/data';
 
 import { acquireObjectUrl, releaseObjectUrl } from '@/lib/objectUrls';
 
@@ -58,6 +58,22 @@ export const StoredImage = Node.create<StoredImageOptions>({
         parseHTML: (element) => element.getAttribute('alt') ?? '',
         renderHTML: (attributes) => ({ alt: attributes.alt as string }),
       },
+      /**
+       * Display width in pixels, or `null` for "fill the column".
+       *
+       * Applied as a CSS width, never the HTML `width` attribute: a resize
+       * moves the CSS one, and having both would leave two sources of truth
+       * fighting over the same box.
+       */
+      width: {
+        default: null,
+        parseHTML: (element) => {
+          const raw = element.getAttribute('data-width');
+          return raw === null ? null : Number(raw);
+        },
+        renderHTML: (attributes) =>
+          attributes.width === null ? {} : { 'data-width': String(attributes.width) },
+      },
     };
   },
 
@@ -73,8 +89,8 @@ export const StoredImage = Node.create<StoredImageOptions>({
 
   markdownTokenName: 'image',
 
-  renderMarkdown: (node: { attrs?: { src?: string; alt?: string } }) =>
-    `![${node.attrs?.alt ?? ''}](${node.attrs?.src ?? ''})`,
+  renderMarkdown: (node: { attrs?: { src?: string; alt?: string; width?: number | null } }) =>
+    `![${formatImageAlt(node.attrs?.alt ?? '', node.attrs?.width ?? null)}](${node.attrs?.src ?? ''})`,
 
   addNodeView() {
     const { missingLabel } = this.options;
@@ -98,6 +114,12 @@ export const StoredImage = Node.create<StoredImageOptions>({
       const image = document.createElement('img');
       image.alt = String(node.attrs.alt ?? '');
       image.className = 'bear-stored-image';
+
+      // A CSS width, not the `width` ATTRIBUTE: the attribute is what the
+      // record's own dimensions set below to reserve the box, and a display
+      // width has to be able to override that without the two disagreeing.
+      const displayWidth = node.attrs.width as number | null;
+      if (displayWidth !== null) image.style.width = `${displayWidth}px`;
       // Reserved from the record below once it resolves. Until then the box is
       // empty rather than guessed: a wrong ratio reflows twice instead of once.
       dom.append(image);

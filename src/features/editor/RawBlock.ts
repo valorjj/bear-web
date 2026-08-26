@@ -1,7 +1,7 @@
 import { Node } from '@tiptap/core';
 import type { MarkdownToken } from '@tiptap/core';
 
-import { storedImageId } from '@/data';
+import { parseImageAlt, storedImageId } from '@/data';
 
 /**
  * Holds the raw Markdown source of any construct this editor has no extension
@@ -325,10 +325,11 @@ export const RawImage = createRawInline('rawImage', 'image').extend({
   parseMarkdown: (token: MarkdownToken) => {
     const href = typeof token.href === 'string' ? token.href : '';
     if (storedImageId(href) !== null) {
-      return {
-        type: 'storedImage',
-        attrs: { src: href, alt: typeof token.text === 'string' ? token.text : '' },
-      };
+      // The alt text carries an optional display width (`alt|640`), K3's
+      // Obsidian-style convention. Split here so the node holds them apart and
+      // `formatImageAlt` puts them back together on the way out.
+      const { alt, width } = parseImageAlt(typeof token.text === 'string' ? token.text : '');
+      return { type: 'storedImage', attrs: { src: href, alt, width } };
     }
     return { type: 'rawImage', attrs: { source: token.raw ?? '' } };
   },
