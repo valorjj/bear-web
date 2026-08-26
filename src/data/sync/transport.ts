@@ -63,6 +63,17 @@ export class SyncQuotaError extends Error {
 export interface Transport {
   pull(since: number): Promise<PullResponse>;
   push(batch: { notes: PushNote[]; tags: PushTag[] }): Promise<PushResponse>;
+  /** Stores one image's bytes. Throws `SyncQuotaError` when the account is full. */
+  uploadImage(id: string, noteId: string, blob: Blob, width: number, height: number): Promise<void>;
+  /**
+   * One image's bytes, or `null` when the server does not have it.
+   *
+   * `null` rather than a throw for a 404, because that is not an error: it is
+   * an image whose owner never uploaded it, or uploaded it from a device that
+   * has not synced yet. Every other failure still throws, so the caller can
+   * tell "not there" from "could not ask".
+   */
+  downloadImage(id: string): Promise<Blob | null>;
 }
 
 /**
@@ -80,7 +91,14 @@ export function createTransport(
   origin: string = API_ORIGIN,
   doFetch: typeof globalThis.fetch = globalThis.fetch,
 ): Transport {
-  async function call(path: string, init: RequestInit = {}): Promise<unknown> {
+  /**
+   * Sends the request and turns every failure status into a typed error.
+   *
+   * Split from `call` below so the binary routes share the status mapping
+   * without also inheriting `response.json()` — an image response is bytes,
+   * and parsing it as JSON would throw on success.
+   */
+  async function send(path: string, init: RequestInit = {}): Promise<Response> {
     let response: Response;
     try {
       response = await doFetch(`${origin}${path}`, { ...init, credentials: 'include' });
@@ -95,8 +113,12 @@ export function createTransport(
       throw new SyncQuotaError(body.used ?? 0, body.limit ?? 0);
     }
 
-    if (!response.ok) throw new SyncUnavailableError(`${path} returned ${response.status}`);
+    return response;
+  }
 
+  async function call(path: string, init: RequestInit = {}): Promise<unknown> {
+    const response = await send(path, init);
+    if (!response.ok) throw new SyncUnavailableError(`${path} returned ${response.status}`);
     return response.json();
   }
 
@@ -110,6 +132,37 @@ export function createTransport(
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(batch),
       })) as PushResponse;
+    },
+
+    async uploadImage(id, noteId, blob, width, height) {
+      const response = await send(`/files/${id}`, {
+        method: 'PUT',
+        headers: {
+          'content-type': 'image/webp',
+          'x-note-id': noteId,
+          'x-width': String(width),
+          'x-height': String(height),
+        },
+        body: blob,
+      });
+
+      if (!response.ok)
+        throw new SyncUnavailableError(`upload of ${id} returned ${response.status}`);
+    },
+
+    async downloadImage(id) {
+      const response = await send(`/files/${id}`);
+
+      // NOT an error. The bytes may simply not have been uploaded yet — by a
+      // device that has been offline, or one that hit its quota — and the
+      // caller's answer is the placeholder it is already showing.
+      if (response.status === 404) return null;
+
+      if (!response.ok) {
+        throw new SyncUnavailableError(`download of ${id} returned ${response.status}`);
+      }
+
+      return response.blob();
     },
   };
 }
