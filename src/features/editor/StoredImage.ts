@@ -2,7 +2,7 @@ import { Node } from '@tiptap/core';
 
 import { files, storedImageId } from '@/data';
 
-import { acquireObjectUrl, releaseObjectUrl } from './objectUrls';
+import { acquireObjectUrl, releaseObjectUrl } from '@/lib/objectUrls';
 
 export interface StoredImageOptions {
   /**

@@ -6,6 +6,11 @@ interface Entry {
 /**
  * One object URL per stored file, reference-counted.
  *
+ * In `src/lib/` because it is behaviour with no product knowledge: it takes a
+ * loader and knows nothing about notes, files or the editor. Both the editor's
+ * stored-image node and the note-list row's thumbnail use it, and a second
+ * copy would be a second place to leak.
+ *
  * Module scope deliberately. A node view is destroyed and rebuilt whenever
  * ProseMirror redraws its node, so a per-instance URL would be created and
  * leaked on every redraw — and creating one per render is the obvious
