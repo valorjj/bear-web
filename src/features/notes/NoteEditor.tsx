@@ -1,9 +1,10 @@
 import { type ReactElement, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 
-import { deriveTitle, folds, notes } from '@/data';
+import { deriveTitle, files, folds, notes, storedImagePath } from '@/data';
 import type { Note } from '@/data';
 import { useExportRunner, type ExportFormat } from '@/features/export';
+import { downscaleImage } from './downscale';
 import {
   EMPTY_DOCUMENT_MARKDOWN,
   foldedKeys,
@@ -118,6 +119,36 @@ export function NoteEditor({
   // a boolean, so a signed-out user and an offline user see different
   // sentences.
   const exportRunner = useExportRunner();
+
+  // Set when an image is refused — too large, or something this app cannot
+  // encode. Its own channel rather than reusing the save or export failures:
+  // three unrelated things going wrong must not be able to stand in for each
+  // other.
+  const [imageFailed, setImageFailed] = useState(false);
+
+  /**
+   * Stores a pasted image and returns the Markdown destination to insert.
+   *
+   * `null` means refused, and the editor then inserts nothing — a 30MB paste
+   * is an ordinary mistake, not an error to throw.
+   */
+  const handleImage = useCallback(
+    async (file: Blob): Promise<string | null> => {
+      const image = await downscaleImage(file);
+      if (image === null) {
+        setImageFailed(true);
+        return null;
+      }
+      setImageFailed(false);
+      const record = await files.add(note.id, image.blob, {
+        mime: 'image/webp',
+        width: image.width,
+        height: image.height,
+      });
+      return storedImagePath(record.id);
+    },
+    [note.id],
+  );
 
   const read = useCallback((): string => {
     try {
@@ -364,18 +395,21 @@ export function NoteEditor({
         updatedAt={note.updatedAt}
         onActivateTag={onActivateTag}
         onExport={handleExport}
+        onImage={handleImage}
         onEditorReady={setFoldEditor}
       />
 
-      {(failed || serializeFailed || exportRunner.failureKey !== null) && (
+      {(failed || serializeFailed || imageFailed || exportRunner.failureKey !== null) && (
         // `status`, not `alert`: `alert` is the degraded-storage banner's role
         // and the e2e suite asserts there is exactly one of those.
         <p role="status" className="shrink-0 border-t border-border px-6 py-2 text-xs text-muted">
-          {exportRunner.failureKey !== null
-            ? t(exportRunner.failureKey)
-            : serializeFailed
-              ? t('editor.serializeFailed')
-              : t('editor.saveFailed')}
+          {imageFailed
+            ? t('editor.image.tooLarge')
+            : exportRunner.failureKey !== null
+              ? t(exportRunner.failureKey)
+              : serializeFailed
+                ? t('editor.serializeFailed')
+                : t('editor.saveFailed')}
         </p>
       )}
     </div>

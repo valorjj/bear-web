@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import '@/styles/editor.css';
 
-import { db, folds, notes } from '@/data';
+import { db, files, folds, notes, storedImagePath } from '@/data';
 import type { Note } from '@/data';
 import * as editor from '@/features/editor';
 import { foldedKeys, headingSections, type RichEditorHandle } from '@/features/editor';
@@ -626,6 +626,48 @@ describe('seeded notes', () => {
     // ceiling is now reachable, so an overrun fails as "purge was not
     // called", which is the sentence a reader needs.
     await waitFor(() => expect(purge).toHaveBeenCalledWith(note.id), { timeout: 5000 });
+  }, 15000);
+
+  it('an image deleted and then undone is still stored', async () => {
+    // THE test of K1. Deleting an image and pressing Cmd-Z must bring it back,
+    // and the reclamation sweep in `notes.save` is what could make that
+    // impossible — a blob it removes is gone with no copy anywhere. This is
+    // the only path in the feature where a bug destroys something the user
+    // cannot recover.
+    //
+    // It works because the sweep hangs off the DEBOUNCED save: the undo lands
+    // before the write that would have reclaimed the file. Moving the sweep to
+    // fire per keystroke closes that window, and this test is what notices.
+    const record = await files.add('seed', new Blob(['x'], { type: 'image/webp' }), {
+      mime: 'image/webp',
+      width: 10,
+      height: 10,
+    });
+    const note = await notes.create(`before ![](${storedImagePath(record.id)}) after`);
+    // The file must belong to the note for the sweep to consider it at all.
+    await db.files.update(record.id, { noteId: note.id });
+
+    const handleRef = createRef<RichEditorHandle>();
+    renderWithI18n(<NoteEditor note={note} handleRef={handleRef} />);
+    await screen.findByRole('textbox');
+    await waitFor(() => expect(handleRef.current?.editor).toBeTruthy());
+
+    // Delete the image node, let the debounced save (and its sweep) run.
+    act(() => {
+      handleRef.current?.editor?.commands.setContent('before after');
+    });
+    await waitFor(async () => {
+      expect((await notes.get(note.id))?.text).not.toContain('files/');
+    });
+
+    act(() => {
+      handleRef.current?.editor?.commands.undo();
+    });
+    await waitFor(async () => {
+      expect((await notes.get(note.id))?.text).toContain(storedImagePath(record.id));
+    });
+
+    expect(await files.get(record.id)).toBeDefined();
   }, 15000);
 
   it('still purges a genuinely blank new note', async () => {

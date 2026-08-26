@@ -43,6 +43,21 @@ export interface FileRecord {
   noteId: string;
   blob: Blob;
   mime: string;
+  /**
+   * The stored image's dimensions, after downscaling.
+   *
+   * Held on the record so a node view can reserve the right box BEFORE the
+   * blob resolves out of IndexedDB — without them the text reflows the moment
+   * each image lands, which on a long note is every image in turn.
+   */
+  width: number;
+  height: number;
+  /**
+   * `blob.size`, denormalised. Lets K2's quota check sum an account's usage
+   * without reading a single blob out of the database.
+   */
+  bytes: number;
+  createdAt: number;
 }
 
 export interface SettingRecord {
@@ -57,6 +72,15 @@ export interface SerializedFile {
   mime: string;
   /** base64, without a data-URL prefix. */
   data: string;
+  /**
+   * OPTIONAL, because a backup written before K1 has none. A restore supplies
+   * `0` for a missing dimension rather than guessing, and the node view reads
+   * `0` as "unknown ratio" — the same value it would see for a record written
+   * before image metadata existed.
+   */
+  width?: number;
+  height?: number;
+  createdAt?: number;
 }
 
 export type SyncKind = 'note' | 'tag';

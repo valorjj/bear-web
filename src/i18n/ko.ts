@@ -87,6 +87,8 @@ export const ko: Record<TranslationKey, string> = {
   'trash.empty.title': '휴지통이 비어 있습니다',
   'trash.empty.body': '삭제한 메모는 완전히 지우기 전까지 여기에 있습니다.',
 
+  'editor.image.missing': '이 기기에 아직 없는 이미지입니다',
+  'editor.image.tooLarge': '이미지가 너무 큽니다 (최대 25MB).',
   'editor.textarea': '메모 내용',
   'editor.saveFailed': '메모를 저장하지 못했습니다. 계속 입력하세요. 저장을 다시 시도합니다.',
   'editor.serializeFailed':

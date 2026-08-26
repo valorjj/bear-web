@@ -140,6 +140,7 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
 
         await db.notes.put(updated);
         await reindexNote(db, id, text, parseTags);
+
         await markDirty(db, 'note', id, timestamp);
 
         return updated;

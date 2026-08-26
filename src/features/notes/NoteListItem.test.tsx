@@ -317,16 +317,14 @@ describe('row layout', () => {
 });
 
 describe('thumbnail', () => {
-  const withImage = makeNote({
+  const withStored = makeNote({
     title: 'Trip',
-    text: 'Trip\n![beach](https://example.com/a.png)\nwe went last week',
+    text: 'Trip\n![beach](files/abc123.webp)\nwe went last week',
   });
 
-  it('renders the note’s first image', () => {
-    renderItem({ note: withImage });
-
-    const img = screen.getByRole('presentation');
-    expect(img).toHaveAttribute('src', 'https://example.com/a.png');
+  const withRemote = makeNote({
+    title: 'Trip',
+    text: 'Trip\n![beach](https://example.com/a.png)\nwe went last week',
   });
 
   it('renders no image for a note that names none', () => {
@@ -335,34 +333,35 @@ describe('thumbnail', () => {
     expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
   });
 
-  it('keeps the thumbnail out of the accessible name', () => {
-    // `alt=""` is what does this. A filename read out between the preview and
-    // the date is noise, and the image is derived from text the snippet
-    // already carries — the same reasoning that made `ThemeDialog`'s card
-    // previews `aria-hidden`.
-    renderItem({ note: withImage });
+  it('renders NO image for a remote URL, and makes no request for one', () => {
+    // Until K1 this rendered `<img src="https://example.com/a.png">`, so
+    // opening the app fetched from a third-party host for every note naming
+    // one — the same beacon behaviour the editor refuses. A remote URL now
+    // yields no thumbnail at all.
+    renderItem({ note: withRemote });
 
-    const name = screen.getByRole('button', { name: /Trip/ }).getAttribute('aria-label') ?? '';
-    expect(name).not.toContain('example.com');
-    expect(name).not.toContain('beach');
+    expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
+    expect(document.querySelector('img')).toBeNull();
   });
 
-  it('shows the prose rather than the image URL in the preview', () => {
-    renderItem({ note: withImage });
+  it('shows the prose rather than the image syntax in the preview', () => {
+    renderItem({ note: withStored });
 
     expect(screen.getByText('we went last week')).toBeInTheDocument();
   });
 
-  it('drops the image once it fails to load, rather than keeping a broken box', () => {
-    renderItem({ note: withImage });
+  it('keeps the thumbnail out of the accessible name', () => {
+    // `alt=""`: the image is decoration derived from text the snippet already
+    // carries.
+    renderItem({ note: withStored });
 
-    fireEvent.error(screen.getByRole('presentation'));
-
-    expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
+    const name = screen.getByRole('button', { name: /Trip/ }).getAttribute('aria-label') ?? '';
+    expect(name).not.toContain('files/');
+    expect(name).not.toContain('beach');
   });
 
   it('shows no thumbnail at the small density, which shows no preview either', () => {
-    renderItem({ note: withImage, size: 'small' });
+    renderItem({ note: withStored, size: 'small' });
 
     expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
   });

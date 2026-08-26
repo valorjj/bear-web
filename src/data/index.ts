@@ -2,6 +2,7 @@ export { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, exportDatabase, importDatabase } 
 export type { ImportDeps, ImportResult } from './backup';
 export { BearDatabase, DATABASE_NAME, db } from './db';
 export { deriveTitle } from './derive';
+export { storedImageId, storedImageIds, storedImagePath } from './images';
 export { newId } from './ids';
 export { compareNotes, DEFAULT_NOTE_ORDER, isNoteOrder } from './order';
 export type { NoteOrder, NoteOrderField } from './order';
@@ -16,8 +17,8 @@ export { openDatabase, resolveDatabase } from './open';
 export { persistStorage, requestPersistentStorage } from './persist';
 export type { PersistDeps, PersistOutcome } from './persist';
 export { reindexNote } from './reindex';
-export { runStartupSweep, sweepBlankNotes } from './sweep';
-export type { SweepDeps } from './sweep';
+export { runStartupFileSweep, runStartupSweep, sweepBlankNotes, sweepOrphanFiles } from './sweep';
+export type { FileSweepDeps, SweepDeps } from './sweep';
 export { API_ORIGIN } from './sync/config';
 export { createEngine, LAST_PULLED_REV_KEY, SYNCED_ACCOUNT_KEY } from './sync/engine';
 export type { EngineDeps, SyncOutcome } from './sync/engine';

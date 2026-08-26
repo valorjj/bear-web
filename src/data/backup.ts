@@ -52,6 +52,9 @@ export async function exportDatabase(db: BearDatabase): Promise<BackupBundle> {
       noteId: f.noteId,
       mime: f.mime,
       data: await blobToBase64(f.blob),
+      width: f.width,
+      height: f.height,
+      createdAt: f.createdAt,
     })),
   );
 
@@ -119,12 +122,24 @@ export async function importDatabase(
   assertBundle(payload);
   const bundle = payload;
 
-  const files = bundle.files.map((f) => ({
-    id: f.id,
-    noteId: f.noteId,
-    mime: f.mime,
-    blob: base64ToBlob(f.data, f.mime),
-  }));
+  // A backup written BEFORE K1 carries no dimensions. Restoring one must not
+  // fail and must not invent them: `0` is what a node view reads as "unknown
+  // ratio", so such an image simply gets no reserved box and reflows once —
+  // which is the honest outcome for a record whose size nobody recorded.
+  // `bytes` is recomputed from the decoded blob, never trusted from the file.
+  const files = bundle.files.map((f) => {
+    const blob = base64ToBlob(f.data, f.mime);
+    return {
+      id: f.id,
+      noteId: f.noteId,
+      mime: f.mime,
+      blob,
+      width: f.width ?? 0,
+      height: f.height ?? 0,
+      bytes: blob.size,
+      createdAt: f.createdAt ?? 0,
+    };
+  });
 
   // Recompute `title` rather than trust the bundle: a hand-edited or stale
   // backup can carry a title that disagrees with its text.

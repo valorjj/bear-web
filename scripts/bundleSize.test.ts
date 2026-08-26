@@ -30,7 +30,19 @@ import { describe, expect, it } from 'vitest';
  * ordinary churn — not a target, a limit. Raising it is a decision someone
  * makes in a diff, not a drift nobody notices.
  */
-const CEILING_BYTES = 324_000;
+const CEILING_BYTES = 328_000;
+
+/**
+ * Raised from 324,000 by K1 (image capture) on 2026-08-26, with the growth
+ * measured on both sides rather than estimated: `main` was **323,911** —
+ * 89 bytes of headroom, so the previous ceiling was all but exhausted — and
+ * the whole feature costs **1,555 B gzipped**: the downscaler, the stored-image
+ * node and its view, the reference-counted object-URL cache, the paste plugin
+ * and the path contract. No dependency was added; this is all first-party code.
+ *
+ * The new headroom is deliberately ~2.5 KB rather than another 89 bytes, so
+ * the next ordinary change does not have to touch this line again.
+ */
 
 describe('bundle size', () => {
   it('keeps the gzipped main bundle under its ceiling', () => {

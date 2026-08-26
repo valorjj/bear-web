@@ -1,6 +1,6 @@
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 
-import type { Note } from '@/data';
+import { files, type Note } from '@/data';
 import { useLocale, useT } from '@/i18n';
 import { Icon, Pin } from '@/ui/Icon';
 
@@ -8,7 +8,9 @@ import { deriveSnippet, formatNoteDate } from './format';
 import { HighlightedText } from './HighlightedText';
 import type { NoteRowMenuRequest } from './NoteRowMenu';
 import { DEFAULT_PREVIEW_SIZE, type PreviewSize, snippetLines } from './preview';
-import { firstImageUrl } from './thumbnail';
+import { acquireObjectUrl, releaseObjectUrl } from '@/lib/objectUrls';
+
+import { firstStoredImageId } from './thumbnail';
 
 export interface NoteListItemProps {
   note: Note;
@@ -47,17 +49,45 @@ export function NoteListItem({
 
   const lines = snippetLines(size);
 
-  // A remote URL can 404, expire, or be behind a login. `onError` is the only
-  // signal that happens, and without acting on it the row keeps a broken-image
-  // box forever. Keyed off the URL so a note edited to point somewhere new
-  // gets a fresh attempt rather than staying suppressed by the old failure.
-  const [brokenImage, setBrokenImage] = useState<string | null>(null);
+  // The row's thumbnail, resolved from IndexedDB.
+  //
+  // A STORED image only. This read the first remote image URL out of the
+  // Markdown until K1, which meant opening the app fetched from whatever
+  // third-party host a note happened to name — the same beacon behaviour the
+  // editor refuses. See `thumbnail.ts`.
+  //
   // Suppressed at the Small density, which shows no snippet either: that size
-  // exists to fit as many rows on screen as possible, and a 64px picture in a
-  // row deliberately stripped of its preview line would be the tallest thing
-  // in it.
-  const imageUrl = lines === 0 ? null : firstImageUrl(note.text);
-  const showImage = imageUrl !== null && imageUrl !== brokenImage;
+  // exists to fit as many rows on screen as possible.
+  const imageId = lines === 0 ? null : firstStoredImageId(note.text);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (imageId === null) {
+      setImageUrl(null);
+      return;
+    }
+
+    let active = true;
+    void acquireObjectUrl(imageId, async (id) => (await files.get(id))?.blob ?? null).then(
+      (url) => {
+        // The row can be unmounted while the blob is in flight — scrolling a
+        // long list does it — and releasing then would decrement a count this
+        // row no longer holds.
+        if (!active) {
+          if (url !== null) releaseObjectUrl(imageId);
+          return;
+        }
+        setImageUrl(url);
+      },
+    );
+
+    return () => {
+      active = false;
+      releaseObjectUrl(imageId);
+    };
+  }, [imageId]);
+
+  const showImage = imageUrl !== null;
 
   // Built from the SAME size decision that drives the render below, so the
   // accessible name can never announce a snippet the row does not display.
@@ -168,11 +198,9 @@ export function NoteListItem({
         */}
         {showImage && (
           <img
-            src={imageUrl}
+            src={imageUrl ?? ''}
             alt=""
-            loading="lazy"
             decoding="async"
-            onError={() => setBrokenImage(imageUrl)}
             className="border-border mt-1 h-16 max-w-full self-start rounded-sm border object-cover"
           />
         )}
