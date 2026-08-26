@@ -951,3 +951,55 @@
     transition: none;
   }
 }
+
+/*
+ * K3's image resize grip.
+ *
+ * Hidden until the image is hovered or something inside it has focus — the
+ * same reveal the table handles use. 44px wide, because `accessibility.md`'s
+ * touch-target rule applies to every new control rather than only the ones a
+ * phone sees; the visible bar inside it is narrower, so the target is bigger
+ * than the mark.
+ *
+ * `cursor: ew-resize` is the whole affordance for a pointer user: the grip
+ * carries no glyph, and without the cursor there is nothing to say it can be
+ * dragged.
+ */
+.bear-stored-image-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.bear-image-grip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 44px;
+  cursor: ew-resize;
+  opacity: 0;
+  transition: opacity var(--bear-duration-fast) var(--bear-ease);
+}
+
+.bear-image-grip::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 4px;
+  height: 32px;
+  transform: translateY(-50%);
+  border-radius: 9999px;
+  background: var(--bear-accent);
+}
+
+.bear-stored-image-wrap:hover .bear-image-grip,
+.bear-stored-image-wrap:focus-within .bear-image-grip {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bear-image-grip {
+    transition: none;
+  }
+}

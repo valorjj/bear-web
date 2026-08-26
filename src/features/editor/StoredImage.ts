@@ -149,7 +149,9 @@ export const StoredImage = Node.create<StoredImageOptions>({
   addNodeView() {
     const { missingLabel } = this.options;
 
-    return ({ node }) => {
+    const editor = this.editor;
+
+    return ({ node, getPos }) => {
       const src = String(node.attrs.src ?? '');
       const id = storedImageId(src);
 
@@ -177,6 +179,57 @@ export const StoredImage = Node.create<StoredImageOptions>({
       // Reserved from the record below once it resolves. Until then the box is
       // empty rather than guessed: a wrong ratio reflows twice instead of once.
       dom.append(image);
+
+      // The resize grip. Pointer-only by nature, which is why the keyboard
+      // chords above exist — `docs/rulings/accessibility.md` records that a
+      // pointer-only route to a real capability is a regression, not a
+      // simplification. 44px because J2a's touch-target rule applies to every
+      // new control, not only the ones a phone sees.
+      const grip = document.createElement('span');
+      grip.className = 'bear-image-grip';
+      grip.setAttribute('contenteditable', 'false');
+      grip.setAttribute('aria-hidden', 'true');
+      dom.append(grip);
+
+      grip.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        grip.setPointerCapture(event.pointerId);
+
+        const startX = event.clientX;
+        const startWidth = image.getBoundingClientRect().width;
+        let live = startWidth;
+
+        const onMove = (move: PointerEvent): void => {
+          live = Math.min(
+            MAX_DISPLAY_WIDTH,
+            Math.max(1, Math.round(startWidth + (move.clientX - startX))),
+          );
+          // Live on the ELEMENT only. A width per pointer event would put a
+          // hundred transactions — and a hundred sync-dirty marks — through
+          // `notes.save` for one drag.
+          image.style.width = `${live}px`;
+        };
+
+        const onUp = (): void => {
+          grip.removeEventListener('pointermove', onMove);
+          grip.removeEventListener('pointerup', onUp);
+          grip.removeEventListener('pointercancel', onUp);
+
+          // Written ONCE, on release. `getPos` rather than a captured
+          // position: the node can move while the pointer is down if anything
+          // else edits the document.
+          const at = typeof getPos === 'function' ? getPos() : null;
+          if (at === null || at === undefined) return;
+          editor.view.dispatch(
+            editor.view.state.tr.setNodeMarkup(at, undefined, { ...node.attrs, width: live }),
+          );
+        };
+
+        grip.addEventListener('pointermove', onMove);
+        grip.addEventListener('pointerup', onUp);
+        grip.addEventListener('pointercancel', onUp);
+      });
 
       let released = false;
       void (async () => {
