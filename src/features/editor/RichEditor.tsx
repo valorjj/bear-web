@@ -60,6 +60,12 @@ export interface RichEditorProps {
    */
   onExport?: (format: ExportFormat) => void;
   /**
+   * Called with each image the user pastes or drops. Returns the Markdown
+   * destination to insert, or `null` if it was refused. Omit it and images
+   * paste as whatever the browser would have done.
+   */
+  onImage?: (file: Blob) => Promise<string | null>;
+  /**
    * Called with the live `editor` every time IT changes identity — in
    * particular the transition from `null` to a ready instance. The mount
    * effect's cleanup only clears `handleRef.current`, never calls this again
@@ -125,6 +131,7 @@ export function RichEditor({
   updatedAt,
   onActivateTag,
   onExport,
+  onImage,
   onEditorReady,
 }: RichEditorProps): ReactElement {
   const t = useT();
@@ -150,6 +157,12 @@ export function RichEditor({
   // callback the very first render supplied.
   const activateRef = useRef(onActivateTag);
   activateRef.current = onActivateTag;
+
+  // Same discipline as `activateRef`: the plugin captures this once at
+  // construction, so the ref keeps the identity stable while the behaviour
+  // stays current.
+  const imageRef = useRef(onImage);
+  imageRef.current = onImage;
 
   // Same discipline as `activateRef` above, for `HeadingFold`'s `onOpenMenu`:
   // the extension array is built once in the `useState` initializer below, so
@@ -226,6 +239,11 @@ export function RichEditor({
       // bytes are not on this device says so in the user's language rather
       // than showing an empty box.
       missingLabel: t('editor.image.missing'),
+      // `null` when the app supplied no handler, exactly like `onActivate`
+      // above: with no listener the plugin is not registered at all and the
+      // browser's own paste is untouched. A wrapper that swallowed the paste
+      // and did nothing would be worse than no affordance.
+      onImage: onImage === undefined ? null : (file) => imageRef.current!(file),
       // Read once at mount like every option above it — the editor is keyed
       // by note id and rebuilt on a language change, so there is no live
       // locale switch for these to miss.

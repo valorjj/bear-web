@@ -13,6 +13,7 @@ import { TableHandles, type TableHandlesOptions } from './TableHandles';
 import { Highlight } from './Highlight';
 import { lowlightForEditor } from './lowlight';
 import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
+import { ImagePaste, type ImagePasteOptions } from './ImagePaste';
 import { StoredImage, type StoredImageOptions } from './StoredImage';
 import type { TagPillOptions } from './TagPill';
 import { TagPill } from './TagPill';
@@ -176,7 +177,8 @@ export function buildEditorExtensions(
       TableHandlesOptions &
       ContextMenuOptions &
       CodeLanguageControlsOptions &
-      StoredImageOptions
+      StoredImageOptions &
+      ImagePasteOptions
   > = {},
 ): Extensions {
   return [
@@ -187,6 +189,7 @@ export function buildEditorExtensions(
     // `RawImage.parseMarkdown` does that explicitly — but the node type must
     // be in the schema before anything can emit it.
     StoredImage.configure({ missingLabel: options.missingLabel ?? null }),
+    ImagePaste.configure({ onImage: options.onImage ?? null }),
     RawImage,
     createRawInlineHtmlNode(computeRecognizedHtmlTags()),
   ];
