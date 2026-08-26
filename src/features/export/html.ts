@@ -1,6 +1,7 @@
 import { getSchema } from '@tiptap/core';
 import { DOMSerializer, Node as ProseMirrorNode } from '@tiptap/pm/model';
 
+import { storedImageId } from '@/data/images';
 import { editorExtensions, lowlight, parseMarkdown } from '@/features/editor';
 
 /** Just enough of a note to render it. */
@@ -213,7 +214,49 @@ function escapeHtml(value: string): string {
  * That is the fallback working correctly, and the strongest argument for giving
  * tables a real node.
  */
-export function renderNoteBody(text: string): string {
+/**
+ * Replaces each stored image's relative path with the bytes themselves.
+ *
+ * An exported file must be SELF-CONTAINED. `files/<id>.webp` resolves to
+ * nothing outside this app, so leaving it in place produces a broken image in
+ * every reader — and for the PDF it is worse than broken: the renderer runs in
+ * a container with deliberately no route off the host (sub-project G's
+ * control), so it could not fetch the bytes even if the path were absolute.
+ * Inlining is what lets that isolation stay intact.
+ *
+ * An image with no supplied bytes is REMOVED rather than left pointing at a
+ * dead path: a note synced before its image arrived should export without a
+ * broken-image icon in the middle of it.
+ *
+ * The map is handed in. `html.ts` imports nothing from `src/data/` — the same
+ * boundary `readExportTokens` keeps by taking the document rather than
+ * reaching for it.
+ */
+function inlineImages(host: HTMLElement, images: Map<string, string>): void {
+  for (const element of [...host.querySelectorAll('img[data-src]')]) {
+    const id = storedImageId(element.getAttribute('data-src') ?? '');
+    const dataUri = id === null ? undefined : images.get(id);
+
+    if (dataUri === undefined) {
+      element.remove();
+      continue;
+    }
+
+    element.setAttribute('src', dataUri);
+    element.removeAttribute('data-src');
+
+    // The display width, carried through as an inline style so the export
+    // lays out the way the editor did. `data-width` is the node's own
+    // serialization, not something a reader understands.
+    const width = element.getAttribute('data-width');
+    if (width !== null) {
+      element.setAttribute('style', `width: ${Number(width)}px; max-width: 100%;`);
+      element.removeAttribute('data-width');
+    }
+  }
+}
+
+export function renderNoteBody(text: string, images: Map<string, string> = new Map()): string {
   const schema = getSchema(editorExtensions);
   const document_ = ProseMirrorNode.fromJSON(schema, parseMarkdown(text));
   const fragment = DOMSerializer.fromSchema(schema).serializeFragment(document_.content, {
@@ -223,6 +266,7 @@ export function renderNoteBody(text: string): string {
   const host = document.createElement('div');
   host.append(fragment);
   highlightCodeBlocks(host, document);
+  inlineImages(host, images);
   return host.innerHTML;
 }
 
@@ -243,6 +287,8 @@ export function renderNoteHtml(
   note: RenderableNote,
   tokens: Record<string, string>,
   locale = 'en',
+  /** Stored-image id → `data:` URI. Anything absent is dropped from the output. */
+  images: Map<string, string> = new Map(),
 ): string {
   const declarations = EXPORT_TOKEN_NAMES.map(
     (name) => `      ${name}: ${tokens[name] ?? FALLBACKS[name]};`,
@@ -662,7 +708,7 @@ ${declarations}
     </style>
   </head>
   <body>
-${renderNoteBody(note.text)}
+${renderNoteBody(note.text, images)}
   </body>
 </html>
 `;

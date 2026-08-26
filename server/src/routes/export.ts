@@ -8,12 +8,20 @@ import { readCappedBody } from '../http/body.ts';
  * The largest document this service will render, in bytes.
  *
  * A note's text is quota-limited to 10 MiB, but the EXPORT HTML is a rendered
- * document, not the text, and 2 MiB of it is already an unreasonably large
- * single note. The cap exists because a render is the most expensive thing
- * this service does: without it, one POST of arbitrary size is buffered into
- * memory on a Mac Mini and then handed to a browser.
+ * document, not the text. The cap exists because a render is the most
+ * expensive thing this service does: without it, one POST of arbitrary size is
+ * buffered into memory on a Mac Mini and then handed to a browser.
+ *
+ * **Raised from 2 MiB by K3, and the arithmetic is the reason rather than a
+ * round number.** The document now INLINES its images as `data:` URIs — it has
+ * to, because the renderer runs in a container with deliberately no route off
+ * the host and could not fetch them otherwise. A stored image is at most
+ * 2048px at q80, which lands at 200–600 KB, and base64 adds a third: call it
+ * 800 KB each. At 2 MiB a note with three screenshots was already refused. 20
+ * MiB carries roughly 25 images and still bounds what one request can push
+ * into this machine's memory.
  */
-export const MAX_EXPORT_BYTES = 2 * 1024 * 1024;
+export const MAX_EXPORT_BYTES = 20 * 1024 * 1024;
 
 /**
  * The authenticated pass-through in front of the PDF renderer.

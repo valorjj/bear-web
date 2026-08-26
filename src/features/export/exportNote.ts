@@ -1,3 +1,4 @@
+import { files, storedImageIds } from '@/data';
 import { downloadBlob } from '@/lib/download';
 
 import { exportFilename, type NamedNote } from './filename';
@@ -42,6 +43,35 @@ const MIME: Record<'md' | 'html', string> = {
  * it, and "export" changing a byte of the user's own file is the one thing this
  * must not do.
  */
+/**
+ * Every stored image a note references, as a `data:` URI.
+ *
+ * An image this device does not have is simply absent from the map, and
+ * `renderNoteHtml` then drops the element — a note synced before its bytes
+ * arrived still exports, without a broken-image icon in the middle of it.
+ */
+async function collectImages(text: string): Promise<Map<string, string>> {
+  const entries = new Map<string, string>();
+
+  for (const id of storedImageIds(text)) {
+    const record = await files.get(id);
+    if (record === undefined) continue;
+    entries.set(id, await blobToDataUri(record.blob));
+  }
+
+  return entries;
+}
+
+/** `FileReader` rather than `btoa`: the latter needs a binary string and mangles bytes above 0x7f. */
+function blobToDataUri(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function exportNote(
   note: ExportableNote,
   format: ExportFormat,
@@ -56,9 +86,13 @@ export async function exportNote(
     return;
   }
 
+  // Resolved HERE, not inside `renderNoteHtml`: that file must not import from
+  // `src/data/`, so the caller reads the blobs and hands them over.
+  const images = await collectImages(note.text);
+
   // Read from the live root, so an export carries the theme the user is looking
   // at rather than a hardcoded palette.
-  const html = renderNoteHtml(note, readExportTokens(doc.documentElement), locale);
+  const html = renderNoteHtml(note, readExportTokens(doc.documentElement), locale, images);
 
   if (format === 'html') {
     download(exportFilename(note, 'html'), new Blob([html], { type: MIME.html }), doc);
