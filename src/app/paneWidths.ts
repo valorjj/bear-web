@@ -12,13 +12,18 @@ export const MAX_PANE_WIDTH = 560;
  * editor: `<main>`'s padding either side, the flex gaps between the five
  * children, and the two resizer tracks.
  *
+ * 16 of padding (`p-2` either side) + 32 of gaps (`gap-2` between five
+ * children) + 16 for the two `w-2` resizer tracks.
+ *
  * A constant rather than a live measurement, and therefore falsifiable rather
  * than merely asserted: `e2e/mobile.spec.ts` drags both panes to their maximum
  * at 1024px and asserts the editor still measures at least `MIN_PANE_WIDTH`.
+ * That test earned its place immediately — this shipped as 56, forgetting one
+ * of the two resizers, and the editor came out at 152px against a 160 floor.
  * If the shell's padding or gaps ever change, that test fails and this number
  * is what to fix.
  */
-export const SHELL_CHROME_WIDTH = 56;
+export const SHELL_CHROME_WIDTH = 64;
 
 /**
  * The widest one pane may be drawn without squeezing the editor below

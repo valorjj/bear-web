@@ -365,7 +365,18 @@ export function NoteList({
           <EmptyState title={t(emptyTitle(scope))} body={t(emptyBody(scope))} />
         )
       ) : (
-        <ul className="min-h-0 flex-1 overflow-y-auto">
+        <ul
+          // The FAB floats over this list, so without room to scroll past it
+          // the last row's preview is permanently covered — visible in the
+          // first phone screenshot, invisible to every test. A `style` rather
+          // than a utility because the needed 64px is off `sourceLint`'s
+          // permitted spacing scale, and because it has to add the same
+          // safe-area inset the FAB itself sits on.
+          style={
+            compact ? { paddingBottom: 'calc(4rem + env(safe-area-inset-bottom))' } : undefined
+          }
+          className="min-h-0 flex-1 overflow-y-auto"
+        >
           {items.map((note) => (
             <NoteListItem
               key={note.id}

@@ -513,9 +513,17 @@ test('the formatting toolbar is icons, not letters', async ({ page }) => {
 });
 
 test('every formatting toolbar control is reachable at a narrow viewport', async ({ page }) => {
-  // At 900px the editor pane sits at its 300px minimum while uniform
-  // icon-only buttons need ~408px, so Link, Code block and Quote overflow the
-  // toolbar's width. The fix is a horizontal scroll on the toolbar itself
+  // 390px — a phone. This test ran at 900px until J1, where three panes put
+  // the editor at its 300px minimum; at 900 the shell is now a two-pane tablet
+  // with the sidebar in a drawer, so the editor is ~556px and the toolbar no
+  // longer overflows at all. The DEFECT this guards has not gone away, it
+  // moved: at 390 the editor pane is ~374px against a toolbar needing ~408, so
+  // the premise below holds again. The test's own vacuity guards
+  // (`scrollWidth > clientWidth`, `clipped`) are what caught the move rather
+  // than letting it pass silently.
+  //
+  // Uniform icon-only buttons need ~408px, so Link, Code block and Quote
+  // overflow the toolbar's width. The fix is a horizontal scroll on the toolbar itself
   // (`overflow-x-auto` in BottomToolbar.tsx), not a responsive collapse —
   // that decision is explicitly out of scope for this milestone. This test
   // proves nothing is unreachable, not that the layout looks any particular
@@ -536,7 +544,7 @@ test('every formatting toolbar control is reachable at a narrow viewport', async
   // by driving `scrollLeft` on the toolbar element directly and checking
   // that a clipped button actually enters ITS bounds, not just the
   // viewport's.
-  await page.setViewportSize({ width: 900, height: 900 });
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.getByRole('button', { name: 'New note' }).click();
 
@@ -1307,18 +1315,30 @@ test('the prose column never collapses to zero at a very narrow pane', async ({ 
   await editor.click();
   await editor.pressSequentially('A line of prose.');
 
-  // 720 total width puts the editor pane at roughly 96px — well under the
-  // 240px (12rem floor + 3rem reservation) point where the floor must take
-  // over, and confirmed not to break the rest of the shell's own layout.
-  await page.setViewportSize({ width: 720, height: 800 });
+  // Driven by DRAGGING both panes wide at 1024, not by shrinking the window.
+  // This test used 720px and then 650px until J1, which put the editor pane at
+  // ~96px; below 1024 the shell is now a two-pane tablet and a one-pane phone,
+  // so those widths give the editor 376px and 374px and the floor never
+  // engages. Two things changed at once and both are improvements: the sidebar
+  // stops competing for a narrow screen, and `maxPaneWidth` now stops the
+  // resizers squeezing the editor below `MIN_PANE_WIDTH`.
+  //
+  // So the narrowest editor pane the UI can still produce is 160px — reached
+  // here — which is under the 240px (12rem floor + 3rem reservation) point
+  // where the floor must take over. The floor is therefore still load-bearing
+  // and still testable; it is simply no longer reachable by resizing a window.
+  await page.setViewportSize({ width: 1024, height: 800 });
+
+  for (const name of ['Resize the sidebar', 'Resize the note list']) {
+    const resizer = page.getByRole('separator', { name });
+    const box = (await resizer.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(1024, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.up();
+  }
 
   const widths = await editor.evaluate(measureProseClamp);
-  expect(widths.pane).toBeLessThan(150);
+  expect(widths.pane).toBeLessThan(240);
   expect(widths.prose).toBeCloseTo(192, 0);
-
-  // The floor must win regardless of how narrow the pane gets past that
-  // point too, not merely at one sampled width.
-  await page.setViewportSize({ width: 650, height: 800 });
-  const narrower = await editor.evaluate(measureProseClamp);
-  expect(narrower.prose).toBeCloseTo(192, 0);
 });

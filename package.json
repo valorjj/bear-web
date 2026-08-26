@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "shots": "PW_HARNESS=1 playwright test --grep @shots",
+    "shots:mobile": "PW_HARNESS=1 playwright test e2e/shots-mobile.spec.ts --grep @shots",
     "shots:pdf": "PW_HARNESS=1 playwright test e2e/shots-pdf.spec.ts",
     "measure": "PW_HARNESS=1 playwright test --grep @measure",
     "server:dev": "tsx watch --env-file=server/.env server/src/index.ts",
