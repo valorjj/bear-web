@@ -24,6 +24,52 @@ const SNIPPET_MAX_CHARS = 240;
 const IMAGE_SYNTAX = /!\[[^\]]*\]\([^)]*\)/g;
 
 /**
+ * A table row or its delimiter: a line whose first non-space character is a
+ * pipe.
+ *
+ * Dropped ENTIRELY rather than stripped of its pipes, which is the difference
+ * between a preview and a mess. A table's cells are the shortest text in a
+ * note and carry none of its sense — a two-line preview reading
+ * `hi | a | b | c | | --- | --- | --- |` says nothing about the note and
+ * looks broken, which is exactly the complaint that produced this. Whatever
+ * prose surrounds the table is what the preview should show, and dropping the
+ * table lines is what lets it.
+ */
+const TABLE_LINE = /^\s*\|/;
+
+/** A fenced code block's delimiter, and the lines between two of them. */
+const FENCE_LINE = /^\s*(?:`{3,}|~{3,})/;
+
+/**
+ * Leading block markers: heading hashes, list bullets, ordered-list numbers,
+ * task checkboxes and blockquote arrows.
+ *
+ * Stripped from the FRONT of a line only, so a `#` inside prose (a tag, a
+ * number sign) is untouched. The preview is prose, not source: `## Dairy`
+ * reads as a heading in the editor and as punctuation noise in a two-line
+ * summary, and `- [ ] Rewrite the seed helper` reads as a task in the editor
+ * and as `- [ ]` in the row.
+ *
+ * Order matters: the checkbox pattern must run after the bullet that carries
+ * it, which is why this is a sequence rather than one alternation.
+ */
+const BLOCK_MARKERS: readonly RegExp[] = [
+  /^\s{0,3}#{1,6}\s+/,
+  /^\s{0,3}>\s?/,
+  /^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s+/,
+  /^\[[ xX]\]\s+/,
+];
+
+/** Turns one Markdown line into the prose a preview should show, or `''`. */
+function previewLine(line: string): string {
+  if (TABLE_LINE.test(line) || FENCE_LINE.test(line)) return '';
+
+  let text = line;
+  for (const marker of BLOCK_MARKERS) text = text.replace(marker, '');
+  return text;
+}
+
+/**
  * The preview shown beneath a note's title in the list: the body text that
  * follows the line `deriveTitle` consumed, with its blank lines closed up and
  * its remaining lines joined into one run of prose.
@@ -47,12 +93,19 @@ const IMAGE_SYNTAX = /!\[[^\]]*\]\([^)]*\)/g;
  * wins, as before — this exception only fires when the title is the sole
  * match.
  *
- * Markdown syntax is left intact. This previews the raw text the user typed.
+ * Block-level Markdown syntax is REMOVED. This used to preview the raw text
+ * verbatim, on the reasoning that the row shows what the user typed — and on a
+ * note containing a table that produced
+ * `hi | a | b | c | | --- | --- | --- |`, which shows nothing and looks
+ * broken. A preview is a summary, not a source view; the editor is where the
+ * syntax belongs. Inline marks (`**bold**`, `` `code` ``) are deliberately
+ * left alone: they read as light emphasis rather than as structure, and
+ * stripping them means parsing rather than trimming a prefix.
  */
 export function deriveSnippet(text: string, query?: string): string {
   const lines = text
     .split('\n')
-    .map((line) => line.replace(IMAGE_SYNTAX, ' ').replace(/\s+/g, ' ').trim())
+    .map((line) => previewLine(line).replace(IMAGE_SYNTAX, ' ').replace(/\s+/g, ' ').trim())
     .filter((line) => line !== '');
 
   const ordinarySnippet = (): string => {

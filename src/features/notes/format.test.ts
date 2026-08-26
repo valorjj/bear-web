@@ -23,10 +23,48 @@ describe('deriveSnippet', () => {
     expect(deriveSnippet('\n\n   Groceries   \n\n   milk   \n')).toBe('milk');
   });
 
-  it('leaves Markdown syntax in the snippet alone', () => {
-    // The snippet is a preview of raw Markdown, not rendered output. Only
-    // `deriveTitle` strips heading syntax, and only from the title line.
-    expect(deriveSnippet('Groceries\n## Dairy')).toBe('## Dairy');
+  it('strips block markers, because a preview is a summary and not a source view', () => {
+    // This test asserted the OPPOSITE until 2026-08-26 — "the snippet is a
+    // preview of raw Markdown" — and that rule was retired rather than
+    // caveated, because on a real note it produced previews like
+    // `hi | a | b | c | | --- | --- | --- |`.
+    expect(deriveSnippet('Groceries\n## Dairy')).toBe('Dairy');
+  });
+
+  it('drops table rows entirely rather than stripping their pipes', () => {
+    // The complaint that produced this. Cells are the shortest text in a note
+    // and carry none of its sense; the prose around the table is the preview.
+    const text = ['TEST', 'hi', '| a | b | c |', '| --- | --- | --- |', 'abcd'].join('\n');
+
+    expect(deriveSnippet(text)).toBe('hi abcd');
+  });
+
+  it('drops a fenced code block’s delimiters', () => {
+    expect(deriveSnippet('Note\nbefore\n```ts\nconst x = 1;\n```\nafter')).toBe(
+      'before const x = 1; after',
+    );
+  });
+
+  it.each([
+    ['a bullet', 'Note\n- milk', 'milk'],
+    ['a numbered item', 'Note\n1. milk', 'milk'],
+    ['an unchecked task', 'Note\n- [ ] Rewrite the helper', 'Rewrite the helper'],
+    ['a checked task', 'Note\n- [x] Rewrite the helper', 'Rewrite the helper'],
+    ['a quote', 'Note\n> quoted', 'quoted'],
+  ])('strips %s', (_what, text, expected) => {
+    expect(deriveSnippet(text)).toBe(expected);
+  });
+
+  it('leaves a hash INSIDE prose alone, so a tag still reads as one', () => {
+    // Only a LEADING marker is a block marker. A `#` mid-line is a tag or a
+    // number sign and belongs in the preview.
+    expect(deriveSnippet('Note\nplanning #work today')).toBe('planning #work today');
+  });
+
+  it('leaves inline marks alone', () => {
+    // They read as light emphasis rather than as structure, and removing them
+    // means parsing rather than trimming a prefix.
+    expect(deriveSnippet('Note\nsome **bold** and `code`')).toBe('some **bold** and `code`');
   });
 
   it('joins the body lines into one run of prose', () => {

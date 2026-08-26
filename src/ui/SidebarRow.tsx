@@ -25,6 +25,16 @@ export interface SidebarRowProps {
   current?: 'page' | 'true';
   /** Nested rows, rendered inside this row's `<li>`. */
   children?: ReactNode;
+  /**
+   * Sizes the row for a finger rather than a pointer: 44px tall with a 16px
+   * label, against 32px and 13px.
+   *
+   * A prop rather than a media query inside this component, because
+   * `src/ui/` holds presentation primitives that know nothing about the app's
+   * layout modes — the caller decides, the same way `Resizer` takes `min`/`max`
+   * rather than importing the pane-width constants.
+   */
+  touch?: boolean;
 }
 
 const INDENT_REM = 0.75;
@@ -46,6 +56,7 @@ export function SidebarRow({
   disclosure,
   current = 'page',
   children,
+  touch = false,
 }: SidebarRowProps): ReactElement {
   return (
     <li>
@@ -81,9 +92,13 @@ export function SidebarRow({
           // Bear is no longer the authority: Soft Depth reads a row as a chip
           // rather than a line, and a chip needs room around its label. 32 is
           // on the permitted scale; 24 and 32 are both there, 28 is not.
-          className={`ease-bear relative flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md pr-2 text-left text-ui transition-colors duration-[var(--bear-duration-fast)] ${
-            selected ? 'bg-selected font-medium text-text' : 'text-text hover:bg-hover'
-          }`}
+          // `h-8`/13px on a pointer, `h-11`/16px on a finger. The 32 was
+          // measured against Bear's desktop row; Bear's own PHONE rows are
+          // ~44px with a 16px label, and at 32/13 the drawer read as a shrunken
+          // desktop sidebar on an iPhone.
+          className={`ease-bear relative flex min-w-0 flex-1 items-center rounded-md pr-2 text-left transition-colors duration-[var(--bear-duration-fast)] ${
+            touch ? 'h-11 gap-3 text-ui-lg' : 'h-8 gap-2 text-ui'
+          } ${selected ? 'bg-selected font-medium text-text' : 'text-text hover:bg-hover'}`}
         >
           {/*
             The accent edge marker. With the tinted `bg-selected` fill this is

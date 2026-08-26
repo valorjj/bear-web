@@ -15,6 +15,8 @@ export interface TagSidebarProps {
   onScopeChange: (next: NoteScope) => void;
   isCollapsed: (tag: string) => boolean;
   onToggle: (tag: string) => void;
+  /** Sizes rows for a finger. True wherever the sidebar is a drawer. */
+  touch?: boolean;
 }
 
 interface RowProps extends Omit<TagSidebarProps, 'nodes'> {
@@ -22,7 +24,7 @@ interface RowProps extends Omit<TagSidebarProps, 'nodes'> {
   depth: number;
 }
 
-function TagRow({ node, depth, scope, onScopeChange, isCollapsed, onToggle }: RowProps) {
+function TagRow({ node, depth, scope, onScopeChange, isCollapsed, onToggle, touch }: RowProps) {
   const t = useT();
   const hasChildren = node.children.length > 0;
   const collapsed = isCollapsed(node.tag);
@@ -33,7 +35,8 @@ function TagRow({ node, depth, scope, onScopeChange, isCollapsed, onToggle }: Ro
       label={node.label}
       count={node.count}
       depth={depth}
-      icon={<Icon glyph={Hash} size="sm" />}
+      icon={<Icon glyph={Hash} size={touch ? 'md' : 'sm'} />}
+      touch={touch}
       selected={selected}
       onSelect={() => onScopeChange(tagScope(node.tag))}
       disclosure={
@@ -53,6 +56,7 @@ function TagRow({ node, depth, scope, onScopeChange, isCollapsed, onToggle }: Ro
               onScopeChange={onScopeChange}
               isCollapsed={isCollapsed}
               onToggle={onToggle}
+              touch={touch}
             />
           ))}
         </ul>
@@ -67,6 +71,7 @@ export function TagSidebar({
   onScopeChange,
   isCollapsed,
   onToggle,
+  touch = false,
 }: TagSidebarProps): ReactElement | null {
   const t = useT();
 
@@ -90,6 +95,7 @@ export function TagSidebar({
             onScopeChange={onScopeChange}
             isCollapsed={isCollapsed}
             onToggle={onToggle}
+            touch={touch}
           />
         ))}
       </ul>

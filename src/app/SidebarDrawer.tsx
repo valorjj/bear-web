@@ -53,7 +53,7 @@ export function SidebarDrawer({ open, onClose, ...content }: SidebarDrawerProps)
       // replacing it, and the strip of list is a target for dismissing it.
       className="bg-sidebar h-full w-full max-w-xs"
     >
-      <SidebarContent {...content} onScopeChange={chooseScope} />
+      <SidebarContent {...content} onScopeChange={chooseScope} touch />
     </Dialog>
   );
 }

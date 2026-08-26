@@ -14,6 +14,8 @@ export interface SmartListSidebarProps {
   onScopeChange: (next: NoteScope) => void;
   /** `undefined` while the counts query has not resolved. Rows still render. */
   counts: SmartListCounts | undefined;
+  /** Sizes rows for a finger. True wherever the sidebar is a drawer. */
+  touch?: boolean;
 }
 
 /**
@@ -44,6 +46,7 @@ export function SmartListSidebar({
   scope,
   onScopeChange,
   counts,
+  touch = false,
 }: SmartListSidebarProps): ReactElement {
   const t = useT();
   const active = scopeKey(scope);
@@ -62,6 +65,7 @@ export function SmartListSidebar({
               // falsiness, and a zero count must render as "0".
               count={counts?.[id]}
               icon={<Icon glyph={ICONS[id]} />}
+              touch={touch}
               selected={active === scopeKey(rowScope)}
               onSelect={() => onScopeChange(rowScope)}
             />
