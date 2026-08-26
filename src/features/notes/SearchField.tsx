@@ -45,13 +45,13 @@ export function SearchField({
 
   if (!isOpen) {
     return (
-      <Button variant="ghost" onClick={() => setOpened(true)} label={t('search.open')}>
-        <Icon glyph={Search} size="sm" />
+      <Button variant="soft" size="touch" onClick={() => setOpened(true)} label={t('search.open')}>
+        <Icon glyph={Search} />
       </Button>
     );
   }
 
-  return (
+  const field = (
     <div className="relative flex min-w-0 flex-1 items-center">
       <span aria-hidden="true" className="pointer-events-none absolute left-2 text-faint">
         <Icon glyph={Search} size="sm" />
@@ -76,7 +76,13 @@ export function SearchField({
         // shell makes, and it applies at every width: a desktop field at 16px
         // costs nothing, and branching the size on layout mode would make the
         // rule invisible at exactly the size it matters.
-        className="h-7 w-full min-w-0 appearance-none rounded-sm border border-border bg-bg py-1 pr-6 pl-8 text-ui-lg text-text placeholder:text-faint [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
+        // 44px tall on a compact layout — the same target the buttons beside
+        // it get, and a 28px field in a 56px bar reads as a leftover from the
+        // desktop strip. `rounded-md` there too: a 44px control with a 4px
+        // radius looks clipped rather than soft.
+        className={`w-full min-w-0 appearance-none border border-border bg-bg py-1 pr-6 pl-8 text-ui-lg text-text placeholder:text-faint [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none ${
+          collapsible ? 'h-11 rounded-md' : 'h-7 rounded-sm'
+        }`}
       />
       {query !== '' && (
         <button
@@ -91,6 +97,33 @@ export function SearchField({
           <Icon glyph={X} size="sm" />
         </button>
       )}
+    </div>
+  );
+
+  if (!collapsible) return field;
+
+  // Open, on a compact layout: the field COVERS the header rather than
+  // squeezing into a slot beside the drawer button and the title. At 390px a
+  // field sharing the bar with two 44px controls and a centred title has
+  // nowhere to go, and the reference app covers the bar for the same reason.
+  // `absolute inset-0` resolves against the header strip, which is `relative`.
+  return (
+    <div className="bg-surface absolute inset-0 z-10 flex items-center gap-1 px-2">
+      {field}
+      <Button
+        variant="ghost"
+        size="touch"
+        onClick={() => {
+          // Cancels the search rather than merely hiding the field: leaving a
+          // query active behind a closed field would filter the list by
+          // something the user can no longer see or clear.
+          onQueryChange('');
+          setOpened(false);
+        }}
+        label={t('search.close')}
+      >
+        <Icon glyph={X} />
+      </Button>
     </div>
   );
 }

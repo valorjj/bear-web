@@ -220,14 +220,33 @@ export function NoteList({
         so they keep a resting fill. `ConfirmDialog`'s Cancel still uses
         `default`, so the variant and its ruling both stay live.
       */}
-      <div className="border-border flex h-9 shrink-0 items-center gap-1 border-b px-2">
+      {/*
+        Two different bars, not one bar with tweaks.
+
+        The compact bar is 56px with 44px circular controls and a centred
+        16px title — iOS navigation-bar proportions. It was `h-9` with 28px
+        `text-ui` controls until the first real-phone test, because it was
+        literally the desktop strip with two buttons swapped in: sized for a
+        mouse, and visibly undersized next to the reference app.
+
+        `relative` because the search field covers this bar when it opens.
+        No bottom border, deliberately — at this height a hairline reads as a
+        seam rather than a separator, and the reference app has none.
+      */}
+      <div
+        className={
+          compact
+            ? 'relative grid h-14 shrink-0 grid-cols-[auto_1fr_auto] items-center gap-1 px-2'
+            : 'border-border flex h-9 shrink-0 items-center gap-1 border-b px-2'
+        }
+      >
         {/*
           Below desktop there is no sidebar pane, so this is the only route to
           the tag tree. Bear's own phone header puts it in exactly this corner.
         */}
         {compact && (
-          <Button variant="ghost" onClick={onOpenDrawer} label={t('sidebar.open')}>
-            <Icon glyph={Menu} size="sm" />
+          <Button variant="soft" size="touch" onClick={onOpenDrawer} label={t('sidebar.open')}>
+            <Icon glyph={Menu} />
           </Button>
         )}
         {/*
@@ -238,9 +257,10 @@ export function NoteList({
 
           Title left, controls right — the reading order of Bear's own header.
         */}
-        <div className="relative">
+        <div className={compact ? 'relative flex min-w-0 justify-center' : 'relative'}>
           <Button
             variant="ghost"
+            size={compact ? 'md' : 'md'}
             onClick={() => setMenuOpen((open) => !open)}
             ariaHasPopup="menu"
             ariaExpanded={menuOpen}
@@ -251,9 +271,11 @@ export function NoteList({
             // requires, and the prefix says what the button actually does —
             // "Notes" alone does not convey that it opens anything.
             label={t('noteList.menu.open').replace('{scope}', scopeName)}
-            className="gap-1"
+            // 16px semibold on a phone: the title is the bar's subject, and at
+            // 13px it read as a caption beside two 44px controls.
+            className={compact ? 'h-11 min-w-0 gap-1 text-ui-lg font-semibold text-text' : 'gap-1'}
           >
-            {scopeName}
+            <span className="truncate">{scopeName}</span>
             <Icon glyph={ChevronDown} size="sm" />
           </Button>
 
@@ -280,14 +302,12 @@ export function NoteList({
         </div>
 
         {compact && (
-          <div className="ml-auto flex min-w-0 items-center">
-            <SearchField
-              query={query}
-              onQueryChange={onQueryChange}
-              inputRef={searchInputRef}
-              collapsible
-            />
-          </div>
+          <SearchField
+            query={query}
+            onQueryChange={onQueryChange}
+            inputRef={searchInputRef}
+            collapsible
+          />
         )}
 
         {/*

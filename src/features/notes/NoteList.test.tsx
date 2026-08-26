@@ -653,3 +653,40 @@ describe('phone header', () => {
     );
   });
 });
+
+describe('compact header proportions', () => {
+  // These pin NUMBERS because the defect was numeric: the phone header shipped
+  // as the desktop strip with two buttons swapped in, and "looks small" is not
+  // something any other test in this repo can see.
+  it('is 56px tall on a phone and 36px on desktop', () => {
+    const { container, unmount } = renderList(<NoteList {...props({ mode: 'phone' })} />);
+    expect(container.querySelector('.h-14')).not.toBeNull();
+    unmount();
+
+    const desktop = renderList(<NoteList {...props({ mode: 'desktop' })} />);
+    expect(desktop.container.querySelector('.h-14')).toBeNull();
+    expect(desktop.container.querySelector('.h-9')).not.toBeNull();
+  });
+
+  it('gives the drawer and search controls 44px targets', () => {
+    renderList(<NoteList {...props({ mode: 'phone' })} />);
+
+    for (const name of ['Show tags', 'Show search']) {
+      expect(screen.getByRole('button', { name }).className).toContain('h-11');
+    }
+  });
+
+  it('keeps desktop controls at their 28px size', () => {
+    renderList(<NoteList {...props({ mode: 'desktop' })} />);
+
+    expect(screen.getByRole('button', { name: 'New note' }).className).toContain('h-7');
+  });
+
+  it('centres the scope title against the bar, not against the left group', () => {
+    // A three-column grid, so the title's position does not drift as the scope
+    // name changes length. A flex row with `ml-auto` cannot give this.
+    const { container } = renderList(<NoteList {...props({ mode: 'phone' })} />);
+
+    expect(container.querySelector('.grid-cols-\\[auto_1fr_auto\\]')).not.toBeNull();
+  });
+});
