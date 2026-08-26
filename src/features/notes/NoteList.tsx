@@ -2,11 +2,12 @@ import { type ReactElement, type RefObject, useCallback, useState } from 'react'
 
 import type { Note, NoteOrder } from '@/data';
 import { useExportRunner } from '@/features/export';
+import type { LayoutMode } from '@/lib/useLayoutMode';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
-import { ChevronDown, Icon, SquarePen } from '@/ui/Icon';
+import { ChevronDown, Icon, Menu, Plus, SquarePen } from '@/ui/Icon';
 import { Popover } from '@/ui/Popover';
 
 import { deriveTitle } from '@/data';
@@ -109,6 +110,10 @@ export interface NoteListProps {
   onPreviewSizeChange: (next: PreviewSize) => void;
   onIncludeDescendantsChange: (next: boolean) => void;
   onScopeChange: (next: NoteScope) => void;
+  /** Which shell layout is in effect. Decides the header's shape and the FAB. */
+  mode: LayoutMode;
+  /** Opens the tag drawer. Only reachable below desktop, where no sidebar pane exists. */
+  onOpenDrawer: () => void;
 }
 
 export function NoteList({
@@ -135,8 +140,11 @@ export function NoteList({
   onPreviewSizeChange,
   onIncludeDescendantsChange,
   onScopeChange,
+  mode,
+  onOpenDrawer,
 }: NoteListProps): ReactElement {
   const t = useT();
+  const compact = mode !== 'desktop';
   const [menuOpen, setMenuOpen] = useState(false);
   const [rowMenu, setRowMenu] = useState<NoteRowMenuRequest | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
@@ -193,7 +201,7 @@ export function NoteList({
     selectedNoteId !== null && (items ?? []).some((note) => note.id === selectedNoteId);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       {/*
         `ghost`, not `default`, and that is a DELIBERATE REVERSAL of M6's ruling
         for this strip alone.
@@ -213,6 +221,15 @@ export function NoteList({
         `default`, so the variant and its ruling both stay live.
       */}
       <div className="border-border flex h-9 shrink-0 items-center gap-1 border-b px-2">
+        {/*
+          Below desktop there is no sidebar pane, so this is the only route to
+          the tag tree. Bear's own phone header puts it in exactly this corner.
+        */}
+        {compact && (
+          <Button variant="ghost" onClick={onOpenDrawer} label={t('sidebar.open')}>
+            <Icon glyph={Menu} size="sm" />
+          </Button>
+        )}
         {/*
           The first thing in the app that names the active scope on screen.
           Until now the only indication was the sidebar's `aria-current` row,
@@ -262,27 +279,56 @@ export function NoteList({
           </Popover>
         </div>
 
-        <Button variant="ghost" className="ml-auto" onClick={onCreate} label={t('noteList.create')}>
-          <Icon glyph={SquarePen} />
-        </Button>
+        {/*
+          The create button and the three selection actions are DESKTOP ONLY.
 
-        {selectedIsVisible && allowsTrash(scope) && (
+          Create moves to the FAB below. The other three act on the SELECTED
+          note, and below desktop selecting a note means leaving the list
+          (phone) or is already visible beside it (tablet) — so a header button
+          naming "the selected note" was never coherent there. All three live
+          in the row's own context menu, which is what makes this header
+          shrinkable at all.
+        */}
+        {!compact && (
+          <Button
+            variant="ghost"
+            className="ml-auto"
+            onClick={onCreate}
+            label={t('noteList.create')}
+          >
+            <Icon glyph={SquarePen} />
+          </Button>
+        )}
+
+        {!compact && selectedIsVisible && allowsTrash(scope) && (
           <Button variant="ghost" onClick={() => onTrash(selectedNoteId!)}>
             {t('noteList.trash')}
           </Button>
         )}
-        {selectedIsVisible && isTrash(scope) && (
+        {!compact && selectedIsVisible && isTrash(scope) && (
           <Button variant="ghost" onClick={() => onRestore(selectedNoteId!)}>
             {t('noteList.restore')}
           </Button>
         )}
-        {selectedIsVisible && isTrash(scope) && (
+        {!compact && selectedIsVisible && isTrash(scope) && (
           <Button variant="danger" onClick={() => onPurge(selectedNoteId!)}>
             {t('noteList.deleteForever')}
           </Button>
         )}
+        {/*
+          Empty trash STAYS in the header at every size, unlike the three
+          selection actions above. The spec proposed moving it into
+          `ScopeMenu`; it fits at 390px beside the drawer, scope and search
+          controls, and an irreversible action reads worse buried in a menu of
+          view preferences than beside the scope it belongs to.
+        */}
         {isTrash(scope) && (
-          <Button variant="danger" disabled={emptyTrashDisabled} onClick={onEmptyTrash}>
+          <Button
+            variant="danger"
+            className="ml-auto"
+            disabled={emptyTrashDisabled}
+            onClick={onEmptyTrash}
+          >
             {t('noteList.emptyTrash')}
           </Button>
         )}
@@ -315,6 +361,31 @@ export function NoteList({
             />
           ))}
         </ul>
+      )}
+
+      {/*
+        The create button, below desktop. `absolute`, so it floats over the
+        list rather than taking a row from it, which is what a FAB is for.
+
+        `env(safe-area-inset-bottom)` on this control alone. General safe-area
+        handling is J4, but a floating control placed in the exact spot the OS
+        reserves for the home indicator cannot wait for it — it would sit under
+        the indicator on every notched phone.
+
+        It reuses `noteList.create` rather than inventing a second string: the
+        same action must not announce two different ways depending on the
+        viewport.
+      */}
+      {compact && (
+        <button
+          type="button"
+          aria-label={t('noteList.create')}
+          onClick={onCreate}
+          style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+          className="bg-accent shadow-popover ease-bear absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full text-white transition-transform duration-[var(--bear-duration-fast)] active:scale-95"
+        >
+          <Icon glyph={Plus} />
+        </button>
       )}
 
       {/* One line for both failure sources. They are mutually exclusive in

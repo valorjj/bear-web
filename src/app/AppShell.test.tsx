@@ -1103,3 +1103,114 @@ describe('AppShell list preferences', () => {
     await waitFor(() => expect(screen.queryByText('milk and bread')).toBeNull());
   });
 });
+
+describe('layout modes', () => {
+  it('renders three panes and two resizers on a desktop viewport', async () => {
+    // The non-goal, guarded: J1 must not change the desktop layout at all.
+    globalThis.__setViewportWidth(1280);
+    renderShell();
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('section[aria-label]')).toHaveLength(3);
+    });
+    expect(screen.getAllByRole('separator')).toHaveLength(2);
+  });
+
+  it('renders two panes and no resizers on a tablet viewport', async () => {
+    globalThis.__setViewportWidth(834);
+    renderShell();
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('section[aria-label]')).toHaveLength(2);
+    });
+    // Not merely absent from view: a `display: none` separator would still be
+    // in the tab order and the accessibility tree, so the assertion is that it
+    // was never rendered.
+    expect(screen.queryAllByRole('separator')).toHaveLength(0);
+  });
+
+  it('renders one pane and no resizers on a phone viewport', async () => {
+    globalThis.__setViewportWidth(390);
+    renderShell();
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('section[aria-label]')).toHaveLength(1);
+    });
+    expect(screen.queryAllByRole('separator')).toHaveLength(0);
+  });
+
+  it('offers the drawer below desktop and not above it', async () => {
+    globalThis.__setViewportWidth(390);
+    const { unmount } = renderShell();
+    expect(await screen.findByRole('button', { name: 'Show tags' })).toBeInTheDocument();
+    unmount();
+
+    globalThis.__setViewportWidth(1280);
+    renderShell();
+    await waitFor(() => {
+      expect(document.querySelectorAll('section[aria-label]')).toHaveLength(3);
+    });
+    expect(screen.queryByRole('button', { name: 'Show tags' })).not.toBeInTheDocument();
+  });
+
+  it('opens the tag tree in a drawer on a phone', async () => {
+    globalThis.__setViewportWidth(390);
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(await screen.findByRole('button', { name: 'Show tags' }));
+
+    const drawer = await screen.findByRole('dialog', { name: 'Tags and lists' });
+    expect(within(drawer).getByRole('button', { name: /^Trash\b/ })).toBeInTheDocument();
+  });
+});
+
+describe('phone screens', () => {
+  it('shows the list, and only the list, with no note selected', async () => {
+    globalThis.__setViewportWidth(390);
+    await notes.create('Groceries');
+    renderShell();
+
+    expect(await screen.findByRole('button', { name: /Groceries/ })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Note text' })).not.toBeInTheDocument();
+  });
+
+  it('replaces the list with the editor when a note is opened', async () => {
+    globalThis.__setViewportWidth(390);
+    const user = userEvent.setup();
+    await notes.create('Groceries');
+    renderShell();
+
+    await user.click(await screen.findByRole('button', { name: /Groceries/ }));
+
+    expect(await screen.findByRole('textbox', { name: 'Note text' })).toBeInTheDocument();
+    // Not merely "the editor is present": on a phone the list must be GONE,
+    // which is the whole difference from the desktop layout.
+    expect(screen.queryByRole('button', { name: /Groceries/ })).not.toBeInTheDocument();
+  });
+
+  it('returns to the list from the back control', async () => {
+    globalThis.__setViewportWidth(390);
+    const user = userEvent.setup();
+    await notes.create('Groceries');
+    renderShell();
+
+    await user.click(await screen.findByRole('button', { name: /Groceries/ }));
+    await user.click(await screen.findByRole('button', { name: 'Back to notes' }));
+
+    expect(await screen.findByRole('button', { name: /Groceries/ })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Note text' })).not.toBeInTheDocument();
+  });
+
+  it('keeps both panes on a tablet, where opening a note does not hide the list', async () => {
+    globalThis.__setViewportWidth(834);
+    const user = userEvent.setup();
+    await notes.create('Groceries');
+    renderShell();
+
+    await user.click(await screen.findByRole('button', { name: /Groceries/ }));
+
+    expect(await screen.findByRole('textbox', { name: 'Note text' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Groceries/ })).toBeInTheDocument();
+  });
+});

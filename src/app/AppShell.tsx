@@ -18,16 +18,21 @@ import {
 } from '@/features/notes';
 import { hasTag, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
+import { useLayoutMode } from '@/lib/useLayoutMode';
+import { useOverlayHistory } from '@/lib/useOverlayHistory';
+import { Button } from '@/ui/Button';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
+import { ChevronLeft, Icon } from '@/ui/Icon';
 import { SessionProvider } from '@/features/account';
 import { ExportProgressProvider, useExportProgress } from '@/features/export';
 import { Pane } from '@/ui/Pane';
 import { ProgressBar } from '@/ui/ProgressBar';
 import { Resizer } from '@/ui/Resizer';
 
-import { MAX_PANE_WIDTH, MIN_PANE_WIDTH } from './paneWidths';
+import { maxPaneWidth, MIN_PANE_WIDTH } from './paneWidths';
 import { SidebarContent } from './SidebarContent';
+import { SidebarDrawer } from './SidebarDrawer';
 import { usePaneWidths } from './usePaneWidths';
 import { useScopeShortcuts } from './useScopeShortcuts';
 import { useSetting } from './useSetting';
@@ -225,6 +230,37 @@ export function AppShell(): ReactElement {
     enabled: pending === null,
   });
 
+  const mode = useLayoutMode();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+
+  // DERIVED, never stored. A stored screen can disagree with the selection —
+  // an editor showing no note, a note open behind a list — and nothing makes
+  // those states unreachable. Deriving makes them unrepresentable, and every
+  // existing transition then does the right thing without a rule of its own:
+  // creating a note selects it so the editor opens; trashing clears the
+  // selection so the list returns; back clears it so the blank-note reclaim
+  // runs exactly as it does on desktop.
+  //
+  // From `selectedNoteId`, NOT `selectedNote`: `useNotes` routes every
+  // selection change through a transient `undefined` on the note OBJECT
+  // (`docs/rulings/notes-lifecycle.md`), so a screen derived from the object
+  // would flicker back to the list mid-switch. The id does not do that.
+  const phoneScreen = selectedNoteId === null ? 'list' : 'editor';
+
+  const showSidebarPane = mode === 'desktop';
+  const showNoteListPane = mode !== 'phone' || phoneScreen === 'list';
+  const showEditorPane = mode !== 'phone' || phoneScreen === 'editor';
+
+  const backToList = useCallback(() => select(null), [select]);
+  useOverlayHistory(mode === 'phone' && phoneScreen === 'editor', backToList, 'editor');
+
+  // The drawer only exists below desktop, so a window dragged wide with it
+  // open would otherwise leave `drawerOpen` true and un-closable.
+  useEffect(() => {
+    if (mode === 'desktop') setDrawerOpen(false);
+  }, [mode]);
+
   const confirmPending = useCallback(async () => {
     if (pending === null) return;
     setPending(null);
@@ -242,16 +278,152 @@ export function AppShell(): ReactElement {
       <ExportProgressBar />
       <SessionProvider>
         <main className="bg-canvas text-text flex h-full w-full gap-2 overflow-hidden p-2">
-          <Pane
-            label={t('pane.sidebar')}
-            width={widths.sidebarWidth}
-            // Not a card: in Soft Depth the sidebar dissolves into the ground and
-            // only the panes holding content float. Its `--bear-sidebar` equals
-            // `--bear-canvas` in the indigo themes for the same reason.
-            elevated={false}
-            className="bg-sidebar flex flex-col overflow-hidden"
-          >
-            <SidebarContent
+          {showSidebarPane && (
+            <Pane
+              label={t('pane.sidebar')}
+              width={widths.sidebarWidth}
+              // Not a card: in Soft Depth the sidebar dissolves into the ground and
+              // only the panes holding content float. Its `--bear-sidebar` equals
+              // `--bear-canvas` in the indigo themes for the same reason.
+              elevated={false}
+              className="bg-sidebar flex flex-col overflow-hidden"
+            >
+              <SidebarContent
+                scope={scope}
+                onScopeChange={setScope}
+                counts={counts}
+                nodes={tree.nodes}
+                isCollapsed={tree.isCollapsed}
+                onToggle={tree.toggle}
+              />
+            </Pane>
+          )}
+
+          {/*
+            Not RENDERED below desktop, not hidden. `Resizer` is a focusable
+            `separator` carrying `aria-valuenow`; `display: none` would take it
+            off the screen while leaving it in the tab order and in the
+            accessibility tree, which is worse than either showing it or not
+            building it.
+
+            `maxPaneWidth` closes a pre-existing bug: each pane used to be
+            clamped to 160..560 with no knowledge of the viewport, so both
+            panes dragged wide in a 1024px window left the editor a NEGATIVE
+            width.
+          */}
+          {showSidebarPane && (
+            <Resizer
+              label={t('resizer.sidebar')}
+              width={widths.sidebarWidth}
+              min={MIN_PANE_WIDTH}
+              max={maxPaneWidth(window.innerWidth, widths.noteListWidth)}
+              onResize={widths.onSidebarResize}
+              onCommit={widths.onSidebarCommit}
+            />
+          )}
+
+          {showNoteListPane && (
+            <Pane
+              label={t('pane.noteList')}
+              // `undefined` makes a Pane `flex-1`. On a phone the list IS the
+              // screen, so it fills. On a tablet it keeps its stored width and
+              // only the editor flexes — two `flex-1` panes would split the
+              // screen in half and give a 400px list beside a 400px editor.
+              width={mode === 'phone' ? undefined : widths.noteListWidth}
+              className="bg-surface"
+            >
+              <NoteList
+                scope={scope}
+                items={visibleItems}
+                selectedNoteId={selectedNoteId}
+                onSelect={select}
+                onCreate={() => void handleCreate()}
+                onTrash={(id) => void handleTrash(id)}
+                onRestore={(id) => void handleRestore(id)}
+                onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
+                onPurge={(id) => setPending({ kind: 'purge', id })}
+                onDuplicate={(id) => void handleDuplicate(id)}
+                onEmptyTrash={() => setPending({ kind: 'empty' })}
+                // Gated on the UNFILTERED `items`, not `visibleItems`: a query that
+                // matches nothing in a full trash must not disable the button that
+                // empties it. Emptying always empties every trashed note regardless
+                // of the query — the dialog copy already says so — so what it
+                // needs to know is whether the trash itself is empty, not whether
+                // the current search happens to show anything.
+                emptyTrashDisabled={items === undefined || items.length === 0}
+                // Same reasoning, same source (the UNFILTERED `items`): whether the
+                // no-results empty state may override a scope's own special-cased
+                // empty copy (Locked, Trash) depends on whether the scope had
+                // anything before the query narrowed it, not on the narrowed view.
+                hasUnfilteredItems={items !== undefined && items.length > 0}
+                count={items?.length ?? 0}
+                scopeQuery={scopeQuery}
+                previewSize={previewSize}
+                onOrderChange={setOrder}
+                onPreviewSizeChange={setPreviewSize}
+                // The menu reports the new `includeDescendants`; the setting stores
+                // its inverse, so exactly one place does the flip.
+                onIncludeDescendantsChange={(next) => setHideSubTagNotes(!next)}
+                onScopeChange={setScope}
+                mode={mode}
+                onOpenDrawer={() => setDrawerOpen(true)}
+                query={query}
+                onQueryChange={setQuery}
+                searchInputRef={searchRef}
+              />
+            </Pane>
+          )}
+
+          {showSidebarPane && (
+            <Resizer
+              label={t('resizer.noteList')}
+              width={widths.noteListWidth}
+              min={MIN_PANE_WIDTH}
+              max={maxPaneWidth(window.innerWidth, widths.sidebarWidth)}
+              onResize={widths.onNoteListResize}
+              onCommit={widths.onNoteListCommit}
+            />
+          )}
+
+          {showEditorPane && (
+            <Pane label={t('pane.editor')} className="bg-bg flex flex-col">
+              {/*
+                The phone's only route back to the list. On desktop and tablet
+                the list is still on screen, so there is nothing to go back to
+                and a back control would be a lie.
+
+                It is also where focus lands when the screen opens — a screen
+                swap has no `Dialog`-style focus restore, so without a real
+                control here a screen-reader user is left parked on a row that
+                is no longer rendered.
+              */}
+              {mode === 'phone' && selectedNote != null && (
+                <div className="border-border flex h-9 shrink-0 items-center border-b px-1">
+                  <Button variant="ghost" onClick={backToList} label={t('nav.backToList')}>
+                    <Icon glyph={ChevronLeft} size="sm" />
+                  </Button>
+                </div>
+              )}
+              {selectedNote === undefined ? null : selectedNote === null ? (
+                <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
+              ) : (
+                // `key` is load-bearing, not an optimisation: it remounts the editor
+                // on every switch, so an instance only ever writes to one note and
+                // its unmount cleanup is the flush-on-switch.
+                <NoteEditor
+                  key={selectedNote.id}
+                  note={selectedNote}
+                  seedText={seed?.id === selectedNote.id ? seed.text : undefined}
+                  onActivateTag={handleActivateTag}
+                />
+              )}
+            </Pane>
+          )}
+
+          {mode !== 'desktop' && (
+            <SidebarDrawer
+              open={drawerOpen}
+              onClose={closeDrawer}
               scope={scope}
               onScopeChange={setScope}
               counts={counts}
@@ -259,81 +431,7 @@ export function AppShell(): ReactElement {
               isCollapsed={tree.isCollapsed}
               onToggle={tree.toggle}
             />
-          </Pane>
-
-          <Resizer
-            label={t('resizer.sidebar')}
-            width={widths.sidebarWidth}
-            min={MIN_PANE_WIDTH}
-            max={MAX_PANE_WIDTH}
-            onResize={widths.onSidebarResize}
-            onCommit={widths.onSidebarCommit}
-          />
-
-          <Pane label={t('pane.noteList')} width={widths.noteListWidth} className="bg-surface">
-            <NoteList
-              scope={scope}
-              items={visibleItems}
-              selectedNoteId={selectedNoteId}
-              onSelect={select}
-              onCreate={() => void handleCreate()}
-              onTrash={(id) => void handleTrash(id)}
-              onRestore={(id) => void handleRestore(id)}
-              onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
-              onPurge={(id) => setPending({ kind: 'purge', id })}
-              onDuplicate={(id) => void handleDuplicate(id)}
-              onEmptyTrash={() => setPending({ kind: 'empty' })}
-              // Gated on the UNFILTERED `items`, not `visibleItems`: a query that
-              // matches nothing in a full trash must not disable the button that
-              // empties it. Emptying always empties every trashed note regardless
-              // of the query — the dialog copy already says so — so what it
-              // needs to know is whether the trash itself is empty, not whether
-              // the current search happens to show anything.
-              emptyTrashDisabled={items === undefined || items.length === 0}
-              // Same reasoning, same source (the UNFILTERED `items`): whether the
-              // no-results empty state may override a scope's own special-cased
-              // empty copy (Locked, Trash) depends on whether the scope had
-              // anything before the query narrowed it, not on the narrowed view.
-              hasUnfilteredItems={items !== undefined && items.length > 0}
-              count={items?.length ?? 0}
-              scopeQuery={scopeQuery}
-              previewSize={previewSize}
-              onOrderChange={setOrder}
-              onPreviewSizeChange={setPreviewSize}
-              // The menu reports the new `includeDescendants`; the setting stores
-              // its inverse, so exactly one place does the flip.
-              onIncludeDescendantsChange={(next) => setHideSubTagNotes(!next)}
-              onScopeChange={setScope}
-              query={query}
-              onQueryChange={setQuery}
-              searchInputRef={searchRef}
-            />
-          </Pane>
-
-          <Resizer
-            label={t('resizer.noteList')}
-            width={widths.noteListWidth}
-            min={MIN_PANE_WIDTH}
-            max={MAX_PANE_WIDTH}
-            onResize={widths.onNoteListResize}
-            onCommit={widths.onNoteListCommit}
-          />
-
-          <Pane label={t('pane.editor')} className="bg-bg">
-            {selectedNote === undefined ? null : selectedNote === null ? (
-              <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
-            ) : (
-              // `key` is load-bearing, not an optimisation: it remounts the editor
-              // on every switch, so an instance only ever writes to one note and
-              // its unmount cleanup is the flush-on-switch.
-              <NoteEditor
-                key={selectedNote.id}
-                note={selectedNote}
-                seedText={seed?.id === selectedNote.id ? seed.text : undefined}
-                onActivateTag={handleActivateTag}
-              />
-            )}
-          </Pane>
+          )}
 
           <ConfirmDialog
             open={pending !== null}
