@@ -826,3 +826,12 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   spacing scale and because it must add the same inset. **Found in a
   screenshot, not by a test:** without it the FAB permanently covers the last
   row's preview, and nothing in the suite can see that.
+
+
+- **A sidebar row is 44px with a 16px label in the drawer, 32px with 13px in
+  the desktop pane.** `SidebarRow` takes a `touch` prop rather than reading a
+  media query itself — `src/ui/` holds primitives that know nothing about the
+  app's layout modes, the same reason `Resizer` takes `min`/`max` rather than
+  importing the pane-width constants. The 32px row was measured against Bear's
+  DESKTOP row; its phone rows are ~44px, and at 32/13 the drawer read as a
+  shrunken desktop sidebar on an iPhone.

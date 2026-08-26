@@ -17,6 +17,8 @@ export interface SidebarContentProps {
   nodes: TagNode[] | undefined;
   isCollapsed: (tag: string) => boolean;
   onToggle: (tag: string) => void;
+  /** Sizes rows for a finger. True in the drawer, false in the desktop pane. */
+  touch?: boolean;
 }
 
 /**
@@ -35,6 +37,7 @@ export function SidebarContent({
   nodes,
   isCollapsed,
   onToggle,
+  touch = false,
 }: SidebarContentProps): ReactElement {
   return (
     <>
@@ -43,13 +46,19 @@ export function SidebarContent({
         stays pinned while the tag tree scrolls under it.
       */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <SmartListSidebar scope={scope} onScopeChange={onScopeChange} counts={counts} />
+        <SmartListSidebar
+          scope={scope}
+          onScopeChange={onScopeChange}
+          counts={counts}
+          touch={touch}
+        />
         <TagSidebar
           nodes={nodes}
           scope={scope}
           onScopeChange={onScopeChange}
           isCollapsed={isCollapsed}
           onToggle={onToggle}
+          touch={touch}
         />
       </div>
 

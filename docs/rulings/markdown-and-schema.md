@@ -439,3 +439,24 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   per-role CSS blocks in either stylesheet on the assumption that source
   order no longer matters — it still decides every combination this list has
   not yet been told about.
+
+
+- **A note-list preview STRIPS block-level Markdown. The opposite rule was
+  retired on 2026-08-26, not caveated.** `deriveSnippet` used to preview the
+  raw text verbatim, on the reasoning that the row should show what the user
+  typed. On a note containing a table that produced
+  `hi | a | b | c | | --- | --- | --- |` — which says nothing about the note
+  and looks broken. A preview is a summary; the editor is where syntax
+  belongs.
+
+  What is removed, and why each: **table rows are dropped ENTIRELY** rather
+  than stripped of their pipes, because cells are the shortest text in a note
+  and carry none of its sense, so the prose around the table is what the
+  preview should show. **Fence delimiters** go for the same reason. **Leading
+  block markers** — heading hashes, bullets, ordered numbers, task checkboxes,
+  blockquote arrows — are trimmed from the FRONT of a line only, so a `#`
+  inside prose is still a tag and still previews as one.
+
+  **Inline marks are deliberately left alone.** `**bold**` and `` `code` ``
+  read as light emphasis rather than as structure, and removing them means
+  parsing rather than trimming a prefix.
