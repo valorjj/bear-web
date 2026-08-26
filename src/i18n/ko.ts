@@ -49,6 +49,10 @@ export const ko: Record<TranslationKey, string> = {
   'note.copyText': '텍스트 복사',
   'note.copyText.failed': '메모를 복사하지 못했습니다.',
 
+  'sidebar.open': '태그 보기',
+  'sidebar.drawer': '태그 및 목록',
+  'nav.backToList': '메모 목록으로',
+  'search.open': '메모 검색',
   'noteList.create': '새 메모',
   'noteList.trash': '삭제',
   'noteList.restore': '복원',

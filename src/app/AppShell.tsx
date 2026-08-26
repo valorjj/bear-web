@@ -12,23 +12,22 @@ import {
   NoteList,
   type NoteScope,
   seedTagFor,
-  SmartListSidebar,
   tagScope,
   useNotes,
   useSmartListCounts,
 } from '@/features/notes';
-import { hasTag, TagSidebar, useTagTree } from '@/features/tags';
+import { hasTag, useTagTree } from '@/features/tags';
 import { useT } from '@/i18n';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
-import { AccountMenu, SessionProvider } from '@/features/account';
+import { SessionProvider } from '@/features/account';
 import { ExportProgressProvider, useExportProgress } from '@/features/export';
-import { ThemePicker } from '@/features/appearance';
 import { Pane } from '@/ui/Pane';
 import { ProgressBar } from '@/ui/ProgressBar';
 import { Resizer } from '@/ui/Resizer';
 
 import { MAX_PANE_WIDTH, MIN_PANE_WIDTH } from './paneWidths';
+import { SidebarContent } from './SidebarContent';
 import { usePaneWidths } from './usePaneWidths';
 import { useScopeShortcuts } from './useScopeShortcuts';
 import { useSetting } from './useSetting';
@@ -252,25 +251,14 @@ export function AppShell(): ReactElement {
             elevated={false}
             className="bg-sidebar flex flex-col overflow-hidden"
           >
-            {/*
-          The scroller is inner, not the Pane itself, so the footer stays
-          pinned while the tag tree scrolls under it.
-        */}
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <SmartListSidebar scope={scope} onScopeChange={setScope} counts={counts} />
-              <TagSidebar
-                nodes={tree.nodes}
-                scope={scope}
-                onScopeChange={setScope}
-                isCollapsed={tree.isCollapsed}
-                onToggle={tree.toggle}
-              />
-            </div>
-
-            <div className="border-border flex shrink-0 items-center gap-1 border-t p-1">
-              <ThemePicker />
-              <AccountMenu />
-            </div>
+            <SidebarContent
+              scope={scope}
+              onScopeChange={setScope}
+              counts={counts}
+              nodes={tree.nodes}
+              isCollapsed={tree.isCollapsed}
+              onToggle={tree.toggle}
+            />
           </Pane>
 
           <Resizer
