@@ -185,6 +185,21 @@ export function AppShell(): ReactElement {
     await notes.setPinned(id, pinned);
   }, []);
 
+  // The copy becomes the selection, the same as a newly created note does.
+  // Duplicating and then having to find the copy in a list ordered by date
+  // would be a worse answer than the user asking for a copy implies.
+  //
+  // No `seed`: unlike `handleCreate`, a duplicate is never empty (it holds
+  // the source's text), so the blank-note purge has nothing to reclaim and
+  // there is no seeded text for `NoteEditor` to scope its discard to.
+  const handleDuplicate = useCallback(
+    async (id: string) => {
+      const copy = await notes.duplicate(id);
+      select(copy.id);
+    },
+    [select],
+  );
+
   // Which destructive action is awaiting confirmation, if any. A single piece
   // of state rather than two booleans: the two dialogs are mutually exclusive
   // and two flags could both be true.
@@ -278,6 +293,7 @@ export function AppShell(): ReactElement {
               onRestore={(id) => void handleRestore(id)}
               onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
               onPurge={(id) => setPending({ kind: 'purge', id })}
+              onDuplicate={(id) => void handleDuplicate(id)}
               onEmptyTrash={() => setPending({ kind: 'empty' })}
               // Gated on the UNFILTERED `items`, not `visibleItems`: a query that
               // matches nothing in a full trash must not disable the button that

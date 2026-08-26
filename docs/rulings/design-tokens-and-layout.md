@@ -25,7 +25,8 @@ spacing, `rounded-*`, `shadow-*` or `outline-none` utility; a plain CSS
 `src/features/editor/highlightClasses.ts` (`ROLE_CLASSES`); and the guards in
 `scripts/sourceLint.test.ts`, `scripts/contrast.ts`, `scripts/contrast.test.ts`,
 `scripts/fonts.test.ts`, `e2e/appearance.spec.ts`, `e2e/contrast.spec.ts` and
-`e2e/smoke.spec.ts`.
+`e2e/smoke.spec.ts`; `src/features/notes/NoteListItem.tsx`'s row structure and
+`src/features/notes/thumbnail.ts`.
 
 - **Tokens sit in THREE TIERS, and the split is what the theme system rests
   on.** Tier 1, palette (16 tokens): `bg` `surface` `sidebar` `canvas` `text`
@@ -692,3 +693,61 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   files already there. This is the same shape as the `parseColour`/`oklab()`
   defect above: a guard that proves the property it was written for while a
   defect walks one step around it.
+
+
+## The note-list row (M9c)
+
+- **The date sits on a FOOTER line, under the preview, not between the title
+  and it.** M9c's redesign. The eye lands on the title and continues into the
+  note's own words; a timestamp in that position is a step over something the
+  reader did not ask for. `NoteListItem` is a flex column and its DOM order IS
+  its visual order, which is what makes the ordering assertable in a unit test
+  at all (`NoteListItem.test.tsx`'s `row layout` suite reads positions out of
+  `textContent`).
+
+- **The pin moved onto that footer line and is absolutely positioned, which is
+  not a styling preference.** It cannot be a child of the row's select button —
+  a `<button>` inside a `<button>` is invalid HTML and unclickable in some
+  browsers (`accessibility.md`), and that rule is pinned by a test asserting
+  no `button button` exists in the row. So the pin is a SIBLING, laid over the
+  footer line, and the date carries `pl-6` to reserve its slot. Those two
+  numbers are a pair: the pin's box runs from 8px to 30px (`left-2` plus
+  `p-1` around a 14px glyph) and `pl-6` puts the date at 36px from the row's
+  edge. 20px (`pl-5`) was the tighter fit and is OFF `sourceLint`'s permitted
+  spacing scale — the guard caught it, which is what the guard is for.
+
+- **An unpinned row's pin is hidden at rest and revealed on hover or focus;
+  a pinned one is always drawn.** On the old right-edge position a faint pin
+  read as a control. On the metadata line it reads as STATE, and a state
+  marker drawn on every row says "pinned" about notes that are not. What
+  makes hiding it safe is the row's context menu: Pin/Unpin lives there too,
+  so hover is no longer the only route, which is exactly the objection that
+  kept the pin drawn before M9c. `opacity`, never `hidden` — the button must
+  stay in the DOM, in the tab order, and keep announcing `aria-pressed`
+  regardless of hover — and `group-focus-within` is what stops it becoming an
+  invisible tab stop. **`toBeVisible()` ignores `opacity`**, so the only test
+  that can see this rule is a `toHaveCSS('opacity', …)` read before and after
+  the hover; `e2e/notes.spec.ts` does that, the same way the table handles'
+  reveal is covered.
+
+- **The preview reserves its height; the thumbnail does not.** Reserving the
+  snippet's two lines is what keeps rows uniform whether or not a note has a
+  body. Reserving space for a thumbnail would do the opposite: most notes name
+  no image, so every one of those rows would carry a permanent hole. The
+  thumbnail has a fixed HEIGHT (`h-16`) and a free width, so the images share
+  a baseline down the list however differently they are shaped — a fixed width
+  would not give that.
+
+- **The row shows an image the editor deliberately shows as text, and that is
+  a known inconsistency, not an oversight.** This app stores no images;
+  `RawImage` renders `![alt](url)` as its own muted monospace source, and
+  image storage is unscheduled. `thumbnail.ts`'s `firstImageUrl` therefore
+  reads the first REMOTE image URL out of the note's Markdown — the only image
+  source that exists — skipping fenced code blocks, and admitting only
+  `https:` and `data:image/*`. `http:` is excluded because the app is served
+  over HTTPS and a plaintext image is blocked as mixed content, which would
+  render as a broken box on every row that named one; a non-image `data:`
+  media type is excluded because admitting a scripting type into an `<img
+  src>` on the grounds that today's browsers ignore it is not a bet worth
+  taking. A URL that fails to load unmounts itself (`onError`), keyed on the
+  URL so an edited note gets a fresh attempt.

@@ -1,8 +1,38 @@
 import { hasQuery, normalizeForSearch } from './search';
 
 /**
- * The one-line preview shown beneath a note's title in the list: the first
- * non-empty line *after* the one `deriveTitle` consumed.
+ * How much joined body text a snippet may carry.
+ *
+ * The row clamps to at most two lines of `text-ui-sm`, so anything past a
+ * couple of hundred characters is cropped by CSS and never seen. The cap is
+ * here rather than left to the clamp because the string also feeds the row's
+ * `aria-label`, where nothing crops it and a screen reader would read the
+ * whole note aloud.
+ */
+const SNIPPET_MAX_CHARS = 240;
+
+/**
+ * Markdown image syntax, removed from a preview because the row draws the
+ * image itself (see `thumbnail.ts`). Without this, a note that opens with a
+ * picture previews as `![](https://…)` — the URL, in place of the words the
+ * user actually wrote.
+ *
+ * Deliberately looser than `thumbnail.ts`'s pattern: this one only has to
+ * delete text, so matching an image whose URL that stricter pattern rejects
+ * costs nothing, while missing one leaves a URL in the preview.
+ */
+const IMAGE_SYNTAX = /!\[[^\]]*\]\([^)]*\)/g;
+
+/**
+ * The preview shown beneath a note's title in the list: the body text that
+ * follows the line `deriveTitle` consumed, with its blank lines closed up and
+ * its remaining lines joined into one run of prose.
+ *
+ * Joined rather than "the first body line alone", which is what this returned
+ * until the M9c row redesign: the row reserves two clamped lines at the
+ * default density, and a single short body line filled exactly one of them, so
+ * half the reserved height was blank for most notes. Joining lets the preview
+ * fill the space it already occupies.
  *
  * With a `query`, it is instead the first line containing that query —
  * including the title line, which the no-query path deliberately skips. A
@@ -22,10 +52,13 @@ import { hasQuery, normalizeForSearch } from './search';
 export function deriveSnippet(text: string, query?: string): string {
   const lines = text
     .split('\n')
-    .map((line) => line.trim())
+    .map((line) => line.replace(IMAGE_SYNTAX, ' ').replace(/\s+/g, ' ').trim())
     .filter((line) => line !== '');
 
-  const ordinarySnippet = (): string => lines[1] ?? '';
+  const ordinarySnippet = (): string => {
+    const body = lines.slice(1).join(' ');
+    return body.length > SNIPPET_MAX_CHARS ? body.slice(0, SNIPPET_MAX_CHARS).trimEnd() : body;
+  };
 
   if (query !== undefined && hasQuery(query)) {
     const target = normalizeForSearch(query.trim());

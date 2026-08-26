@@ -25,8 +25,14 @@ import { NoteEditor } from './NoteEditor';
 // `ExportProgressProvider`, `useExportProgress`, `PdfExportError` — passes
 // through to the real module, the same technique `normalizeMarkdown` below
 // uses via `vi.spyOn` rather than a full mock.
-vi.mock('@/features/export', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/features/export')>();
+// The DEEP module, not the `@/features/export` barrel. `useExportRunner` —
+// which is what actually calls `exportNote` now — imports it as `./exportNote`
+// rather than through its own barrel, so mocking the barrel replaces a binding
+// nothing in the path under test reads. The barrel re-exports whatever this
+// module resolves to, so `vi.mocked(exportNote)` imported from the barrel is
+// still this same spy.
+vi.mock('@/features/export/exportNote', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/export/exportNote')>();
   return { ...actual, exportNote: vi.fn(actual.exportNote) };
 });
 

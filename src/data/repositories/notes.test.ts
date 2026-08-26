@@ -40,6 +40,53 @@ describe('notesRepository', () => {
     expect(note.archivedAt).toBeNull();
   });
 
+  describe('duplicate', () => {
+    it('copies the text into a new note with its own id and timestamps', async () => {
+      const source = await notes.create('# Groceries\n\nmilk');
+      clock = 5000;
+
+      const copy = await notes.duplicate(source.id);
+
+      expect(copy.id).not.toBe(source.id);
+      expect(copy.text).toBe(source.text);
+      expect(copy.title).toBe('Groceries');
+      expect(copy.createdAt).toBe(5000);
+      expect(copy.updatedAt).toBe(5000);
+      expect(await db.notes.count()).toBe(2);
+    });
+
+    it('leaves the copy unpinned even when the source is pinned', async () => {
+      const source = await notes.create('kept');
+      await notes.setPinned(source.id, true);
+
+      const copy = await notes.duplicate(source.id);
+
+      expect(copy.pinned).toBe(false);
+      expect((await notes.get(source.id))?.pinned).toBe(true);
+    });
+
+    it('indexes the copy under the same tags as the source', async () => {
+      const source = await notes.create('planning #work');
+
+      const copy = await notes.duplicate(source.id);
+
+      expect(await notes.tagsOf(copy.id)).toEqual(['work']);
+    });
+
+    it('does not touch the source note', async () => {
+      const source = await notes.create('original');
+      clock = 5000;
+
+      await notes.duplicate(source.id);
+
+      expect(await notes.get(source.id)).toEqual(source);
+    });
+
+    it('rejects for a note that does not exist', async () => {
+      await expect(notes.duplicate('missing')).rejects.toThrow('Note not found: missing');
+    });
+  });
+
   it('derives the title from the text on save', async () => {
     const note = await notes.create();
     clock = 2000;

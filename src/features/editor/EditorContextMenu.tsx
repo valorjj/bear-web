@@ -1,6 +1,7 @@
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
+import { MENU_GAP, useAnchoredMenu } from '@/lib/useAnchoredMenu';
 import {
   Ban,
   Bold,
@@ -29,14 +30,6 @@ import type { ContextMenuRequest } from './ContextMenu';
 import type { EditorFlags } from './editorState';
 import type { HighlightChoiceResult } from './HighlightPalette';
 import { HIGHLIGHT_CHOICES } from './highlightChoices';
-
-/**
- * Gap kept between the menu and both the viewport's edges AND the pointer —
- * matches the literal `4` the flip/clamp arithmetic used before this was
- * named. Also what bounds `maxHeight` below: a menu exactly `MENU_GAP` from
- * top and bottom can never be taller than `100vh - 2 * MENU_GAP`.
- */
-const MENU_GAP = 4;
 
 const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
 const HEADING_GLYPHS = [Heading1, Heading2, Heading3, Heading4, Heading5, Heading6] as const;
@@ -74,15 +67,6 @@ export interface EditorContextMenuProps {
   onClose: () => void;
 }
 
-/**
- * Everything focusable, NOT `'button'` — copied verbatim from `HeadingMenu`.
- * See that file's docblock: `ConfirmDialog`'s `'button'`-only trap is a
- * documented gap, harmless there only because it holds exactly two buttons;
- * copying it here would silently skip any future non-button item.
- */
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
 const ITEM_CLASS =
   'text-ui-sm text-text hover:bg-hover flex w-full items-center gap-2 rounded px-2 py-1 text-left';
 const DESTRUCTIVE_CLASS =
@@ -116,92 +100,18 @@ export function EditorContextMenu({
   onClose,
 }: EditorContextMenuProps): ReactElement {
   const t = useT();
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  // Anchored at the request's rect until proven otherwise — identical
-  // reasoning and arithmetic to `HeadingMenu`'s two-stage position state.
-  // `request.rect` is a zero-size rect at the pointer for a right-click open,
-  // or the caret's real rect for a keyboard open; both feed the same
-  // flip/clamp below without a special case.
-  const [position, setPosition] = useState(() => ({
-    top: request.rect.bottom + MENU_GAP,
-    left: request.rect.left,
-  }));
-
-  useEffect(() => {
-    ref.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
-  }, []);
-
-  // Flips above the click point when there is no room below, and clamps
-  // horizontally into the viewport — the same reasoning as `HeadingMenu`:
-  // `fixed` positioning means scrolling can never bring an off-screen menu
-  // back, and a right-click near the bottom or right edge of the window is
-  // the common case, not an edge case. Measured after mount, in an effect:
-  // the menu's real height/width don't exist before the first render.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    // `getBoundingClientRect()` reads the RENDERED box, which the `maxHeight`
-    // style below (`MENU_GAP` on both edges) already clamps — so this is the
-    // CONSTRAINED height, never the natural one a five-section-plus-table
-    // menu would need (measured at ~530px, taller than a 720px viewport
-    // leaves room for either above or below the click point). Flipping and
-    // clamping against the constrained height is what keeps `top + height`
-    // inside the viewport in both branches below; against the natural
-    // height, a menu too tall for either placement would overflow no matter
-    // which one this picked.
-    const menuRect = el.getBoundingClientRect();
-
-    const fitsBelow = request.rect.bottom + MENU_GAP + menuRect.height <= window.innerHeight;
-    const top = fitsBelow
-      ? request.rect.bottom + MENU_GAP
-      : Math.max(MENU_GAP, request.rect.top - MENU_GAP - menuRect.height);
-
-    const left = Math.min(request.rect.left, window.innerWidth - menuRect.width - MENU_GAP);
-
-    setPosition({ top, left: Math.max(MENU_GAP, left) });
-    // `flags.table` (not the whole `flags` object, which is a fresh object
-    // every transaction): the table section is the one conditional block
-    // that changes this menu's natural height after the initial mount, and
-    // — same shape as the highlight palette's R9 fix — nothing else in this
-    // effect re-runs when that flips true a render after `request` first
-    // arrived, which left a stale (pre-table-section) position uncorrected.
-  }, [request, flags.table]);
-
-  // Neither listener can live on the menu's own React `onKeyDown`/`onClick`:
-  // both must keep working after focus (or the click itself) has already
-  // left this subtree — copied from `HeadingMenu` for the same reason.
-  useEffect(() => {
-    function handleOutsideMouseDown(event: MouseEvent): void {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        onClose();
-      }
-    }
-    function handleDocumentKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'Escape') onClose();
-    }
-    document.addEventListener('mousedown', handleOutsideMouseDown, true);
-    document.addEventListener('keydown', handleDocumentKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideMouseDown, true);
-      document.removeEventListener('keydown', handleDocumentKeyDown);
-    };
-  }, [onClose]);
-
-  // Tab-trapping only — Escape is handled at the document level above so it
-  // keeps working once focus has left this subtree.
-  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
-    if (event.key !== 'Tab') return;
-
-    const items = [...(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
-    if (items.length === 0) return;
-    const index = items.indexOf(document.activeElement as HTMLElement);
-    const next = event.shiftKey ? index - 1 : index + 1;
-    if (next < 0 || next >= items.length) {
-      event.preventDefault();
-      items[event.shiftKey ? items.length - 1 : 0]?.focus();
-    }
-  }
+  // Placement, initial focus, Escape/outside dismissal and the Tab trap all
+  // come from `useAnchoredMenu`.
+  //
+  // `flags.table` is passed as a re-measure trigger (not the whole `flags`
+  // object, which is a fresh object every transaction): the table section is
+  // the one conditional block that changes this menu's natural height after
+  // the initial mount, and nothing else would re-run the measurement when it
+  // flips true a render after `request` first arrived — which left a stale,
+  // pre-table-section position uncorrected.
+  const { ref, position, onKeyDown } = useAnchoredMenu<HTMLDivElement>(request.rect, onClose, [
+    flags.table,
+  ]);
 
   function act(action: ContextMenuAction): void {
     onAction(action);

@@ -47,12 +47,13 @@ feature and is not yet scheduled.
 | D2 server: the sync protocol                                      | complete |
 | C code block language + highlighting                              | complete |
 | H editor interaction surfaces                                     | complete |
+| I note-list row redesign + row context menu                       | complete |
 | G export: PDF, rendered server-side                               | complete |
 | M9b callout blocks                                                | deferred |
 
-1668 unit tests (plus 92 server tests, 55 of which are integration tests that
+1761 unit tests (plus 92 server tests, 55 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 123 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 126 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **G moved PDF export off the client entirely, and it is the first capability
@@ -75,6 +76,28 @@ built; **control 4 ("the container has no route off the host") is NOT**, and
 the spec says so in place — `internal: true` denies egress and also kills the
 published port, so the API could never reach the renderer. See
 `docs/rulings/export.md` and `server/README.md`.
+
+**I redesigned the note-list row and gave it a right-click menu.** The row is
+now title → preview → thumbnail → a footer line carrying the pin and the date,
+which is where the date moved to (it used to sit between the title and the
+preview). `deriveSnippet` joins the body lines rather than returning the first
+one alone, so the two reserved preview lines are actually filled. The row also
+draws a THUMBNAIL — and this app stores no images, so it is the first remote
+image URL in the note's own Markdown (`src/features/notes/thumbnail.ts`),
+which means **the list shows a picture the editor still shows as raw
+monospace text**. That inconsistency is accepted deliberately and recorded in
+`docs/rulings/design-tokens-and-layout.md`; it closes when image storage
+ships. The row menu (`NoteRowMenu.tsx`, right-click or `Shift+F10`) carries
+Pin/Unpin, Duplicate, Copy text, an Export group and the destructive route —
+Delete in an active scope, Restore plus Delete forever in the trash, the
+latter still routed through `ConfirmDialog`. That menu is also what let the
+resting pin go: an unpinned row's pin is now hidden until the row is hovered
+or focused, because hover is no longer the only route to pinning. A right-click does NOT select the
+row, so every action is addressed by the request's `noteId`. Two extractions
+came out of it: `src/lib/useAnchoredMenu.ts` (placement, focus, dismissal and
+the Tab trap, which `HeadingMenu`, `EditorContextMenu` and `TableHandleMenu`
+each held a byte-identical copy of) and `useExportRunner` in
+`src/features/export/`.
 
 **D reverses the "no backend, no account" premise above.** D1 shipped
 `server/`: a Hono service on Node against its own MariaDB container on the Mac
@@ -289,6 +312,13 @@ These bit us once already. They are not mistakes.
   belong in Playwright.
 - `erasableSyntaxOnly` forbids `enum`, parameter properties, and namespaces.
   `verbatimModuleSyntax` requires `import type` / `export type`.
+- **A component defined inside a render body is a new type every render.**
+  `NoteRowMenu`'s `Item` was written there first: React then unmounts and
+  remounts every row on each render, and this menu DOES re-render while open
+  (the PDF item's `pending` flag flips mid-export), which throws keyboard
+  focus out of the menu at the moment the user is reading it. Module scope,
+  always.
+
 - **`renderIconMarkup` takes a LIST of shapes, not one path, and `Icon.tsx`
   carries lucide's `__iconNode` arrays verbatim.** It draws the ProseMirror
   widgets that cannot render React (`HeadingFold`'s gutter). Importing
@@ -625,8 +655,9 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
 - Components reach persistence **only** through `src/data/index.ts`, never a
   repository module directly.
 - `src/lib/` holds framework-level hooks with no product knowledge —
-  `useFlushTriggers` today. Like `src/ui/`, it must import **nothing** from
-  `src/app/`, `src/data/`, `src/features/` or `src/i18n/`; unlike `src/ui/`, it
+  `useFlushTriggers` and `useAnchoredMenu` today. Like `src/ui/`, it must
+  import **nothing** from `src/app/`, `src/data/`, `src/features/` or
+  `src/i18n/`; unlike `src/ui/`, it
   is behaviour rather than presentation. (The M4 spec places this directory at
   `src/app/`; the spec is wrong and has been corrected.)
 - **No user-facing string is hardcoded in a component.** Everything goes through

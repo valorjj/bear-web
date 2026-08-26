@@ -1091,3 +1091,98 @@ test('hovering the title line reveals no fold chevron; hovering a body heading d
   await expect(bodyToggle).toHaveCount(1);
   await expect(bodyToggle).toHaveCSS('opacity', '1');
 });
+
+test('the row context menu deletes the row it was opened on', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.fill(NOTE_TEXT);
+  await editor.blur();
+
+  const row = page.getByRole('button', { name: /Groceries/ });
+  await expect(row).toBeVisible();
+
+  // A real right-click, with a real hit test behind it — jsdom has neither,
+  // so this route cannot be covered by the unit suite.
+  await row.click({ button: 'right' });
+
+  const menu = page.getByRole('menu', { name: 'Note actions' });
+  await expect(menu).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Delete' }).click();
+
+  await expect(menu).toBeHidden();
+  await expect(page.getByRole('button', { name: /Groceries/ })).toHaveCount(0);
+
+  await page.getByRole('button', { name: /^Trash\b/ }).click();
+  await expect(page.getByRole('button', { name: /Groceries/ })).toBeVisible();
+});
+
+test('the row context menu opens from the keyboard, and PDF names its own precondition', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.fill(NOTE_TEXT);
+  await editor.blur();
+
+  const row = page.getByRole('button', { name: /Groceries/ });
+  await row.focus();
+  await page.keyboard.press('Shift+F10');
+
+  const menu = page.getByRole('menu', { name: 'Note actions' });
+  await expect(menu).toBeVisible();
+
+  // Signed out, so PDF is `aria-disabled` — which Playwright treats as "not
+  // enabled" and refuses to click at all, waiting out the whole timeout. So
+  // the item is driven the way `aria-disabled` exists to allow: reached by
+  // keyboard, and asserted on rather than clicked. `click({ force: true })`
+  // would synthesise an event no real user can produce.
+  const pdf = menu.getByRole('menuitem', { name: /PDF/ });
+  await expect(pdf).toHaveAttribute('aria-disabled', 'true');
+  await expect(pdf).toHaveAccessibleName(/Sign in to export PDF/);
+
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+});
+
+test('an unpinned row reveals its pin on hover; a pinned one shows it at rest', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.fill(NOTE_TEXT);
+  await editor.blur();
+
+  const row = page.getByRole('button', { name: /Groceries/ });
+  await expect(row).toBeVisible();
+  const pin = page.getByRole('button', { name: 'Pin note' });
+
+  // `opacity` read directly, not `toBeVisible()`, which ignores opacity
+  // entirely — it would pass whether or not the reveal rule fires, since the
+  // button exists and has layout either way. Same reasoning, and the same
+  // trap, as the table handles' own reveal test.
+  await expect(pin).toHaveCSS('opacity', '0');
+
+  await row.hover();
+  await expect(pin).toHaveCSS('opacity', '1');
+
+  // Focus is the keyboard equivalent of that hover, and without it the pin
+  // would be an invisible tab stop.
+  await page.mouse.move(0, 0);
+  await expect(pin).toHaveCSS('opacity', '0');
+  await row.focus();
+  await expect(pin).toHaveCSS('opacity', '1');
+
+  // Once pinned it is state, not an affordance, so it stays drawn with
+  // nothing hovering or focused.
+  await pin.click();
+  const unpin = page.getByRole('button', { name: 'Unpin note' });
+  await page.mouse.move(0, 0);
+  await unpin.blur();
+  await expect(unpin).toHaveCSS('opacity', '1');
+});

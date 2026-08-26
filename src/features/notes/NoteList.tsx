@@ -1,6 +1,7 @@
-import { type ReactElement, type RefObject, useState } from 'react';
+import { type ReactElement, type RefObject, useCallback, useState } from 'react';
 
 import type { Note, NoteOrder } from '@/data';
+import { useExportRunner } from '@/features/export';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n';
 import { Button } from '@/ui/Button';
@@ -8,7 +9,10 @@ import { EmptyState } from '@/ui/EmptyState';
 import { ChevronDown, Icon, SquarePen } from '@/ui/Icon';
 import { Popover } from '@/ui/Popover';
 
+import { deriveTitle } from '@/data';
+
 import { NoteListItem } from './NoteListItem';
+import { NoteRowMenu, type NoteRowAction, type NoteRowMenuRequest } from './NoteRowMenu';
 import type { PreviewSize } from './preview';
 import { hasQuery } from './search';
 import { SearchField } from './SearchField';
@@ -54,6 +58,8 @@ export interface NoteListProps {
   onRestore: (id: string) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
   onPurge: (id: string) => void;
+  /** Copies a note. The caller decides whether the copy becomes the selection. */
+  onDuplicate: (id: string) => void;
   onEmptyTrash: () => void;
   /**
    * Whether "Empty trash" should be disabled. Computed by the caller from the
@@ -115,6 +121,7 @@ export function NoteList({
   onRestore,
   onTogglePin,
   onPurge,
+  onDuplicate,
   onEmptyTrash,
   emptyTrashDisabled,
   hasUnfilteredItems,
@@ -131,6 +138,48 @@ export function NoteList({
 }: NoteListProps): ReactElement {
   const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [rowMenu, setRowMenu] = useState<NoteRowMenuRequest | null>(null);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const exportRunner = useExportRunner();
+
+  const closeRowMenu = useCallback(() => setRowMenu(null), []);
+
+  // The menu acts on the row it was opened on, which is not necessarily the
+  // selected one — right-clicking a row deliberately does NOT select it, so
+  // every action below is addressed by `rowMenu.noteId`.
+  const rowNote = rowMenu === null ? null : (items?.find((n) => n.id === rowMenu.noteId) ?? null);
+
+  function runRowAction(action: NoteRowAction): void {
+    if (rowMenu === null || rowNote === null) return;
+
+    switch (action) {
+      case 'pin':
+        onTogglePin(rowNote.id, !rowNote.pinned);
+        return;
+      case 'duplicate':
+        onDuplicate(rowNote.id);
+        return;
+      case 'copyText':
+        setCopyFailed(false);
+        // `navigator.clipboard` is absent under jsdom and over plain HTTP on
+        // a non-localhost origin, and `writeText` rejects when the document
+        // is not focused. Every one of those is silent without this branch,
+        // so the failure is reported rather than swallowed.
+        void (
+          navigator.clipboard?.writeText(rowNote.text) ?? Promise.reject(new Error('no clipboard'))
+        ).catch(() => setCopyFailed(true));
+        return;
+      case 'trash':
+        onTrash(rowNote.id);
+        return;
+      case 'restore':
+        onRestore(rowNote.id);
+        return;
+      case 'purge':
+        onPurge(rowNote.id);
+        return;
+    }
+  }
 
   const scopeName = scope.kind === 'tag' ? scope.tag : t(SMART_LIST_LABELS[scope.list]);
 
@@ -260,11 +309,41 @@ export function NoteList({
               selected={note.id === selectedNoteId}
               onSelect={() => onSelect(note.id)}
               onTogglePin={onTogglePin}
+              onOpenMenu={setRowMenu}
               query={query}
               size={previewSize}
             />
           ))}
         </ul>
+      )}
+
+      {/* One line for both failure sources. They are mutually exclusive in
+          practice — a menu action is one action — and `status` rather than
+          `alert`, because `alert` is the degraded-storage banner's role and
+          the e2e suite asserts there is exactly one of those. */}
+      {(exportRunner.failureKey !== null || copyFailed) && (
+        <p role="status" className="shrink-0 border-t border-border px-3 py-2 text-xs text-muted">
+          {copyFailed ? t('note.copyText.failed') : t(exportRunner.failureKey!)}
+        </p>
+      )}
+
+      {rowMenu !== null && rowNote !== null && (
+        <NoteRowMenu
+          request={rowMenu}
+          onAction={runRowAction}
+          onExport={(format) => {
+            setCopyFailed(false);
+            exportRunner.run(
+              {
+                title: deriveTitle(rowNote.text),
+                text: rowNote.text,
+                updatedAt: rowNote.updatedAt,
+              },
+              format,
+            );
+          }}
+          onClose={closeRowMenu}
+        />
       )}
     </div>
   );

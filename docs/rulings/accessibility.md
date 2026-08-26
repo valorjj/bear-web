@@ -14,7 +14,10 @@ route into it) and `src/features/editor/HighlightPalette.tsx`; `src/ui/Icon.tsx`
 buttons; `src/ui/Button.tsx`'s `VARIANTS` map (`default` / `ghost` / `danger`);
 `src/features/notes/NoteList.tsx`'s header strip and its scope-header button;
 `src/features/notes/ScopeMenu.tsx`'s `role` attributes and disabled-group copy;
-`src/features/notes/preview.ts`'s `snippetLines`; `src/ui/ConfirmDialog.tsx`'s
+`src/features/notes/preview.ts`'s `snippetLines`;
+`src/features/notes/NoteRowMenu.tsx`'s roles, its `Shift+F10` route in
+`NoteListItem.tsx` and its `aria-disabled` PDF item; the thumbnail's `alt` in
+`NoteListItem.tsx`; `src/ui/ConfirmDialog.tsx`'s
 Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
 (the `Decoration.node` call and its `aria-label`) and its `.focus()` /
 `tabindex` handling; `src/features/editor/TableHandles.ts`'s handle buttons
@@ -320,3 +323,34 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   `Tab` to it, assert it is focused, press `Enter`. Reaching for
   `click({ force: true })` instead synthesises an event no real user can
   produce, and would pass on a control no keyboard user could reach.
+
+
+- **The note row's context menu needs the `Shift+F10` route for the same
+  reason the editor's does, and here the stakes are higher.** Delete, Restore
+  and Delete forever live in that menu; without the keyboard opener a keyboard
+  user would have no route to them from the list at all for a note that is not
+  the current selection (the header's buttons act on the selection only). The
+  row's select button handles the key itself and anchors the menu on its OWN
+  rect, where the pointer route anchors on a zero-size rect at the click point
+  — the same two-shapes-one-field arrangement `ContextMenuRequest.rect` uses.
+
+- **A right-click on a row does NOT select it, and every item in the menu is
+  therefore addressed by the request's `noteId`.** A menu that read
+  `selectedNoteId` would delete the wrong note whenever the user right-clicked
+  a row other than the open one, which is the ordinary case. `NoteList.test.tsx`
+  pins this by opening the menu on one row while a DIFFERENT row is selected
+  and asserting which id the action carried — an assertion that changes with
+  the behaviour, rather than merely proving an action fired.
+
+- **The row menu's Pin item is a plain `menuitem`, not a `menuitemcheckbox`.**
+  The row it acts on already shows the pin state, and the item's own words flip
+  between "Pin note" and "Unpin note" — a checked state on top of a verb that
+  already changes would describe the note twice and disagree with itself half
+  the time. The pin BUTTON on the row keeps `aria-pressed`, because it is a
+  toggle whose label is its only other signal.
+
+- **The row's thumbnail is `alt=""`, deliberately.** It is decoration derived
+  from text the row's own preview line already announces, so a filename read
+  aloud between the preview and the date is noise — the same reasoning that
+  made `ThemeDialog`'s card previews `aria-hidden`. Pinned by a test asserting
+  the URL and the alt text are both absent from the row's accessible name.

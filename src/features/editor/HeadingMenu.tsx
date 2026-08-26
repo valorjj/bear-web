@@ -1,22 +1,12 @@
 import { isMacOS } from '@tiptap/core';
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
+import { useAnchoredMenu } from '@/lib/useAnchoredMenu';
 
 import type { HeadingMenuRequest } from './HeadingFold';
 
 const LEVELS = [1, 2, 3, 4, 5, 6] as const;
-
-/**
- * Everything focusable, NOT `'button'`.
- *
- * `ConfirmDialog`'s trap queries `'button'` specifically. That is a documented
- * gap, harmless there only because it holds exactly two buttons; copying it
- * here would silently skip any future non-button item, leaving it invisible to
- * both the initial-focus effect and the Tab-wrap arithmetic.
- */
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 export interface HeadingMenuProps {
   request: HeadingMenuRequest;
@@ -48,93 +38,12 @@ export function HeadingMenu({
   onClose,
 }: HeadingMenuProps): ReactElement {
   const t = useT();
-  const ref = useRef<HTMLDivElement | null>(null);
   const modifier = isMacOS() ? '⌘⌥' : 'Ctrl+Alt+';
 
-  // Anchored below the badge until proven otherwise. `request.rect` is the
-  // only geometry known before mount, so this is what the FIRST paint uses —
-  // the flip/clamp effect below corrects it once the menu's own size exists,
-  // the same "measure after mount" approach the focus effect already uses.
-  const [position, setPosition] = useState(() => ({
-    top: request.rect.bottom + 4,
-    left: request.rect.left,
-  }));
-
-  useEffect(() => {
-    ref.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
-  }, []);
-
-  // Flips above the badge when there is no room below, and clamps
-  // horizontally into the viewport. `fixed` positioning means scrolling can
-  // never bring an off-screen menu back — a heading in the bottom quarter of
-  // a long note is exactly where the level menu gets used, so opening
-  // unreachable there is the common case, not an edge case. Measured after
-  // mount, in an effect: the menu's real height/width don't exist before the
-  // first render, only `request.rect` (the badge's own rect) does.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const menuRect = el.getBoundingClientRect();
-
-    const fitsBelow = request.rect.bottom + 4 + menuRect.height <= window.innerHeight;
-    const top = fitsBelow
-      ? request.rect.bottom + 4
-      : Math.max(4, request.rect.top - 4 - menuRect.height);
-
-    const left = Math.min(request.rect.left, window.innerWidth - menuRect.width - 4);
-
-    setPosition({ top, left: Math.max(4, left) });
-  }, [request]);
-
-  // Neither listener can live on the menu's own React `onKeyDown`/`onClick`:
-  // both must keep working after focus (or the click itself) has already
-  // left this subtree, which is exactly the case a React handler scoped to
-  // this element can never see.
-  useEffect(() => {
-    function handleOutsideMouseDown(event: MouseEvent): void {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        onClose();
-      }
-    }
-    function handleDocumentKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'Escape') onClose();
-    }
-    // Capture, not bubble. A click on a heading's badge/toggle is itself
-    // what opens (or re-opens) a menu, and `HeadingFold`'s own mousedown
-    // handler runs during the BUBBLE phase (ProseMirror attaches it with no
-    // `capture` option). Closing during CAPTURE guarantees this listener
-    // runs first, so clicking heading B's badge while heading A's menu is
-    // still open closes A's menu and only THEN lets the click's own bubble
-    // handler open B's — not the reverse, which would otherwise queue two
-    // `setMenu` calls in the same tick and leave the new menu closed instead
-    // of open.
-    document.addEventListener('mousedown', handleOutsideMouseDown, true);
-    // A document-level listener, not the React `onKeyDown` below, because
-    // Escape must close the menu even after focus has already left it — e.g.
-    // a click inside the editor moves focus without the menu ever receiving
-    // a keydown at all, and `onKeyDown` scoped to this subtree only fires
-    // while something inside it is focused.
-    document.addEventListener('keydown', handleDocumentKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideMouseDown, true);
-      document.removeEventListener('keydown', handleDocumentKeyDown);
-    };
-  }, [onClose]);
-
-  // Tab-trapping only, now — Escape is handled at the document level above so
-  // it keeps working once focus has left this subtree.
-  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
-    if (event.key !== 'Tab') return;
-
-    const items = [...(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
-    if (items.length === 0) return;
-    const index = items.indexOf(document.activeElement as HTMLElement);
-    const next = event.shiftKey ? index - 1 : index + 1;
-    if (next < 0 || next >= items.length) {
-      event.preventDefault();
-      items[event.shiftKey ? items.length - 1 : 0]?.focus();
-    }
-  }
+  // Placement, initial focus, Escape/outside dismissal and the Tab trap all
+  // come from `useAnchoredMenu` — four behaviours this file, `EditorContextMenu`,
+  // `TableHandleMenu` and `NoteRowMenu` each had a byte-identical copy of.
+  const { ref, position, onKeyDown } = useAnchoredMenu<HTMLDivElement>(request.rect, onClose);
 
   return (
     <div

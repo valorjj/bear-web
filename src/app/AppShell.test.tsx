@@ -289,6 +289,41 @@ describe('AppShell notes', () => {
     expect(await screen.findByRole('button', { name: /Groceries/ })).toBeInTheDocument();
   });
 
+  it('duplicates a note from the row menu and opens the copy', async () => {
+    const user = userEvent.setup();
+    const source = await notes.create('# Groceries\n\nmilk');
+    // Pinned so the two rows can be told apart by POSITION: pinned notes sort
+    // first everywhere, and the copy is deliberately unpinned, so the source
+    // is row 0 and the copy is row 1. Without that, both rows derive the same
+    // title from the same text and "exactly one row is current" would pass
+    // whichever of them the app had actually selected.
+    await notes.setPinned(source.id, true);
+
+    renderShell();
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: /Groceries/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Duplicate' }));
+
+    // Two rows, both named Groceries: the copy carries the source's text
+    // verbatim, so it derives the same title.
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /Groceries/ })).toHaveLength(2);
+    });
+
+    // The COPY is what is open, not the source — a duplicate the user then
+    // has to hunt for in a date-ordered list is not what "duplicate" implies.
+    const stored = await db.notes.toArray();
+    const copy = stored.find((n) => n.id !== source.id);
+    expect(copy).toBeDefined();
+    expect(copy!.text).toBe(source.text);
+    expect(copy!.pinned).toBe(false);
+    await waitFor(() => {
+      const rows = screen.getAllByRole('button', { name: /Groceries/ });
+      expect(rows[0]).not.toHaveAttribute('aria-current');
+      expect(rows[1]).toHaveAttribute('aria-current', 'true');
+    });
+  });
+
   it('discards a note the user never typed into', async () => {
     const user = userEvent.setup();
     const keeper = await notes.create('Keeper');

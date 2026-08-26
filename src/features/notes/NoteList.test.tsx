@@ -1,12 +1,53 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Note } from '@/data';
+import type { Session, SessionState } from '@/features/account';
+import { ExportProgressProvider } from '@/features/export';
 import { renderWithI18n } from '@/i18n/testing';
 
 import { NoteList, type NoteListProps } from './NoteList';
 import { ACTIVE_SCOPE, smartScope, tagScope, TRASHED_SCOPE } from './scope';
+
+// The row menu reads the session through `useSessionValue()` (context) to
+// decide whether PDF export is reachable. Mocked rather than provided, so no
+// test in this file fires the real provider's boot fetch — the same technique,
+// for the same reason, as `ExportMenu.test.tsx`.
+let sessionState: SessionState = { status: 'signedOut' };
+
+vi.mock('@/features/account', () => ({
+  useSessionValue: (): Session => ({
+    state: sessionState,
+    signIn: vi.fn(),
+    signOut: vi.fn(async () => {}),
+  }),
+}));
+
+/**
+ * `NoteList` runs an export from its row menu, so it needs the global PDF
+ * progress flag above it — the real provider, since nothing here drives it.
+ *
+ * `rerender` is wrapped too. Testing Library's own `rerender` replaces the
+ * whole element it was given, so a bare `rerender(<NoteList …/>)` would drop
+ * the provider and throw — with a stack pointing at `useExportProgress`, not
+ * at the test.
+ */
+function renderList(
+  ui: React.ReactElement,
+  locale?: 'en' | 'ko',
+): ReturnType<typeof renderWithI18n> {
+  const result = renderWithI18n(<ExportProgressProvider>{ui}</ExportProgressProvider>, locale);
+  const { rerender } = result;
+  return {
+    ...result,
+    rerender: (next) => rerender(<ExportProgressProvider>{next}</ExportProgressProvider>),
+  };
+}
+
+function trashedNote(id: string, title: string): Note {
+  return { ...makeNote(id, title), trashedAt: 1 };
+}
 
 function makeNote(id: string, title: string, text?: string): Note {
   return {
@@ -32,6 +73,7 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
     onRestore: vi.fn(),
     onTogglePin: vi.fn(),
     onPurge: vi.fn(),
+    onDuplicate: vi.fn(),
     onEmptyTrash: vi.fn(),
     emptyTrashDisabled: false,
     hasUnfilteredItems: true,
@@ -48,7 +90,7 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
 
 describe('NoteList', () => {
   it('renders one row per note, in the order given', () => {
-    renderWithI18n(<NoteList {...props()} />);
+    renderList(<NoteList {...props()} />);
 
     const titles = screen.getAllByRole('listitem').map((li) => li.textContent);
     expect(titles[0]).toContain('Alpha');
@@ -59,27 +101,27 @@ describe('NoteList', () => {
     const onSelect = vi.fn();
     const user = userEvent.setup();
 
-    renderWithI18n(<NoteList {...props({ onSelect })} />);
+    renderList(<NoteList {...props({ onSelect })} />);
     await user.click(screen.getByRole('button', { name: /Beta/ }));
 
     expect(onSelect).toHaveBeenCalledWith('b');
   });
 
   it('renders nothing but the header while the query is loading', () => {
-    renderWithI18n(<NoteList {...props({ items: undefined })} />);
+    renderList(<NoteList {...props({ items: undefined })} />);
 
     expect(screen.queryAllByRole('listitem')).toHaveLength(0);
     expect(screen.queryByText('No notes')).not.toBeInTheDocument();
   });
 
   it('shows the notes empty state when the active scope has no notes', () => {
-    renderWithI18n(<NoteList {...props({ items: [] })} />);
+    renderList(<NoteList {...props({ items: [] })} />);
 
     expect(screen.getByText('No notes')).toBeInTheDocument();
   });
 
   it('shows the trash empty state when the trashed scope has no notes', () => {
-    renderWithI18n(<NoteList {...props({ scope: TRASHED_SCOPE, items: [] })} />);
+    renderList(<NoteList {...props({ scope: TRASHED_SCOPE, items: [] })} />);
 
     expect(screen.getByText('Trash is empty')).toBeInTheDocument();
   });
@@ -88,7 +130,7 @@ describe('NoteList', () => {
     const onCreate = vi.fn();
     const user = userEvent.setup();
 
-    renderWithI18n(<NoteList {...props({ scope: TRASHED_SCOPE, onCreate })} />);
+    renderList(<NoteList {...props({ scope: TRASHED_SCOPE, onCreate })} />);
     await user.click(screen.getByRole('button', { name: 'New note' }));
 
     expect(onCreate).toHaveBeenCalledTimes(1);
@@ -98,7 +140,7 @@ describe('NoteList', () => {
     const onTrash = vi.fn();
     const user = userEvent.setup();
 
-    const { rerender } = renderWithI18n(<NoteList {...props()} />);
+    const { rerender } = renderList(<NoteList {...props()} />);
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
 
     rerender(<NoteList {...props({ selectedNoteId: 'a', onTrash })} />);
@@ -111,9 +153,7 @@ describe('NoteList', () => {
     const onTrash = vi.fn();
     const user = userEvent.setup();
 
-    renderWithI18n(
-      <NoteList {...props({ scope: tagScope('work'), selectedNoteId: 'a', onTrash })} />,
-    );
+    renderList(<NoteList {...props({ scope: tagScope('work'), selectedNoteId: 'a', onTrash })} />);
 
     const trashButton = screen.getByRole('button', { name: 'Delete' });
     await user.click(trashButton);
@@ -126,7 +166,7 @@ describe('NoteList', () => {
     // `selectedNoteId` is always null there and an app-level assertion passes
     // for free whatever `allowsTrash` returns. Driving `NoteList` directly is
     // what makes this able to fail, and it is the unit that owns the gate.
-    renderWithI18n(<NoteList {...props({ scope: smartScope('locked'), selectedNoteId: 'a' })} />);
+    renderList(<NoteList {...props({ scope: smartScope('locked'), selectedNoteId: 'a' })} />);
 
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
@@ -135,7 +175,7 @@ describe('NoteList', () => {
   it('renders Delete in an ordinary scope with a note selected', () => {
     // The paired positive case. Without it, a gate that hides Delete
     // everywhere would pass the test above.
-    renderWithI18n(<NoteList {...props({ scope: ACTIVE_SCOPE, selectedNoteId: 'a' })} />);
+    renderList(<NoteList {...props({ scope: ACTIVE_SCOPE, selectedNoteId: 'a' })} />);
 
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
@@ -144,9 +184,7 @@ describe('NoteList', () => {
     const onRestore = vi.fn();
     const user = userEvent.setup();
 
-    renderWithI18n(
-      <NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: 'a', onRestore })} />,
-    );
+    renderList(<NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: 'a', onRestore })} />);
 
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Restore' }));
@@ -155,7 +193,7 @@ describe('NoteList', () => {
   });
 
   it('offers delete forever and empty trash only in the trashed scope', () => {
-    renderWithI18n(<NoteList {...props({ scope: ACTIVE_SCOPE, selectedNoteId: 'a' })} />);
+    renderList(<NoteList {...props({ scope: ACTIVE_SCOPE, selectedNoteId: 'a' })} />);
 
     expect(screen.queryByRole('button', { name: 'Delete forever' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Empty trash' })).not.toBeInTheDocument();
@@ -165,7 +203,7 @@ describe('NoteList', () => {
     const onPurge = vi.fn();
     const user = userEvent.setup();
 
-    renderWithI18n(<NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: 'a', onPurge })} />);
+    renderList(<NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: 'a', onPurge })} />);
 
     await user.click(screen.getByRole('button', { name: 'Delete forever' }));
 
@@ -173,7 +211,7 @@ describe('NoteList', () => {
   });
 
   it('does not offer delete forever in the trashed scope with nothing selected', () => {
-    renderWithI18n(<NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: null })} />);
+    renderList(<NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: null })} />);
 
     expect(screen.queryByRole('button', { name: 'Delete forever' })).not.toBeInTheDocument();
   });
@@ -182,7 +220,7 @@ describe('NoteList', () => {
     const onEmptyTrash = vi.fn();
     const user = userEvent.setup();
 
-    renderWithI18n(
+    renderList(
       <NoteList {...props({ scope: TRASHED_SCOPE, selectedNoteId: null, onEmptyTrash })} />,
     );
 
@@ -200,7 +238,7 @@ describe('NoteList', () => {
   // render — otherwise a query that hides the selected note leaves a live
   // "Delete forever" button next to an empty "No matching notes" list.
   it('hides Move to trash for a selected note the query has filtered out', () => {
-    renderWithI18n(
+    renderList(
       <NoteList
         {...props({
           scope: ACTIVE_SCOPE,
@@ -214,7 +252,7 @@ describe('NoteList', () => {
   });
 
   it('hides Restore and Delete forever for a selected note the query has filtered out', () => {
-    renderWithI18n(
+    renderList(
       <NoteList
         {...props({
           scope: TRASHED_SCOPE,
@@ -229,7 +267,7 @@ describe('NoteList', () => {
   });
 
   it('disables empty trash when told to (loading or an empty trash)', () => {
-    const { rerender } = renderWithI18n(
+    const { rerender } = renderList(
       <NoteList {...props({ scope: TRASHED_SCOPE, emptyTrashDisabled: true })} />,
     );
     expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDisabled();
@@ -243,7 +281,7 @@ describe('NoteList', () => {
   // button that empties the whole trash regardless of the query — only
   // `emptyTrashDisabled` may do that.
   it('keeps empty trash enabled when a query matches nothing, as long as the trash itself is not empty', () => {
-    renderWithI18n(
+    renderList(
       <NoteList
         {...props({ scope: TRASHED_SCOPE, items: [], query: 'zzzzz', emptyTrashDisabled: false })}
       />,
@@ -255,7 +293,7 @@ describe('NoteList', () => {
 
 describe('icons', () => {
   it('renders New note as an icon button that still has a name', () => {
-    renderWithI18n(<NoteList {...props({ items: [] })} />);
+    renderList(<NoteList {...props({ items: [] })} />);
 
     const button = screen.getByRole('button', { name: 'New note' });
     expect(button.querySelector('svg')).not.toBeNull();
@@ -265,7 +303,7 @@ describe('icons', () => {
   // Destructive actions keep their words: an icon-only delete asks the user to
   // recall a glyph before doing something irreversible.
   it('keeps destructive controls as text', () => {
-    renderWithI18n(<NoteList {...props({ selectedNoteId: 'a' })} />);
+    renderList(<NoteList {...props({ selectedNoteId: 'a' })} />);
 
     expect(screen.getByRole('button', { name: 'Delete' }).textContent).not.toBe('');
   });
@@ -273,13 +311,13 @@ describe('icons', () => {
 
 describe('search', () => {
   it('renders the query field', () => {
-    renderWithI18n(<NoteList {...props({ items: [] })} />);
+    renderList(<NoteList {...props({ items: [] })} />);
 
     expect(screen.getByRole('searchbox', { name: 'Search notes' })).toBeInTheDocument();
   });
 
   it('shows the empty-list state when there is no query', () => {
-    renderWithI18n(<NoteList {...props({ items: [], query: '' })} />);
+    renderList(<NoteList {...props({ items: [], query: '' })} />);
 
     expect(screen.getByText('No notes')).toBeInTheDocument();
     expect(screen.queryByText('No matching notes')).toBeNull();
@@ -288,7 +326,7 @@ describe('search', () => {
   // Distinct copy, because an empty result caused by a query reads as "this
   // list is empty" otherwise — and the user cannot tell why.
   it('shows the no-results state when a query is responsible', () => {
-    renderWithI18n(<NoteList {...props({ items: [], query: 'milk' })} />);
+    renderList(<NoteList {...props({ items: [], query: 'milk' })} />);
 
     expect(screen.getByText('No matching notes')).toBeInTheDocument();
     expect(screen.queryByText('No notes')).toBeNull();
@@ -300,7 +338,7 @@ describe('search', () => {
   // query win over that special case and assert exactly the false thing it
   // was written to prevent.
   it('does not let a query override the Locked empty copy', () => {
-    renderWithI18n(
+    renderList(
       <NoteList
         {...props({
           scope: smartScope('locked'),
@@ -318,7 +356,7 @@ describe('search', () => {
   // Same mechanism, the Trash instance: a genuinely empty trash plus a query
   // must still say "Trash is empty", not "No matching notes".
   it('does not let a query override the Trash empty copy when the trash is genuinely empty', () => {
-    renderWithI18n(
+    renderList(
       <NoteList
         {...props({
           scope: TRASHED_SCOPE,
@@ -336,7 +374,7 @@ describe('search', () => {
   // The paired positive case: when the trash DOES have notes and the query
   // matches none of them, the no-results copy is correct and must still show.
   it('shows no-results, not the Trash empty copy, when a non-empty trash has no matches', () => {
-    renderWithI18n(
+    renderList(
       <NoteList
         {...props({
           scope: TRASHED_SCOPE,
@@ -352,7 +390,7 @@ describe('search', () => {
   });
 
   it('passes the query down so rows can highlight', () => {
-    const { container } = renderWithI18n(
+    const { container } = renderList(
       <NoteList
         {...props({ items: [makeNote('a', 'Groceries', 'Groceries\nmilk')], query: 'milk' })}
       />,
@@ -364,20 +402,20 @@ describe('search', () => {
 
 describe('scope header', () => {
   it('names the current smart list on the header button', () => {
-    renderWithI18n(<NoteList {...props({ scope: smartScope('todo') })} />);
+    renderList(<NoteList {...props({ scope: smartScope('todo') })} />);
 
     const header = screen.getByRole('button', { name: /Todo/ });
     expect(header).toHaveAttribute('aria-haspopup', 'menu');
   });
 
   it('names the tag on the header button in a tag scope', () => {
-    renderWithI18n(<NoteList {...props({ scope: tagScope('work/urgent') })} />);
+    renderList(<NoteList {...props({ scope: tagScope('work/urgent') })} />);
 
     expect(screen.getByRole('button', { name: /work\/urgent/ })).toBeInTheDocument();
   });
 
   it('opens the menu and reports expansion', async () => {
-    renderWithI18n(<NoteList {...props()} />);
+    renderList(<NoteList {...props()} />);
     const header = screen.getByRole('button', { name: /Notes/ });
     expect(header).toHaveAttribute('aria-expanded', 'false');
 
@@ -389,7 +427,7 @@ describe('scope header', () => {
 
   it('closes the menu after choosing a scope', async () => {
     const onScopeChange = vi.fn();
-    renderWithI18n(<NoteList {...props({ onScopeChange })} />);
+    renderList(<NoteList {...props({ onScopeChange })} />);
 
     await userEvent.click(screen.getByRole('button', { name: /Notes/ }));
     await userEvent.click(screen.getByRole('menuitemradio', { name: /Pinned/ }));
@@ -402,7 +440,7 @@ describe('scope header', () => {
     // `items` here is the query-narrowed view. A search matching one note must
     // not relabel a 33-note list as "1 note" — the same distinction
     // emptyTrashDisabled and hasUnfilteredItems already draw.
-    renderWithI18n(<NoteList {...props({ count: 33, items: [makeNote('a', 'Alpha')] })} />);
+    renderList(<NoteList {...props({ count: 33, items: [makeNote('a', 'Alpha')] })} />);
 
     await userEvent.click(screen.getByRole('button', { name: /Notes/ }));
 
@@ -410,15 +448,149 @@ describe('scope header', () => {
   });
 
   it('renders rows at the given preview size', () => {
-    const { container } = renderWithI18n(<NoteList {...props({ previewSize: 'small' })} />);
+    const { container } = renderList(<NoteList {...props({ previewSize: 'small' })} />);
 
     expect(container.querySelector('.line-clamp-2')).toBeNull();
     expect(container.querySelector('.line-clamp-1')).toBeNull();
   });
 
   it('renders two snippet lines at large', () => {
-    const { container } = renderWithI18n(<NoteList {...props({ previewSize: 'large' })} />);
+    const { container } = renderList(<NoteList {...props({ previewSize: 'large' })} />);
 
     expect(container.querySelector('.line-clamp-2')).not.toBeNull();
+  });
+});
+
+describe('row context menu', () => {
+  /**
+   * Replaces `navigator.clipboard.writeText`. Must run after
+   * `userEvent.setup()`, which installs a clipboard stub of its own.
+   */
+  function stubClipboard(impl: () => Promise<void> = async () => {}): ReturnType<typeof vi.fn> {
+    const writeText = vi.fn(impl);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    return writeText;
+  }
+
+  /** Right-clicks the row and returns once the menu is on screen. */
+  async function openRowMenu(name: string): Promise<void> {
+    fireEvent.contextMenu(screen.getByRole('button', { name: new RegExp(name) }));
+    await screen.findByRole('menu', { name: 'Note actions' });
+  }
+
+  it('opens on a row right-click', async () => {
+    renderList(<NoteList {...props()} />);
+
+    await openRowMenu('Alpha');
+
+    expect(screen.getByRole('menu', { name: 'Note actions' })).toBeInTheDocument();
+  });
+
+  it('acts on the row it was opened on, not on the selected note', async () => {
+    // The whole point of the addressing: a right-click deliberately does not
+    // change the selection, so a menu that read `selectedNoteId` would delete
+    // the wrong note every time.
+    const onTrash = vi.fn();
+    const user = userEvent.setup();
+    renderList(<NoteList {...props({ selectedNoteId: 'a', onTrash })} />);
+
+    await openRowMenu('Beta');
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+
+    expect(onTrash).toHaveBeenCalledWith('b');
+  });
+
+  it('duplicates through the caller', async () => {
+    const onDuplicate = vi.fn();
+    const user = userEvent.setup();
+    renderList(<NoteList {...props({ onDuplicate })} />);
+
+    await openRowMenu('Alpha');
+    await user.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+
+    expect(onDuplicate).toHaveBeenCalledWith('a');
+  });
+
+  it('toggles the pin of the row it was opened on', async () => {
+    const onTogglePin = vi.fn();
+    const user = userEvent.setup();
+    renderList(<NoteList {...props({ onTogglePin })} />);
+
+    await openRowMenu('Alpha');
+    await user.click(screen.getByRole('menuitem', { name: 'Pin note' }));
+
+    expect(onTogglePin).toHaveBeenCalledWith('a', true);
+  });
+
+  it('copies the note’s own text to the clipboard', async () => {
+    const user = userEvent.setup();
+    // Installed AFTER `userEvent.setup()`, which fits its own clipboard stub
+    // over `navigator.clipboard` — stubbing first is silently overwritten.
+    const writeText = stubClipboard();
+    renderList(<NoteList {...props()} />);
+
+    await openRowMenu('Alpha');
+    await user.click(screen.getByRole('menuitem', { name: 'Copy text' }));
+
+    // The TEXT, not the title: a row menu that copied the preview would be
+    // silently lossy, and nothing on screen would say so.
+    expect(writeText).toHaveBeenCalledWith('Alpha\nbody of Alpha');
+  });
+
+  it('says so when the clipboard refuses', async () => {
+    // `writeText` rejects when the document is not focused, and the whole
+    // clipboard API is absent over plain HTTP on a non-localhost origin.
+    // Both are silent without the failure branch under test.
+    const user = userEvent.setup();
+    stubClipboard(() => Promise.reject(new Error('not focused')));
+    renderList(<NoteList {...props()} />);
+
+    await openRowMenu('Alpha');
+    await user.click(screen.getByRole('menuitem', { name: 'Copy text' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('This note could not be copied.');
+  });
+
+  it('offers Restore and Delete forever on a trashed row', async () => {
+    const onRestore = vi.fn();
+    const user = userEvent.setup();
+    renderList(
+      <NoteList
+        {...props({ scope: TRASHED_SCOPE, items: [trashedNote('a', 'Alpha')], onRestore })}
+      />,
+    );
+
+    await openRowMenu('Alpha');
+    await user.click(screen.getByRole('menuitem', { name: 'Restore' }));
+
+    expect(onRestore).toHaveBeenCalledWith('a');
+  });
+
+  it('routes Delete forever through the caller’s confirmation, never straight to a purge', async () => {
+    const onPurge = vi.fn();
+    const user = userEvent.setup();
+    renderList(
+      <NoteList
+        {...props({ scope: TRASHED_SCOPE, items: [trashedNote('a', 'Alpha')], onPurge })}
+      />,
+    );
+
+    await openRowMenu('Alpha');
+    await user.click(screen.getByRole('menuitem', { name: 'Delete forever' }));
+
+    expect(onPurge).toHaveBeenCalledWith('a');
+  });
+
+  it('closes after an action', async () => {
+    const user = userEvent.setup();
+    renderList(<NoteList {...props()} />);
+
+    await openRowMenu('Alpha');
+    await user.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+
+    expect(screen.queryByRole('menu', { name: 'Note actions' })).not.toBeInTheDocument();
   });
 });
