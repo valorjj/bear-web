@@ -52,12 +52,13 @@ feature and is not yet scheduled.
 | J2a phone header proportions and 44px targets                     | complete |
 | K1 image capture and display, locally                             | complete |
 | K2 image sync: the Mac Mini as an image store                     | complete |
+| K3 image resize, and images in every export                       | complete |
 | G export: PDF, rendered server-side                               | complete |
 | M9b callout blocks                                                | deferred |
 
-1875 unit tests (plus 127 server tests, 55 of which are integration tests that
+1925 unit tests (plus 127 server tests, 55 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 142 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 146 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **G moved PDF export off the client entirely, and it is the first capability
@@ -403,6 +404,26 @@ function`, so every test rendering the shell needs the stub
   is now viewport-dependent. Lowering the configured viewport turns all seven
   into confusing failures about missing panes; `e2e/mobile.spec.ts` carries one
   named assertion that fails honestly instead.
+
+- **`src/lib/zip.ts` is a hand-written archive format, and no test we own can
+  prove it correct.** Its own unit test reads the archive back with our parser,
+  which establishes only that reader and writer share whatever
+  misunderstanding they have. `e2e/imageExport.spec.ts` runs `/usr/bin/unzip
+-t`, and that is the only thing in the repo that can catch a wrong CRC-32 —
+  which produces a perfectly-shaped archive that reports itself as corrupt,
+  with nothing pointing at the cause.
+
+- **A top-level inline node makes an INVALID ProseMirror document, and the
+  symptom is an editor that silently refuses to be typed into.** `doc` accepts
+  block content only; an inline child makes every transaction throw
+  `Called contentMatchAt on a node with invalid content`.
+  `@tiptap/extension-paragraph` unwraps a paragraph whose only token is an
+  image, so `![](files/x.webp)` alone on a line produced exactly that —
+  reachable by pasting an image into an empty note and reloading, and shipped
+  for a day. `parseMarkdown` re-wraps. Note that `rawBlock.test.ts` had
+  asserted the unwrapped shape and called it correct: the assertion recorded
+  the upstream behaviour and hid its consequence, because nothing ever tried to
+  EDIT such a document.
 
 - **A component defined inside a render body is a new type every render.**
   `NoteRowMenu`'s `Item` was written there first: React then unmounts and

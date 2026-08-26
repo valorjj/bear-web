@@ -110,3 +110,51 @@ describe('the renderer prints the document as the SCREEN shows it', () => {
     expect(x).toBeGreaterThan(INDENT_PX);
   });
 });
+
+/**
+ * A 2x2 red PNG, base64. Small enough to inline in a source file, real enough
+ * that Chromium actually decodes and embeds it.
+ */
+const RED_PIXEL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z4AATAxQxig9Sg8NPQCS3QEHrqEd4gAAAABJRU5ErkJggg==';
+
+const IMAGE_PROBE = `<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  @page { size: A4; margin: 10mm; }
+  body { background: #ffffff; }
+  img { width: 200px; }
+</style></head>
+<body><p>before</p><img src="${RED_PIXEL}" alt=""><p>after</p></body></html>`;
+
+describe('an inlined image reaches the PDF', () => {
+  let pdf: Uint8Array;
+
+  beforeAll(async () => {
+    pdf = await renderPdf(IMAGE_PROBE, { browser, timeoutMs: 20_000 });
+  }, 60_000);
+
+  it('embeds an image XObject', () => {
+    // K3 inlines images as `data:` URIs because the renderer has deliberately
+    // no route off the host and could not fetch a path. This asserts the
+    // inlining actually survived the render.
+    //
+    // A STRUCTURAL check on the PDF, not a text extraction. A text extraction
+    // cannot see a missing image any more than it can see tofu — the words
+    // around it are present either way, so `toContain('before')` passes on a
+    // page with no picture at all.
+    const text = new TextDecoder('latin1').decode(pdf);
+
+    expect(text).toContain('/Subtype /Image');
+  });
+
+  it('embeds it with real dimensions rather than a zero-sized placeholder', () => {
+    // A dropped `src` can still leave an <img> box in the layout; an embedded
+    // image with a width and height is the thing that only exists when bytes
+    // were decoded.
+    const text = new TextDecoder('latin1').decode(pdf);
+    const width = /\/Width (\d+)/.exec(text);
+
+    expect(width, 'no /Width on any embedded image').not.toBeNull();
+    expect(Number(width![1])).toBeGreaterThan(0);
+  });
+});

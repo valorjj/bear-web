@@ -84,8 +84,37 @@ function sanitize(node: JSONContent): JSONContent {
   return content === undefined ? node : { ...node, content };
 }
 
+/**
+ * Wraps a top-level INLINE node in a paragraph.
+ *
+ * `doc` accepts block content only, and a document whose direct child is an
+ * inline node is invalid — every later transaction on it throws
+ * `Called contentMatchAt on a node with invalid content`, which surfaces as
+ * an editor that silently refuses to be typed into.
+ *
+ * Reachable, and shipped: K1's `![](files/<id>.webp)` on a line of its own is
+ * parsed to a bare `storedImage` at the top level, so pasting an image into an
+ * EMPTY note and reloading produced exactly that document. Found while
+ * building K3's resize, because `setNodeMarkup` was the first thing to touch
+ * such a note and throw.
+ *
+ * Fixed here rather than in the node: any inline node can reach the top level
+ * this way, and `RawImage` on its own line has the same shape.
+ */
+function wrapTopLevelInline(doc: JSONContent): JSONContent {
+  if (doc.content === undefined) return doc;
+
+  const content = doc.content.map((child) => {
+    const type = child.type === undefined ? undefined : schema.nodes[child.type];
+    if (type === undefined || !type.isInline) return child;
+    return { type: 'paragraph', content: [child] };
+  });
+
+  return { ...doc, content };
+}
+
 export function parseMarkdown(markdown: string): JSONContent {
-  return sanitize(manager.parse(markdown) as JSONContent);
+  return sanitize(wrapTopLevelInline(manager.parse(markdown) as JSONContent));
 }
 
 export function serializeMarkdown(doc: JSONContent): string {

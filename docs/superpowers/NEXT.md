@@ -739,11 +739,26 @@ miss. Its own 2 GiB quota.
 
 ### K3. Resize and export — NOT STARTED (was K3, unchanged)
 
-Drag-to-resize (a width in the Markdown, so it touches the schema), and images
-in Markdown (as a bundle), HTML (inlined) and PDF. The last is the hard one:
-the renderer is a separate container with deliberately no route off the host —
-and it now also has no route to `GET /files/:id`, which K3 must solve rather
-than assume.
+**SHIPPED 2026-08-26.** Spec:
+`docs/superpowers/specs/2026-08-26-k3-resize-and-export-design.md`. Plan:
+`docs/superpowers/plans/2026-08-26-k3-resize-and-export.md`.
+
+A display width in the Markdown (`![alt|640](…)`), a drag grip and
+`Mod-Alt-Arrow` chords, images inlined into HTML and PDF, and Markdown as a
+store-only zip.
+
+**Findings worth carrying forward:**
+
+- **K1 shipped a second bug that K3 found**: a note whose whole text is one
+  image parsed to an INVALID document, and typing into it threw. Reachable by
+  pasting an image into an empty note and reloading.
+- **The renderer's isolation shaped the design rather than being worked
+  around**: it has no route off the host, so images inline as data URIs, which
+  forced `MAX_EXPORT_BYTES` from 2 MiB to 20 MiB.
+- **A hand-written zip cannot be validated by its own reader.** `unzip -t` is
+  the only thing that can catch a wrong CRC.
+- **A text extraction cannot see a missing image in a PDF**, the same way it
+  cannot see tofu — the assertion has to be structural or rasterised.
 
 ### K4. The thumbnail — MOSTLY DONE IN K1
 

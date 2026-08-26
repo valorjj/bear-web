@@ -45,6 +45,10 @@ const CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   // `fidelity` and `totality` suites below both iterate CANONICAL.
   { name: 'stored image', markdown: '![beach](files/abc123.webp)' },
   { name: 'stored image, no alt', markdown: '![](files/abc123.webp)' },
+  // K3's display width. The unresized shapes above are the byte-identical
+  // guarantee — an image nobody touched must not gain a `|` on save.
+  { name: 'stored image with width', markdown: '![beach|640](files/abc123.webp)' },
+  { name: 'stored image, width only', markdown: '![|640](files/abc123.webp)' },
   // Still a RAW inline, and must stay one — see the privacy ruling.
   { name: 'remote image', markdown: '![remote](https://example.com/a.png)' },
   { name: 'blockquote', markdown: '> Quoted text.' },
@@ -266,5 +270,34 @@ describe('an empty block keeps its own marker', () => {
 
   it('keeps an earlier list item when a later one is empty', () => {
     expect(normalizeMarkdown('1. Milk\n2. ')).toBe('1. Milk\n2. ');
+  });
+});
+
+describe('a top-level inline node', () => {
+  it('is wrapped in a paragraph, so the document is valid', () => {
+    // `doc` accepts BLOCK content only. An inline node as its direct child is
+    // an invalid document, and every later transaction on it throws
+    // `Called contentMatchAt on a node with invalid content` — which surfaces
+    // as an editor that silently refuses to be typed into.
+    //
+    // Shipped in K1 and reachable: pasting an image into an EMPTY note leaves
+    // `![](files/<id>.webp)` as the whole text, and reloading parsed it to a
+    // bare `storedImage` at the top level. Found while building K3's resize,
+    // because `setNodeMarkup` was the first thing to touch such a note.
+    const doc = parseMarkdown('![](files/abc123.webp)');
+
+    expect(doc.content?.[0]?.type).toBe('paragraph');
+    expect(doc.content?.[0]?.content?.[0]?.type).toBe('storedImage');
+  });
+
+  it('still round-trips to the same Markdown', () => {
+    // The wrapper must not add a blank line or lose the image.
+    expect(normalizeMarkdown('![](files/abc123.webp)')).toBe('![](files/abc123.webp)');
+  });
+
+  it('leaves a block node at the top level alone', () => {
+    const doc = parseMarkdown('# Heading');
+
+    expect(doc.content?.[0]?.type).toBe('heading');
   });
 });

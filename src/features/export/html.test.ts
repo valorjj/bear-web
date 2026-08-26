@@ -540,3 +540,60 @@ describe('table-cell paragraph rules stay parallel between editor and export', (
     expect(exportRule).not.toMatch(/min-height\s*:\s*(0|auto)\b/);
   });
 });
+
+describe('stored images', () => {
+  const note = (text: string) => ({ title: 'Note', text, updatedAt: 0 });
+  const tokens: Record<string, string> = {};
+
+  it('inlines a stored image as a data URI', () => {
+    const html = renderNoteHtml(
+      note('Note\n\n![](files/abc123.webp)'),
+      tokens,
+      'en',
+      new Map([['abc123', 'data:image/webp;base64,AAA']]),
+    );
+
+    expect(html).toContain('src="data:image/webp;base64,AAA"');
+    // The relative path must be GONE. An exported file still pointing at
+    // `files/abc123.webp` is broken in every reader — and the PDF renderer
+    // could not fetch it even in principle, because it has no route off the
+    // host by design.
+    expect(html).not.toContain('files/abc123.webp');
+  });
+
+  it('drops an image whose bytes are missing rather than emitting a dead path', () => {
+    // A note synced before its image arrived must still export, without a
+    // broken-image icon in the middle of it.
+    const html = renderNoteHtml(note('Note\n\n![](files/gone.webp)'), tokens, 'en', new Map());
+
+    expect(html).not.toContain('files/gone.webp');
+    expect(html).not.toContain('<img');
+  });
+
+  it('carries the display width through as an inline style', () => {
+    const html = renderNoteHtml(
+      note('Note\n\n![|300](files/abc123.webp)'),
+      tokens,
+      'en',
+      new Map([['abc123', 'data:image/webp;base64,AAA']]),
+    );
+
+    expect(html).toMatch(/width:\s*300px/);
+    // `data-width` is the node's own serialization, not something a reader
+    // understands.
+    expect(html).not.toContain('data-width');
+  });
+
+  it('leaves a remote image as source, never as an img', () => {
+    // K1's privacy rule survives export: an exported file that fetches from a
+    // third-party host when opened is the same beacon, just posted elsewhere.
+    const html = renderNoteHtml(
+      note('Note\n\n![](https://example.com/a.png)'),
+      tokens,
+      'en',
+      new Map(),
+    );
+
+    expect(html).not.toContain('<img');
+  });
+});

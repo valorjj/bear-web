@@ -47,3 +47,58 @@ export function storedImageIds(markdown: string): string[] {
   }
   return ids;
 }
+
+/**
+ * The widest an image may be asked to display at.
+ *
+ * The stored WebP is at most 2048px on its long edge (K1), so a display width
+ * beyond that only stretches pixels. It is also the clamp that stops a note
+ * edited by hand — or synced from a client with a bug — rendering a 999999px
+ * image whose cause the user cannot see.
+ */
+export const MAX_DISPLAY_WIDTH = 2048;
+
+export interface ImageAlt {
+  alt: string;
+  width: number | null;
+}
+
+/**
+ * Splits Obsidian's `alt|640` convention into its parts.
+ *
+ * The width rides in the ALT TEXT rather than in a separate field so it
+ * travels with the note: sync carries it, an exported bundle carries it, and
+ * another device lays the note out the same way. It is also per-USE, so one
+ * screenshot can be full width in one note and a thumbnail in another.
+ *
+ * The cost, accepted deliberately: this is not standard Markdown, and a strict
+ * reader shows `alt|640` as the alt text. That is a wart in one place —
+ * someone else's viewer — against correct behaviour in this app and in
+ * Obsidian, which is the reader that actually opens the bundles this app
+ * produces.
+ *
+ * A NON-NUMERIC suffix stays part of the alt text rather than being treated as
+ * a malformed width. `a|b` is what every other reader will display, and
+ * guessing otherwise would silently swallow a character the user typed.
+ */
+export function parseImageAlt(raw: string): ImageAlt {
+  const pipe = raw.lastIndexOf('|');
+  if (pipe === -1) return { alt: raw, width: null };
+
+  const suffix = raw.slice(pipe + 1);
+  if (!/^[0-9]+$/.test(suffix)) return { alt: raw, width: null };
+
+  const value = Number(suffix);
+  if (value < 1) return { alt: raw, width: null };
+
+  return { alt: raw.slice(0, pipe), width: Math.min(value, MAX_DISPLAY_WIDTH) };
+}
+
+/**
+ * The inverse. The pipe is OMITTED entirely when there is no width, so an
+ * image nobody resized serialises byte-identically to what K1 wrote — which
+ * the `CANONICAL` round-trip fixtures pin.
+ */
+export function formatImageAlt(alt: string, width: number | null): string {
+  return width === null ? alt : `${alt}|${width}`;
+}
