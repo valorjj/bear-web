@@ -19,6 +19,7 @@ const env = {
   googleClientId: 'id',
   googleClientSecret: 'secret',
   pdfRendererUrl: 'http://127.0.0.1:8788',
+  imageRoot: './data/test-images',
 };
 
 describe.skipIf(!url)('/sync', () => {

@@ -110,9 +110,16 @@ function namesUserScopedTable(line: string): boolean {
  * correct — the value is being supplied, not filtered — so a bare mention
  * stays acceptable there. Every other shape (`FROM`, `UPDATE`, `JOIN`)
  * requires `user_id` in predicate position: followed by `=` or by `IN`.
+ *
+ * The modifiers between `INSERT` and `INTO` are matched too. K2's
+ * `INSERT IGNORE INTO image_files` is a legitimate insert that this rejected
+ * while accepting the identical statement without the modifier — a gap in the
+ * guard rather than a fault in the SQL, and annotating around it would have
+ * hidden the gap instead of closing it. `IGNORE`, `LOW_PRIORITY`,
+ * `DELAYED` and `HIGH_PRIORITY` are MySQL's full set here.
  */
 function constrainsUserId(line: string): boolean {
-  if (/\bINSERT\s+INTO\b/i.test(line) && /user_id/.test(line)) return true;
+  if (/\bINSERT\s+(?:\w+\s+)*INTO\b/i.test(line) && /user_id/.test(line)) return true;
   return /user_id\s*(=|IN\b)/i.test(line);
 }
 

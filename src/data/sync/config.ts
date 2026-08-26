@@ -9,3 +9,30 @@
 export const API_ORIGIN: string =
   (import.meta.env.VITE_API_ORIGIN as string | undefined) ??
   (import.meta.env.DEV ? 'http://localhost:8787' : 'https://api.markflowing.com');
+
+/**
+ * Whether this browser has ever completed a sign-in.
+ *
+ * Lives HERE rather than in `src/features/account/` because both sides need
+ * it and only one direction is allowed: `src/data/` must not import from
+ * `src/features/`. `useSession` imports it from here.
+ *
+ * It gates every cross-origin request the app makes on boot — a visitor who
+ * has never signed in must produce none at all, or `e2e/smoke.spec.ts` goes
+ * red on `net::ERR_NAME_NOT_RESOLVED` and every offline user gets a console
+ * error.
+ */
+export const SESSION_HINT_KEY = 'bear-web:account:hasSession';
+
+/**
+ * `localStorage` throws outright in some contexts — a private window, a
+ * browser set to block site data, a thumbnail capture — so every read is
+ * wrapped. Absent is the safe answer: it means "make no request".
+ */
+export function hasSignedInBefore(): boolean {
+  try {
+    return localStorage.getItem(SESSION_HINT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}

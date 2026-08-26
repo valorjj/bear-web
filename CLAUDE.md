@@ -51,12 +51,13 @@ feature and is not yet scheduled.
 | J1 responsive shell: phone, tablet, desktop                       | complete |
 | J2a phone header proportions and 44px targets                     | complete |
 | K1 image capture and display, locally                             | complete |
+| K2 image sync: the Mac Mini as an image store                     | complete |
 | G export: PDF, rendered server-side                               | complete |
 | M9b callout blocks                                                | deferred |
 
-1892 unit tests (plus 92 server tests, 55 of which are integration tests that
+1875 unit tests (plus 127 server tests, 55 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 141 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 142 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **G moved PDF export off the client entirely, and it is the first capability

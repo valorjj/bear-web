@@ -4,6 +4,7 @@ import { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
 import { markAllDirty, markDeleted } from './markDirty';
 import { parseTags } from '../tags';
+import { SyncQuotaError } from './transport';
 import type { PullResponse, PushResponse, Transport } from './transport';
 import { createEngine, LAST_PULLED_REV_KEY, markConflictText, SYNCED_ACCOUNT_KEY } from './engine';
 
@@ -11,6 +12,12 @@ import { createEngine, LAST_PULLED_REV_KEY, markConflictText, SYNCED_ACCOUNT_KEY
 function fakeTransport(): Transport & {
   pulls: PullResponse[];
   pushed: Array<{ notes: unknown[]; tags: unknown[] }>;
+  /** Image ids the engine successfully uploaded. */
+  uploaded: string[];
+  /** `'notes'` / `'image'` in the order the engine called them. */
+  order: string[];
+  /** Set to make the next upload throw, to drive the refusal paths. */
+  uploadError: Error | null;
   nextPull: PullResponse;
   nextPush: PushResponse;
 } {
@@ -24,8 +31,21 @@ function fakeTransport(): Transport & {
       return state.nextPull;
     },
     async push(batch: { notes: unknown[]; tags: unknown[] }) {
+      state.order.push('notes');
       state.pushed.push(batch);
       return state.nextPush;
+    },
+    uploaded: [] as string[],
+    order: [] as string[],
+    /** Set to throw for one upload, to drive the refusal paths. */
+    uploadError: null as Error | null,
+    async uploadImage(id: string) {
+      state.order.push('image');
+      if (state.uploadError !== null) throw state.uploadError;
+      state.uploaded.push(id);
+    },
+    async downloadImage() {
+      return null;
     },
   };
   return state as unknown as ReturnType<typeof fakeTransport>;
@@ -819,5 +839,135 @@ describe('sync engine', () => {
     // Clearing here would strand the later edit on this device forever,
     // looking perfectly saved.
     expect(await db.syncState.get(['tag', 'work'])).toMatchObject({ dirty: 1, syncedRev: 9 });
+  });
+});
+
+describe('image upload', () => {
+  let db: BearDatabase;
+  let transport: ReturnType<typeof fakeTransport>;
+
+  beforeEach(async () => {
+    db = new BearDatabase(`test-${crypto.randomUUID()}`);
+    await db.open();
+    transport = fakeTransport();
+  });
+
+  function engine() {
+    return createEngine({ db, transport, parseTags, now: () => 1000, generateId: () => 'gen' });
+  }
+
+  async function addImage(id: string, noteId = 'n1'): Promise<void> {
+    await db.files.add({
+      id,
+      noteId,
+      blob: new Blob([new Uint8Array([1])], { type: 'image/webp' }),
+      mime: 'image/webp',
+      width: 10,
+      height: 10,
+      bytes: 1,
+      createdAt: 500,
+    });
+    await db.syncState.put({
+      kind: 'image',
+      key: id,
+      syncedRev: 0,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 500,
+    });
+  }
+
+  it('uploads a dirty image', async () => {
+    await addImage('f1');
+
+    await engine().syncOnce(ACCOUNT);
+
+    expect(transport.uploaded).toEqual(['f1']);
+  });
+
+  it('uploads images even when NOTHING else is dirty', async () => {
+    // The engine used to return early when there were no notes or tags to
+    // push, which skipped images entirely — they would sit dirty until the
+    // user happened to edit a note.
+    await addImage('f1');
+
+    await engine().syncOnce(ACCOUNT);
+
+    expect(transport.uploaded).toEqual(['f1']);
+  });
+
+  it('pushes notes BEFORE uploading images', async () => {
+    // Load-bearing: a quota refusal on pixels must not be able to stop a
+    // note's own text from ever reaching the server.
+    await db.notes.add({
+      id: 'n1',
+      title: 'Note',
+      text: 'Note',
+      createdAt: 1,
+      updatedAt: 1,
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    });
+    await db.syncState.put({
+      kind: 'note',
+      key: 'n1',
+      syncedRev: 0,
+      dirty: 1,
+      deleted: 0,
+      markedAt: 1,
+    });
+    await addImage('f1');
+
+    await engine().syncOnce(ACCOUNT);
+
+    expect(transport.order).toEqual(['notes', 'image']);
+  });
+
+  it('clears the dirty flag once an image is uploaded', async () => {
+    await addImage('f1');
+
+    await engine().syncOnce(ACCOUNT);
+
+    expect((await db.syncState.get(['image', 'f1']))?.dirty).toBe(0);
+  });
+
+  it('does not upload the same image twice', async () => {
+    await addImage('f1');
+    await engine().syncOnce(ACCOUNT);
+    await engine().syncOnce(ACCOUNT);
+
+    expect(transport.uploaded).toEqual(['f1']);
+  });
+
+  it('leaves a refused image dirty AND local', async () => {
+    // The file must stay usable on this device. Dropping it would destroy the
+    // user's data because the server declined to hold a copy.
+    await addImage('f1');
+    transport.uploadError = new SyncQuotaError(5, 4);
+
+    await engine().syncOnce(ACCOUNT);
+
+    expect(await db.files.get('f1')).toBeDefined();
+    expect((await db.syncState.get(['image', 'f1']))?.dirty).toBe(1);
+  });
+
+  it('a refused image does not abort the sync', async () => {
+    await addImage('f1');
+    transport.uploadError = new SyncQuotaError(5, 4);
+
+    await expect(engine().syncOnce(ACCOUNT)).resolves.toBeDefined();
+  });
+
+  it('forgets an image reclaimed before it was ever uploaded', async () => {
+    // The boot sweep can remove a file whose reference the user deleted while
+    // offline. Its bookkeeping row must not outlive it and retry forever.
+    await addImage('f1');
+    await db.files.delete('f1');
+
+    await engine().syncOnce(ACCOUNT);
+
+    expect(await db.syncState.get(['image', 'f1'])).toBeUndefined();
+    expect(transport.uploaded).toEqual([]);
   });
 });

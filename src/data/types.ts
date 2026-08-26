@@ -83,7 +83,11 @@ export interface SerializedFile {
   createdAt?: number;
 }
 
-export type SyncKind = 'note' | 'tag';
+/**
+ * `'image'` rows carry no revision and are never pulled: an image is
+ * immutable, so its bookkeeping only ever answers "has this been uploaded".
+ */
+export type SyncKind = 'note' | 'tag' | 'image';
 
 /**
  * Per-row sync bookkeeping.

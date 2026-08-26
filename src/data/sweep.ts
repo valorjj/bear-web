@@ -91,10 +91,18 @@ export function runStartupSweep(createdBefore: number): Promise<number> {
 }
 
 export interface FileSweepDeps {
-  /** Every stored file, with the note that owns it. */
-  listFiles: () => Promise<Array<{ id: string; noteId: string; createdAt: number }>>;
-  /** The owning note's current text, or `null` if the note is gone. */
-  noteText: (noteId: string) => Promise<string | null>;
+  listFiles: () => Promise<Array<{ id: string; createdAt: number }>>;
+  /**
+   * Every image id referenced by ANY note.
+   *
+   * Not "the owning note's text", which is what this asked for first and was
+   * WRONG: `notes.duplicate` copies a note's text verbatim, so two notes can
+   * reference one image while the file row names only the original. Deleting
+   * the image from that original then destroyed the duplicate's copy too —
+   * data loss, from a sweep that looked correct. A file is orphaned only when
+   * NOTHING references it.
+   */
+  referencedIds: () => Promise<Set<string>>;
   remove: (id: string) => Promise<void>;
   /**
    * Only files stored strictly before this instant are eligible — the same
@@ -132,20 +140,14 @@ export interface FileSweepDeps {
 export async function sweepOrphanFiles(deps: FileSweepDeps): Promise<number> {
   try {
     const files = await deps.listFiles();
-    const texts = new Map<string, string | null>();
+    // Read ONCE, over every note, rather than per file: a note's text is what
+    // establishes a reference, and the same note can reference many files.
+    const referenced = await deps.referencedIds();
 
     let removed = 0;
     for (const file of files) {
       if (file.createdAt >= deps.createdBefore) continue;
-
-      if (!texts.has(file.noteId)) texts.set(file.noteId, await deps.noteText(file.noteId));
-      const text = texts.get(file.noteId) ?? null;
-
-      // The note is gone but its files were not reclaimed — `notes.purge`
-      // handles that case, so this is belt and braces for a crash mid-purge.
-      // Still unreferenced either way.
-      const referenced = text === null ? false : storedImageIds(text).includes(file.id);
-      if (referenced) continue;
+      if (referenced.has(file.id)) continue;
 
       try {
         await deps.remove(file.id);
@@ -172,12 +174,16 @@ export async function sweepOrphanFiles(deps: FileSweepDeps): Promise<number> {
 export function runStartupFileSweep(createdBefore: number): Promise<number> {
   return sweepOrphanFiles({
     listFiles: () =>
-      db.files
-        .toArray()
-        .then((rows) =>
-          rows.map((row) => ({ id: row.id, noteId: row.noteId, createdAt: row.createdAt })),
-        ),
-    noteText: (noteId) => db.notes.get(noteId).then((note) => note?.text ?? null),
+      db.files.toArray().then((rows) => rows.map(({ id, createdAt }) => ({ id, createdAt }))),
+    referencedIds: async () => {
+      const ids = new Set<string>();
+      // Every note, TRASHED ONES INCLUDED: a note in the trash can be
+      // restored, and reclaiming its images first would restore it broken.
+      for (const note of await db.notes.toArray()) {
+        for (const id of storedImageIds(note.text)) ids.add(id);
+      }
+      return ids;
+    },
     remove: (id) => db.files.delete(id),
     createdBefore,
     onError: (error) => {

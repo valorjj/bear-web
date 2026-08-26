@@ -65,3 +65,90 @@ describe('transport', () => {
     ).rejects.toBeInstanceOf(SyncUnavailableError);
   });
 });
+
+describe('images', () => {
+  function transportWith(fetchMock: typeof globalThis.fetch) {
+    return createTransport('https://api.test', fetchMock);
+  }
+
+  const blob = (): Blob => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' });
+
+  it('PUTs the bytes with the metadata headers', async () => {
+    const doFetch = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    await transportWith(doFetch as unknown as typeof globalThis.fetch).uploadImage(
+      'f1',
+      'n1',
+      blob(),
+      40,
+      20,
+    );
+
+    const [url, init] = doFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.test/files/f1');
+    expect(init.method).toBe('PUT');
+    expect((init.headers as Record<string, string>)['x-note-id']).toBe('n1');
+    expect((init.headers as Record<string, string>)['x-width']).toBe('40');
+    // The session cookie is what authorises this; without it every upload 401s.
+    expect(init.credentials).toBe('include');
+  });
+
+  it('throws SyncQuotaError on a 413, so the caller can leave the file local', async () => {
+    const doFetch = vi.fn(
+      async () => new Response(JSON.stringify({ used: 5, limit: 4 }), { status: 413 }),
+    );
+
+    await expect(
+      transportWith(doFetch as unknown as typeof globalThis.fetch).uploadImage(
+        'f1',
+        'n1',
+        blob(),
+        1,
+        1,
+      ),
+    ).rejects.toBeInstanceOf(SyncQuotaError);
+  });
+
+  it('throws SyncUnauthorizedError on a 401', async () => {
+    const doFetch = vi.fn(async () => new Response(null, { status: 401 }));
+
+    await expect(
+      transportWith(doFetch as unknown as typeof globalThis.fetch).uploadImage(
+        'f1',
+        'n1',
+        blob(),
+        1,
+        1,
+      ),
+    ).rejects.toBeInstanceOf(SyncUnauthorizedError);
+  });
+
+  it('returns null for a 404 download, which is a placeholder and not an error', async () => {
+    const doFetch = vi.fn(async () => new Response(null, { status: 404 }));
+
+    expect(
+      await transportWith(doFetch as unknown as typeof globalThis.fetch).downloadImage('f1'),
+    ).toBeNull();
+  });
+
+  it('throws on a 500 download, which IS an error and may be retried', async () => {
+    // The distinction matters in both directions: a 404 must not be retried on
+    // every render, and a 500 must not be remembered as "this image does not
+    // exist".
+    const doFetch = vi.fn(async () => new Response(null, { status: 500 }));
+
+    await expect(
+      transportWith(doFetch as unknown as typeof globalThis.fetch).downloadImage('f1'),
+    ).rejects.toBeInstanceOf(SyncUnavailableError);
+  });
+
+  it('returns the bytes on success', async () => {
+    const doFetch = vi.fn(async () => new Response(new Uint8Array([9, 9]), { status: 200 }));
+
+    const result = await transportWith(doFetch as unknown as typeof globalThis.fetch).downloadImage(
+      'f1',
+    );
+
+    expect(new Uint8Array(await result!.arrayBuffer())).toEqual(new Uint8Array([9, 9]));
+  });
+});
