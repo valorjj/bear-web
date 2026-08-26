@@ -279,6 +279,17 @@ export function NoteList({
           </Popover>
         </div>
 
+        {compact && (
+          <div className="ml-auto flex min-w-0 items-center">
+            <SearchField
+              query={query}
+              onQueryChange={onQueryChange}
+              inputRef={searchInputRef}
+              collapsible
+            />
+          </div>
+        )}
+
         {/*
           The create button and the three selection actions are DESKTOP ONLY.
 
@@ -334,9 +345,16 @@ export function NoteList({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center border-b border-border px-2 py-1">
-        <SearchField query={query} onQueryChange={onQueryChange} inputRef={searchInputRef} />
-      </div>
+      {/*
+        Below desktop the search field collapses into the header strip above
+        rather than taking a row of its own — at 390px a permanent second row
+        is a tenth of the screen spent on a control that is usually idle.
+      */}
+      {!compact && (
+        <div className="flex shrink-0 items-center border-b border-border px-2 py-1">
+          <SearchField query={query} onQueryChange={onQueryChange} inputRef={searchInputRef} />
+        </div>
+      )}
 
       {/* `undefined` is "not loaded yet", not "empty": showing the empty state
           during the first frame would flash "No notes" on every reload. */}
