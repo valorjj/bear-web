@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { AppDeps } from '../app.ts';
 import { authenticator } from '../auth/authenticate.ts';
 import { clearedSessionCookie } from '../auth/cookies.ts';
+import { removeUserImages } from '../images/store.ts';
 import { deleteUser } from '../repositories/users.ts';
 
 interface EmailRow {
@@ -32,6 +33,10 @@ export function accountRoutes(deps: AppDeps): Hono {
     // One delete: identities and sessions cascade. D2's tables must cascade
     // too rather than being added to a list here.
     await deleteUser(deps.query, userId);
+    // The one thing the database cascade cannot reach. A deletion that leaves
+    // the pixels on disk is not a deletion — and this is the spec's day-one
+    // requirement rather than a nicety.
+    await removeUserImages(deps.env.imageRoot, userId);
 
     c.header('set-cookie', clearedSessionCookie(deps.secureCookies));
     return c.body(null, 204);
