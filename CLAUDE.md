@@ -335,6 +335,18 @@ These bit us once already. They are not mistakes.
   belong in Playwright.
 - `erasableSyntaxOnly` forbids `enum`, parameter properties, and namespaces.
   `verbatimModuleSyntax` requires `import type` / `export type`.
+- **A click cannot place a caret in jsdom, and a test that assumes where the
+  caret ended up will fail rarely and confusingly.** `document.elementFromPoint`
+  is stubbed to null and every Range rect is zero, so ProseMirror's
+  `posAtCoords` resolves nothing. `NoteEditor.test.tsx`'s seeded-note test rested
+  on "ProseMirror always leaves the caret directly after the character it just
+  inserted" and CI disproved it on 2026-08-26: `expected 'x#wor' to be '#work'`
+  — the insert landed at position 0 while the caret sat at the end, so the
+  Backspace deleted the wrong character. **It did not reproduce locally** in 5
+  scoped runs, 3 full-suite runs (one at load 24), or two deliberate attempts
+  to plant a hostile caret. Revert an edit with `commands.undo()`, which reads
+  no caret at all, rather than with a keystroke that does.
+
 - **jsdom implements NO `matchMedia` — the property is absent, not stubbed.**
   A component calling it throws `TypeError: window.matchMedia is not a
 function`, so every test rendering the shell needs the stub

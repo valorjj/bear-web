@@ -571,52 +571,47 @@ describe('seeded notes', () => {
     const purge = vi.spyOn(notes, 'purge').mockResolvedValue(undefined);
     const note = await notes.create('\n#work');
 
-    const { unmount } = renderWithI18n(<NoteEditor note={note} seedText={'\n#work'} />);
+    const handleRef = createRef<RichEditorHandle>();
+    const { unmount } = renderWithI18n(
+      <NoteEditor note={note} seedText={'\n#work'} handleRef={handleRef} />,
+    );
     const el = await screen.findByRole('textbox');
-
-    await userEvent.click(el);
-    // Two calls, not one `userEvent.type(el, 'x{Backspace}')`. The seed here
-    // is itself a tag, so `TagPill`'s decoration redraws the span on the
-    // insert. Observed directly: after that redraw, jsdom's own selection
-    // reports `anchorOffset: 1` instead of 6, so the `{Backspace}` half of a
-    // single combined `userEvent.type` call lands at the wrong position and
-    // does nothing — this is a jsdom selection-tracking artifact, not a
-    // traced ProseMirror mechanism. Splitting into two calls avoids feeding
-    // the second keystroke through that stale selection. Confirmed correct
-    // in a real Chromium browser via Playwright — the equivalent keystrokes
-    // there revert the text exactly as expected. The assertion this test
-    // makes is unchanged.
-    await userEvent.type(el, 'x');
-    // Wait for the insert to LAND before sending the backspace. Splitting
-    // into two `type` calls was not enough on its own: under load the
-    // decoration rebuild can still be in flight when the second keystroke is
-    // dispatched, the backspace then deletes nothing, and the editor unmounts
-    // holding text that is not the seed. `useAutosave` correctly takes its
-    // `flush` branch instead of `discard`, so `purge` is never called and the
-    // test hangs until Vitest's 5000ms `testTimeout` kills it — with a
-    // message naming no assertion at all. That was this file's flake: a
-    // keystroke that had not landed, NOT a slow database. Measured directly:
-    // in an instrumented failing run `save` completed in 3-10ms and a 250ms
-    // heartbeat ticked undisturbed for the whole five seconds, and simply
-    // deleting the backspace from this test reproduces that trace byte for
-    // byte.
+    // Typed through the DOM, reverted through UNDO — deliberately not through
+    // a Backspace, and this is the fix for a real CI failure on 2026-08-26.
     //
-    // Both waits are deliberately about the ROUND TRIP, not about a position.
-    // `userEvent.click` cannot place a caret reliably here — jsdom has no
-    // layout, `document.elementFromPoint` is stubbed to null and every Range
-    // rect is zero, so ProseMirror's `posAtCoords` has nothing to resolve and
-    // the insert can land at either end. An earlier version of this wait
-    // asserted the text became "#workx" and caught the editor holding
-    // "x#work" instead. What the test actually needs is only that the insert
-    // happened and that the backspace undid it — which holds wherever the
-    // caret was, because ProseMirror always leaves it directly after the
-    // character it just inserted.
+    // The test used to click, type `x`, then send `{Backspace}`, resting on
+    // "ProseMirror always leaves the caret directly after the character it
+    // just inserted". That is not true in jsdom: CI failed with
+    // `expected 'x#wor' to be '#work'` — the `x` had landed at position 0
+    // while the caret sat at the end, so the backspace deleted the `k`. jsdom
+    // has no layout, `document.elementFromPoint` is stubbed to null and every
+    // Range rect is zero, so `posAtCoords` resolves nothing and a click places
+    // the caret nowhere in particular.
+    //
+    // **This fix is argued structurally, not demonstrated by reproduction, and
+    // that limit is worth stating.** The failure did not reproduce locally: 5
+    // scoped runs, 3 full-suite runs (one at load 24), and two deliberate
+    // attempts to force it by planting the caret at a hostile position — all
+    // green, with the OLD backspace code too. So "the new version fixes it"
+    // rests on the mechanism rather than on a red-to-green transition: the
+    // revert no longer READS the caret. Undo reverses the last transaction
+    // wherever it happened, so the class of failure CI hit cannot arise here,
+    // whether or not that class is reachable on this machine.
+    //
+    // Undo is also a real user gesture rather than a test-only escape hatch,
+    // so the path under test — edited, then returned to the seed, so `discard`
+    // purges — is still driven the way a user drives it. The `not.toBe` wait
+    // above keeps it honest: if the insert never landed, undo would have
+    // nothing to reverse and this test would pass vacuously.
+    await userEvent.click(el);
+    await userEvent.type(el, 'x');
     await waitFor(() => expect(el.textContent).not.toBe('#work'));
 
-    await userEvent.type(el, '{Backspace}');
-    // Fails HERE, in one second and naming the text it found, if the
-    // backspace lands wrong again — rather than surfacing five seconds later
-    // as an unexplained timeout on an assertion about `purge`.
+    act(() => {
+      handleRef.current?.editor?.commands.undo();
+    });
+    // Fails HERE, naming the text it found, rather than surfacing five seconds
+    // later as an unexplained timeout on an assertion about `purge`.
     await waitFor(() => expect(el.textContent).toBe('#work'));
 
     unmount();
