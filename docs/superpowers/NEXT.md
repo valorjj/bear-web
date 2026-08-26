@@ -708,19 +708,42 @@ reference-counted object URL. Offline, one device.
 - **Typing Markdown never parses as Markdown** — serializing a text node
   escapes it. Tests must seed; inserting code must insert a node.
 
-### K2. The Mac Mini — NOT STARTED
+### K2. The Mac Mini — SHIPPED 2026-08-26
 
-Upload endpoint, on-disk storage, auth, a 2 GB account quota, pull-on-demand.
-`bytes` and `createdAt` were added to `FileRecord` in K1 for this. The missing
--image placeholder already exists and is deliberately quiet rather than an
-error, because after K2 it is the ordinary look of an image whose bytes have
-not arrived.
+Spec: `docs/superpowers/specs/2026-08-26-k2-image-sync-design.md`.
+Plan: `docs/superpowers/plans/2026-08-26-k2-image-sync.md`.
 
-### K3. Resize and export — NOT STARTED
+`PUT`/`GET /files/:id`, bytes on disk under `IMAGE_ROOT`, metadata in
+`image_files`, upload driven by the sync engine after notes, lazy download on a
+miss. Its own 2 GiB quota.
+
+**Findings worth carrying forward:**
+
+- **K1 shipped a data-loss bug that K2 found.** `notes.duplicate` copies a
+  note's text, so two notes can reference one image while the file row names
+  only the original — and K1's boot sweep asked the OWNING note, so deleting
+  the image from that original destroyed the duplicate's copy. The sweep now
+  asks whether ANY note references the id.
+- **The engine's early return skipped image uploads.** An account whose only
+  change was a pasted screenshot sat unsynced until the user edited a note.
+- **The multi-tenancy guard had a gap**: it accepted a bare `user_id` on
+  `INSERT INTO` but not on `INSERT IGNORE INTO`, flagging a legitimate
+  statement. Widened, and re-verified that it still rejects a `SELECT` missing
+  its predicate.
+- **The API is not containerised.** Only MariaDB and the PDF renderer are, so
+  `IMAGE_ROOT` is a host path — outside the repo, and outside the
+  TCC-protected directories where a launchd job hangs rather than fails.
+- **An unanswered modal reads as an unstable element** in Playwright, not as a
+  modal: device B boots signed in with local notes and `AdoptNotesDialog`
+  intercepts every click until answered.
+
+### K3. Resize and export — NOT STARTED (was K3, unchanged)
 
 Drag-to-resize (a width in the Markdown, so it touches the schema), and images
 in Markdown (as a bundle), HTML (inlined) and PDF. The last is the hard one:
-the renderer is a separate container with deliberately no route off the host.
+the renderer is a separate container with deliberately no route off the host —
+and it now also has no route to `GET /files/:id`, which K3 must solve rather
+than assume.
 
 ### K4. The thumbnail — MOSTLY DONE IN K1
 

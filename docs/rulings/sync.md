@@ -200,3 +200,67 @@ it, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`,
 - **`AdoptNotesDialog` mounts unconditionally beside the account popover** and
   self-gates on `open`, rather than only mounting when the menu itself has
   been opened at least once.
+
+
+## Images (K2)
+
+- **Notes push BEFORE images.** Either order leaves a recoverable state — a
+  note whose image has not arrived shows the placeholder, and so does an image
+  whose note has not — so the order is chosen for a different reason: a quota
+  refusal on pixels must not be able to stop a note's own TEXT from ever
+  reaching the server. Text matters more than pixels. Pinned by a test that
+  records the call order, and falsified by swapping them.
+
+- **The engine's early return uploads images before returning.** It used to
+  exit as soon as no notes or tags were dirty, which skipped images entirely:
+  an account whose only change was a pasted screenshot sat unsynced until the
+  user happened to edit a note. Restoring that early return fails four tests.
+
+- **A refused image stays DIRTY and stays LOCAL.** Dropping it would destroy
+  the user's data because the server declined to hold a copy. One image
+  failing never aborts the others, and never aborts the sync.
+
+- **The image quota is its OWN 2 GiB and is never summed into `QUOTA_BYTES`.**
+  That one is 10 MiB and governs note TEXT; a single screenshot would exhaust
+  it two hundred times over.
+
+- **Bytes live on disk, metadata in MariaDB.** A `MEDIUMBLOB` would put
+  hundreds of megabytes of pixels into every `mysqldump` and churn the buffer
+  pool for data that is never queried. **`IMAGE_ROOT` is a host path, not a
+  Docker volume** — the API runs under launchd and only MariaDB and the PDF
+  renderer are containers. It must be outside the repo (a `git clean` would
+  take every image) and outside `~/Documents`, `~/Desktop` and `~/Downloads`,
+  which are TCC-protected: a launchd job reading one HANGS rather than fails.
+
+- **The file is written before the row.** A filesystem and a database cannot be
+  written atomically, so a crash between them leaves an unreferenced file —
+  invisible, costing disk. The reverse leaves a row promising bytes that do
+  not exist, which every client reads as a permanent 404.
+
+- **`GET /files/:id` answers the SAME 404 for "missing" and "not yours".**
+  Distinguishing them tells an attacker which ids exist.
+
+- **Upload is idempotent and never overwrites.** Ids are client-generated and
+  a retry after a dropped connection is ordinary rather than a conflict. An id
+  names one immutable image, so the first bytes win.
+
+- **Every refusal test asserts nothing landed on disk**, not merely the status.
+  A refusal that stores the file anyway is not a refusal.
+
+- **Download is lazy, and a failure is never remembered.** A 404 means the
+  owning device has not uploaded yet; a network error means we could not ask.
+  Neither is cached, which is the same reason `acquireObjectUrl` does not
+  cache a miss — a remembered failure strands the placeholder for the life of
+  the tab.
+
+- **A downloaded image is stored with an EMPTY `noteId` and is not marked
+  dirty.** It came from the server; re-uploading it would be a round trip for
+  nothing. The empty owner costs nothing because the boot sweep asks whether
+  ANY note references the id, not who owns it.
+
+- **The boot sweep asks whether ANY note references an image — never just the
+  owning note.** `notes.duplicate` copies a note's text verbatim, so two notes
+  can reference one image while the file row names only the original. K1
+  shipped the owner-only version, which destroyed the duplicate's copy when
+  the image was deleted from the original. Trashed notes count as references
+  too: a restored note must not come back broken.
