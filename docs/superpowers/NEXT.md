@@ -301,6 +301,56 @@ carrying forward rather than rediscovering:
   descendant of a heading containing a ProseMirror widget — measured across
   seven experiments. `⌘⌥F` is the keyboard and screen-reader route.
 
+### I. Note-list row redesign + row context menu — SHIPPED 2026-08-26
+
+The row became title → preview → thumbnail → a footer line carrying the pin and
+the date, which is where the date moved to (it used to sit between the title and
+the preview). `deriveSnippet` joins the body lines rather than returning the
+first alone, so the two reserved preview lines are actually filled.
+
+**Findings worth carrying forward:**
+
+- **The row draws a thumbnail, and at the time the app stored no images**, so it
+  was the first remote image URL in the note's own Markdown
+  (`src/features/notes/thumbnail.ts`) — which meant the list showed a picture
+  the editor still showed as raw monospace text. K1 closed that by rewiring it
+  to stored images, pulled forward from K4 because it turned out to be a privacy
+  hole rather than a cosmetic gap.
+- **A right-click does NOT select the row**, so every action is addressed by the
+  request's `noteId` rather than by the selection. J2's long-press inherited
+  this unchanged.
+- **The row menu is what let the resting pin go.** An unpinned row's pin became
+  hover-revealed because hover was no longer the only route to pinning — a
+  decision J2 then had to revisit for touch, where the menu's route is a long
+  press and therefore invisible.
+- **Two extractions came out of it:** `src/lib/useAnchoredMenu.ts` (placement,
+  focus, dismissal and the Tab trap, which `HeadingMenu`, `EditorContextMenu`
+  and `TableHandleMenu` each held a byte-identical copy of) and `useExportRunner`
+  in `src/features/export/`.
+- **A component defined inside a render body is a new type every render.**
+  `NoteRowMenu`'s `Item` was written there first, and this menu re-renders while
+  open (the PDF item's `pending` flag flips mid-export), which threw keyboard
+  focus out of the menu at the moment the user was reading it.
+
+### M9b. Callout blocks — SHIPPED 2026-08-27
+
+Spec: `docs/superpowers/specs/2026-08-27-m9b-callout-blocks-design.md`.
+
+Five types written as `> [!warning] Title` — the microsyntax GitHub and Obsidian
+core both render natively, chosen over the plugin's ` ```ad-warning ` form
+because that one degrades to a code block full of the user's prose in any reader
+that does not know it.
+
+**Findings worth carrying forward:**
+
+- **A callout is an ATTRIBUTE on `blockquote`, not a new node.** It is still a
+  blockquote, so the toolbar button, `Mod+Shift+B` and nesting all keep working.
+- **It opened with a corruption fix rather than a feature.** `> [!NOTE]`
+  serialized to `> \[!NOTE\]`, so merely opening and saving a note carrying a
+  GitHub alert rewrote it — and nothing in the suite could see it.
+- **Callouts deliberately do NOT collapse.** B1's "no blockquote folding" was
+  reopened in the brainstorm and upheld.
+
 ### B2. Drag-to-reorder headings — queued, unspecced
 
 Grab the badge to move a heading and its whole subtree, with a drop indicator.
@@ -661,7 +711,7 @@ was needed to start using either.
   constraints they qualify.
 
 
-## J. Mobile — J1 and J2a SHIPPED 2026-08-26, J2–J4 named and unscheduled
+## J. Mobile — J1, J2a, J2 and J3 SHIPPED; only J4 remains
 
 **The starting point was worse than "cramped".** Measured at 390×844 before
 anything was written: sidebar 240 + note list 320 + two resizers laid out wider

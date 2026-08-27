@@ -2,8 +2,14 @@
 
 A local-first, web-based Markdown notes app: **lightweight, fast, beautiful,
 easy to use, with image storage.** Three panes (tag sidebar / note list /
-editor), notes organized by inline hashtags rather than folders. No backend, no
-account — everything lives in the browser's IndexedDB.
+editor) on a desktop, one screen at a time on a phone; notes organized by
+inline hashtags rather than folders.
+
+**Local-first, but no longer backend-less.** IndexedDB is still the single
+source of truth and the app works offline exactly as it always did — but D
+added a server (`server/`, on the Mac Mini) with Google accounts and a sync
+protocol, and G moved PDF export onto it. This paragraph read "no backend, no
+account" until 2026-08-27, months after both shipped.
 
 **Bear is a reference, not a target.** The app was built as a Bear clone and M8
 treated Bear's measured geometry as the definition of correct. That ended at
@@ -11,8 +17,7 @@ M9a. `npm run measure` and the "Measured against the real Bear" section of
 `docs/design/DESIGN-bear-web.md` remain the only tooling that can see "renders
 wrong", so keep using them for self-comparison and regression — but **a
 measurement that diverges from Bear is no longer a defect on its own**, and
-"Bear does it this way" is not by itself an argument. Image storage is a wanted
-feature and is not yet scheduled.
+"Bear does it this way" is not by itself an argument.
 
 **Live:** https://valorjj.github.io/bear-web/
 **Spec:** `docs/superpowers/specs/2026-08-06-bear-web-design.md`
@@ -63,215 +68,47 @@ skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
 `npm run test:pdf`), 173 end-to-end tests. `main` is always green and
 auto-deploys.
 
-**G moved PDF export off the client entirely, and it is the first capability
-in this app that does not exist without an account.** It shipped because the
-browser's own print pipeline could not keep the promise: a print dialog gives
-the user a dozen ways to produce a document the app did not design — wrong
-paper, scaled, backgrounds stripped — and the reference app's PDF export
-ignores the selected theme outright, which is the gap G exists to close.
-`src/features/export/print.ts` is deleted. `requestPdf` POSTs the document
-`renderNoteHtml` already built to `POST /export/pdf`, an authenticated
-pass-through in front of a **separate Chromium container** (`server/pdf/`,
-`markflowing-pdf`) that is not reachable from the browser at all. The client
-still builds the document, and must: it reads the live theme off the cascade,
-and `server/` may import nothing from `src/` but `src/data/types.ts`. **The
-network is now needed for two things, not one** — sync since D2, and PDF
-export since G. Everything else still works offline exactly as before.
-`ExportMenu` marks the PDF item `aria-disabled` when signed out and names the
-reason in its accessible name. Four of the spec's five security controls are
-built; **control 4 ("the container has no route off the host") is NOT**, and
-the spec says so in place — `internal: true` denies egress and also kills the
-published port, so the API could never reach the renderer. See
-`docs/rulings/export.md` and `server/README.md`.
+**The per-sub-project narrative moved out of this file on 2026-08-27.**
+"What shipped, what we learned, and why in that order" lives in
+`docs/superpowers/NEXT.md`, and each sub-project's reasoning in its spec under
+`docs/superpowers/specs/`. This file ROUTES; it does not retell. It had grown
+to 993 lines — about 25k tokens loaded into every session — and roughly 250 of
+them were a history already written down twice elsewhere, including two
+paragraphs added the same day this was cut. If you want the story of A/B/C, D,
+G, H, I, J, K or M9b, open `NEXT.md`.
 
-**J3 fixed the editor's layout at 390px, and its most useful output was three
-things it disproved.** The virtual keyboard was entirely unhandled: the
-formatting toolbar sat at y=788 with an iPhone keyboard covering the bottom
-~336px, so it was hidden at exactly the moment the user was typing.
-`index.html` now asks for `interactive-widget=resizes-content` and
-`src/lib/visibleViewport.ts` is the fallback — **and arithmetic, not feature
-detection, is what stops the two double-applying**: where the browser honours
-it the LAYOUT viewport shrinks too, so `innerHeight` and `visualViewport` agree
-and the computed inset is naturally 0. `window.innerHeight` is the wrong number
-for anything that must stay on screen, and `useAnchoredMenu` went through the
-same fix — it was deciding a menu "fits below" into space the user cannot see.
+**What survives here is only what a fresh session would get WRONG without it:**
+the table above, the operational traps below, the harness entry points, the
+toolchain surprises, the architecture boundaries, and the rulings index. The
+test for a new paragraph is "would someone make a mistake without this?", never
+"is this interesting?"
 
-**Tables squeezed to mid-word breaks (`colum` / `n one`) and now scroll — but
-three plausible ways to write that do nothing at all, and each was measured
-rather than reasoned about.** `min-width` on a cell is IGNORED under
-`table-layout: fixed` and renders byte-identically to no rule; `min-width` on
-the table loses to Tiptap's inline `min-width: 50px`; `min-width` on `col`
-loses to its inline `25px`. Only `col { min-width: … !important }` works, which
-is the legitimate case for the keyword — outranking a third-party inline style.
-An earlier draft would have driven it from a variable set by `TableHandles`,
-which only mounts while the caret is inside that table, so every other table
-would have squeezed.
+**Do not read the lettered rows as milestone ids.** The lettering is
+`NEXT.md`'s. B is the sub-project M9a's spec named **M9c**; B2 is a follow-up
+named only once B shipped, queued but unspecced — and its ordering against
+anything else is an open question, not a ruling.
 
-**Three things J3 asserted turned out to be false, and saying so is the point.**
-`NEXT.md`'s "top pill overlaps the note title" was stale — measured flush, since
-`pt-12` reserves exactly the pill's height. The spec's predicted reference-set
-churn does not exist: `npm run measure` on `main` and on the branch produced
-byte-identical output, and the staleness that WAS there belonged to J2a, I and
-M9b. And `coarse:pb-32` grew the toolbar's reserve until nothing could be made
-to fail with it absent, so it came back out — the strip reaches 68px against
-`pb-24`'s 96, and the guard was itself checked by overgrowing the strip to
-`h-32`, where it fails at 96 < 140. **The toolbar now grows its INK on a coarse
-pointer**, which supersedes J2's "expand the hit area, never the ink" rule in
-the one place it had to: `overflow-x-auto` forces a non-visible `overflow-y`, so
-a pseudo-element is generated and then clipped. **J4 remains.**
+**Two capabilities need the network, and everything else still works offline
+exactly as before:** sync (since D2) and PDF export (since G). PDF export is
+the first capability in this app that does not exist without an account;
+`ExportMenu` marks the item `aria-disabled` when signed out and names the
+reason in its accessible name.
 
-**J2 made every affordance reachable by a finger, and it opened by finding
-that three of its own tests could not fail.** Six controls were hover- or
-right-click-only: the note row's pin and its menu, the heading fold gutter, the
-table handles, the image grip and the editor's context menu. Reveals now rest
-visible under `(hover: none)`; target size and the long-press gesture are gated
-on `(pointer: coarse)`; the two queries stay separate so each rule reads as the
-reason it exists. The editor's context menu deliberately gets NO touch route —
-every action in it is reachable from `BottomToolbar`, so it is a second route to
-capabilities that already have one rather than the pointer-only route
-`accessibility.md` forbids, and the OS keeps its own Cut/Copy/Look Up callout
-inside the `contenteditable`.
+### Operational traps on this machine
 
-**The bug worth remembering is that a long press opened the row menu and it
-vanished in the same frame.** Every mobile browser replays a touch as
-`mousedown`/`mouseup`/`click` for pointer-unaware pages, and `useAnchoredMenu`
-dismisses on an outside `mousedown` in the CAPTURE phase — which the element's
-own `onClickCapture` cannot reach, and which `stopPropagation` cannot stop
-either, because it only stops OTHER NODES while both listeners sit on
-`document`. It takes `stopImmediatePropagation`, gated on the pointer type so a
-real right-click does not have its follow-up click eaten. **No unit test could
-see it**; it took `Input.dispatchTouchEvent` over a CDP session, because
-`page.touchscreen` offers only `tap` and a synthesised `pointerdown` proves the
-handler runs rather than that the gesture reaches it. Three tests were vacuous
-until a fault injection: the fold fixture opened on a heading that is a note's
-title and therefore never foldable; a Playwright `name` is a case-insensitive
-SUBSTRING, so `'Pin'` matched the sidebar's **Pinned**; and the table test
-passed against a sabotaged build twice, because `.click()` leaves the table
-hovered and Chromium applies STICKY `:hover` on tap. `BottomToolbar` is the one
-surface J2 could not fix: it is `overflow-x-auto`, which forces a non-visible
-`overflow-y`, so a 44px `::after` is generated and then clipped to the 36px
-strip — the utility emits and does nothing. A taller strip is a reflow, and
-reflow is J3's. **J3 and J4 remain**; see `docs/superpowers/NEXT.md`.
-
-**J1 made the app usable on a phone, and the starting point was worse than
-"cramped".** At 390px the sidebar (240) plus the note list (320) plus two
-resizers laid out wider than the screen, so the editor pane sat entirely
-off it — and `<main>`'s `overflow-hidden` meant `scrollWidth === clientWidth
-=== 390`, so the page could not be scrolled to reach it. A phone user could
-tap a note and never see one. There were no responsive rules at all: the only
-`@media` blocks in `src/styles/` were `prefers-color-scheme` and
-`prefers-reduced-motion`.
-
-There are now three modes behind `src/lib/useLayoutMode.ts` — `phone` below
-640, `tablet` to 1023, `desktop` at 1024 and up, where the layout is
-unchanged. The phone's screen is DERIVED from `selectedNoteId` rather than
-stored, `src/lib/useOverlayHistory.ts` gives the drawer and the editor screen
-one history entry each so Android's back button and iOS's edge-swipe work
-without a router, and the tag sidebar becomes a `Dialog` drawer rendering
-`SidebarContent` — the same component the desktop pane renders. **Mobile is
-four sub-projects; J1, J2a, J2 and J3 are done**: J2a did the phone header's
-proportions and targets only, and J2 finished touch parity. J3 fixed the editor's own layout. Only J4
-remains — platform chrome: safe areas, `100dvh` on the shell, installability,
-pull-to-refresh. See
-`docs/rulings/design-tokens-and-layout.md`'s J1 section and
-`docs/superpowers/NEXT.md`'s open table.
-
-**I redesigned the note-list row and gave it a right-click menu.** The row is
-now title → preview → thumbnail → a footer line carrying the pin and the date,
-which is where the date moved to (it used to sit between the title and the
-preview). `deriveSnippet` joins the body lines rather than returning the first
-one alone, so the two reserved preview lines are actually filled. The row also
-draws a THUMBNAIL — and this app stores no images, so it is the first remote
-image URL in the note's own Markdown (`src/features/notes/thumbnail.ts`),
-which means **the list shows a picture the editor still shows as raw
-monospace text**. That inconsistency is accepted deliberately and recorded in
-`docs/rulings/design-tokens-and-layout.md`; it closes when image storage
-ships. The row menu (`NoteRowMenu.tsx`, right-click or `Shift+F10`) carries
-Pin/Unpin, Duplicate, Copy text, an Export group and the destructive route —
-Delete in an active scope, Restore plus Delete forever in the trash, the
-latter still routed through `ConfirmDialog`. That menu is also what let the
-resting pin go: an unpinned row's pin is now hidden until the row is hovered
-or focused, because hover is no longer the only route to pinning. A right-click does NOT select the
-row, so every action is addressed by the request's `noteId`. Two extractions
-came out of it: `src/lib/useAnchoredMenu.ts` (placement, focus, dismissal and
-the Tab trap, which `HeadingMenu`, `EditorContextMenu` and `TableHandleMenu`
-each held a byte-identical copy of) and `useExportRunner` in
-`src/features/export/`.
-
-**D reverses the "no backend, no account" premise above.** D1 shipped
-`server/`: a Hono service on Node against its own MariaDB container on the Mac
-Mini, with Google OAuth2 accounts (Authorization Code + PKCE) and an opaque,
-revocable session cookie. GitHub and Naver were part of the original idea but
-were not built in D1 — only Google exists today. **D2 shipped the sync
-protocol: note and tag data now crosses the network**, encrypted in transit,
-to the account the signed-in user controls — a per-account revision counter,
-`GET`/`POST /sync` with tombstones and a 90-day sweep, and a `(conflict)` note
-holding the losing edit of a last-write-wins collision. Local-first is
-unchanged: IndexedDB stays the source of truth, sync is automatic and quiet,
-and the app works exactly as well offline as it did before D2. See
-`docs/rulings/sync.md` for the constraints no test enforces. The UI offers
-sign-in, the signed-in identity, sync status, and sign-out and nothing
-else — `DELETE /account` exists as an endpoint with no client affordance,
-deliberately: it is the spec's day-one requirement, but a wrapper reachable
-only from its own tests was removed.
-The boot `GET /me` is gated on a locally stored "has signed in before" hint
-(`bear-web:account:hasSession`), so a visitor who never signed in makes no
-cross-origin request at all — without the gate `e2e/smoke.spec.ts` was red on
-`net::ERR_NAME_NOT_RESOLVED` and every offline user got a console error. The
-server binds `127.0.0.1` and the database publishes `127.0.0.1:3308`: the
-rate limiter trusts `cf-connecting-ip` verbatim, so the tunnel must be the only
-path in. D is NOT in the A/B/C queue.
-Decisions already taken: local-first is KEPT (IndexedDB stays the source of
-truth, the server is a sync target), identity is per-provider with no
-email-based auto-linking, and A shipped first. Constraints and the reasoning
-are in `docs/superpowers/NEXT.md`; a browser cannot speak the MySQL wire
-protocol, so the server is the project. See `server/README.md` for how to run
-it — including `server/.env.local` and `npm run server:dev:local` for local
-development, since `server/.env` holds the production origins the live tunnel
-depends on and the two servers cannot run at once.
-**Production runs as a launchd service** (`com.markflowing.api`) as of
-2026-08-24, controlled by the `server:service:*` npm scripts. Its `KeepAlive`
-is unconditional, so **`lsof -ti:8787 | xargs kill` no longer stops it** —
-launchd restarts it within ~10s and your local server then cannot bind. Run
-`npm run server:service:stop` before `server:dev:local`.
-
-**The last five rows are not numbered milestones yet**, and the lettering is
-`docs/superpowers/NEXT.md`'s, which holds the order and the reasoning for it.
-B is the sub-project M9a's spec named **M9c**; do not read the letters as new
-milestone ids. **B2 is not part of that spec** — it is a follow-up named only
-once B shipped, queued but unscheduled. Its ordering relative to C is an open
-question, not a ruling — nobody has decided whether either blocks the other.
-**M9b callout blocks shipped on 2026-08-27.** Five types written as
-`> [!warning] Title` — the callout microsyntax GitHub and Obsidian core both
-render natively, chosen over the plugin's ` ```ad-warning ` form because that
-one degrades to a code block full of the user's prose in any reader that does
-not know it. A callout is an ATTRIBUTE on `blockquote`, not a new node: it is
-a blockquote, so the toolbar button, `Mod+Shift+B` and nesting all keep
-working. **It opened with a corruption fix rather than a feature** —
-`> [!NOTE]` serialized to `> \[!NOTE\]`, so merely opening and saving a note
-carrying a GitHub alert rewrote it, and nothing in the suite could see it.
-Callouts deliberately do NOT collapse: B1's "no blockquote folding" was
-reopened in the brainstorm and upheld. See
-`docs/superpowers/specs/2026-08-27-m9b-callout-blocks-design.md`.
-
-**Image storage is no longer entirely unscheduled: K1 shipped on 2026-08-26.**
-Pasting or dropping a screenshot into a note now stores one downscaled WebP in
-IndexedDB (`files`, the table that had existed unused since M1), references it
-as `![](files/<id>.webp)` — a relative path, so sync needs no rewriting and an
-exported folder is a portable Markdown bundle — and renders it through a
-`StoredImage` node whose object URLs are reference-counted in
-`src/lib/objectUrls.ts`. It works entirely offline on one device. **K2 (the Mac
-Mini as a sync target), K3 (drag-to-resize and images in export) and K4 are
-not built**; K4's thumbnail rewire was pulled forward into K1 because it turned
-out to be a privacy hole rather than a cosmetic gap — see below.
-
-**The historical note below is kept because its reasoning still applies to
-K2–K4.**
-
-**Image storage is named in this project's goal and had never been
-scheduled** — not by a milestone and not by the three sub-projects above. It is
-larger than all three together and none of them block it. Treat its absence
-from this table as an open decision, not as a ruling.
+- **Production runs as a launchd service** (`com.markflowing.api`), controlled
+  by the `server:service:*` npm scripts. Its `KeepAlive` is unconditional, so
+  **`lsof -ti:8787 | xargs kill` no longer stops it** — launchd restarts it
+  within ~10s and your local server then cannot bind. Run
+  `npm run server:service:stop` before `server:dev:local`.
+- **`server/.env` holds the production origins the live tunnel depends on, and
+  the two servers cannot run at once.** Local development uses
+  `server/.env.local` via `npm run server:dev:local`. See `server/README.md`.
+- **The server binds `127.0.0.1` and the database publishes `127.0.0.1:3308`.**
+  The rate limiter trusts `cf-connecting-ip` verbatim, so the tunnel must be
+  the only path in.
+- **`server/` may import nothing from `src/` but `src/data/types.ts`** — see
+  Architecture boundaries, where it is enforced rather than merely stated.
 
 **Three further Playwright entry points exist and are deliberately not in that
 count, because they assert nothing.** Both drive the fixed corpus in
@@ -327,8 +164,24 @@ npm run format       # Prettier
 npm run build
 ```
 
-All six must pass before any commit. `npm run shots` and `npm run measure` are
-not part of the gate — see above.
+All six must pass before any commit.
+
+**`npm run shots` and `npm run measure` are NOT local gates**, and the two are
+handled differently on purpose:
+
+- **`measure` is checked in CI.** It needs a production build and a real
+  browser, so locally it is in `test:e2e`'s cost class rather than the cheap
+  tier — but CI has already built and installed both by the time it runs, so
+  there it is nearly free. `ci.yml` re-runs it and fails on a diff, because
+  `docs/design/measurements.md` is committed, is meant to record the SHIPPED
+  geometry, and silently drifted three days and three sub-projects before
+  anyone noticed. "Exists, unrun, silently stale" is the worst state for a
+  reference file: it looks like coverage. If it fails on a diff you did not
+  cause, regenerate and commit — and check `main` produces the same numbers
+  before blaming your own branch.
+- **`shots` stays on demand.** 240 screenshots have no meaningful pass/fail and
+  nothing can diff them but a person. Run it when you change something visual;
+  count the files, do not trust the exit code.
 
 ### The full suite is expensive; budget it
 
@@ -899,7 +752,7 @@ user_id FROM identities WHERE email = ?`, which reads `user_id` without
 
 ## Rules that must not be silently reversed
 
-**The rulings live in `docs/rulings/`, not here.** 275 bullets across 13 files,
+**The rulings live in `docs/rulings/`, not here.** 398 bullets across 13 files,
 every one a live constraint. They are NOT loaded into context automatically —
 this index is. Its job is to tell you which file to open before you touch
 something, so read the row before you write the diff, not after.

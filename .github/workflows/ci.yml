@@ -94,6 +94,30 @@ jobs:
       - name: End-to-end tests
         run: npm run test:e2e
 
+      # `npm run measure` is deliberately NOT a local commit gate — it needs a
+      # production build and a real browser, so it is in `test:e2e`'s cost class
+      # rather than the cheap tier, and this machine is a fanless Mac Mini. Here
+      # it is nearly free: the build and the browser are already in place above.
+      #
+      # It exists because `docs/design/measurements.md` is committed, is meant
+      # to record the SHIPPED geometry, and silently drifted three days and
+      # three sub-projects (J2a's 16px search field, I's row height, M9b's extra
+      # toolbar control) before anyone noticed — and then only by accident,
+      # while chasing a diff that turned out not to be J3's. "Exists, unrun,
+      # silently stale" is the worst state for a reference file, because it
+      # looks like coverage.
+      #
+      # Every value in it traces to CSS arithmetic (18.85 = 1.45 x 13,
+      # 23.04 = 1.6 x 14.4) and both fonts are bundled webfonts with identical
+      # metrics on every platform, so ubuntu and macOS should agree. That was
+      # reasoned, not measured on both — if this step ever fails with a diff
+      # nobody caused, THAT is the assumption breaking, and the fix is to scope
+      # the comparison rather than to delete it.
+      - name: Measurements are current
+        run: |
+          npm run measure
+          git diff --exit-code docs/design/measurements.md docs/design/measurements.json
+
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4

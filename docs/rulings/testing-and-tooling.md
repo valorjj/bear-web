@@ -87,6 +87,14 @@ because a restyle made it fail.
   and when a diff appears, run `measure` on `main` too before attributing it:
   J3's output was byte-identical to `main`'s, so none of that drift was J3's.
 
+- **A source-scanning assertion cannot tell a command from a COMMENT about the
+  command.** `scripts/ciCoverage.test.ts` asserted `ci.yml` contains
+  `'npm run measure'`; deleting the step left the test green, because the
+  paragraph explaining why the step exists says those words too. It now reads a
+  comment-stripped view (`commands`), and every "CI actually runs this"
+  assertion in that file must use it. The same trap applies to any test that
+  greps prose-bearing source for a symbol it expects to be CALLED.
+
 - **Source-scanning tests live in `scripts/`, not `src/`.** `tsconfig.app.json`
   deliberately omits Node types (`"types": ["vite/client", "vitest/globals"]`,
   `"include": ["src"]`); `tsconfig.node.json` already includes `scripts`.

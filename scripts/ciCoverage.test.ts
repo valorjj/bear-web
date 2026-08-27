@@ -3,6 +3,21 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+
+/**
+ * `workflow` with its YAML comments stripped.
+ *
+ * Every assertion below that means "CI actually RUNS this" must read this and
+ * not `workflow`. A `toContain('npm run measure')` against the raw file passes
+ * against the PROSE explaining why the step exists — demonstrated by deleting
+ * the step and watching the test stay green. That is the same near-vacuous
+ * shape `docs/rulings/testing-and-tooling.md` collects: an assertion that
+ * cannot distinguish the thing from a mention of the thing.
+ */
+const commands = workflow
+  .split('\n')
+  .filter((line) => !/^\s*#/.test(line))
+  .join('\n');
 const viteConfig = readFileSync('vite.config.ts', 'utf8');
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
   scripts: Record<string, string>;
@@ -56,15 +71,34 @@ describe('CI runs every suite the default `npm test` skips', () => {
   });
 
   it('invokes that script from the CI workflow', () => {
-    expect(workflow, 'ci.yml must run the pdf suite explicitly').toContain('npm run test:pdf');
+    expect(commands, 'ci.yml must run the pdf suite explicitly').toContain('npm run test:pdf');
+  });
+
+  it('checks the committed measurements are current', () => {
+    // `docs/design/measurements.md` is committed and records the shipped
+    // geometry, but `npm run measure` is not a local gate — so without this
+    // step it drifts silently, and it did: three days and three sub-projects.
+    // Nothing else in the repo would notice the step being dropped.
+    expect(commands, 'ci.yml must re-run npm run measure').toContain('npm run measure');
+    expect(
+      commands,
+      'ci.yml must FAIL on a measurements diff, not merely regenerate them',
+    ).toContain('git diff --exit-code docs/design/measurements.md');
+  });
+
+  it('runs the measurement check AFTER the browser is installed', () => {
+    const install = commands.indexOf('playwright install');
+    const measure = commands.indexOf('npm run measure');
+    expect(install).toBeGreaterThan(-1);
+    expect(measure).toBeGreaterThan(install);
   });
 
   it('runs it AFTER the Playwright browser is installed', () => {
     // `chromium.launch()` throws `Executable doesn't exist` otherwise, and the
     // ordering is the whole reason this step is separate rather than folded
     // into the unit-test step.
-    const install = workflow.indexOf('playwright install');
-    const run = workflow.indexOf('npm run test:pdf');
+    const install = commands.indexOf('playwright install');
+    const run = commands.indexOf('npm run test:pdf');
 
     expect(install, 'the workflow must install a browser').toBeGreaterThan(-1);
     expect(run).toBeGreaterThan(install);
