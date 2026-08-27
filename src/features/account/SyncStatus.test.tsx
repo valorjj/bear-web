@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { renderWithI18n } from '@/i18n/testing';
 
-import { SyncStatus } from './SyncStatus';
+import { syncSummary, SyncStatus } from './SyncStatus';
 import type { SyncStatusValue } from './useSync';
 
 const CASES: { status: SyncStatusValue; message: string | null; expected: string }[] = [
@@ -37,5 +37,37 @@ describe('SyncStatus', () => {
 
     expect(screen.getByText('Not backed up yet')).toBeInTheDocument();
     expect(screen.queryByText('Notes are backed up')).toBeNull();
+  });
+});
+
+describe('syncSummary', () => {
+  const t = (key: string): string => key;
+
+  it('is resting only when a sync has actually completed and nothing is running', () => {
+    // `resting` is what decides whether the account button shows a badge at
+    // all. Getting it wrong in one direction puts a permanent dot on the
+    // chrome that the eye learns to ignore; in the other it hides the states
+    // the badge exists for.
+    expect(syncSummary({ status: 'idle', message: null, lastSyncedAt: 1000 }, t).resting).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    ['a sync in flight', { status: 'syncing', lastSyncedAt: 1000 }],
+    ['being offline', { status: 'offline', lastSyncedAt: 1000 }],
+    ['an error', { status: 'error', lastSyncedAt: 1000 }],
+    ['signed in but never synced', { status: 'idle', lastSyncedAt: null }],
+  ] as const)('is not resting for %s', (_what, input) => {
+    expect(syncSummary({ ...input, message: null }, t).resting).toBe(false);
+  });
+
+  it('gives the badge the same sentence the menu line shows', () => {
+    // The two surfaces must not drift: the badge is a colour, and the
+    // button's accessible name is the only thing that says what it means.
+    const summary = syncSummary({ status: 'error', message: 'Backup paused', lastSyncedAt: 1 }, t);
+
+    expect(summary.label).toBe('Backup paused');
+    expect(summary.tone).toBe('danger');
   });
 });

@@ -36,6 +36,12 @@ void openDatabase().then((status) => {
   // the user has not been given any context for is the wrong trade.
   void persistStorage();
 
+  // Removed BEFORE `createRoot`, not left for React to clear. React does empty
+  // the container on its first render, but that happens after the root is
+  // created and after `render` is called — and `index.html`'s indicator is a
+  // real element with a running animation until then.
+  document.getElementById('boot')?.remove();
+
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App status={status} />

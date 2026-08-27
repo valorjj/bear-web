@@ -34,6 +34,15 @@ export interface NoteEditorProps {
    */
   seedText?: string;
   /**
+   * Set ONLY for a note the app just created, so the caret lands on the title
+   * line and the user can name it by typing.
+   *
+   * Distinct from `seedText`, which is absent for a note created outside a tag
+   * scope — the common case, and precisely the one that needs the caret. The
+   * two cannot be collapsed into one flag.
+   */
+  autoFocus?: boolean;
+  /**
    * Called with a tag name when the user Mod-clicks its pill. Returns whether
    * the app acted on it; `false` makes the gesture behave like a plain click.
    */
@@ -69,6 +78,7 @@ const pendingDiscards = new Map<string, ReturnType<typeof setTimeout>>();
 export function NoteEditor({
   note,
   seedText,
+  autoFocus = false,
   onActivateTag,
   handleRef: externalHandleRef,
 }: NoteEditorProps): ReactElement {
@@ -387,6 +397,7 @@ export function NoteEditor({
     <div className="flex h-full flex-col">
       <RichEditor
         initialMarkdown={initialMarkdown}
+        autoFocus={autoFocus}
         onChange={onChange}
         onBlur={flush}
         ariaLabel={t('editor.textarea')}

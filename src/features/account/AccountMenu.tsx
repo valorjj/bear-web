@@ -7,8 +7,18 @@ import { Popover } from '@/ui/Popover';
 
 import { AdoptNotesDialog } from './AdoptNotesDialog';
 import { useSessionValue } from './SessionContext';
-import { Status, SyncStatus } from './SyncStatus';
-import { useSync } from './useSync';
+import { Status, syncSummary, SyncStatus, type StatusTone } from './SyncStatus';
+import { useSync, type SyncStatusValue } from './useSync';
+
+/**
+ * The badge's fill, keyed by the same tone `SyncStatus` uses for its dot, so
+ * the two surfaces cannot disagree about what a state looks like.
+ */
+const BADGE_TONE: Record<StatusTone, string> = {
+  accent: 'bg-accent',
+  faint: 'bg-faint',
+  danger: 'bg-danger',
+};
 
 /** Matches the previous `w-64`, kept so the visual size is unchanged. */
 const MENU_WIDTH = 256;
@@ -151,6 +161,28 @@ export function AccountMenu(): ReactElement {
     return () => window.removeEventListener('resize', place);
   }, [open]);
 
+  /**
+   * The account button's corner badge, or `null` when there is nothing worth
+   * saying.
+   *
+   * Signed out is `null` on purpose: there is no sync to report, and a badge
+   * on a signed-out account would read as a problem rather than as an absence.
+   * The RESTING signed-in state is `null` too — "backed up, nothing happening"
+   * is the state the app is in almost all the time, and a permanent dot for it
+   * would train the eye to ignore the one that matters. What remains is every
+   * state a user would actually want surfaced without opening a menu to hunt
+   * for it: syncing, offline, an error, and signed-in-but-never-synced.
+   */
+  const badge: { label: string; tone: StatusTone; state: SyncStatusValue } | null = (() => {
+    if (state.status !== 'signedIn') return null;
+
+    const summary = syncSummary(
+      { status: sync.status, message: sync.message, lastSyncedAt: sync.lastSyncedAt },
+      t,
+    );
+    return summary.resting ? null : { ...summary, state: sync.status };
+  })();
+
   return (
     <div className="relative">
       <button
@@ -158,11 +190,26 @@ export function AccountMenu(): ReactElement {
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={t('account.menu')}
+        // The badge is a colour, and a colour alone is not a status. The
+        // button's accessible name carries the same sentence the menu's own
+        // status line shows, from the same `syncSummary` call, so a screen
+        // reader hears what a sighted user sees without opening the menu.
+        aria-label={badge === null ? t('account.menu') : `${t('account.menu')}, ${badge.label}`}
         onClick={() => setOpen((previous) => !previous)}
-        className="text-muted hover:bg-hover hover:text-text ease-bear flex size-8 items-center justify-center rounded-md transition-colors duration-[var(--bear-duration-fast)]"
+        className="text-muted hover:bg-hover hover:text-text ease-bear relative flex size-8 items-center justify-center rounded-md transition-colors duration-[var(--bear-duration-fast)]"
       >
         <Icon glyph={UserRound} size="md" />
+        {badge !== null ? (
+          <span
+            aria-hidden="true"
+            data-sync-badge={badge.state}
+            // `ring-bg`, not a gap: the dot sits on the icon's corner and
+            // needs to read as separate from it whatever the icon is doing
+            // underneath — a hairline of pane background does that at any
+            // theme, where a margin only moves the overlap somewhere else.
+            className={`absolute top-1 right-1 size-1.5 rounded-full ring-2 ring-bg ${BADGE_TONE[badge.tone]} ${badge.state === 'syncing' ? 'animate-pulse' : ''}`}
+          />
+        ) : null}
       </button>
 
       {open && placement !== null ? (

@@ -441,8 +441,9 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   not yet been told about.
 
 
-- **A note-list preview STRIPS block-level Markdown. The opposite rule was
-  retired on 2026-08-26, not caveated.** `deriveSnippet` used to preview the
+- **A note-list preview STRIPS Markdown, block and inline alike. The opposite
+  rule was retired on 2026-08-26 and again on 2026-08-27, not caveated.**
+  `deriveSnippet` used to preview the
   raw text verbatim, on the reasoning that the row should show what the user
   typed. On a note containing a table that produced
   `hi | a | b | c | | --- | --- | --- |` — which says nothing about the note
@@ -457,9 +458,38 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   blockquote arrows — are trimmed from the FRONT of a line only, so a `#`
   inside prose is still a tag and still previews as one.
 
-  **Inline marks are deliberately left alone.** `**bold**` and `` `code` ``
-  read as light emphasis rather than as structure, and removing them means
-  parsing rather than trimming a prefix.
+  **Inline marks go too, and the rule that kept them was wrong.** It said
+  `**bold**` and `` `code` `` read as light emphasis rather than as structure.
+  What it never anticipated is that a COLOURED highlight does not serialize to
+  a light delimiter at all: `Highlight.ts`'s `renderMarkdown` emits real inline
+  HTML, because `==` carries no colour slot. A real note therefore previewed as
+  `hi <mark class="hl-green">abcd</mark> hi, this is good.` — more characters
+  of attribute than of note. Once the tag has to go, there is no principled
+  line that keeps `**` and drops `<mark>`.
+
+  `stripInline` removes, in this order: code spans, autolinks, raw inline HTML
+  tags, links (keeping their text), `==highlight==`, `~~strike~~`, then
+  emphasis longest-delimiter-first. **The order is load-bearing** — code spans
+  must be unwrapped before a `*` inside one can read as emphasis, and the
+  autolink rule must precede the raw-tag rule or `<https://…>` is deleted as a
+  tag. It is a sequence of trims, not a Markdown parse: it runs for every row
+  on every keystroke of a search.
+
+  **An UNPAIRED delimiter is left alone**, and every pair requires a non-space
+  character inside it — CommonMark's own rule. A half-typed `**` is a note
+  being written, and deleting one side of a pair silently drops the user's
+  characters. Underscore emphasis additionally refuses to fire intra-word, so
+  `some_var_name` survives.
+
+  **A backslash escape is held aside under a NUL sentinel while the rules run**,
+  or `\*star\*` reads as an emphasis pair and the stripper deletes the very
+  characters the backslash exists to keep.
+
+  **A `query` is matched against the STRIPPED lines**, not the raw ones.
+  `HighlightedText` searches the snippet `deriveSnippet` returns, so a line
+  chosen because it matched must still contain the match after stripping —
+  otherwise the row highlights nothing and reads as a false positive. Nobody
+  searches for `<mark`.
 
 
 ## Stored images (K1)

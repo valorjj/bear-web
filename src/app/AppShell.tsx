@@ -95,6 +95,22 @@ export function AppShell(): ReactElement {
     if (seed !== null && selectedNoteId !== seed.id) setSeed(null);
   }, [seed, selectedNoteId]);
 
+  // The note the app just created, so its editor can take the caret.
+  //
+  // A SEPARATE flag from `seed`, not a reuse of it: `seed` is only set for a
+  // note created inside a tag scope, and the note created outside one — the
+  // common case, and exactly the one where nothing on screen moved — carries
+  // no seed at all.
+  //
+  // Cleared the moment the selection leaves it, on the same reasoning as the
+  // seed above: without this, returning to that note later in the session
+  // would grab focus again for a note the user merely re-opened.
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (justCreatedId !== null && selectedNoteId !== justCreatedId) setJustCreatedId(null);
+  }, [justCreatedId, selectedNoteId]);
+
   // Guards against a double-click (or any other double-fire) on "New note":
   // `create` is async, and without this a second click before the first
   // `await` resolves creates a second note that never gets an editor mounted
@@ -119,6 +135,7 @@ export function AppShell(): ReactElement {
 
       const created = await notes.create(seedText);
       setSeed(seedText === '' ? null : { id: created.id, text: seedText });
+      setJustCreatedId(created.id);
       select(created.id);
     } finally {
       creatingRef.current = false;
@@ -419,6 +436,7 @@ export function AppShell(): ReactElement {
                   key={selectedNote.id}
                   note={selectedNote}
                   seedText={seed?.id === selectedNote.id ? seed.text : undefined}
+                  autoFocus={justCreatedId === selectedNote.id}
                   onActivateTag={handleActivateTag}
                 />
               )}

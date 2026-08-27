@@ -58,13 +58,60 @@ describe('deriveSnippet', () => {
   it('leaves a hash INSIDE prose alone, so a tag still reads as one', () => {
     // Only a LEADING marker is a block marker. A `#` mid-line is a tag or a
     // number sign and belongs in the preview.
-    expect(deriveSnippet('Note\nplanning #work today')).toBe('planning #work today');
+    expect(deriveSnippet('Note\nplanning #work with **care**')).toBe('planning #work with care');
   });
 
-  it('leaves inline marks alone', () => {
-    // They read as light emphasis rather than as structure, and removing them
-    // means parsing rather than trimming a prefix.
-    expect(deriveSnippet('Note\nsome **bold** and `code`')).toBe('some **bold** and `code`');
+  it('strips the inline HTML a coloured highlight serializes to', () => {
+    // The complaint that produced this rule, verbatim from a real note: the
+    // row printed `hi <mark class="hl-green">abcd</mark> hi, this is good.`
+    // The tag is syntax; the words inside it are the note.
+    const text = 'TEST\nhi <mark class="hl-green">abcd</mark> hi, this is good.';
+
+    expect(deriveSnippet(text)).toBe('hi abcd hi, this is good.');
+  });
+
+  it.each([
+    ['bold with asterisks', 'some **bold** here', 'some bold here'],
+    ['bold with underscores', 'some __bold__ here', 'some bold here'],
+    ['italic with an asterisk', 'some *soft* here', 'some soft here'],
+    ['italic with an underscore', 'some _soft_ here', 'some soft here'],
+    ['bold italic', 'some ***loud*** here', 'some loud here'],
+    ['a code span', 'call `render()` twice', 'call render() twice'],
+    ['a multi-backtick code span', 'call ``a ` b`` twice', 'call a ` b twice'],
+    ['strikethrough', 'was ~~wrong~~ right', 'was wrong right'],
+    ['a plain highlight', 'the ==important== bit', 'the important bit'],
+    ['a coloured highlight', 'the <mark class="hl-blue">important</mark> bit', 'the important bit'],
+    ['a link, keeping its text', 'see [the docs](https://example.com) now', 'see the docs now'],
+    ['a bare autolink', 'see <https://example.com> now', 'see https://example.com now'],
+    ['an escaped asterisk', 'a literal \\*star\\* here', 'a literal *star* here'],
+    ['nested marks', '**bold with `code`** here', 'bold with code here'],
+  ])('strips %s', (_what, body, expected) => {
+    expect(deriveSnippet(`Note\n${body}`)).toBe(expected);
+  });
+
+  it('leaves an unpaired delimiter alone rather than eating the line', () => {
+    // A half-typed `**` is text the user is in the middle of writing, not
+    // syntax. Deleting one side of a pair would silently drop characters.
+    expect(deriveSnippet('Note\n2 * 3 = 6 and a ** here')).toBe('2 * 3 = 6 and a ** here');
+  });
+
+  it('still finds a query that the stripping moved', () => {
+    // `HighlightedText` searches the STRIPPED snippet for the query, so a
+    // snippet chosen because it matched must still contain the match after
+    // stripping — otherwise the row highlights nothing and reads as a false
+    // positive. Selection therefore has to run on stripped lines too.
+    const text = 'TEST\nhi <mark class="hl-green">abcd</mark> tail';
+
+    expect(deriveSnippet(text, 'abcd')).toContain('abcd');
+  });
+
+  it('matches a query against the stripped text, not the raw syntax', () => {
+    // Nobody searches for `<mark`, and a snippet is not a source view. With no
+    // line matching, this falls through to the ordinary joined snippet — the
+    // point being that the tag never selected a line on its own.
+    expect(deriveSnippet('TEST\nplain body\nhi <mark>abcd</mark>', 'mark')).toBe(
+      'plain body hi abcd',
+    );
   });
 
   it('joins the body lines into one run of prose', () => {

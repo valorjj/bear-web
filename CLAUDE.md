@@ -56,9 +56,9 @@ feature and is not yet scheduled.
 | G export: PDF, rendered server-side                               | complete |
 | M9b callout blocks                                                | deferred |
 
-1925 unit tests (plus 127 server tests, 55 of which are integration tests that
+2004 unit tests (plus 127 server tests, 55 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 146 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 148 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **G moved PDF export off the client entirely, and it is the first capability

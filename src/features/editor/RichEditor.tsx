@@ -41,6 +41,23 @@ export interface RichEditorHandle {
 export interface RichEditorProps {
   /** Read once, at mount. This component is expected to be keyed by note id. */
   initialMarkdown: string;
+  /**
+   * Puts the caret on the note's FIRST line at mount.
+   *
+   * Read once, like `initialMarkdown`, and for the same reason: this component
+   * is keyed by note id, so a mount is a note switch. Flipping this on a live
+   * instance does nothing, deliberately — focus that can be re-triggered by a
+   * re-render is focus that fights the user.
+   *
+   * `'start'` rather than `'end'`: the first line IS the title (`deriveTitle`
+   * reads it), and a note created inside a tag scope is seeded `\n#tag`, so
+   * `'end'` would land the caret after the tag on line two and typing would
+   * extend the TAG instead of naming the note.
+   *
+   * Off by default. Selecting an existing row must not steal focus from the
+   * search field the user is typing into.
+   */
+  autoFocus?: boolean;
   onChange: () => void;
   onBlur: () => void;
   ariaLabel: string;
@@ -123,6 +140,7 @@ function applyHighlightChoice(editor: Editor, result: HighlightChoiceResult): vo
  */
 export function RichEditor({
   initialMarkdown,
+  autoFocus = false,
   onChange,
   onBlur,
   ariaLabel,
@@ -259,6 +277,7 @@ export function RichEditor({
   const editor = useEditor({
     extensions,
     content: parseMarkdown(initialMarkdown),
+    autofocus: autoFocus ? 'start' : false,
     onUpdate: onChange,
     onBlur,
     editorProps: {
