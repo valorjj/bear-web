@@ -1,10 +1,15 @@
 import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from 'react';
 
+import { visibleBottom } from './visibleViewport';
+
 /**
  * Gap kept between a menu and both the viewport's edges AND its anchor —
  * the literal `4` every one of the four call sites used before this was named.
  * Also what bounds `maxHeight`: a menu exactly `MENU_GAP` from top and bottom
- * can never be taller than `100vh - 2 * MENU_GAP`.
+ * can never be taller than `100dvh - 2 * MENU_GAP`. `dvh` rather than `vh`
+ * because on mobile `100vh` is the LARGE viewport and ignores the browser's
+ * collapsing chrome, so a menu clamped against it can still run off the
+ * bottom of the screen.
  */
 export const MENU_GAP = 4;
 
@@ -91,7 +96,11 @@ export function useAnchoredMenu<E extends HTMLElement>(
     // either placement would overflow whichever this picked.
     const menuRect = el.getBoundingClientRect();
 
-    const fitsBelow = rect.bottom + MENU_GAP + menuRect.height <= window.innerHeight;
+    // `visibleBottom()`, NOT `window.innerHeight`. A virtual keyboard does not
+    // shrink the layout viewport on iOS, so `innerHeight` reports a full screen
+    // while a third of it is covered — and this menu would then decide it
+    // "fits below" into space the user cannot see.
+    const fitsBelow = rect.bottom + MENU_GAP + menuRect.height <= visibleBottom();
     const top = fitsBelow
       ? rect.bottom + MENU_GAP
       : Math.max(MENU_GAP, rect.top - MENU_GAP - menuRect.height);

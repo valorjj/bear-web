@@ -153,7 +153,11 @@ export function NoteRowMenu({
       style={{
         top: position.top,
         left: position.left,
-        maxHeight: `calc(100vh - ${MENU_GAP * 2}px)`,
+        // `dvh`, not `vh`. On mobile `100vh` is the LARGE viewport: it
+        // ignores the browser's own collapsing chrome, so a tall menu clamped
+        // against it can still run past the bottom of the screen. `dvh` is
+        // the viewport as it actually is right now.
+        maxHeight: `calc(100dvh - ${MENU_GAP * 2}px)`,
       }}
       className="bg-surface border-border shadow-popover fixed z-20 min-w-48 overflow-y-auto rounded-md border p-1"
     >
