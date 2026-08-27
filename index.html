@@ -4,7 +4,26 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      `interactive-widget=resizes-content` asks the browser to shrink the LAYOUT
+      viewport when the virtual keyboard opens, rather than leaving it at full
+      height with a third of the screen covered. Where it is honoured the
+      editor's floating toolbar stays above the keyboard with no JavaScript at
+      all (J3).
+
+      It is a request, not a guarantee: iOS may ignore it.
+      `src/lib/visibleViewport.ts` is the fallback, and the two cannot
+      double-apply because when the browser HAS resized, the inset that hook
+      computes is zero.
+
+      Nothing in the test suite can prove the browser honoured this — Playwright
+      has no virtual keyboard. `scripts/sourceLint.test.ts` asserts the token is
+      present, which catches deletion and nothing more.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+    />
     <title>bear-web</title>
     <!--
       Runs before first paint, and must stay inline for that reason.

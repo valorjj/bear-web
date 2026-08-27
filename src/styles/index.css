@@ -149,6 +149,18 @@ body {
 @custom-variant touch (@media (hover: none));
 
 /*
+ * "The pointer is a fingertip" (J2's second query, first used in J3).
+ *
+ * Separate from `touch:` above on purpose, and J2's ruling says why: a rule
+ * that GROWS A TARGET should say it is about a fingertip, and a rule that stops
+ * hiding a control should say it is about hover. They agree on every device
+ * this app will meet; the point is that each reads as the reason it exists.
+ *
+ * `src/lib/useCoarsePointer.ts` is the JavaScript half of the same pair.
+ */
+@custom-variant coarse (@media (pointer: coarse));
+
+/*
  * A tap target reaches 44px; the drawn control does not move (J2).
  *
  * The expansion is a pseudo-element, so the toolbar stays `h-9`, no menu
@@ -238,6 +250,44 @@ body {
     [role='menuitemcheckbox'] {
       min-height: var(--bear-touch-target);
     }
+  }
+
+  /*
+   * A fade at the trailing edge of a horizontally scrollable strip (J3).
+   *
+   * `BottomToolbar` has always scrolled and was simply CLIPPED at the right
+   * edge — a hard cut with nothing to say more existed. The fade is the hint.
+   *
+   * `mask-image` rather than a gradient overlay: an overlay would need to be
+   * painted in the strip's own background colour, and this app has sixteen
+   * themes. A mask fades whatever is underneath to transparent and is
+   * therefore theme-independent by construction.
+   *
+   * The opaque stops are `currentColor`, not a hex value. A mask reads only
+   * the ALPHA channel, so which colour it is cannot matter as long as it is
+   * opaque — and `scripts/sourceLint.test.ts` forbids a colour literal outside
+   * `tokens.css`, correctly, because it cannot tell a mask's alpha carrier
+   * from a real colour and should not have to.
+   *
+   * It is NOT animated away at the scroll's end. `scroll-timeline` would do
+   * that and is not supported widely enough to depend on; a permanent fade on
+   * both edges reads as "this strip scrolls", which is the whole message.
+   */
+  .bear-scroll-fade {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      currentColor var(--bear-scroll-fade-width),
+      currentColor calc(100% - var(--bear-scroll-fade-width)),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      currentColor var(--bear-scroll-fade-width),
+      currentColor calc(100% - var(--bear-scroll-fade-width)),
+      transparent 100%
+    );
   }
 
   /*

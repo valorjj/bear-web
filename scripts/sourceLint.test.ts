@@ -438,6 +438,29 @@ describe('focus', () => {
   });
 });
 
+describe('the viewport meta', () => {
+  const html = readFileSync('index.html', 'utf8');
+
+  /*
+   * The one thing about J3's keyboard handling that source can check.
+   *
+   * `interactive-widget=resizes-content` asks the browser to shrink the layout
+   * viewport when the virtual keyboard opens, which is what keeps the editor's
+   * floating toolbar above it without JavaScript. Playwright has no virtual
+   * keyboard, so NOTHING in the e2e suite can prove the browser honoured it —
+   * `e2e/phoneEditor.spec.ts` drives the JS fallback and would stay green with
+   * this token misspelled.
+   *
+   * This catches deletion and a typo in the token. It cannot catch "the browser
+   * ignored it", and the spec's real-device checklist exists for that.
+   */
+  it('asks the browser to resize content for the virtual keyboard', () => {
+    const meta = /<meta\s+name="viewport"[\s\S]*?content="([^"]+)"/.exec(html);
+    expect(meta, 'no viewport meta tag found').not.toBeNull();
+    expect(meta![1]).toContain('interactive-widget=resizes-content');
+  });
+});
+
 describe('the pre-paint theme script', () => {
   const html = readFileSync('index.html', 'utf8');
   const roster = readFileSync('src/styles/themes.ts', 'utf8');

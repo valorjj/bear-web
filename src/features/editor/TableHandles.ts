@@ -196,7 +196,7 @@ function handlesLayer(
   view: EditorView,
   pos: number,
   labels: NonNullable<TableHandlesOptions['labels']>,
-): { dom: HTMLElement; measure: () => void } {
+): { dom: HTMLElement; measure: () => void; destroy: () => void } {
   const layer = document.createElement('div');
   layer.className = 'bear-table-handles';
   // Chrome, not content. `contentEditable = 'false'` keeps it out of anything
@@ -204,9 +204,45 @@ function handlesLayer(
   // buttons alone, in CSS, so the layer cannot shadow the prose beneath it.
   layer.contentEditable = 'false';
 
+  /*
+   * The scroll container Tiptap wraps every table in, which J3 made scrollable.
+   *
+   * The handle layer is a widget at the position BEFORE the table, so it is a
+   * SIBLING of this wrapper and lives outside it — which is why the CSS reveal
+   * rule reads `:has(+ .tableWrapper:hover)`. Being outside means two things
+   * once the wrapper can scroll: the handles do not move with the cells they
+   * point at, and they are not clipped when those cells scroll out of view.
+   * `measure` below answers both.
+   */
+  let scrollTarget: HTMLElement | null = null;
+  let frame: number | null = null;
+
+  const onScroll = (): void => {
+    // Coalesced to one measure per frame. A transaction fires a handful of
+    // times a second; a scroll fires on every frame of a fling, and each
+    // measure reads layout for every row and column in the table.
+    if (frame !== null) return;
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      measure();
+    });
+  };
+
   const measure = (): void => {
     const table = tableElement(view, pos);
     if (table === null) return;
+
+    const wrapper = table.closest('.tableWrapper');
+    const container = wrapper instanceof HTMLElement ? wrapper : table;
+    if (container !== scrollTarget) {
+      scrollTarget?.removeEventListener('scroll', onScroll);
+      scrollTarget = container;
+      scrollTarget.addEventListener('scroll', onScroll, { passive: true });
+    }
+    // What the user can actually SEE of the table. Equal to the table's own
+    // box until it is scrolled, so nothing below changes behaviour for a
+    // table that fits.
+    const clip = container.getBoundingClientRect();
 
     // DIRECT children only. `tableCell`'s content is `block+`, so a nested
     // table is schema-legal even though GFM cannot express one — and a bare
@@ -249,7 +285,11 @@ function handlesLayer(
       const button = buttons[index];
       if (button === undefined) return;
       const rect = row.getBoundingClientRect();
-      button.style.left = `${bounds.left - origin.left - ROW_GAP}px`;
+      // Pinned to the VISIBLE left edge, not the table's. They are the same
+      // until the table is scrolled; after that, tracking `bounds.left` would
+      // walk the row handles left across the prose, because this layer sits
+      // outside the scroll container and nothing clips it.
+      button.style.left = `${clip.left - origin.left - ROW_GAP}px`;
       button.style.top = `${rect.top + rect.height / 2 - origin.top}px`;
     });
 
@@ -257,13 +297,26 @@ function handlesLayer(
       const button = buttons[rows.length + index];
       if (button === undefined) return;
       const rect = cell.getBoundingClientRect();
-      button.style.left = `${rect.left + rect.width / 2 - origin.left}px`;
+      const centre = rect.left + rect.width / 2;
+      // Hidden when its column has scrolled out of sight. `visibility`, not
+      // `display`: the button keeps its box and its place in the tab order, so
+      // a keyboard user's focus is not thrown out of the layer by a scroll.
+      button.style.visibility = centre < clip.left || centre > clip.right ? 'hidden' : '';
+      button.style.left = `${centre - origin.left}px`;
       button.style.top = `${bounds.top - origin.top}px`;
     });
   };
 
   measure();
-  return { dom: layer, measure };
+  return {
+    dom: layer,
+    measure,
+    destroy: () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      scrollTarget?.removeEventListener('scroll', onScroll);
+      scrollTarget = null;
+    },
+  };
 }
 
 declare module '@tiptap/core' {
@@ -399,6 +452,7 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
      * plugin having to stash anything on the element.
      */
     const measurers = new Map<HTMLElement, () => void>();
+    const releasers = new Map<HTMLElement, () => void>();
     const measureAll = (): void => {
       for (const measure of measurers.values()) measure();
     };
@@ -416,8 +470,13 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
               Decoration.widget(
                 pos,
                 (view) => {
-                  const { dom, measure } = handlesLayer(view, pos, labels);
+                  const { dom, measure, destroy } = handlesLayer(view, pos, labels);
                   measurers.set(dom, measure);
+                  // Held beside the measurer so the widget's own `destroy`
+                  // below can release the layer's scroll listener. Without
+                  // this a table scrolled and then left keeps a listener on
+                  // DOM ProseMirror has already discarded.
+                  releasers.set(dom, destroy);
                   return dom;
                 },
                 {
@@ -434,6 +493,8 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
                   ignoreSelection: true,
                   destroy(dom) {
                     measurers.delete(dom as HTMLElement);
+                    releasers.get(dom as HTMLElement)?.();
+                    releasers.delete(dom as HTMLElement);
                   },
                 },
               ),
@@ -497,6 +558,8 @@ export const TableHandles = Extension.create<TableHandlesOptions>({
             update: measureAll,
             destroy() {
               window.removeEventListener('resize', measureAll);
+              for (const release of releasers.values()) release();
+              releasers.clear();
               measurers.clear();
             },
           };

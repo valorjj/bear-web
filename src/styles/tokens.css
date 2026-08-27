@@ -75,6 +75,21 @@
    */
   --bear-touch-target: 44px;
 
+  /*
+   * How far a scrollable strip's edge fades (J3). Wide enough to read as a
+   * fade rather than as a rendering artefact, narrow enough not to grey out a
+   * glyph that is fully in view.
+   */
+  --bear-scroll-fade-width: 12px;
+
+  /*
+   * The narrowest a table column may become before the table scrolls instead
+   * (J3). 8rem holds two columns inside a 390px phone pane without scrolling
+   * and sends three or more to the scroll container, which is the right
+   * trade: two columns at 128px are readable, three at 92px are not.
+   */
+  --bear-table-column-min: 8rem;
+
   /* Editor typography, bound to the M8 preference sliders. */
   --bear-font-size: 16px;
   --bear-line-height: 1.6;
