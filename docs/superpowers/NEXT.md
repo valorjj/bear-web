@@ -26,21 +26,27 @@ believe the table and fix this file.
 
 | Open | State |
 | --- | --- |
-| **J2 touch parity** | not started — the largest real gap |
-| **J3 the editor on a phone** | not started |
+| **J3 the editor on a phone** | not started — the largest real gap |
 | **J4 platform chrome** | not started |
 | **B2 drag-to-reorder headings** | queued, unspecced |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
 
-**Mobile is the gap worth naming out loud.** J1 turned "unusable" into
-"usable" and J2a fixed the phone header's proportions, but "easy to use" — a
-clause of the stated goal — is still not true on a phone. J2 is where the
-touch rulings get made, and a wrong ruling there (long-press versus a visible
-affordance) is expensive to reverse once every surface has copied it.
+**Mobile is still the gap worth naming out loud.** J1 turned "unusable" into
+"usable", J2a fixed the phone header's proportions, and J2 made every
+affordance reachable by a finger. What is left is the editor itself: at 390px
+the top control pill still overlaps the note title, the virtual keyboard is
+unhandled, and `BottomToolbar` cannot reach a 44px target without the reflow
+J2 refused to make. That is J3.
 
 **Nothing blocks anything.** B2 and K4 are small enough to slot in anywhere;
-J3 depends on nothing but J1; J2's ordering ahead of J3 is a recommendation,
-not a dependency.
+J3 depends on nothing but J1.
+
+**J3 inherits one item by name.** `BottomToolbar` is `overflow-x-auto`, which
+forces a non-visible `overflow-y`, so a pseudo-element hit area is generated
+and then clipped to the 36px strip. The utility was applied, measured, and
+removed. Reaching 44px there means a taller strip, which reflows a floating
+toolbar whose reserved space (`RichEditor`'s `pb-24`) is asserted in
+`e2e/appearance.spec.ts`.
 
 ### E. Editor affordances — **SHIPPED 2026-08-24**
 
@@ -699,17 +705,46 @@ the platform back gesture works without a router.
   prose-floor test's ~96px editor pane became unreachable, because
   `maxPaneWidth` now stops the resizers squeezing it below 160.
 
-### J2. Touch parity — NOT STARTED
+### J2. Touch parity — SHIPPED 2026-08-27
+
+Spec: `docs/superpowers/specs/2026-08-27-j2-touch-parity-design.md`.
+Rulings: `docs/rulings/design-tokens-and-layout.md`,
+`docs/rulings/testing-and-tooling.md`.
 
 **J2a shipped separately on 2026-08-26** — the phone header's proportions and
-its 44px targets — and is NOT the whole of J2. Everything below is still open.
+its 44px targets — and was not the whole of J2.
 
-Every hover-only affordance and every right-click route needs a touch
-equivalent, and tap targets need to reach 44px. The note row's pin shipped
-hover-revealed on 2026-08-26 with the row context menu as its non-hover route;
-on a phone there is no right-click either, so long-press is the likely answer
-and J2 is where that gets ruled on. The fold chevron, the table handles and the
-resizer's hit area are in the same position.
+The ruling this sub-project existed to make: **hybrid, not one gesture.**
+Editor-gutter controls rest visible on a device that cannot hover; the note-list
+row gets long-press. Long-press is not an option inside a `contenteditable`,
+where the OS already owns that gesture for select-word-and-callout, and iOS
+Safari raises no `contextmenu` from a long press at all. The row's pin rests
+visible AND long-press ships — neither replaces the other, because long-press is
+invisible and the other four row actions have no touch route without it.
+
+**Findings worth carrying forward:**
+
+- **A long press opens a menu and the browser's own synthetic mouse burst
+  closes it in the same frame.** Every mobile browser replays a touch as
+  `mousedown`/`mouseup`/`click`, and `useAnchoredMenu` dismisses on an outside
+  `mousedown` in the CAPTURE phase. It takes `stopImmediatePropagation` —
+  `stopPropagation` only stops other NODES, and both listeners are on
+  `document` — gated on the pointer type, or a real right-click loses the click
+  on the menu item the user then chooses.
+- **The spec's menu-item plan was wrong and was corrected mid-flight.** A 44px
+  `::after` on a 26px menu item overlaps its neighbours, so a near-miss selects
+  the wrong command — Delete among them. Menu items grow `min-height` instead,
+  applied by explicit ARIA role in one declaration across ten menus, and the
+  seven-file class extraction the spec called for was never performed.
+- **Three tests could not fail until a fault injection said so**, each for a
+  different reason: a note's first block is its title and is never foldable; a
+  Playwright `name` is a case-insensitive substring; and neither `.click()` nor
+  a tap can prove a `(hover: none)` rule, because Chromium applies sticky
+  `:hover` on touch.
+- **`hasTouch: true` alone flips both `(hover: none)` and `(pointer: coarse)`
+  in Chromium**, with or without `isMobile`. Verified with a throwaway probe
+  before the design was written, because if it had come back false none of this
+  would have been testable.
 
 ### J3. The editor on a phone — NOT STARTED
 

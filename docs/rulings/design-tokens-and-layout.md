@@ -837,6 +837,97 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   DESKTOP row; its phone rows are ~44px, and at 32/13 the drawer read as a
   shrunken desktop sidebar on an iPhone.
 
+## Touch parity (J2)
+
+- **Two queries, and collapsing them into one is a regression even though no
+  device separates them.** `(hover: none)` gates the REVEALS — it is the
+  literal statement "this control can never be revealed", which is the defect
+  J2 exists to fix. `(pointer: coarse)` gates TARGET SIZE and the long-press
+  gesture — the literal statement "the pointer is a fingertip". They agree on
+  every device this app will meet; the point is that each rule reads as the
+  reason it exists. `src/lib/useCoarsePointer.ts` exports `HOVER_NONE_QUERY`
+  solely so a unit test can prove the two have not been merged by a
+  well-meaning simplification.
+
+- **The `touch:` variant is DECLARED, not borrowed.**
+  `@custom-variant touch (@media (hover: none))` in `src/styles/index.css`.
+  Tailwind may ship a built-in for this query under some name; using it would
+  tie the app's touch behaviour to a minor upgrade's naming, and the failure
+  mode of a variant that stops matching is Tailwind's usual one — no warning,
+  no error, the utility simply never emitted. That is exactly how
+  `hover:bg-hover` stayed dead from M4 to M5.5.
+
+- **Hit areas grow; ink does not — EXCEPT in menus, where it is reversed, and
+  the reversal is the correct call.** `touch-target` / `touch-target-y` expand
+  a control to 44px with a pseudo-element, so no pane reflows and
+  `npm run measure`'s 27 surfaces keep their numbers. A menu is the one place
+  that is wrong: menu items are a VERTICAL list about 26px tall, so a 44px
+  overlay on each overlaps its neighbours by 9px top and bottom, and a
+  near-miss then selects the WRONG command — which in `NoteRowMenu` includes
+  Delete. Overlapping targets are strictly worse than small ones. Menu items
+  therefore grow `min-height`, which is safe precisely because a popover
+  growing taller reflows nothing outside itself.
+
+- **The menu rule is applied by ARIA ROLE, and that only works because these
+  roles are explicit.** One declaration covers `[role='menuitem']`,
+  `[role='menuitemradio']` and `[role='menuitemcheckbox']` — 40 attributes
+  across ten menus, all written into the JSX. An IMPLICIT role would match
+  nothing: `docs/rulings/testing-and-tooling.md` records the audit where
+  `[role="region"]` silently matched no `<section aria-label>` at all. Do not
+  extend this rule to a role the app does not write out.
+
+- **Two clusters cannot reach 44 in both axes, and both say so where they are
+  declared.** `BottomToolbar`'s buttons are 32px wide at a 34px pitch, and the
+  fold gutter's toggle and badge sit exactly adjacent at `-3rem` and `-1.5rem`
+  — so a 44px-wide expansion would put each inside its neighbour. They land at
+  32×44 and 24×44 respectively. 24px still clears WCAG 2.5.8 (AA); the 44 this
+  project usually holds is 2.5.5 (AAA) and Apple's HIG figure, and
+  `Button.tsx` cited the wrong one of those two for a milestone.
+
+- **`BottomToolbar` cannot carry the hit-area utility at all, and the reason is
+  a hard CSS blocker rather than an oversight.** The strip is
+  `overflow-x-auto`, and CSS forces `overflow-y` to a non-visible value
+  whenever `overflow-x` is not visible — the computed pair measures
+  `auto`/`auto`. A 44px `::after` on a 28px button inside a 36px strip is
+  therefore generated at its full height and then CLIPPED to the strip, so it
+  receives no tap the ink would not have received anyway: the utility emits and
+  does nothing. It was applied, measured, and removed again. The only route to
+  44px there is a taller strip, which reflows a floating toolbar whose reserved
+  space (`RichEditor`'s `pb-24`) is asserted in `e2e/appearance.spec.ts` — J3's
+  work. `TopControls` is the same shape WITHOUT the overflow and does carry it.
+
+- **The row pin rests visible on touch AND long-press ships; neither replaces
+  the other.** Sub-project I hid the resting pin because "the row menu is
+  another route to pinning". On touch that route is a long press, which is
+  invisible, so leaning on it alone would make the most common row action
+  undiscoverable — and long-press is required regardless, because Duplicate,
+  Copy text, Export and Delete have no other touch route. The accepted cost:
+  the row's bottom-left 44px pins rather than selects. On a ~300×90 row that is
+  a corner, and an unreachable pin is worse than a corner that pins.
+
+- **The editor's context menu has NO touch route, deliberately, and the
+  decision lapses if anything is added to it.** Every action it carries is
+  reachable from `BottomToolbar`, and its table operations additionally from
+  `TableHandleMenu`, whose handles rest visible under the rule above. So it is
+  a second route to capabilities that already have one, not the pointer-only
+  route to a real capability that `docs/rulings/accessibility.md` forbids. The
+  OS keeps its own long-press callout — Cut, Copy, Look Up, Share — inside the
+  `contenteditable`, which is what a phone user actually wants there. Add an
+  action to `EditorContextMenu` with no `BottomToolbar` twin and this ruling is
+  void.
+
+- **A long press must swallow the synthetic mouse burst, with
+  `stopImmediatePropagation` and only for touch.** Every mobile browser replays
+  a touch as `mousedown`/`mouseup`/`click` so pointer-unaware pages keep
+  working, and `useAnchoredMenu` dismisses on an outside `mousedown` in the
+  CAPTURE phase — so the menu a press opened closed in the same frame and the
+  gesture appeared to do nothing. The element's own `onClickCapture` cannot
+  help, because a capture listener on `document` runs strictly before anything
+  on the element; and `stopPropagation` cannot either, because it only stops
+  OTHER NODES while both listeners sit on `document`. It must be gated on the
+  pointer type: swallowing after a real right-click eats the user's click on
+  the menu item they then choose.
+
 ## The boot indicator
 
 - **`#root` must never be empty while the app is opening.** Until 2026-08-27 it

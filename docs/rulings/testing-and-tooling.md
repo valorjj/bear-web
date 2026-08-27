@@ -15,6 +15,39 @@ any Playwright keyboard shortcut aimed at a Tiptap/ProseMirror binding; any
 after any local merge; and any test whose expectation you are about to edit
 because a restyle made it fail.
 
+- **A Playwright `name` is a case-insensitive SUBSTRING by default, and the
+  failure reads as "element not found".** `getByRole('button', { name: 'Pin' })`
+  matched the sidebar's **Pinned** smart list rather than the note row's pin,
+  and because the sidebar is a closed drawer on a phone but a visible pane on a
+  desktop, the same locator resolved to different elements in the two blocks of
+  `e2e/touch.spec.ts` — passing on touch and failing on a pointer, which reads
+  exactly like a broken media query. Pass `exact: true` whenever the accessible
+  name is a prefix of another control's.
+
+- **`.click()` drives the MOUSE, and a tap is no better, so neither can prove a
+  `(hover: none)` rule.** `e2e/touch.spec.ts`'s table-handle test passed
+  against a build with the resting rule inverted **twice**: `.click()` leaves
+  the table hovered so `:has(+ table:hover)` matches, and
+  `page.touchscreen.tap()` fails the same way because Chromium applies STICKY
+  `:hover` to a tapped element on a touch device and holds it until something
+  else is tapped. Place the caret with the KEYBOARD when asserting that
+  something is visible without hover.
+
+- **A long press cannot be driven by `locator.dispatchEvent`, and CDP is the
+  honest route.** `page.touchscreen` offers `tap` and nothing else. A
+  synthesised `pointerdown` proves the handler runs but not that the gesture
+  reaches it — the same mistake as `{ force: true }` in `e2e/pdfExport.spec.ts`,
+  an event no user can produce. `Input.dispatchTouchEvent` over a
+  `context.newCDPSession(page)` makes Chromium generate genuine `pointer`
+  events carrying `pointerType: 'touch'`, and it is what caught the
+  synthetic-mouse dismissal bug that no unit test could see.
+
+- **A note's FIRST block is its title and is never foldable**, so a fixture
+  opening on `## Heading` carries no fold toggle and every assertion about the
+  gutter fails as "element not found" rather than as a missing rule. Seed a
+  plain title line first. `e2e/appearance.spec.ts`'s fold-gutter fixture says
+  the same thing at its own call site; `e2e/touch.spec.ts` learned it again.
+
 - **Source-scanning tests live in `scripts/`, not `src/`.** `tsconfig.app.json`
   deliberately omits Node types (`"types": ["vite/client", "vitest/globals"]`,
   `"include": ["src"]`); `tsconfig.node.json` already includes `scripts`.

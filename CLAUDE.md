@@ -50,6 +50,7 @@ feature and is not yet scheduled.
 | I note-list row redesign + row context menu                       | complete |
 | J1 responsive shell: phone, tablet, desktop                       | complete |
 | J2a phone header proportions and 44px targets                     | complete |
+| J2 touch parity                                                   | complete |
 | K1 image capture and display, locally                             | complete |
 | K2 image sync: the Mac Mini as an image store                     | complete |
 | K3 image resize, and images in every export                       | complete |
@@ -82,6 +83,39 @@ the spec says so in place — `internal: true` denies egress and also kills the
 published port, so the API could never reach the renderer. See
 `docs/rulings/export.md` and `server/README.md`.
 
+**J2 made every affordance reachable by a finger, and it opened by finding
+that three of its own tests could not fail.** Six controls were hover- or
+right-click-only: the note row's pin and its menu, the heading fold gutter, the
+table handles, the image grip and the editor's context menu. Reveals now rest
+visible under `(hover: none)`; target size and the long-press gesture are gated
+on `(pointer: coarse)`; the two queries stay separate so each rule reads as the
+reason it exists. The editor's context menu deliberately gets NO touch route —
+every action in it is reachable from `BottomToolbar`, so it is a second route to
+capabilities that already have one rather than the pointer-only route
+`accessibility.md` forbids, and the OS keeps its own Cut/Copy/Look Up callout
+inside the `contenteditable`.
+
+**The bug worth remembering is that a long press opened the row menu and it
+vanished in the same frame.** Every mobile browser replays a touch as
+`mousedown`/`mouseup`/`click` for pointer-unaware pages, and `useAnchoredMenu`
+dismisses on an outside `mousedown` in the CAPTURE phase — which the element's
+own `onClickCapture` cannot reach, and which `stopPropagation` cannot stop
+either, because it only stops OTHER NODES while both listeners sit on
+`document`. It takes `stopImmediatePropagation`, gated on the pointer type so a
+real right-click does not have its follow-up click eaten. **No unit test could
+see it**; it took `Input.dispatchTouchEvent` over a CDP session, because
+`page.touchscreen` offers only `tap` and a synthesised `pointerdown` proves the
+handler runs rather than that the gesture reaches it. Three tests were vacuous
+until a fault injection: the fold fixture opened on a heading that is a note's
+title and therefore never foldable; a Playwright `name` is a case-insensitive
+SUBSTRING, so `'Pin'` matched the sidebar's **Pinned**; and the table test
+passed against a sabotaged build twice, because `.click()` leaves the table
+hovered and Chromium applies STICKY `:hover` on tap. `BottomToolbar` is the one
+surface J2 could not fix: it is `overflow-x-auto`, which forces a non-visible
+`overflow-y`, so a 44px `::after` is generated and then clipped to the 36px
+strip — the utility emits and does nothing. A taller strip is a reflow, and
+reflow is J3's. **J3 and J4 remain**; see `docs/superpowers/NEXT.md`.
+
 **J1 made the app usable on a phone, and the starting point was worse than
 "cramped".** At 390px the sidebar (240) plus the note list (320) plus two
 resizers laid out wider than the screen, so the editor pane sat entirely
@@ -98,12 +132,11 @@ stored, `src/lib/useOverlayHistory.ts` gives the drawer and the editor screen
 one history entry each so Android's back button and iOS's edge-swipe work
 without a router, and the tag sidebar becomes a `Dialog` drawer rendering
 `SidebarContent` — the same component the desktop pane renders. **Mobile is
-four sub-projects; J1 is done and J2a is a slice of J2, not the whole of
-it**: J2 is touch parity (hover-only affordances, long-press, 44px targets —
-J2a did the phone header's proportions and targets only), J3 the editor on a
-phone (virtual keyboard, floating toolbars), J4 platform chrome (safe areas,
-`100dvh`, installability). **This is the largest remaining gap between the app
-and its stated goal**: "easy to use" is not yet true on a phone. See
+four sub-projects; J1, J2a and J2 are done**: J2a did the phone header's
+proportions and targets only, and J2 finished touch parity. J3 (the editor on a
+phone — virtual keyboard, floating toolbars) and J4 (platform chrome — safe
+areas, `100dvh`, installability) remain, and they are now the largest gap
+between the app and its stated goal. See
 `docs/rulings/design-tokens-and-layout.md`'s J1 section and
 `docs/superpowers/NEXT.md`'s open table.
 
