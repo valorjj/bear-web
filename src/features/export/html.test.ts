@@ -625,7 +625,7 @@ describe('callouts in an export', () => {
     // here: it would export with `data-callout` set and no rule to match it,
     // which is a plain quote wearing an attribute.
     const document_ = renderNoteHtml(
-      { title: 'T', text: NOTE, updatedAt: 0 },
+      { title: 'T', text: NOTE },
       Object.fromEntries(EXPORT_TOKEN_NAMES.map((name) => [name, 'VALUE'])),
     );
 
@@ -636,7 +636,7 @@ describe('callouts in an export', () => {
 
   it('asks for every callout token, so none silently falls back', () => {
     const document_ = renderNoteHtml(
-      { title: 'T', text: NOTE, updatedAt: 0 },
+      { title: 'T', text: NOTE },
       Object.fromEntries(EXPORT_TOKEN_NAMES.map((name) => [name, `VALUE-${name}`])),
     );
 

@@ -199,6 +199,45 @@ const SCROLL_NOTE = [
   ]).flat(),
 ].join('\n');
 
+/**
+ * M9b's own shot: all five callout types in one frame, plus an unrecognised
+ * marker and a plain quote beneath them.
+ *
+ * The last two rows are the point of the fixture rather than filler. A
+ * screenshot of five tinted panels proves the palette; only a frame that also
+ * carries a quote and a marker outside the roster proves that neither of them
+ * invented a colour.
+ */
+const CALLOUT_NOTE = [
+  '# 배포 전 점검',
+  '',
+  '> [!info] 무엇을 확인하나',
+  '>',
+  '> 배포 직전에 한 번씩 훑어보는 목록입니다.',
+  '',
+  '> [!tip] 더 빠르게',
+  '>',
+  '> 스크립트로 묶어두면 두 번째부터는 한 줄입니다.',
+  '',
+  '> [!success] 통과',
+  '>',
+  '> 테스트와 타입 검사가 모두 초록입니다.',
+  '',
+  '> [!warning] 백업 전에 확인',
+  '>',
+  '> 이 작업은 되돌릴 수 없습니다.',
+  '',
+  '> [!danger] 계정 삭제',
+  '>',
+  '> 서버에 있던 메모도 함께 지워집니다.',
+  '',
+  '> [!사내공지] 로스터에 없는 표시',
+  '>',
+  '> 색을 지어내지 않고 그대로 인용문으로 남습니다.',
+  '',
+  '> 그냥 인용문입니다.',
+].join('\n');
+
 export const CORPUS: Corpus = {
   notes: [
     {
@@ -258,6 +297,16 @@ export const CORPUS: Corpus = {
       text: CODE_NOTE,
       createdAt: ago(7 * DAY),
       updatedAt: ago(6 * DAY),
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    },
+    {
+      id: 'n-callouts',
+      title: '배포 전 점검',
+      text: CALLOUT_NOTE,
+      createdAt: ago(6 * DAY),
+      updatedAt: ago(5 * HOUR),
       pinned: false,
       trashedAt: null,
       archivedAt: null,

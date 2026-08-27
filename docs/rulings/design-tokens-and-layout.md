@@ -868,3 +868,73 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   stands in for replaces it within a frame of being able to. There is no
   translated string to give it — it exists before React and therefore before
   `useT`.
+
+## Callout colour and icons (M9b)
+
+- **Five hues, TWO roles each, and one role is not enough.** The `fill` is a
+  panel that `--bear-text` must read through; the `edge` — the left bar and
+  the icon — is an opaque mark that must be legible on its own. They are
+  checked separately: fills at 4.5 in `OVERLAYS`, edges at 3.0 in
+  `DECORATIVE`.
+
+- **The fill MIXES INTO `--bear-bg`; it is not alpha laid over it.** That is
+  the difference between a tint that works in sixteen themes and one that
+  works in eight. An alpha tint of a LIGHT hue over a DARK ground raises the
+  panel's luminance sharply, and the light body text then loses the contrast
+  the panel exists to preserve. Mixing into the theme's own background keeps
+  the panel within a few percent of it by construction, in either scheme.
+
+- **The edge is a light/dark literal pair interpolated on `--bear-dark`**, the
+  mechanism the syntax palette proves. A single fixed hue — the way
+  `--bear-hl-*` works — cannot serve both schemes for an opaque mark.
+
+- **The hues stay independent of `--bear-accent`, `--bear-danger` AND
+  `--bear-code-*`.** The literals come from the same measured families as the
+  syntax palette but are DUPLICATED rather than aliased: a theme that retunes
+  its code colours must not repaint the user's prose. Reusing `--bear-danger`
+  for the danger callout was considered and rejected on the same grounds.
+
+- **Five contrast rows exist purely to stop the other five being vacuous.** A
+  fill identical to `--bear-bg` passes a 4.5 check against `text` perfectly,
+  so a callout that had silently stopped tinting anything would sail through.
+  `CALLOUT_FILLS_ARE_VISIBLE` requires the panel to be visible AS a panel.
+  Both directions are fault-injected: the fill rows fail across all 16 themes
+  before the tokens exist, and a zero mix fails all 16 after.
+
+- **`e2e/callouts.spec.ts` checks the five fills are distinct FROM EACH
+  OTHER.** Nothing else can: the contrast spec checks each fill against the
+  page in isolation, so two types resolving to the same colour — what a
+  copy-paste slip in `tokens.css` produces — passes every ratio while making a
+  warning indistinguishable from a danger.
+
+- **The icons are TOKENS (`--bear-cal-icon-*`), not a mirrored stylesheet
+  block.** `readExportTokens` copies custom properties verbatim (reading one
+  back does not resolve it), so the exported document draws its glyphs from
+  the same declaration the editor uses. One source, no drift, and no mirror
+  test to write — which is a better answer than the plan's, and the plan was
+  wrong.
+
+- **Drawn with `mask-image` over `background: currentColor`.** One glyph
+  serves every theme and takes the type's edge hue from the cascade. This is
+  also why `lucide-react`'s ban outside `Icon.tsx` — measured at +57.20 kB
+  gzip — does not apply here: nothing reaches JavaScript.
+
+- **A missing icon falls back to `none`, never to a placeholder shape.** A
+  mask that fails to load paints the whole ELEMENT, so a fallback glyph would
+  draw a solid square where the icon should be. `none` collapses to nothing
+  and the header keeps its words.
+
+- **The title text is `--bear-text`, not the edge hue.** Colouring it would
+  need the edge to clear 4.5 on the fill rather than 3.0 on the page, which no
+  palette this readable would survive — and the bar plus the icon already
+  carry the type, which is also what keeps colour from being its only carrier.
+
+- **The empty-header hint is a DECORATION and cannot become content.**
+  `calloutTitle` does not know its parent's type and CSS `attr()` cannot reach
+  an ancestor's attribute, so the plugin sets `data-placeholder` in the view.
+  It registers no plugin at all without `calloutLabels`, which is every schema
+  build outside the mounted editor — so the hint can never reach a note's text
+  or an exported file. Baking the name into the Markdown (note text would
+  depend on the UI language at the last save) and a per-locale CSS `content:`
+  string (Korean outside `useT`, where `ko.ts`'s completeness check cannot see
+  it) were both rejected.

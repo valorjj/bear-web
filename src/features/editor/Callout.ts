@@ -292,11 +292,31 @@ export const Callout = Blockquote.extend<CalloutOptions>({
    */
   addInputRules() {
     return [
+      // The PARENT'S rules first, and their absence was a real regression:
+      // `extend({ addInputRules })` REPLACES the base implementation rather
+      // than adding to it, so without this spread typing `> ` stopped making a
+      // blockquote at all. No unit test could see it — none of them type — and
+      // `e2e/appearance.spec.ts` caught it by measuring a quote that was never
+      // rendered.
+      ...(this.parent?.() ?? []),
       new InputRule({
-        find: /^>\s\[!([a-zA-Z]+)\]\s$/,
-        handler: ({ range, match, chain }) => {
+        // `[!warning] `, not `> [!warning] `. Typing the full thing fires the
+        // inherited `> ` rule FIRST, which wraps the line in a blockquote —
+        // so by the time the marker is typed the line no longer starts with
+        // `>` and a regex expecting one can never match. Verified: the
+        // original spelling matched nothing at all in a real browser.
+        find: /^\[!([a-zA-Z]+)\]\s$/,
+        handler: ({ range, match, chain, state }) => {
           const parsed = parseMarker(`[!${match[1]!}] `);
           if (parsed?.type == null) return null;
+
+          // Only inside a blockquote. A bare `[!note] ` typed into a paragraph
+          // is prose, and silently wrapping it in a panel would be the editor
+          // rewriting something the user did not ask it to.
+          const { $from } = state.selection;
+          let depth = $from.depth;
+          while (depth > 0 && $from.node(depth).type.name !== 'blockquote') depth -= 1;
+          if (depth === 0) return null;
 
           chain().deleteRange(range).setCalloutType(parsed.type).run();
           return undefined;
