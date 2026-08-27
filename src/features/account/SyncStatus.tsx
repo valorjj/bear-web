@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 
-import { useT } from '@/i18n';
+import { type TranslationKey, useT } from '@/i18n';
 
 import type { SyncStatusValue } from './useSync';
 
@@ -63,26 +63,38 @@ const TONE: Record<SyncStatusValue, StatusTone> = {
   error: 'danger',
 };
 
-/**
- * The sync status line, mounted under the account status inside
- * `AccountMenu`'s signed-in branch.
- *
- * "Offline" is deliberately given the same quiet `faint` dot as `syncing`,
- * never `danger`: a machine that sleeps is offline constantly, and that is
- * the normal case, not a failure.
- */
-export function SyncStatus({
-  status,
-  message,
-  lastSyncedAt,
-}: {
+export interface SyncSummaryInput {
   status: SyncStatusValue;
   message: string | null;
   /** `null` until a sync has actually completed on this device. */
   lastSyncedAt: number | null;
-}): ReactElement {
-  const t = useT();
+}
 
+export interface SyncSummary {
+  label: string;
+  tone: StatusTone;
+  /**
+   * True for the ONE state worth no chrome outside the menu: backed up, with
+   * nothing happening. Every other state — syncing, offline, error, and
+   * signed-in-but-never-synced — is something the user would want to see
+   * without opening a menu to look for it.
+   */
+  resting: boolean;
+}
+
+/**
+ * The single reading of sync state, shared by the menu's status line and by
+ * the badge on the account button.
+ *
+ * Extracted rather than duplicated: the two are the same claim in two sizes,
+ * and a badge that says one thing while the line beside it says another is
+ * worse than no badge. Takes `t` rather than calling `useT` so it stays a
+ * plain function usable from either component's render.
+ */
+export function syncSummary(
+  { status, message, lastSyncedAt }: SyncSummaryInput,
+  t: (key: TranslationKey) => string,
+): SyncSummary {
   // `idle` is the resting state BOTH before the first sync and after a
   // successful one, so it alone cannot be rendered as "Notes are backed up":
   // that sentence is asserted the moment a user signs in, before a single
@@ -103,5 +115,23 @@ export function SyncStatus({
             ? t('sync.pending')
             : t('sync.idle');
 
-  return <Status label={label} tone={settled === 'pending' ? 'faint' : TONE[status]} />;
+  return {
+    label,
+    tone: settled === 'pending' ? 'faint' : TONE[status],
+    resting: settled === 'idle',
+  };
+}
+
+/**
+ * The sync status line, mounted under the account status inside
+ * `AccountMenu`'s signed-in branch.
+ *
+ * "Offline" is deliberately given the same quiet `faint` dot as `syncing`,
+ * never `danger`: a machine that sleeps is offline constantly, and that is
+ * the normal case, not a failure.
+ */
+export function SyncStatus(props: SyncSummaryInput): ReactElement {
+  const summary = syncSummary(props, useT());
+
+  return <Status label={summary.label} tone={summary.tone} />;
 }

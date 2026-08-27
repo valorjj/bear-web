@@ -415,3 +415,18 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   caption bar. The title centres via a three-column grid, so it centres
   against the BAR rather than against whatever the left group happens to
   measure — with a flex row it drifts as the scope name changes length.
+
+## The account button's sync badge
+
+- **A colour is not a status.** The dot on `AccountMenu`'s trigger is
+  `aria-hidden`, and the button's accessible name carries the same sentence the
+  menu's own status line shows — from the same `syncSummary` call, so the two
+  cannot drift into saying different things about one state.
+
+- **The RESTING state shows no badge at all.** "Backed up, nothing happening"
+  is the state the app is in almost all the time, and a permanent dot for it
+  trains the eye to ignore the one that matters. What remains is every state a
+  user would want surfaced without opening a menu to hunt for it: syncing,
+  offline, an error, and signed-in-but-never-synced. Signed out shows nothing
+  either — there is no sync to report, and a badge there would read as a
+  problem rather than as an absence.

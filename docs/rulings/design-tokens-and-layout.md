@@ -8,7 +8,8 @@ chrome and prose column are positioned.
 **Trigger:** any change to `src/styles/tokens.css`, `src/styles/index.css`,
 `src/styles/editor.css`, `src/styles/themes.ts` (`THEMES`, `DEFAULT_THEME_ID`,
 `SYSTEM_DARK_ID`), `src/app/theme.ts` (`applyTheme`, `readMirror`,
-`MIRROR_KEY`), the inline `<script>` in `index.html`, `src/ui/Pane.tsx`,
+`MIRROR_KEY`), the inline `<script>` and the `#boot` indicator in `index.html`,
+the `#boot` removal in `src/main.tsx`, `src/ui/Pane.tsx`,
 `src/ui/Popover.tsx`, `src/features/account/AccountMenu.tsx`,
 `src/ui/Resizer.tsx`, `src/ui/Button.tsx`, `src/ui/Dialog.tsx`,
 `src/features/appearance/ThemePicker.tsx`, `src/features/appearance/ThemeDialog.tsx`,
@@ -835,3 +836,35 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   importing the pane-width constants. The 32px row was measured against Bear's
   DESKTOP row; its phone rows are ~44px, and at 32/13 the drawer read as a
   shrunken desktop sidebar on an iPhone.
+
+## The boot indicator
+
+- **`#root` must never be empty while the app is opening.** Until 2026-08-27 it
+  was: `main.tsx` calls `createRoot` only after `openDatabase()` resolves, so
+  every launch showed a blank page with no way to tell "still opening" from
+  "broken". That is not hypothetical — the Dexie-version-blocked failure
+  recorded in CLAUDE.md leaves `openDatabase()` permanently unsettled, and a
+  bare `<div id="root">` plus one console warning was its entire symptom.
+
+- **It fades in after a delay rather than appearing at once.** IndexedDB is
+  local and the normal open is far faster than the delay, so a normal launch
+  shows nothing at all. A spinner that flashes for 40ms is worse than no
+  spinner.
+
+- **Its colour is `var(--bear-muted, CanvasText)` — a token with a SYSTEM
+  colour fallback, never a literal.** The production build links the stylesheet
+  in `<head>` above the indicator and the inline theme script has already set
+  `data-theme`, so the token resolves to the active theme's value and the
+  spinner is themed on the first frame. `CanvasText` covers the dev server,
+  where the stylesheet arrives with the module. A hex fallback here would be a
+  defect under the every-colour-is-a-token rule.
+
+- **`main.tsx` removes it BEFORE `createRoot`, not by letting React clear the
+  container.** React does empty the container, but only after the root is
+  created and `render` is called; until then the indicator is a real element
+  with a running animation.
+
+- **It is `aria-hidden`.** It carries no text, it is decorative, and the app it
+  stands in for replaces it within a frame of being able to. There is no
+  translated string to give it — it exists before React and therefore before
+  `useT`.

@@ -60,13 +60,100 @@ const BLOCK_MARKERS: readonly RegExp[] = [
   /^\[[ xX]\]\s+/,
 ];
 
+/**
+ * A backslash escape's payload, held aside while the rules below run.
+ *
+ * Without this, `\*star\*` reads as an emphasis pair and the stripper deletes
+ * the very characters the backslash was written to keep. NUL is the sentinel
+ * because it cannot occur in a note: the editor's Markdown pipeline never
+ * emits one, and it survives every pattern below as ordinary `\S` content.
+ */
+const ESCAPE = /\\([\\`*_{}[\]()#+\-.!~>|=])/g;
+const SENTINEL = '\u0000';
+
+/**
+ * Inline Markdown, in the order it must be removed.
+ *
+ * ORDER IS LOAD-BEARING, in three places. Code spans go first, so their
+ * contents are unwrapped before anything can read a `*` inside them as
+ * emphasis. Autolinks (`<https://…>`) go before the raw-tag rule, which would
+ * otherwise see `<https…>` as a tag and delete the address. And the emphasis
+ * rules run longest delimiter first, so `***loud***` is not eaten as `**`
+ * plus a stray `*`.
+ *
+ * Every pair requires a non-space character after its opening delimiter and
+ * before its closing one — CommonMark's own rule, and the thing that keeps
+ * `2 * 3 = 6` intact. An UNPAIRED delimiter is left alone on purpose: a
+ * half-typed `**` is a note being written, and deleting one side of a pair
+ * would silently drop the user's own characters.
+ *
+ * Underscore emphasis additionally refuses to fire intra-word, so
+ * `some_var_name` survives; asterisks need no such guard because Markdown
+ * itself has none for them.
+ */
+const INLINE_RULES: readonly (readonly [RegExp, string])[] = [
+  [/(`+)([\s\S]*?)\1(?!`)/g, '$2'],
+  [/<((?:https?|mailto):[^>\s]+)>/g, '$1'],
+  [/<\/?[a-zA-Z][^<>]*>/g, ''],
+  [/\[([^\][]*)\]\([^()]*\)/g, '$1'],
+  [/\[([^\][]*)\]\[[^\]]*\]/g, '$1'],
+  [/==(?=\S)([\s\S]*?\S)==/g, '$1'],
+  [/~~(?=\S)([\s\S]*?\S)~~/g, '$1'],
+  [/\*\*\*(?=\S)([\s\S]*?\S)\*\*\*/g, '$1'],
+  [/(?<!\w)___(?=\S)([\s\S]*?\S)___(?!\w)/g, '$1'],
+  [/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '$1'],
+  [/(?<!\w)__(?=\S)([\s\S]*?\S)__(?!\w)/g, '$1'],
+  [/\*(?=\S)([\s\S]*?\S)\*/g, '$1'],
+  [/(?<!\w)_(?=\S)([\s\S]*?\S)_(?!\w)/g, '$1'],
+];
+
+/**
+ * Removes inline Markdown and inline HTML from one already-block-stripped
+ * line, leaving the words the user wrote.
+ *
+ * This reverses the rule that stood here until 2026-08-27 — "inline marks are
+ * deliberately left alone; they read as light emphasis rather than as
+ * structure" — which was retired rather than caveated. It was wrong for one
+ * concrete reason its argument never anticipated: a COLOURED highlight does
+ * not serialize to a light delimiter, it serializes to real inline HTML
+ * (`Highlight.ts`'s `renderMarkdown`), so a real note previewed as
+ * `hi <mark class="hl-green">abcd</mark> hi, this is good.` — more characters
+ * of attribute than of note. Once the tag has to go, no principled line keeps
+ * `**` and drops `<mark>`: a preview is a summary, and the editor is where
+ * syntax belongs.
+ *
+ * Deliberately a sequence of trims rather than a Markdown parse. It runs per
+ * line, on text already stripped of block markers, and it must stay cheap
+ * enough to run for every row in the list on every keystroke of a search. A
+ * construct spanning two lines therefore loses only the delimiters sitting on
+ * the line being trimmed — never content.
+ */
+function stripInline(line: string): string {
+  const escaped: string[] = [];
+  let text = line.replace(ESCAPE, (_match, character: string) => {
+    escaped.push(character);
+    return SENTINEL;
+  });
+
+  for (const [pattern, replacement] of INLINE_RULES) text = text.replace(pattern, replacement);
+
+  // Split rather than a `replace` against a NUL pattern: a control character
+  // in a regex literal is a lint warning, and splitting reads no worse.
+  return text
+    .split(SENTINEL)
+    .map((part, index) => (index === 0 ? part : (escaped[index - 1] ?? '') + part))
+    .join('');
+}
+
 /** Turns one Markdown line into the prose a preview should show, or `''`. */
 function previewLine(line: string): string {
   if (TABLE_LINE.test(line) || FENCE_LINE.test(line)) return '';
 
   let text = line;
   for (const marker of BLOCK_MARKERS) text = text.replace(marker, '');
-  return text;
+  // Images are removed BEFORE the inline rules, not after: the link rule would
+  // otherwise take `![a](url)` down to a bare `!`.
+  return stripInline(text.replace(IMAGE_SYNTAX, ' '));
 }
 
 /**
@@ -93,19 +180,22 @@ function previewLine(line: string): string {
  * wins, as before — this exception only fires when the title is the sole
  * match.
  *
- * Block-level Markdown syntax is REMOVED. This used to preview the raw text
- * verbatim, on the reasoning that the row shows what the user typed — and on a
- * note containing a table that produced
+ * Markdown syntax is REMOVED, block and inline alike. This used to preview
+ * the raw text verbatim, on the reasoning that the row shows what the user
+ * typed — and on a note containing a table that produced
  * `hi | a | b | c | | --- | --- | --- |`, which shows nothing and looks
  * broken. A preview is a summary, not a source view; the editor is where the
- * syntax belongs. Inline marks (`**bold**`, `` `code` ``) are deliberately
- * left alone: they read as light emphasis rather than as structure, and
- * stripping them means parsing rather than trimming a prefix.
+ * syntax belongs. See `stripInline` for why the inline half followed.
+ *
+ * A `query` is matched against the STRIPPED lines, which is the only shape
+ * that keeps a search row honest: `HighlightedText` searches the snippet this
+ * returns, so a line chosen because it matched must still contain the match
+ * after stripping — and nobody searches for `<mark`.
  */
 export function deriveSnippet(text: string, query?: string): string {
   const lines = text
     .split('\n')
-    .map((line) => previewLine(line).replace(IMAGE_SYNTAX, ' ').replace(/\s+/g, ' ').trim())
+    .map((line) => previewLine(line).replace(/\s+/g, ' ').trim())
     .filter((line) => line !== '');
 
   const ordinarySnippet = (): string => {

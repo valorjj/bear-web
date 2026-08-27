@@ -42,6 +42,81 @@ Range.prototype.getClientRects = () =>
 document.elementFromPoint = () => null;
 
 describe('RichEditor', () => {
+  it('does not take focus by default', async () => {
+    // Selecting an existing row must not steal focus from whatever the user
+    // was doing — the search field, most obviously, which `AppShell` focuses
+    // on `/` and which selecting a result would otherwise blank.
+    const handleRef = createRef<RichEditorHandle>();
+    renderWithI18n(
+      <RichEditor
+        initialMarkdown="# Hello"
+        onChange={vi.fn()}
+        onBlur={vi.fn()}
+        ariaLabel="Note text"
+        handleRef={handleRef}
+        createdAt={0}
+        updatedAt={0}
+      />,
+    );
+
+    const surface = await screen.findByRole('textbox', { name: 'Note text' });
+    expect(surface).not.toHaveFocus();
+  });
+
+  it('puts the caret on the title line when autoFocus is set', async () => {
+    // The complaint that produced this: creating a note left no caret
+    // anywhere, so there was no sign the app had done anything at all. The
+    // first line IS the title (`deriveTitle` reads it), so 'start' is the
+    // title field this app does not otherwise have.
+    const handleRef = createRef<RichEditorHandle>();
+    renderWithI18n(
+      <RichEditor
+        autoFocus
+        initialMarkdown={''}
+        onChange={vi.fn()}
+        onBlur={vi.fn()}
+        ariaLabel="Note text"
+        handleRef={handleRef}
+        createdAt={0}
+        updatedAt={0}
+      />,
+    );
+
+    const surface = await screen.findByRole('textbox', { name: 'Note text' });
+    await waitFor(() => expect(surface).toHaveFocus());
+
+    const editor = handleRef.current?.editor;
+    expect(editor?.state.selection.from).toBe(1);
+  });
+
+  it('places the caret at the START, not the end, of a seeded note', async () => {
+    // A note created inside a tag scope is seeded `\n#tag`, so 'end' would
+    // land the caret after the tag on line two and typing would extend the
+    // TAG rather than name the note. Asserting a position distinct from the
+    // document's end is what makes this test able to fail.
+    const handleRef = createRef<RichEditorHandle>();
+    renderWithI18n(
+      <RichEditor
+        autoFocus
+        initialMarkdown={'\n#work'}
+        onChange={vi.fn()}
+        onBlur={vi.fn()}
+        ariaLabel="Note text"
+        handleRef={handleRef}
+        createdAt={0}
+        updatedAt={0}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(handleRef.current?.editor).toBeTruthy();
+    });
+
+    const editor = handleRef.current!.editor!;
+    expect(editor.state.selection.from).toBe(1);
+    expect(editor.state.selection.from).toBeLessThan(editor.state.doc.content.size);
+  });
+
   it('renders the initial markdown as rich content', async () => {
     const handleRef = createRef<RichEditorHandle>();
     renderWithI18n(

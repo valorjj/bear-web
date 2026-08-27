@@ -907,6 +907,44 @@ describe('search', () => {
     expect(await screen.findByRole('button', { name: /Untitled/ })).toBeInTheDocument();
   });
 
+  // The complaint that produced this: creating a note put a caret nowhere, so
+  // there was no sign the app had done anything. The first line is the title
+  // (`deriveTitle` reads it), so focusing the editor at 'start' IS focusing
+  // the title field this app does not otherwise have.
+  it('puts the caret in the new note so it can be named by typing', async () => {
+    renderShell();
+
+    await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+
+    const surface = await screen.findByRole('textbox', { name: 'Note text' });
+    await waitFor(() => expect(surface).toHaveFocus());
+  });
+
+  // The other half, and the one that can actually regress: `autoFocus` is a
+  // prop on a component keyed by note id, so a careless "always focus" would
+  // pass the test above AND blank the search field on every result the user
+  // clicks. Selecting an existing row must leave focus where it was.
+  it('does not steal focus when an existing note is selected', async () => {
+    renderShell();
+    await createNoteWithText('Groceries\nmilk and bread');
+    // A second note, so the first stops being the just-created one. Without
+    // this the row clicked below is still the note the shell created, and the
+    // test would assert nothing.
+    await createNoteWithText('Trip\nDay one');
+
+    const row = await screen.findByRole('button', { name: /Groceries/ });
+    await userEvent.click(row);
+
+    const surface = await screen.findByRole('textbox', { name: 'Note text' });
+
+    // Waits for focus and requires that it never arrives, rather than reading
+    // `toHaveFocus` once. Tiptap's autofocus is asynchronous, so the one-shot
+    // assertion passed against an editor hardcoded to `autoFocus` — verified
+    // by injection, which is the only reason this is written the slow way.
+    await expect(waitFor(() => expect(surface).toHaveFocus(), { timeout: 300 })).rejects.toThrow();
+    expect(row).toHaveFocus();
+  });
+
   it('keeps the query when the scope changes', async () => {
     renderShell();
     await createNoteWithText('Groceries\nmilk and bread');

@@ -53,7 +53,80 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      The boot indicator, painted by the browser before any JavaScript runs.
+
+      Until this existed, `#root` was empty until `openDatabase()` resolved
+      and `main.tsx` called `createRoot` — so every launch showed a blank
+      page with no way to tell "still opening" from "broken". That is not
+      hypothetical here: the Dexie-version-blocked failure recorded in
+      CLAUDE.md leaves `openDatabase()` permanently unsettled, and its only
+      symptom today is a bare `<div id="root">` and one console warning.
+
+      It FADES IN after a delay rather than appearing at once, so a fast open
+      — which is the normal case, IndexedDB being local — shows nothing at
+      all. A spinner that flashes for 40ms is worse than no spinner.
+
+      The colour is a token with a system-colour fallback, not a literal: the
+      production build links the stylesheet in `<head>` above this, so
+      `--bear-muted` resolves to the ACTIVE theme's value (the script above
+      has already set `data-theme`). `CanvasText` covers the dev server,
+      where the stylesheet arrives with the module.
+
+      `aria-hidden`, deliberately: it is decorative, it carries no text, and
+      the app it stands in for replaces it within a frame of being able to.
+    -->
+    <div id="root">
+      <div id="boot" aria-hidden="true">
+        <div id="boot-spinner"></div>
+      </div>
+    </div>
+    <style>
+      #boot {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        block-size: 100vh;
+        opacity: 0;
+        animation: boot-in 200ms ease-out 400ms forwards;
+      }
+
+      #boot-spinner {
+        inline-size: 24px;
+        block-size: 24px;
+        border: 2px solid var(--bear-muted, CanvasText);
+        border-block-start-color: transparent;
+        border-radius: 50%;
+        animation: boot-spin 700ms linear infinite;
+        opacity: 0.75;
+      }
+
+      @keyframes boot-in {
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* The app honours this everywhere else; the first thing on screen must
+         not be the one exception. The indicator still appears — it simply
+         stops moving, which is what the preference asks for. */
+      @media (prefers-reduced-motion: reduce) {
+        #boot {
+          animation-duration: 1ms;
+        }
+
+        #boot-spinner {
+          animation: none;
+          border-block-start-color: var(--bear-muted, CanvasText);
+        }
+      }
+    </style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

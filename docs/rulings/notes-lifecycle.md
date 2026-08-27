@@ -7,7 +7,8 @@ between the selected note and the database.
 **Trigger:** any change to `src/features/notes/NoteEditor.tsx`,
 `src/features/notes/useAutosave.ts`, `src/features/notes/useNotes.ts`,
 `src/data/derive.ts`, `src/lib/useFlushTriggers.ts`; the `key={selectedNote.id}`
-/ `seed` / `setSeed` lines in `src/app/AppShell.tsx`; the symbols `seedText`,
+/ `seed` / `setSeed` / `justCreatedId` lines in `src/app/AppShell.tsx`; the
+symbols `autoFocus`, `seedText`,
 `normalizedSeedText`, `hadTextAtMountRef`, `editedRef`, `pendingDiscards`,
 `discard`, `deriveTitle`, `persistedRef`, `attemptedRef`, `saveSeqRef`,
 `sanitize`, `foldEditor`, `lastFoldedKeysRef`, `FOLD_PERSIST_DELAY_MS`;
@@ -230,3 +231,31 @@ between the selected note and the database.
   `sweep.test.ts` fails under exactly that mistake. `notes.purge` still
   reclaims a purged note's files immediately, because there the note is gone
   and the case is unambiguous.
+
+## The caret on a new note
+
+- **`autoFocus` is a SEPARATE flag from `seedText`, and collapsing the two is
+  wrong.** `seedText` is set only for a note created inside a tag scope; a note
+  created outside one carries no seed at all — and that is the common case, and
+  precisely the one where nothing on screen moved to tell the user anything had
+  happened. `AppShell` tracks `justCreatedId` alongside `seed` for this reason,
+  and clears it on the same rule: the moment the selection leaves that note.
+  Without the clear, re-opening the note later in the session would grab focus
+  again for a note the user merely looked at.
+
+- **The caret goes to `'start'`, never `'end'`.** The first line IS the title
+  (`deriveTitle` reads it), so 'start' is the title field this app does not
+  otherwise have. A note created inside a tag scope is seeded `\n#tag`, so
+  `'end'` would land the caret after the tag on line two and typing would
+  extend the TAG instead of naming the note.
+
+- **`autoFocus` is read once, at mount, like `initialMarkdown`.** `RichEditor`
+  is keyed by note id, so a mount is a note switch. Focus that can be
+  re-triggered by an arbitrary re-render is focus that fights the user.
+
+- **A test that reads `toHaveFocus` once cannot see this, in either
+  direction.** Tiptap focuses asynchronously, so the negative assertion —
+  "selecting an existing row does not steal focus" — PASSED against an editor
+  hardcoded to `autoFocus`; verified by injection. It has to wait for focus and
+  require that it never arrives (`await expect(waitFor(...)).rejects.toThrow()`),
+  which is the only reason that test is written the slow way.
