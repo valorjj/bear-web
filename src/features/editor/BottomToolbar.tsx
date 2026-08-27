@@ -35,6 +35,9 @@ export interface BottomToolbarProps {
    * colour is current.
    */
   highlightColor: HighlightColor | null;
+  /** Whether the callout menu is open — drives `aria-expanded` on its chevron. */
+  calloutMenuOpen: boolean;
+  onToggleCalloutMenu: () => void;
   /** Whether the colour menu is open — drives `aria-expanded` on the chevron. */
   colorMenuOpen: boolean;
   onToggleColorMenu: () => void;
@@ -214,6 +217,8 @@ export function BottomToolbar({
   highlightColor,
   colorMenuOpen,
   onToggleColorMenu,
+  calloutMenuOpen,
+  onToggleCalloutMenu,
   flags,
 }: BottomToolbarProps): ReactElement {
   const t = useT();
@@ -236,19 +241,23 @@ export function BottomToolbar({
               // The highlight pair reads as ONE control: the button loses its
               // trailing inset so the chevron sits against it rather than a
               // full gap away.
-              action.key === 'highlight' ? 'pr-0.5 pl-2' : 'px-2'
+              action.key === 'highlight' || action.key === 'quote' ? 'pr-0.5 pl-2' : 'px-2'
             }`}
           >
             <Icon glyph={action.glyph} />
           </button>
-          {action.key === 'highlight' && (
+          {(action.key === 'highlight' || action.key === 'quote') && (
             <button
               type="button"
-              aria-label={t('editor.toolbar.highlightColor')}
+              aria-label={t(
+                action.key === 'highlight'
+                  ? 'editor.toolbar.highlightColor'
+                  : 'editor.toolbar.calloutType',
+              )}
               aria-haspopup="menu"
-              aria-expanded={colorMenuOpen}
+              aria-expanded={action.key === 'highlight' ? colorMenuOpen : calloutMenuOpen}
               disabled={editor === null}
-              onClick={onToggleColorMenu}
+              onClick={action.key === 'highlight' ? onToggleColorMenu : onToggleCalloutMenu}
               className="h-7 shrink-0 rounded-sm pr-2 pl-0.5 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-expanded:bg-selected aria-expanded:text-text disabled:pointer-events-none disabled:opacity-40"
             >
               <Icon glyph={ChevronDown} size="sm" />

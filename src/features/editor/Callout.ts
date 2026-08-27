@@ -1,4 +1,4 @@
-import { Node } from '@tiptap/core';
+import { InputRule, Node } from '@tiptap/core';
 import type { JSONContent, MarkdownParseHelpers, MarkdownRendererHelpers } from '@tiptap/core';
 import { Blockquote } from '@tiptap/extension-blockquote';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
@@ -276,6 +276,33 @@ export const Callout = Blockquote.extend<CalloutOptions>({
           return true;
         },
     };
+  },
+
+  /**
+   * `> [!warning] ` typed at the start of a line becomes a callout.
+   *
+   * A convenience for someone who already knows the syntax, and never the only
+   * route: the chevron menu is what makes the feature discoverable, and this
+   * ships alongside it. `textblockTypeInputRule` and friends do not fit — the
+   * rule has to wrap AND set an attribute — so the generic `InputRule` runs the
+   * command, which already knows how to do both.
+   *
+   * Matches the marker only when it is the whole line so far. A `> [!x] `
+   * typed mid-paragraph is prose, exactly as `parseMarker` treats it.
+   */
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /^>\s\[!([a-zA-Z]+)\]\s$/,
+        handler: ({ range, match, chain }) => {
+          const parsed = parseMarker(`[!${match[1]!}] `);
+          if (parsed?.type == null) return null;
+
+          chain().deleteRange(range).setCalloutType(parsed.type).run();
+          return undefined;
+        },
+      }),
+    ];
   },
 
   /**

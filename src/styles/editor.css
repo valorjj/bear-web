@@ -1113,3 +1113,50 @@
 .ProseMirror blockquote[data-callout] > :last-child {
   margin-block-end: 0;
 }
+
+/*
+ * The callout swatch in the toolbar's chevron menu.
+ *
+ * Outside `.ProseMirror` deliberately — it is chrome, not document — and
+ * alongside `.bear-fold-*` above, which are the other editor-owned classes
+ * that live outside the prose surface.
+ */
+.bear-cal-swatch {
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+  flex: none;
+  border-radius: 50%;
+  background-color: var(--bear-faint);
+}
+
+.bear-cal-swatch:not([data-type='plain']) {
+  border-radius: 0;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+
+.bear-cal-swatch[data-type='info'] {
+  background-color: var(--bear-cal-edge-info);
+  mask-image: var(--bear-cal-icon-info);
+}
+
+.bear-cal-swatch[data-type='tip'] {
+  background-color: var(--bear-cal-edge-tip);
+  mask-image: var(--bear-cal-icon-tip);
+}
+
+.bear-cal-swatch[data-type='success'] {
+  background-color: var(--bear-cal-edge-success);
+  mask-image: var(--bear-cal-icon-success);
+}
+
+.bear-cal-swatch[data-type='warning'] {
+  background-color: var(--bear-cal-edge-warning);
+  mask-image: var(--bear-cal-icon-warning);
+}
+
+.bear-cal-swatch[data-type='danger'] {
+  background-color: var(--bear-cal-edge-danger);
+  mask-image: var(--bear-cal-icon-danger);
+}
