@@ -95,11 +95,133 @@ const CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
     name: 'highlight, colour with inline markup inside',
     markdown: 'Some <mark class="hl-green">**bold** green</mark> text.',
   },
+  // M9b. The canonical form is the LOOSE one — marker line, a bare `>`, then
+  // the body — because that is what the serializer emits whatever the source
+  // used. The tight form Obsidian and GitHub write is a stability case.
+  { name: 'callout, info', markdown: '> [!info] Heads up\n>\n> Body text.' },
+  { name: 'callout, tip', markdown: '> [!tip] Try this\n>\n> Body text.' },
+  { name: 'callout, success', markdown: '> [!success] Done\n>\n> Body text.' },
+  { name: 'callout, warning', markdown: '> [!warning] Be careful\n>\n> Body text.' },
+  { name: 'callout, danger', markdown: '> [!danger] Stop\n>\n> Body text.' },
+  { name: 'callout, untitled', markdown: '> [!tip]' },
+  { name: 'callout, bold title', markdown: '> [!tip] **loud**\n>\n> Body text.' },
+  { name: 'callout, two body paragraphs', markdown: '> [!danger] T\n>\n> one\n>\n> two' },
+  { name: 'callout, list inside', markdown: '> [!info] T\n>\n> - a\n> - b' },
+  // An unrecognised marker is never a colour and never lost: it stays a plain
+  // blockquote whose `rawMarker` attribute carries the word back out verbatim.
+  {
+    name: 'callout, unrecognised marker',
+    markdown: '> [!\uc0ac\ub0b4\uacf5\uc9c0] \uc81c\ubaa9\n>\n> \ubcf8\ubb38.',
+  },
 ];
 
 describe.each(CANONICAL)('fidelity: $name', ({ markdown }) => {
   it('round-trips byte-for-byte', () => {
     expect(normalizeMarkdown(markdown)).toBe(markdown);
+  });
+});
+
+describe('the callout marker', () => {
+  it('is not escaped, which used to corrupt every GitHub alert on save', () => {
+    // The bug M9b opens with, probed against the real pipeline on 2026-08-27:
+    // before the tokenizer claimed the marker this returned
+    // `> \\[!NOTE\\]`, so merely OPENING and saving a note carrying an alert
+    // rewrote it. Nothing in the suite could see it.
+    expect(normalizeMarkdown('> [!NOTE]\n>\n> Plain GFM alert.')).toBe(
+      '> [!info]\n>\n> Plain GFM alert.',
+    );
+  });
+
+  it('normalizes an alias to its canonical spelling', () => {
+    expect(normalizeMarkdown('> [!CAUTION] T\n>\n> B')).toBe('> [!warning] T\n>\n> B');
+  });
+
+  it('rewrites the tight form Obsidian writes into the loose one', () => {
+    // The two parse DIFFERENTLY \u2014 tight gives one paragraph carrying a hard
+    // newline, loose gives two paragraphs \u2014 so this is a real conversion, not
+    // a whitespace tidy.
+    expect(normalizeMarkdown('> [!warning] Be careful\n> Body.')).toBe(
+      '> [!warning] Be careful\n>\n> Body.',
+    );
+  });
+
+  it('leaves a plain blockquote entirely alone', () => {
+    expect(normalizeMarkdown('> just a quote')).toBe('> just a quote');
+  });
+
+  it('declines a marker that is not at the start of the block', () => {
+    // A `[!x]` mid-sentence is prose. The escape is correct there, and this is
+    // the assertion that stops the fix above from over-reaching.
+    expect(normalizeMarkdown('> see [!warning] here')).toBe('> see \\[!warning\\] here');
+  });
+});
+
+describe('a stray calloutTitle', () => {
+  // `calloutTitle` has NO `renderMarkdown` on purpose, so a title in an invalid
+  // position serializes to NOTHING — measured at `'\n\nafter'` before the
+  // repair existed, with the word `stray` simply gone. A lenient renderer on
+  // the node would have hidden that; the repair preserves the words AND keeps
+  // the loss observable here.
+  const strayFirst = {
+    type: 'doc',
+    content: [
+      { type: 'calloutTitle', content: [{ type: 'text', text: 'stray' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'after' }] },
+    ],
+  };
+
+  it('keeps its text by becoming a paragraph', () => {
+    expect(serializeMarkdown(strayFirst)).toBe('stray\n\nafter');
+  });
+
+  it('is repaired inside a blockquote that is not a callout', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'blockquote',
+          content: [{ type: 'calloutTitle', content: [{ type: 'text', text: 'quoted' }] }],
+        },
+      ],
+    };
+
+    expect(serializeMarkdown(doc)).toBe('> quoted');
+  });
+
+  it('is repaired when it sits AFTER the first child of a real callout', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'blockquote',
+          attrs: { callout: 'tip', rawMarker: null },
+          content: [
+            { type: 'calloutTitle', content: [{ type: 'text', text: 'T' }] },
+            { type: 'calloutTitle', content: [{ type: 'text', text: 'second' }] },
+          ],
+        },
+      ],
+    };
+
+    expect(serializeMarkdown(doc)).toBe('> [!tip] T\n>\n> second');
+  });
+
+  it('leaves a legitimate title alone', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'blockquote',
+          attrs: { callout: 'warning', rawMarker: null },
+          content: [
+            { type: 'calloutTitle', content: [{ type: 'text', text: 'T' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'B' }] },
+          ],
+        },
+      ],
+    };
+
+    expect(serializeMarkdown(doc)).toBe('> [!warning] T\n>\n> B');
   });
 });
 

@@ -30,7 +30,22 @@ import { describe, expect, it } from 'vitest';
  * ordinary churn — not a target, a limit. Raising it is a decision someone
  * makes in a diff, not a drift nobody notices.
  */
-const CEILING_BYTES = 328_000;
+const CEILING_BYTES = 332_000;
+
+/**
+ * Raised from 328,000 by M9b (callout blocks) on 2026-08-27, measured on both
+ * sides. `main` was **327,813 B** — **187 bytes of headroom**, so the previous
+ * ceiling was even closer to exhausted than K1 left it — and the marker
+ * grammar, the extended blockquote node, the `calloutTitle` node and
+ * `sanitize`'s repair together cost **844 B gzipped**. No dependency was
+ * added: `@tiptap/extension-blockquote` was already in the bundle by way of
+ * StarterKit, so importing it directly is free.
+ *
+ * Headroom is deliberately ~3.5 KB rather than another 187 bytes, because the
+ * rest of M9b (the chevron menu, its commands and its translated strings) is
+ * still to come and this line should not have to move twice inside one
+ * milestone.
+ */
 
 /**
  * Raised from 324,000 by K1 (image capture) on 2026-08-26, with the growth

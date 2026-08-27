@@ -105,6 +105,14 @@ const NON_CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   // Markdown spelling at all, so it is now dropped at parse time instead.
   { name: 'trailing hard break, html', markdown: 'a<br>' },
   { name: 'trailing hard break, two spaces', markdown: 'a  \n' },
+  // M9b. Each of these is a real conversion rather than a whitespace tidy:
+  // the tight form parses to ONE paragraph carrying a hard newline, the loose
+  // form to two, and an alias carries a spelling the roster does not use.
+  { name: 'callout, tight form', markdown: '> [!warning] Be careful\n> Body.' },
+  { name: 'callout, alias', markdown: '> [!CAUTION] T\n>\n> B' },
+  { name: 'callout, uppercase GFM alert', markdown: '> [!NOTE]\n> Body.' },
+  { name: 'callout, alias failure', markdown: '> [!failure] T\n> B' },
+  { name: 'callout, untitled tight', markdown: '> [!tip]\n> Body.' },
 ];
 
 /**

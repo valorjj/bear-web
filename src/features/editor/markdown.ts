@@ -66,8 +66,41 @@ const schema = getSchema(editorExtensions);
  *    note writes to it — churning `updatedAt`, note order and the tag index.
  *    Mid-block hard breaks are untouched; only the unrepresentable one goes.
  */
+/**
+ * Unwraps a `calloutTitle` that is not a callout's first child.
+ *
+ * `blockquote`'s content is `calloutTitle? block+`, so a title anywhere else
+ * makes an INVALID document — and ProseMirror does not reject one. Verified on
+ * 2026-08-27: `Node.fromJSON` accepts it happily and every later transaction
+ * throws `Called contentMatchAt on a node with invalid content`, which surfaces
+ * as an editor that silently refuses to be typed into. That exact failure
+ * shipped for a day in K1 and is recorded in CLAUDE.md.
+ *
+ * It also loses text. `calloutTitle` deliberately has NO `renderMarkdown`, so a
+ * stray one serializes to nothing at all — measured, before this existed, as
+ * `'\n\nafter'` for a document whose first child was a title reading `stray`.
+ * Giving the node a lenient renderer would have hidden that; unwrapping to a
+ * paragraph preserves the words instead, and keeps the loss observable in a
+ * test rather than only in a user's note.
+ */
+function repairCalloutTitles(node: JSONContent): JSONContent {
+  if (node.content === undefined) return node;
+
+  const isCallout =
+    node.type === 'blockquote' &&
+    ((node.attrs?.callout ?? null) !== null || (node.attrs?.rawMarker ?? null) !== null);
+
+  const content = node.content.map((child, index) => {
+    if (child.type !== 'calloutTitle') return child;
+    if (isCallout && index === 0) return child;
+    return { type: 'paragraph', content: child.content };
+  });
+
+  return { ...node, content };
+}
+
 function sanitize(node: JSONContent): JSONContent {
-  let content = node.content?.map(sanitize);
+  let content = repairCalloutTitles(node).content?.map(sanitize);
 
   while (content !== undefined && content[content.length - 1]?.type === 'hardBreak') {
     content = content.slice(0, -1);

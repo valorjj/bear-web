@@ -6,6 +6,7 @@ import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
 import StarterKit from '@tiptap/starter-kit';
 
+import { Callout, CalloutTitle, type CalloutOptions } from './Callout';
 import { CodeLanguageControls, type CodeLanguageControlsOptions } from './CodeLanguageControls';
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
 import { ContextMenu, type ContextMenuOptions } from './ContextMenu';
@@ -35,7 +36,8 @@ function buildSupportedExtensions(
       HeadingFoldOptions &
       TableHandlesOptions &
       ContextMenuOptions &
-      CodeLanguageControlsOptions
+      CodeLanguageControlsOptions &
+      CalloutOptions
   >,
 ): Extensions {
   return [
@@ -58,7 +60,21 @@ function buildSupportedExtensions(
     // that never highlights anything, which no rendered-output test can see.
     // `extensions.test.ts` asserts the surviving `codeBlock` carries a
     // `lowlight` option.
-    StarterKit.configure({ underline: false, codeBlock: false }),
+    // `blockquote: false` is load-bearing for the same reason `codeBlock: false`
+    // beside it is: `Callout` re-registers a node of the same name, and two
+    // extensions claiming one name let Tiptap's reversed registration order
+    // decide the winner silently. The losing case here is not a crash — it is
+    // a working editor in which no callout ever gets a colour, which no
+    // rendered-output test can see. `extensions.test.ts` asserts the surviving
+    // `blockquote` carries the `callout` attribute.
+    StarterKit.configure({ underline: false, codeBlock: false, blockquote: false }),
+    // A callout IS a blockquote, so this is the blockquote — extended, not
+    // added beside. Both ARE Nodes: they change the schema, so
+    // `computeRecognizedHtmlTags()` sees them and the round-trip suites are
+    // not blind to them. See `Callout.ts` for why the title parses from `p`
+    // rather than `div`.
+    Callout.configure(options),
+    CalloutTitle,
     // Registered here rather than inside `buildSupportedExtensions`' tail so it
     // sits with the other schema-contributing nodes. Unlike `TagPill`,
     // `HeadingFold` and `TableHandles`, this IS a Node: it changes the schema,
@@ -177,6 +193,7 @@ export function buildEditorExtensions(
       TableHandlesOptions &
       ContextMenuOptions &
       CodeLanguageControlsOptions &
+      CalloutOptions &
       StoredImageOptions &
       ImagePasteOptions
   > = {},
