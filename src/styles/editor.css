@@ -1003,3 +1003,113 @@
     transition: none;
   }
 }
+
+/*
+ * Callouts (M9b).
+ *
+ * A callout IS a blockquote — the attribute is what makes it one — so these
+ * rules sit after `.ProseMirror blockquote` above and override the parts that
+ * read as "someone else said this": the hairline becomes a 6px hue bar, the
+ * muted body colour goes back to full text, and the block gains a tinted fill.
+ *
+ * Each type sets three custom properties and nothing else; every rule below is
+ * generic. Adding a sixth type is one block here, one hue pair and one icon in
+ * `tokens.css`, and two rows in `e2e/contrast.spec.ts`.
+ */
+.ProseMirror blockquote[data-callout='info'] {
+  --cal-edge: var(--bear-cal-edge-info);
+  --cal-fill: var(--bear-cal-fill-info);
+  --cal-icon: var(--bear-cal-icon-info);
+}
+
+.ProseMirror blockquote[data-callout='tip'] {
+  --cal-edge: var(--bear-cal-edge-tip);
+  --cal-fill: var(--bear-cal-fill-tip);
+  --cal-icon: var(--bear-cal-icon-tip);
+}
+
+.ProseMirror blockquote[data-callout='success'] {
+  --cal-edge: var(--bear-cal-edge-success);
+  --cal-fill: var(--bear-cal-fill-success);
+  --cal-icon: var(--bear-cal-icon-success);
+}
+
+.ProseMirror blockquote[data-callout='warning'] {
+  --cal-edge: var(--bear-cal-edge-warning);
+  --cal-fill: var(--bear-cal-fill-warning);
+  --cal-icon: var(--bear-cal-icon-warning);
+}
+
+.ProseMirror blockquote[data-callout='danger'] {
+  --cal-edge: var(--bear-cal-edge-danger);
+  --cal-fill: var(--bear-cal-fill-danger);
+  --cal-icon: var(--bear-cal-icon-danger);
+}
+
+.ProseMirror blockquote[data-callout] {
+  /* Six times the theme's border width rather than a fixed 6px, on the same
+     reasoning the quote hairline above is doubled: High Contrast scales both,
+     and the bar is the type's loudest signal. */
+  border-left: calc(var(--bear-border-width) * 6) solid var(--cal-edge);
+  border-radius: var(--bear-radius-md);
+  background-color: var(--cal-fill);
+  padding: 0.75em 1em;
+  /* The quote rule above dims its body. A callout is the note's own emphasis,
+     not a quotation, so the text comes back to full strength. */
+  color: var(--bear-text);
+}
+
+.ProseMirror blockquote[data-callout] > [data-callout-title] {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-weight: 600;
+  /* Holds the header line open when the title is empty, so the icon never
+     sits on a collapsed row. */
+  min-height: 1.4em;
+}
+
+/*
+ * The glyph.
+ *
+ * `background: var(--cal-edge)` with the shape as a mask, rather than a
+ * coloured SVG: one asset per type serves sixteen themes, and the hue comes
+ * from the same token the bar uses so the two can never disagree.
+ */
+.ProseMirror blockquote[data-callout] > [data-callout-title]::before {
+  content: '';
+  flex: none;
+  inline-size: 1.15em;
+  block-size: 1.15em;
+  background-color: var(--cal-edge);
+  mask-image: var(--cal-icon);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+
+/*
+ * The empty-header hint.
+ *
+ * `data-placeholder` is set by a decoration in `Callout.ts`, not by the node's
+ * own `renderHTML`: the title node does not know its parent's type, and CSS
+ * `attr()` cannot reach an ancestor's attribute. A decoration is also how
+ * `TagPill` and `HeadingFold` already add view-only information here.
+ *
+ * View-only is the point — it is a hint to the writer, never content. It is
+ * absent from every export, and from the Markdown, by construction.
+ */
+.ProseMirror blockquote[data-callout] > [data-callout-title][data-placeholder]:empty::after {
+  content: attr(data-placeholder);
+  color: var(--bear-faint);
+  font-weight: 400;
+}
+
+/* The body's first and last blocks sit against the panel's own padding. */
+.ProseMirror blockquote[data-callout] > :first-child {
+  margin-block-start: 0;
+}
+
+.ProseMirror blockquote[data-callout] > :last-child {
+  margin-block-end: 0;
+}

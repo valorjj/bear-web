@@ -254,6 +254,126 @@
   );
 
   /*
+   * The callout palette. Ten literals, ten tokens, five types.
+   *
+   * Authored as a light value and a dark value per type and interpolated on
+   * `--bear-dark`, the mechanism the syntax palette below already proves.
+   * A single fixed hue per type — the way `--bear-hl-*` above works — cannot
+   * serve both schemes here, because a callout's EDGE is an opaque mark that
+   * must stay legible, not a translucent tint that text reads through.
+   *
+   * The literals are chosen from the same measured families as the syntax
+   * palette (its `-l` values clear 4.5 against gruvbox-light's surface, its
+   * `-d` values against nord's), but they are DUPLICATED rather than aliased
+   * to `--bear-code-*`. Callout hues stay independent of every other token
+   * for the same reason they stay independent of `--bear-accent`: a theme that
+   * retunes its code colours must not repaint the user's prose.
+   *
+   * The FILL is mixed into `--bear-bg` rather than laid over it as alpha.
+   * That is the difference between a tint that works in sixteen themes and one
+   * that works in eight: an alpha tint of a LIGHT hue over a DARK ground
+   * raises the panel's luminance sharply, and the light body text then loses
+   * the contrast the panel exists to preserve. Mixing into the theme's own
+   * background keeps the panel within a few percent of it by construction, in
+   * either scheme.
+   *
+   * The title TEXT is `--bear-text`, not the edge hue — see `editor.css`.
+   * The bar and the icon carry the colour, which is also what keeps colour
+   * from being the only carrier of the type.
+   */
+  --bear-cal-info-l: #2a5db0;
+  --bear-cal-tip-l: #00706b;
+  --bear-cal-success-l: #1e753b;
+  --bear-cal-warning-l: #a84b00;
+  --bear-cal-danger-l: #b02a1f;
+
+  --bear-cal-info-d: #87aeff;
+  --bear-cal-tip-d: #7fdbca;
+  --bear-cal-success-d: #9ece6a;
+  --bear-cal-warning-d: #ffb86c;
+  --bear-cal-danger-d: #ff9a92;
+
+  /* How far the fill travels from the page toward the type's hue. Dark themes
+     need more, for the same reason `--bear-hl-a` grows with `--bear-dark`: an
+     equal mix reads as a weaker tint against a dark ground. */
+  --bear-cal-mix: calc(12 + 7 * var(--bear-dark));
+
+  --bear-cal-edge-info: color-mix(
+    in oklab,
+    var(--bear-cal-info-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-cal-info-d)
+  );
+  --bear-cal-edge-tip: color-mix(
+    in oklab,
+    var(--bear-cal-tip-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-cal-tip-d)
+  );
+  --bear-cal-edge-success: color-mix(
+    in oklab,
+    var(--bear-cal-success-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-cal-success-d)
+  );
+  --bear-cal-edge-warning: color-mix(
+    in oklab,
+    var(--bear-cal-warning-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-cal-warning-d)
+  );
+  --bear-cal-edge-danger: color-mix(
+    in oklab,
+    var(--bear-cal-danger-l) calc((1 - var(--bear-dark)) * 100%),
+    var(--bear-cal-danger-d)
+  );
+
+  --bear-cal-fill-info: color-mix(
+    in oklab,
+    var(--bear-cal-edge-info) calc(var(--bear-cal-mix) * 1%),
+    var(--bear-bg)
+  );
+  --bear-cal-fill-tip: color-mix(
+    in oklab,
+    var(--bear-cal-edge-tip) calc(var(--bear-cal-mix) * 1%),
+    var(--bear-bg)
+  );
+  --bear-cal-fill-success: color-mix(
+    in oklab,
+    var(--bear-cal-edge-success) calc(var(--bear-cal-mix) * 1%),
+    var(--bear-bg)
+  );
+  --bear-cal-fill-warning: color-mix(
+    in oklab,
+    var(--bear-cal-edge-warning) calc(var(--bear-cal-mix) * 1%),
+    var(--bear-bg)
+  );
+  --bear-cal-fill-danger: color-mix(
+    in oklab,
+    var(--bear-cal-edge-danger) calc(var(--bear-cal-mix) * 1%),
+    var(--bear-bg)
+  );
+
+  /*
+   * The type glyphs, as MASKS rather than as coloured images.
+   *
+   * Tokens rather than a stylesheet block, which is what removes the
+   * mirroring hazard entirely: `readExportTokens` copies custom properties
+   * verbatim (reading one back does NOT resolve it), so the exported
+   * document gets these from the same declaration the editor uses. There is
+   * no second copy to drift, and therefore no mirror test to write.
+   *
+   * Drawn with `mask-image` over `background: currentColor`, so one glyph
+   * serves every theme and takes the type's edge hue from the cascade. This
+   * is also why `lucide-react`'s ban outside `Icon.tsx` — measured at
+   * +57.20 kB gzip — does not apply: nothing here reaches JavaScript.
+   *
+   * The shapes are lucide's `info`, `lightbulb`, `circle-check`,
+   * `triangle-alert` and `circle-x`, copied verbatim. `stroke='black'` is
+   * arbitrary: a mask reads alpha, not colour.
+   */
+  --bear-cal-icon-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E");
+  --bear-cal-icon-tip: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5'/%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3C/svg%3E");
+  --bear-cal-icon-success: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E");
+  --bear-cal-icon-warning: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+  --bear-cal-icon-danger: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m15 9-6 6'/%3E%3Cpath d='m9 9 6 6'/%3E%3C/svg%3E");
+  /*
    * The syntax palette. Twelve literals, six tokens.
    *
    * Authored as a light value and a dark value per role, interpolated on the

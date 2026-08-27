@@ -1,8 +1,27 @@
 import { Node } from '@tiptap/core';
 import type { JSONContent, MarkdownParseHelpers, MarkdownRendererHelpers } from '@tiptap/core';
 import { Blockquote } from '@tiptap/extension-blockquote';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 import { type CalloutType, formatMarker, parseMarker } from './callouts';
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    callout: {
+      /**
+       * Sets the callout type of the block at the cursor, wrapping it in a
+       * blockquote first if it is not already in one.
+       *
+       * `null` turns a callout back into a plain quote, which is what the
+       * menu's first row does. Distinct from `toggleBlockquote`, which would
+       * unwrap the block entirely.
+       */
+      setCalloutType: (type: CalloutType | null) => ReturnType;
+    };
+  }
+}
 
 export interface CalloutOptions {
   /**
@@ -196,5 +215,111 @@ export const Callout = Blockquote.extend<CalloutOptions>({
           .join('\n'),
       )
       .join('\n>\n');
+  },
+
+  addCommands() {
+    return {
+      ...this.parent?.(),
+      setCalloutType:
+        (type) =>
+        ({ state, tr, dispatch, chain }) => {
+          const { $from } = state.selection;
+
+          // Walk out to the nearest enclosing blockquote. Depth 0 is the doc,
+          // so a bare paragraph finds nothing and gets wrapped below.
+          let depth = $from.depth;
+          while (depth > 0 && $from.node(depth).type.name !== 'blockquote') depth -= 1;
+
+          if (depth === 0) {
+            // CHAINED, not two calls on `commands`. `wrapIn` already computes
+            // the join and lift steps, so it is worth reusing — but a second
+            // `commands.setCalloutType` re-reads the ORIGINAL `state`, where
+            // the blockquote does not exist yet, and the stale positions throw
+            // `TransformError: Gap is not a flat range`. A chain hands each
+            // step a state derived from the shared transaction instead.
+            return chain().wrapIn('blockquote').setCalloutType(type).run();
+          }
+
+          if (dispatch === undefined) return true;
+
+          const pos = $from.before(depth);
+          const node = $from.node(depth);
+          const children: ProseMirrorNode[] = [];
+          node.forEach((child) => children.push(child));
+
+          const hasTitle = children[0]?.type.name === 'calloutTitle';
+          const titleType = state.schema.nodes.calloutTitle!;
+          const paragraphType = state.schema.nodes.paragraph!;
+
+          // The whole node is REBUILT and swapped in, rather than the title
+          // being inserted or removed in place: one step that produces an
+          // already-valid node, with nothing left for ProseMirror's content
+          // fitting to decide. `tr.insert(pos + 1, title)` also works — it was
+          // tried first and its output was identical — but it leaves the
+          // schema satisfaction implicit, and this command is the only place
+          // in the app that moves a `calloutTitle` in or out of existence.
+          const content =
+            type === null
+              ? hasTitle
+                ? [paragraphType.create(null, children[0]!.content), ...children.slice(1)]
+                : children
+              : hasTitle
+                ? children
+                : [titleType.create(), ...children];
+
+          tr.replaceWith(
+            pos,
+            pos + node.nodeSize,
+            node.type.create({ ...node.attrs, callout: type, rawMarker: null }, content),
+          );
+
+          return true;
+        },
+    };
+  },
+
+  /**
+   * Marks an EMPTY header with its type's localized name.
+   *
+   * A decoration rather than the node's own `renderHTML`, for two reasons that
+   * both had to hold: `calloutTitle` does not know its parent's type, and CSS
+   * `attr()` cannot reach an ancestor's attribute. It is also how `TagPill` and
+   * `HeadingFold` already add view-only information in this editor.
+   *
+   * Registers NO plugin when `calloutLabels` is absent, which is every schema
+   * build outside the mounted editor — so the export path and every round-trip
+   * suite are untouched by it, and the hint can never reach a note's text.
+   */
+  addProseMirrorPlugins() {
+    const labels = this.options.calloutLabels;
+    if (labels === null) return [];
+
+    return [
+      new Plugin({
+        key: new PluginKey('calloutPlaceholder'),
+        props: {
+          decorations(state) {
+            const decorations: Decoration[] = [];
+
+            state.doc.descendants((node, pos) => {
+              if (node.type.name !== 'blockquote') return true;
+              const type = node.attrs.callout as CalloutType | null;
+              const title = node.firstChild;
+              if (type === null || title?.type.name !== 'calloutTitle') return true;
+              if (title.content.size > 0) return true;
+
+              decorations.push(
+                Decoration.node(pos + 1, pos + 1 + title.nodeSize, {
+                  'data-placeholder': labels[type],
+                }),
+              );
+              return true;
+            });
+
+            return DecorationSet.create(state.doc, decorations);
+          },
+        },
+      }),
+    ];
   },
 });

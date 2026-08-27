@@ -75,7 +75,45 @@ const RULES = [
  * clears it by an enormous margin on purpose — white on black — and that
  * spread is the point of having the theme in the roster.
  */
-const DECORATIVE = [{ fg: 'border', grounds: ['bg', 'surface', 'sidebar'], min: 1.05 }] as const;
+/**
+ * A callout's edge — the left bar and the type icon — is a graphical object,
+ * not text, so 3.0 rather than 4.5. It is held to a real bar rather than to
+ * `border`'s 1.05 because it is the only thing distinguishing a warning from a
+ * danger at a glance: an edge that fades into the page defeats the block.
+ *
+ * The FILL is checked separately, in OVERLAYS, because it is alpha and the
+ * body text has to survive the composite.
+ */
+const CALLOUT_EDGES = [
+  { fg: 'cal-edge-info', grounds: ['bg'], min: 3.0 },
+  { fg: 'cal-edge-tip', grounds: ['bg'], min: 3.0 },
+  { fg: 'cal-edge-success', grounds: ['bg'], min: 3.0 },
+  { fg: 'cal-edge-warning', grounds: ['bg'], min: 3.0 },
+  { fg: 'cal-edge-danger', grounds: ['bg'], min: 3.0 },
+] as const;
+
+/**
+ * The panel must be visible AS a panel.
+ *
+ * Without this the fill rows in OVERLAYS are vacuous in the worst way: a fill
+ * identical to `--bear-bg` passes a 4.5 check against `text` perfectly, so a
+ * callout that had silently stopped tinting anything would sail through the
+ * suite. Held to `border`'s own floor, because a panel edge nobody can see is
+ * the same defect as a hairline nobody can see.
+ */
+const CALLOUT_FILLS_ARE_VISIBLE = [
+  { fg: 'cal-fill-info', grounds: ['bg'], min: 1.05 },
+  { fg: 'cal-fill-tip', grounds: ['bg'], min: 1.05 },
+  { fg: 'cal-fill-success', grounds: ['bg'], min: 1.05 },
+  { fg: 'cal-fill-warning', grounds: ['bg'], min: 1.05 },
+  { fg: 'cal-fill-danger', grounds: ['bg'], min: 1.05 },
+] as const;
+
+const DECORATIVE = [
+  { fg: 'border', grounds: ['bg', 'surface', 'sidebar'], min: 1.05 },
+  ...CALLOUT_EDGES,
+  ...CALLOUT_FILLS_ARE_VISIBLE,
+] as const;
 
 /**
  * Overlays are alpha over a ground, and text has to survive the composite.
@@ -93,6 +131,15 @@ const OVERLAYS = [
   { overlay: 'hl-green', ground: 'bg', fg: 'text', min: 4.5 },
   { overlay: 'hl-pink', ground: 'bg', fg: 'text', min: 4.5 },
   { overlay: 'hl-purple', ground: 'bg', fg: 'text', min: 4.5 },
+  // A callout's body is ordinary prose on a tinted panel, and the panel exists
+  // to draw the eye rather than to hide the words. `bg` is the ground for the
+  // same reason a highlight's is: a callout is always inside the editor's own
+  // canvas, never on a sidebar or a popover.
+  { overlay: 'cal-fill-info', ground: 'bg', fg: 'text', min: 4.5 },
+  { overlay: 'cal-fill-tip', ground: 'bg', fg: 'text', min: 4.5 },
+  { overlay: 'cal-fill-success', ground: 'bg', fg: 'text', min: 4.5 },
+  { overlay: 'cal-fill-warning', ground: 'bg', fg: 'text', min: 4.5 },
+  { overlay: 'cal-fill-danger', ground: 'bg', fg: 'text', min: 4.5 },
 ] as const;
 
 const READ = [
@@ -119,6 +166,16 @@ const READ = [
   'code-comment',
   'code-function',
   'code-type',
+  'cal-fill-info',
+  'cal-fill-tip',
+  'cal-fill-success',
+  'cal-fill-warning',
+  'cal-fill-danger',
+  'cal-edge-info',
+  'cal-edge-tip',
+  'cal-edge-success',
+  'cal-edge-warning',
+  'cal-edge-danger',
 ];
 
 test.describe('contrast', () => {
