@@ -560,3 +560,75 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   asserted the unwrapped shape and called it correct — the assertion recorded
   the upstream fact and hid the consequence, because nothing ever tried to EDIT
   such a document.
+
+## Callouts (M9b)
+
+- **`> [!warning] Title` is the syntax, and the choice is irreversible.** It
+  goes into note text and cannot change without rewriting every note that has
+  a callout. The plugin's other spelling — a fenced ` ```ad-warning ` block —
+  was rejected because it degrades, in every reader that does not know it, to
+  **a code block full of the user's prose**. `> [!warning]` degrades to a
+  blockquote, and GitHub and Obsidian core both render it natively. K1 made
+  "an exported folder is a portable Markdown bundle" a property of this app;
+  a callout that degraded to a monospace box would quietly undo it.
+
+- **The marker used to be ESCAPED, and that was silent corruption.** Probed
+  on 2026-08-27: `> [!NOTE]` serialized to `> \[!NOTE\]`, so merely opening
+  and saving a note carrying a GitHub alert rewrote it. Nothing in the suite
+  could see it. The tokenizer claiming the marker is what fixes it — the same
+  mechanism `Highlight` uses for `<mark>`, and for the same reason.
+
+- **The marker is anchored to the START of a block, and a `[!x]` mid-sentence
+  keeps its escape.** `markdown.test.ts` asserts
+  `> see [!warning] here` still round-trips as `> see \[!warning\] here`.
+  That assertion is what stops the fix above from over-reaching into prose.
+
+- **Read leniently, write canonically.** Both spacings parse and they parse
+  DIFFERENTLY — the tight form Obsidian and GitHub write produces ONE
+  paragraph carrying a hard newline, the loose form two paragraphs — so
+  `parseMarker` splits at the first newline and the serializer always emits
+  the loose form. Aliases (`note`, `caution`, `failure`, …) normalize to the
+  five canonical spellings on save, case-insensitively.
+
+- **An unrecognised marker is never a colour and never lost.** It stays a
+  plain blockquote whose `rawMarker` attribute carries the word back out
+  verbatim. Inventing a hue from an unknown word would be worse than the loss
+  it replaces; dropping the text is not on the table; and leaving it as
+  ordinary prose would hit the escaping bug above. **Consequence worth
+  knowing:** the marker is consumed, so the user sees a plain quote with no
+  visible sign the word is still there. It is, and it round-trips.
+
+- **A callout is an ATTRIBUTE on `blockquote`, never a new node.** A callout
+  IS a blockquote — that is what the Markdown says — so the toolbar button,
+  `Mod+Shift+B`, nesting, `EditorContextMenu` and `editorState`'s
+  `blockquote` flag all keep working untouched, and switching type is
+  `updateAttributes` rather than a content-preserving migration between two
+  node types. `blockquote: false` on StarterKit is load-bearing for exactly
+  the reason `codeBlock: false` beside it is.
+
+- **`calloutTitle` parses from `p[data-callout-title]`, NOT a `div`.**
+  `computeRecognizedHtmlTags()` derives its set from every `parseHTML` rule in
+  the schema. `div` is not in that set today and `p` already is, so keying on
+  `p` cannot change what `createRawInlineHtmlNode` rescues as a side effect —
+  and `rawBlock.test.ts` pins `<div>raw html</div>` round-tripping verbatim.
+
+- **`calloutTitle` has NO `renderMarkdown`, deliberately.** Measured: a title
+  in an invalid position then serializes to nothing at all, losing its text
+  (`'\n\nafter'` for a document whose first child read `stray`). A lenient
+  renderer on the node would have HIDDEN that. `sanitize`'s repair unwraps
+  such a node to a paragraph instead, which preserves the words and keeps the
+  loss observable in a test rather than only in a user's note. Fault
+  injection: three of its four tests fail without the repair.
+
+- **`setCalloutType` chains `wrapIn`; it must not call it twice on
+  `commands`.** A second `commands.setCalloutType` re-reads the ORIGINAL
+  state, where the blockquote does not exist yet, and the stale positions
+  throw `TransformError: Gap is not a flat range`. A chain hands each step a
+  state derived from the shared transaction.
+
+- **Callouts do not collapse, and that is B1's rule upheld rather than
+  overlooked.** `2026-08-20-b1-collapsible-headings-design.md` rules "no list
+  folding, no blockquote folding, no code-block folding". Reopened
+  deliberately in M9b's brainstorm and kept: a callout long enough to want
+  folding usually wanted to be a section under a heading. This is why there is
+  no `-`/`+` flag in the Markdown and no fold state to persist.

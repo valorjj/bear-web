@@ -1,6 +1,7 @@
 import { getMarkRange } from '@tiptap/core';
 import type { Editor } from '@tiptap/core';
 
+import type { CalloutType } from './callouts';
 import type { HighlightColor } from './Highlight';
 
 /**
@@ -27,6 +28,12 @@ export interface EditorFlags {
   orderedList: boolean;
   codeBlock: boolean;
   blockquote: boolean;
+  /**
+   * The callout type under the caret, or `null` for a plain quote or no quote
+   * at all. `blockquote` above says WHETHER there is a quote; this says which
+   * kind, and the two are read together by the chevron menu.
+   */
+  calloutType: CalloutType | null;
   table: boolean;
   /** `null` means the DEFAULT tint (`==text==`), NOT "no highlight". */
   highlightColor: HighlightColor | null;
@@ -51,6 +58,7 @@ export const EMPTY_FLAGS: EditorFlags = {
   orderedList: false,
   codeBlock: false,
   blockquote: false,
+  calloutType: null,
   table: false,
   highlightColor: null,
   highlightRange: null,
@@ -93,6 +101,9 @@ export function editorFlagsSelector({ editor }: { editor: Editor }): EditorFlags
     orderedList: editor.isActive('orderedList'),
     codeBlock: editor.isActive('codeBlock'),
     blockquote: editor.isActive('blockquote'),
+    calloutType: editor.isActive('blockquote')
+      ? ((editor.getAttributes('blockquote').callout as CalloutType | null) ?? null)
+      : null,
     table: editor.isActive('table'),
     highlightColor: highlight
       ? ((editor.getAttributes('highlight').color as HighlightColor | null) ?? null)

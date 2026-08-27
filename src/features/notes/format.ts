@@ -58,6 +58,13 @@ const BLOCK_MARKERS: readonly RegExp[] = [
   /^\s{0,3}>\s?/,
   /^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s+/,
   /^\[[ xX]\]\s+/,
+  // A callout's marker, which the blockquote rule above has just exposed. The
+  // TITLE after it is kept: it is the most informative text in the block, and
+  // dropping it would preview a warning as whatever paragraph happened to
+  // follow. Runs after the `>` rule for exactly that reason, and matches ANY
+  // word rather than the roster — an unrecognised marker is syntax in a
+  // preview too, whatever it means elsewhere.
+  /^\[![^\]\n]+\]\s?/,
 ];
 
 /**

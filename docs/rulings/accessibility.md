@@ -430,3 +430,26 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   offline, an error, and signed-in-but-never-synced. Signed out shows nothing
   either — there is no sync to report, and a badge there would read as a
   problem rather than as an absence.
+
+## The callout type menu (M9b)
+
+- **`menuitemradio` with `aria-checked`, never `menuitem`.** The six choices
+  are mutually exclusive and exactly one is always in effect, which is what
+  `aria-checked` carries. The swatch and the glyph alone would leave a
+  screen-reader user with six identically-shaped buttons — the same reasoning
+  `HighlightMenu` records.
+
+- **The rows are DERIVED from `CALLOUT_TYPES`, not listed again**, so a sixth
+  type cannot exist in the schema and be missing from the menu. Their labels
+  are `TranslationKey`s, so a forgotten translation is a compile error rather
+  than a blank row.
+
+- **The menu reflects the caret, which is a behaviour and not a bug.** Opening
+  it with the cursor outside a callout correctly reports a plain quote, and
+  choosing a type then makes a NEW callout at the cursor. `e2e/callouts.spec.ts`
+  clicks into the block first for exactly this reason; the first version of
+  that test did not, and failed honestly.
+
+- **Colour is never the only carrier of a callout's type.** Every type has a
+  distinct glyph as well as a hue, and the title text stays `--bear-text` so
+  the block does not depend on hue for legibility either.

@@ -30,7 +30,30 @@ import { describe, expect, it } from 'vitest';
  * ordinary churn — not a target, a limit. Raising it is a decision someone
  * makes in a diff, not a drift nobody notices.
  */
-const CEILING_BYTES = 328_000;
+const CEILING_BYTES = 333_000;
+
+/**
+ * Raised from 328,000 by M9b (callout blocks) on 2026-08-27, measured on both
+ * sides. `main` was **327,813 B** — **187 bytes of headroom**, so the previous
+ * ceiling was even closer to exhausted than K1 left it — and the finished
+ * milestone measures **330,243 B**, a true cost of **2,430 B gzipped** for the
+ * marker grammar, the extended blockquote node, the `calloutTitle` node,
+ * `sanitize`'s repair, the type command, the placeholder plugin, the chevron
+ * menu and the input rule.
+ *
+ * An interim raise to 332,000 was made mid-milestone and described the cost as
+ * 844 B, which was the figure at that moment and not the feature's. Both the
+ * number and the ceiling are corrected here rather than left to read as a
+ * final measurement that was never taken.
+ *
+ * No dependency was added: `@tiptap/extension-blockquote` was already in the
+ * bundle by way of StarterKit, so importing it directly is free. The five
+ * icons cost nothing at all — they are `mask-image` data URIs in `tokens.css`,
+ * which is CSS, not JS.
+ *
+ * Headroom is ~2.75 KB, matching what K1 deliberately left, so the next
+ * ordinary change does not have to touch this line.
+ */
 
 /**
  * Raised from 324,000 by K1 (image capture) on 2026-08-26, with the growth

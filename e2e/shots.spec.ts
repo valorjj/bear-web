@@ -175,6 +175,17 @@ for (const theme of THEMES) {
       await openNote(page, /Highlighting three languages/, 'unhighlighted text');
       await blur(page);
       await shot(editor, `13-editor-code-${theme.name}`);
+
+      // M9b's shot, and it needs no new `test` block: this one is already
+      // seeded and already in the Notes scope, so a second boot would cost
+      // sixteen more page loads for one frame.
+      //
+      // Five tinted panels prove the palette. The unrecognised marker and the
+      // plain quote beneath them prove that NEITHER invented a colour, which
+      // is the half a palette screenshot alone cannot show.
+      await openNote(page, /배포 전 점검/, '되돌릴 수 없습니다');
+      await blur(page);
+      await shot(editor, `15-editor-callouts-${theme.name}`);
     });
 
     test(`exported document @shots`, async ({ page }) => {

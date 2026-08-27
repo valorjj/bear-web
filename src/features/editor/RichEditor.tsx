@@ -10,6 +10,7 @@ import type { ContextMenuRequest } from './ContextMenu';
 import { EMPTY_FLAGS, editorFlagsSelector } from './editorState';
 import { EditorContextMenu, type ContextMenuAction } from './EditorContextMenu';
 import { buildEditorExtensions } from './extensions';
+import { CalloutMenu } from './CalloutMenu';
 import { HeadingMenu } from './HeadingMenu';
 import { HighlightMenu } from './HighlightMenu';
 import { HighlightPalette, type HighlightChoiceResult } from './HighlightPalette';
@@ -159,6 +160,7 @@ export function RichEditor({
   const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
   const [tableMenu, setTableMenu] = useState<TableHandleMenuRequest | null>(null);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const [calloutMenuOpen, setCalloutMenuOpen] = useState(false);
   /**
    * The colour the toolbar's Highlight button applies. Sticky across clicks so
    * highlighting in one colour stays a single click; it is a session
@@ -238,6 +240,18 @@ export function RichEditor({
       // there is no "nobody is listening" state to represent with `null` here.
       onOpenMenu: (request) => openMenuRef.current(request),
       foldHint: t('editor.fold.toggle'),
+      // Read once at mount, like `foldHint` above. These drive the empty-header
+      // hint and nothing else: they are a writer's aid, never content, so they
+      // never reach the Markdown or an export. Supplying them here is also what
+      // registers the placeholder plugin at all — every schema build outside
+      // this component passes nothing and gets no plugin.
+      calloutLabels: {
+        info: t('editor.callout.info'),
+        tip: t('editor.callout.tip'),
+        success: t('editor.callout.success'),
+        warning: t('editor.callout.warning'),
+        danger: t('editor.callout.danger'),
+      },
       // Unconditionally wired, same as `onOpenMenu` above and for the same
       // reason: the context menu is a built-in editor affordance, not an
       // opt-in prop the app may omit.
@@ -670,6 +684,28 @@ export function RichEditor({
          * rather than within it.
          */}
         <div className="pointer-events-auto flex max-w-full flex-col items-center gap-2">
+          {calloutMenuOpen && (
+            <CalloutMenu
+              // Read through `flags`, the editor-state subscription, never
+              // `editor.isActive` in this render body: `useEditor` does not
+              // re-render on transactions in Tiptap v3, so an `isActive` call
+              // made during render is stale from the moment the caret moves.
+              current={flags.calloutType}
+              onChoose={(type) => {
+                // The document mutation runs FIRST, before any React state
+                // change, for the same reason the colour menu does it: closing
+                // the menu unmounts it and moves focus off the item it focused
+                // on open, and doing that before the command left the edit
+                // dependent on render timing.
+                if (editor !== null) {
+                  editor.chain().command(pinAllSelectionStep).focus().setCalloutType(type).run();
+                }
+
+                setCalloutMenuOpen(false);
+              }}
+              onDismiss={() => setCalloutMenuOpen(false)}
+            />
+          )}
           {colorMenuOpen && (
             <HighlightMenu
               // What the cursor is actually sitting in wins over the sticky
@@ -714,7 +750,17 @@ export function RichEditor({
             flags={flags}
             highlightColor={highlightColor}
             colorMenuOpen={colorMenuOpen}
-            onToggleColorMenu={() => setColorMenuOpen((open) => !open)}
+            onToggleColorMenu={() => {
+              setCalloutMenuOpen(false);
+              setColorMenuOpen((open) => !open);
+            }}
+            calloutMenuOpen={calloutMenuOpen}
+            onToggleCalloutMenu={() => {
+              // Two menus stack in one column above the toolbar, so opening
+              // either closes the other rather than letting both float.
+              setColorMenuOpen(false);
+              setCalloutMenuOpen((open) => !open);
+            }}
           />
         </div>
       </div>

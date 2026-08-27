@@ -114,6 +114,25 @@ describe('deriveSnippet', () => {
     );
   });
 
+  it('strips a callout marker but keeps its title', () => {
+    // The title is the most informative text in the block; the marker is
+    // syntax. Dropping the title would preview a warning as whatever
+    // paragraph happened to follow it.
+    expect(deriveSnippet('Note\n> [!warning] 백업 전에 확인\n>\n> 되돌릴 수 없습니다.')).toBe(
+      '백업 전에 확인 되돌릴 수 없습니다.',
+    );
+  });
+
+  it('strips an unrecognised marker too, because it is syntax either way', () => {
+    expect(deriveSnippet('Note\n> [!사내공지] 제목\n>\n> 본문.')).toBe('제목 본문.');
+  });
+
+  it('keeps a bracketed phrase that is not a marker', () => {
+    // `[!` only opens a marker at the very start of a block. Mid-line it is
+    // prose, and eating it would delete the user's words.
+    expect(deriveSnippet('Note\nsee [!important] below')).toBe('see [!important] below');
+  });
+
   it('joins the body lines into one run of prose', () => {
     // The row clamps to two lines and reserves the height whether or not
     // there is text to fill it, so a preview that stopped at the first body

@@ -54,11 +54,11 @@ feature and is not yet scheduled.
 | K2 image sync: the Mac Mini as an image store                     | complete |
 | K3 image resize, and images in every export                       | complete |
 | G export: PDF, rendered server-side                               | complete |
-| M9b callout blocks                                                | deferred |
+| M9b callout blocks                                                | complete |
 
-2004 unit tests (plus 127 server tests, 55 of which are integration tests that
+2119 unit tests (plus 127 server tests, 55 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 148 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 154 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **G moved PDF export off the client entirely, and it is the first capability
@@ -168,8 +168,18 @@ B is the sub-project M9a's spec named **M9c**; do not read the letters as new
 milestone ids. **B2 is not part of that spec** — it is a follow-up named only
 once B shipped, queued but unscheduled. Its ordering relative to C is an open
 question, not a ruling — nobody has decided whether either blocks the other.
-**M9b callout blocks is deferred, not dropped** — specced in M9a's
-decomposition, deliberately not chosen this round, still unblocked.
+**M9b callout blocks shipped on 2026-08-27.** Five types written as
+`> [!warning] Title` — the callout microsyntax GitHub and Obsidian core both
+render natively, chosen over the plugin's ` ```ad-warning ` form because that
+one degrades to a code block full of the user's prose in any reader that does
+not know it. A callout is an ATTRIBUTE on `blockquote`, not a new node: it is
+a blockquote, so the toolbar button, `Mod+Shift+B` and nesting all keep
+working. **It opened with a corruption fix rather than a feature** —
+`> [!NOTE]` serialized to `> \[!NOTE\]`, so merely opening and saving a note
+carrying a GitHub alert rewrote it, and nothing in the suite could see it.
+Callouts deliberately do NOT collapse: B1's "no blockquote folding" was
+reopened in the brainstorm and upheld. See
+`docs/superpowers/specs/2026-08-27-m9b-callout-blocks-design.md`.
 
 **Image storage is no longer entirely unscheduled: K1 shipped on 2026-08-26.**
 Pasting or dropping a screenshot into a note now stores one downscaled WebP in
@@ -201,8 +211,8 @@ count, because they assert nothing.** Both drive the fixed corpus in
   three-language code note (one unregistered language, to keep the plain-
   render fallback visible), the right-click context menu open on a table cell
   (its tallest form) and the exported document, **in every theme in the
-  roster** (14 shots × 16 themes = 224 files, up from 208 when H added its own
-  shot). The theme list is derived from `themes.ts` by a regex requiring `id`, `labelKey` and
+  roster** (15 shots × 16 themes = 240 files, up from 224 when M9b added
+  its callout frame). The theme list is derived from `themes.ts` by a regex requiring `id`, `labelKey` and
   `group` on ONE line in that order — a Prettier reflow would make it match
   nothing, and an empty list renders the default theme sixteen times with no
   error. Count the files, do not trust the exit code.
@@ -215,7 +225,12 @@ count, because they assert nothing.** Both drive the fixed corpus in
 - `npm run shots:pdf` → `e2e/shots-pdf.spec.ts` renders the corpus note to a
   real PDF through the **containerised** renderer in four themes spanning the
   roster (`paper`, `sepia`, `nord`, `high-contrast`) and rasterises page 1
-  into `docs/design/shots/pdf/` with poppler's `pdftoppm` (4 files). It needs
+  into `docs/design/shots/pdf/` with poppler's `pdftoppm` (**5 files** since
+  M9b: the four themed renders plus one pass over the callout note). That
+  fifth render is one theme, not four, because the risk it covers is not
+  palette — `contrast.spec.ts` covers that across all sixteen — but whether
+  the CONTAINER'S Chromium draws a `mask-image` data URI at all under print
+  media. It does; verified 2026-08-27. It needs
   `PDF_RENDERER_URL` and `npm run pdf:up`, and it SKIPS silently without them
   — **count the files.** It is not folded into `npm run shots`: sixteen A4
   container renders is not a cost that harness should carry, and the existing
@@ -827,7 +842,7 @@ at the top; the rows here are abridged.
 | `src/data/migrations.ts`, `sweep.ts`, `persist.ts`, `backup.ts`, `db.ts`'s `stores({…})`; the `noteTags` writes in `repositories/notes.ts`; the boot sequence in `main.tsx`; a new `db.version(n).upgrade()`                                                                                                                                                                            | [tag-index-and-startup.md](docs/rulings/tag-index-and-startup.md)                                                                      |
 | `NoteEditor.tsx`, `useAutosave.ts`, `useNotes.ts`, `derive.ts`, `useFlushTriggers.ts`; `AppShell`'s `key={…}` / `seed`; any `useLiveQuery` whose deps are not `[]`, and any write GATED on one (`useTagTree.reveal`); `notes.purge` / `notes.save` call sites                                                                                                                           | [notes-lifecycle.md](docs/rulings/notes-lifecycle.md)                                                                                  |
 | `scope.ts` (`NoteScope`, `SMART_LIST_IDS`, `scopeKey`, `ScopeQuery`, the capability functions), `src/data/order.ts`, `ScopeMenu.tsx`, `useSetting.ts`, `smartLists.ts`, `useSmartListCounts.ts`, `search.ts`, `HighlightedText.tsx`, `ConfirmDialog.tsx`, `AppShell`'s scope/query state                                                                                                | [scopes-and-search.md](docs/rulings/scopes-and-search.md)                                                                              |
-| `src/features/editor/markdown.ts`, `extensions.ts`, `RawBlock.ts`, `toolbarSelection.ts`, `taskItemPromotion.ts`; the `CANONICAL` / `NON_CANONICAL` fixtures; a new import of `@tiptap/markdown`; a new extension, input rule, **or keyboard binding** (`useScopeShortcuts.ts` included)                                                                                                | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md)                                                                          |
+| `src/features/editor/markdown.ts`, `extensions.ts`, `RawBlock.ts`, `toolbarSelection.ts`, `taskItemPromotion.ts`, `callouts.ts`, `Callout.ts`; the `CANONICAL` / `NON_CANONICAL` fixtures; a new import of `@tiptap/markdown`; a new extension, input rule, **or keyboard binding** (`useScopeShortcuts.ts` included)                                                                   | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md)                                                                          |
 | `tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` entries in `extensions.ts`, `RawTable`, `table.test.ts`, any table fixture                                                                                                                                                                                                                 | [tables.md](docs/rulings/tables.md)                                                                                                    |
 | `TagPill.ts` (`tagDecorations`, `tagRangeAt`, the `mousedown` handler), `blockText.ts` (`maskedBlockText`), `RichEditor`'s `activateRef` / `data-mod-held`, `AppShell.handleActivateTag`, `--bear-tag-fill*`, `tagAgreement.test.ts`                                                                                                                                                    | [tag-pills.md](docs/rulings/tag-pills.md)                                                                                              |
 | `src/features/export/` — `html.ts`, `exportNote.ts`, `requestPdf.ts`, `filename.ts`, `ExportMenu.tsx`; `NoteEditor.handleExport`; `server/src/routes/export.ts`, `server/pdf/`; the `export.*` i18n keys and `ALLOWED_IDENTICAL`                                                                                                                                                        | [export.md](docs/rulings/export.md)                                                                                                    |

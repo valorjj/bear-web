@@ -676,7 +676,16 @@ test('exporting a note downloads its Markdown verbatim, and its HTML as a real d
   // Self-contained: the token values are resolved into the file, so it renders
   // the same on a machine that has never seen this app.
   expect(htmlText).toMatch(/--bear-text:\s*\S/);
-  expect(htmlText).not.toMatch(/https?:\/\//);
+  // No FETCHABLE reference — nothing the browser would go to the network for.
+  // Narrowed from a bare `https?://` scan when M9b's callout icons arrived:
+  // those are `data:image/svg+xml` masks whose markup carries
+  // `xmlns='http://www.w3.org/2000/svg'`, and an XML namespace is an
+  // identifier that is never resolved, not a resource. The assertion below
+  // still fails on a real `src=`, `href=` or `url(https://…)`, which is what
+  // it was always for.
+  expect(htmlText).not.toMatch(/(?:src|href)\s*=\s*["']?https?:\/\//);
+  expect(htmlText).not.toMatch(/url\(\s*["']?https?:\/\//);
+  expect(htmlText).not.toMatch(/@import/);
 
   // And it has to RENDER, which is a different question from whether its markup
   // is right. The exported document carries no Tailwind preflight, so the

@@ -377,6 +377,82 @@ describe('the info panel', () => {
   });
 });
 
+describe('the callout type menu', () => {
+  async function openCalloutMenu(): Promise<HTMLElement> {
+    await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Callout type' }));
+    return screen.getByRole('menu', { name: 'Callout type' });
+  }
+
+  it('opens from a chevron beside Quote that reports its own state', async () => {
+    renderEditor('word');
+    await screen.findByLabelText('Note text');
+
+    const chevron = within(bottomToolbar()).getByRole('button', { name: 'Callout type' });
+    expect(chevron).toHaveAttribute('aria-haspopup', 'menu');
+    expect(chevron).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.click(chevron);
+    expect(chevron).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('writes the chosen type into the document', async () => {
+    // The whole loop: menu click -> command -> document -> Markdown. The
+    // component tests assert the menu's own semantics; this is the only thing
+    // that proves the wiring between them.
+    const { handleRef } = renderEditor('Be careful');
+    await screen.findByLabelText('Note text');
+
+    const menu = await openCalloutMenu();
+    await userEvent.click(within(menu).getByRole('menuitemradio', { name: 'Warning' }));
+
+    await waitFor(() => expect(handleRef.current?.getMarkdown()).toContain('> [!warning]'));
+    expect(handleRef.current?.getMarkdown()).toContain('Be careful');
+  });
+
+  it('reports the type under the caret when it reopens', async () => {
+    // Read through the editor-state subscription, never `isActive` in a render
+    // body: `useEditor` does not re-render on transactions in Tiptap v3, so a
+    // menu that read `isActive` would open showing whatever was true the last
+    // time React happened to render.
+    renderEditor('> [!danger] Stop\n>\n> Body.');
+    await screen.findByLabelText('Note text');
+
+    const menu = await openCalloutMenu();
+
+    expect(within(menu).getByRole('menuitemradio', { name: 'Danger' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+  });
+
+  it('turns a callout back into a plain quote and keeps the header text', async () => {
+    const { handleRef } = renderEditor('> [!danger] Stop\n>\n> Body.');
+    await screen.findByLabelText('Note text');
+
+    const menu = await openCalloutMenu();
+    await userEvent.click(within(menu).getByRole('menuitemradio', { name: 'Quote' }));
+
+    await waitFor(() => expect(handleRef.current?.getMarkdown()).not.toContain('[!danger]'));
+    // The header is the user's own text; a menu click must not delete it.
+    expect(handleRef.current?.getMarkdown()).toContain('Stop');
+  });
+
+  it('closes the colour menu when it opens, so the two never stack', async () => {
+    renderEditor('word');
+    await screen.findByLabelText('Note text');
+
+    await userEvent.click(
+      within(bottomToolbar()).getByRole('button', { name: 'Highlight colour' }),
+    );
+    expect(screen.getByRole('menu', { name: 'Highlight colour' })).toBeInTheDocument();
+
+    await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Callout type' }));
+
+    expect(screen.queryByRole('menu', { name: 'Highlight colour' })).toBeNull();
+    expect(screen.getByRole('menu', { name: 'Callout type' })).toBeInTheDocument();
+  });
+});
+
 describe('the highlight colour menu', () => {
   async function openColourMenu(): Promise<HTMLElement> {
     await userEvent.click(
