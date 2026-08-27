@@ -74,23 +74,36 @@ describe('CI runs every suite the default `npm test` skips', () => {
     expect(commands, 'ci.yml must run the pdf suite explicitly').toContain('npm run test:pdf');
   });
 
-  it('checks the committed measurements are current', () => {
-    // `docs/design/measurements.md` is committed and records the shipped
-    // geometry, but `npm run measure` is not a local gate — so without this
-    // step it drifts silently, and it did: three days and three sub-projects.
-    // Nothing else in the repo would notice the step being dropped.
-    expect(commands, 'ci.yml must re-run npm run measure').toContain('npm run measure');
-    expect(
-      commands,
-      'ci.yml must FAIL on a measurements diff, not merely regenerate them',
-    ).toContain('git diff --exit-code docs/design/measurements.md');
+  /*
+   * NOT a CI step, and that is a measured decision rather than an oversight.
+   *
+   * It ran in `ci.yml` for exactly one commit and failed: text-derived widths
+   * differ between ubuntu and macOS. The scope header button measured 68.7 on
+   * macOS and 70 on ubuntu; the tag pill 573.6 against 564.2 — a 9.4px gap,
+   * which is LARGER than real design changes worth catching (sub-project I
+   * moved a row height by 4px). No tolerance separates that signal from that
+   * noise, so the comparison only means anything on the machine that generated
+   * the file. Every height and style value did match; it is widths alone.
+   *
+   * So the check is `npm run measure:check`, run locally where the platform
+   * agrees with itself. This guards the script rather than the workflow.
+   */
+  it('ships a measure:check script that FAILS on a stale reference', () => {
+    const script = packageJson.scripts['measure:check'];
+    expect(script, 'measure:check must exist').toBeDefined();
+    expect(script, 'it must regenerate the measurements').toContain('npm run measure');
+    expect(script, 'it must fail on a diff rather than silently rewriting').toContain(
+      'git diff --exit-code',
+    );
+    expect(script).toContain('docs/design/measurements.md');
   });
 
-  it('runs the measurement check AFTER the browser is installed', () => {
-    const install = commands.indexOf('playwright install');
-    const measure = commands.indexOf('npm run measure');
-    expect(install).toBeGreaterThan(-1);
-    expect(measure).toBeGreaterThan(install);
+  it('does NOT run the measurement check in CI, where it cannot be trusted', () => {
+    // Guards the finding above against a well-meaning "why isn't this in CI?"
+    // If you are re-adding it, read this block's comment first.
+    expect(commands, 'measure must not run in ci.yml — see the comment above').not.toContain(
+      'npm run measure',
+    );
   });
 
   it('runs it AFTER the Playwright browser is installed', () => {

@@ -166,22 +166,30 @@ npm run build
 
 All six must pass before any commit.
 
-**`npm run shots` and `npm run measure` are NOT local gates**, and the two are
-handled differently on purpose:
+**A seventh gate, and one harness that stays on demand:**
 
-- **`measure` is checked in CI.** It needs a production build and a real
-  browser, so locally it is in `test:e2e`'s cost class rather than the cheap
-  tier — but CI has already built and installed both by the time it runs, so
-  there it is nearly free. `ci.yml` re-runs it and fails on a diff, because
-  `docs/design/measurements.md` is committed, is meant to record the SHIPPED
-  geometry, and silently drifted three days and three sub-projects before
-  anyone noticed. "Exists, unrun, silently stale" is the worst state for a
-  reference file: it looks like coverage. If it fails on a diff you did not
-  cause, regenerate and commit — and check `main` produces the same numbers
-  before blaming your own branch.
-- **`shots` stays on demand.** 240 screenshots have no meaningful pass/fail and
-  nothing can diff them but a person. Run it when you change something visual;
-  count the files, do not trust the exit code.
+- **`npm run measure:check` before a commit that touched anything visual.** It
+  regenerates `docs/design/measurements.md` and FAILS on a diff. That file is
+  committed and is meant to record the SHIPPED geometry, and it silently
+  drifted three days and three sub-projects (J2a's 16px search field, I's row
+  height, M9b's extra toolbar control) before anyone noticed — and then only by
+  accident, while chasing a diff that turned out to belong to neither branch.
+  "Exists, unrun, silently stale" is the worst state for a reference file: it
+  looks like coverage. When it fails, regenerate and commit — and run `measure`
+  on `main` too before blaming your own branch.
+- **It is deliberately NOT in CI, and that is measured rather than assumed.**
+  It ran in `ci.yml` for exactly one commit and failed: TEXT-DERIVED WIDTHS
+  differ between ubuntu and macOS. The scope header button measured 68.7 on
+  macOS against 70 on ubuntu, and the tag pill 573.6 against 564.2 — a 9.4px
+  gap, which is LARGER than a real change worth catching (sub-project I moved a
+  row height by 4px). No tolerance separates that signal from that noise. Every
+  height and style value matched; widths alone diverge. The comparison
+  therefore only means anything on the machine that generated the file.
+  `scripts/ciCoverage.test.ts` now asserts it is absent from `ci.yml`, so
+  re-adding it fails loudly with the reason attached.
+- **`npm run shots` stays on demand.** 240 screenshots have no meaningful
+  pass/fail and nothing can diff them but a person. Run it when you change
+  something visual; count the files, do not trust the exit code.
 
 ### The full suite is expensive; budget it
 

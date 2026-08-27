@@ -80,12 +80,21 @@ because a restyle made it fail.
   only thing that covers the browser path, and item 1 on ANDROID is the only
   thing that can show the two mechanisms do not double-apply.
 
-- **`npm run measure` drifts, because it is deliberately not in the gate.**
-  `docs/design/measurements.md` sat three days and three sub-projects stale
-  (J2a's 16px search field, I's row height, M9b's extra toolbar control).
-  Regenerate it at the end of any sub-project that touched a measured surface —
-  and when a diff appears, run `measure` on `main` too before attributing it:
-  J3's output was byte-identical to `main`'s, so none of that drift was J3's.
+- **`npm run measure` drifts, and the fix is `npm run measure:check` LOCALLY —
+  never in CI.** `docs/design/measurements.md` sat three days and three
+  sub-projects stale (J2a's 16px search field, I's row height, M9b's extra
+  toolbar control). The check ran in `ci.yml` for exactly one commit and failed:
+  **text-derived widths differ between ubuntu and macOS.** The scope header
+  button measured 68.7 on macOS against 70 on ubuntu; the tag pill 573.6
+  against 564.2 — a 9.4px gap, LARGER than a real change worth catching (I
+  moved a row height by 4px), so no tolerance separates signal from noise.
+  Every height and every style value matched; widths alone diverge, and only
+  where the box is sized by its text. The comparison is therefore meaningful
+  only on the machine that generated the file.
+  `scripts/ciCoverage.test.ts` asserts the step is ABSENT from `ci.yml` so
+  re-adding it fails with the reason attached. And when a diff does appear, run
+  `measure` on `main` before attributing it: J3's output was byte-identical to
+  `main`'s, so none of that drift was J3's.
 
 - **A source-scanning assertion cannot tell a command from a COMMENT about the
   command.** `scripts/ciCoverage.test.ts` asserted `ci.yml` contains
