@@ -71,7 +71,14 @@ export function Resizer({
       // there is real space here, so the element occupies it rather than
       // overlapping its neighbours. `relative z-10` is kept so the cards'
       // shadows never sit above the hit area.
-      className="group relative z-10 w-2 shrink-0 cursor-col-resize focus-visible:outline-none"
+      // `touch-target` widens the 8px track to a 44px hit area on a coarse
+      // pointer, without moving the cards on either side.
+      //
+      // J1 ruled a resizer is NOT RENDERED below desktop, which reads like "no
+      // touch problem". It is not: an iPad Pro in landscape is at or above the
+      // 1024 desktop breakpoint AND reports a coarse pointer, so it renders an
+      // 8px drag track for a fingertip.
+      className="group touch-target relative z-10 w-2 shrink-0 cursor-col-resize focus-visible:outline-none"
     >
       <span
         aria-hidden="true"

@@ -400,6 +400,59 @@ describe('row menu', () => {
     expect(onOpenMenu.mock.calls[0][0]).toMatchObject({ pinned: true, trashed: true });
   });
 
+  it('opens on a long press, anchored at the finger, without selecting the row', () => {
+    const onOpenMenu = vi.fn();
+    const onSelect = vi.fn();
+    vi.useFakeTimers();
+    try {
+      renderItem({ onOpenMenu, onSelect });
+      const row = screen.getByRole('button', { name: /Groceries/ });
+
+      const down = new MouseEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 88,
+        clientY: 176,
+      });
+      Object.defineProperty(down, 'pointerType', { value: 'touch' });
+      row.dispatchEvent(down);
+      vi.advanceTimersByTime(500);
+
+      // The finger's position, not the row's rect — jsdom reports 0 for every
+      // measured rect, so 88/176 can only have come from the pointer.
+      expect(onOpenMenu).toHaveBeenCalledTimes(1);
+      expect(onOpenMenu.mock.calls[0][0].rect.left).toBe(88);
+      expect(onOpenMenu.mock.calls[0][0].rect.top).toBe(176);
+
+      // The click a touch produces after the press must NOT reach the row.
+      // Without suppression a long press would open this menu over an editor
+      // screen the user never asked to open.
+      fireEvent.click(row);
+      expect(onSelect).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not open when the finger is scrolling', () => {
+    const onOpenMenu = vi.fn();
+    vi.useFakeTimers();
+    try {
+      renderItem({ onOpenMenu });
+      const row = screen.getByRole('button', { name: /Groceries/ });
+
+      const down = new MouseEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0 });
+      Object.defineProperty(down, 'pointerType', { value: 'touch' });
+      row.dispatchEvent(down);
+      row.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 0, clientY: 60 }));
+      vi.advanceTimersByTime(500);
+
+      expect(onOpenMenu).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('opens on Shift+F10, the keyboard route', async () => {
     const onOpenMenu = vi.fn();
     const user = userEvent.setup();

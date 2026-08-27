@@ -237,6 +237,30 @@ export function BottomToolbar({
             aria-pressed={flags[action.active] === true}
             disabled={editor === null}
             onClick={() => editor !== null && action.run(editor, t, highlightColor)}
+            // NO `touch-target-y` here, and the reason is a hard blocker
+            // rather than an oversight (J2).
+            //
+            // This strip is `overflow-x-auto`, and CSS forces `overflow-y` to
+            // a non-visible value whenever `overflow-x` is not visible — the
+            // computed pair measures `auto`/`auto`. So a 44px `::after` on a
+            // 28px button inside a 36px strip is generated at its full height
+            // (verified: `height: 44px`) and then CLIPPED to the strip, which
+            // means it receives no tap the ink would not have received anyway.
+            // The utility would emit and do nothing, which is the exact shape
+            // of the dead `hover:bg-hover` this project shipped for two
+            // milestones.
+            //
+            // The only route to 44px here is a taller strip, and that is a
+            // reflow of a floating toolbar whose reserved bottom padding in
+            // `RichEditor` is asserted by `e2e/appearance.spec.ts` — J3's
+            // work, not J2's. `TopControls` is the same shape WITHOUT the
+            // overflow, so it does carry the utility and `e2e/touch.spec.ts`
+            // proves it works there.
+            //
+            // (That padding is named in prose rather than written as its
+            // utility: `scripts/sourceLint.test.ts`'s spacing scan reads
+            // comments too, and a backticked utility in a comment reads to it
+            // as an off-scale value in the markup.)
             className={`h-7 shrink-0 rounded-sm text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40 ${
               // The highlight pair reads as ONE control: the button loses its
               // trailing inset so the chevron sits against it rather than a
@@ -258,6 +282,10 @@ export function BottomToolbar({
               aria-expanded={action.key === 'highlight' ? colorMenuOpen : calloutMenuOpen}
               disabled={editor === null}
               onClick={action.key === 'highlight' ? onToggleColorMenu : onToggleCalloutMenu}
+              // Same clipping blocker as its sibling above, and the same
+              // deferral to J3 — despite this being the narrowest control in
+              // the app at ~18px and the only route to the highlight colours
+              // and the callout types.
               className="h-7 shrink-0 rounded-sm pr-2 pl-0.5 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-expanded:bg-selected aria-expanded:text-text disabled:pointer-events-none disabled:opacity-40"
             >
               <Icon glyph={ChevronDown} size="sm" />
