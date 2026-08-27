@@ -251,11 +251,16 @@ export function BottomToolbar({
             // milestones.
             //
             // The only route to 44px here is a taller strip, and that is a
-            // reflow of a floating toolbar whose reserved space
-            // (`RichEditor`'s `pb-24`) is asserted elsewhere — J3's work, not
-            // J2's. `TopControls` is the same shape WITHOUT the overflow, so
-            // it does carry the utility and `e2e/touch.spec.ts` proves it
-            // works there.
+            // reflow of a floating toolbar whose reserved bottom padding in
+            // `RichEditor` is asserted by `e2e/appearance.spec.ts` — J3's
+            // work, not J2's. `TopControls` is the same shape WITHOUT the
+            // overflow, so it does carry the utility and `e2e/touch.spec.ts`
+            // proves it works there.
+            //
+            // (That padding is named in prose rather than written as its
+            // utility: `scripts/sourceLint.test.ts`'s spacing scan reads
+            // comments too, and a backticked utility in a comment reads to it
+            // as an off-scale value in the markup.)
             className={`h-7 shrink-0 rounded-sm text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40 ${
               // The highlight pair reads as ONE control: the button loses its
               // trailing inset so the chevron sits against it rather than a
