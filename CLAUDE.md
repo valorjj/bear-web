@@ -98,10 +98,14 @@ stored, `src/lib/useOverlayHistory.ts` gives the drawer and the editor screen
 one history entry each so Android's back button and iOS's edge-swipe work
 without a router, and the tag sidebar becomes a `Dialog` drawer rendering
 `SidebarContent` — the same component the desktop pane renders. **Mobile is
-four sub-projects and only J1 is done**: J2 is touch parity (hover-only
-affordances, long-press, 44px targets), J3 the editor on a phone (virtual
-keyboard, floating toolbars), J4 platform chrome (safe areas, `100dvh`,
-installability). See `docs/rulings/design-tokens-and-layout.md`'s J1 section.
+four sub-projects; J1 is done and J2a is a slice of J2, not the whole of
+it**: J2 is touch parity (hover-only affordances, long-press, 44px targets —
+J2a did the phone header's proportions and targets only), J3 the editor on a
+phone (virtual keyboard, floating toolbars), J4 platform chrome (safe areas,
+`100dvh`, installability). **This is the largest remaining gap between the app
+and its stated goal**: "easy to use" is not yet true on a phone. See
+`docs/rulings/design-tokens-and-layout.md`'s J1 section and
+`docs/superpowers/NEXT.md`'s open table.
 
 **I redesigned the note-list row and gave it a right-click menu.** The row is
 now title → preview → thumbnail → a footer line carrying the pin and the date,

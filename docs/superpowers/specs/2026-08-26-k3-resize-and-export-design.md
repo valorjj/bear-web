@@ -110,9 +110,19 @@ follows by taking the document rather than reaching for it.
 
 ### PDF
 
-The renderer container has **deliberately no route off the host** — that is
-sub-project G's control, and K3 must not weaken it. So the PDF path inlines
-exactly as HTML does, and the renderer needs nothing it cannot already reach.
+The renderer's browser **cannot resolve any host** — that is sub-project G's
+isolation, and K3 must not weaken it. So the PDF path inlines exactly as HTML
+does, and the renderer needs nothing it cannot already reach.
+
+> **Corrected 2026-08-27.** This read "the renderer container has deliberately
+> no route off the host", which is G's **control 4** — and control 4 is NOT
+> implemented. G's own spec carries a NOT IMPLEMENTED caveat under it; this
+> spec cited the control without the caveat, and so did
+> `docs/rulings/export.md`'s images bullet. What is built is
+> `--host-resolver-rules=MAP * ~NOTFOUND` at browser launch; the container
+> keeps a real route to the internet. K3's conclusion is unchanged — the
+> renderer still cannot fetch an image — but it rests on the browser-level
+> block, not on the container's network.
 
 **This forces a limit change, and it is the one risk worth naming.**
 `MAX_EXPORT_BYTES` is 2 MiB. A single 600 KB WebP is ~800 KB base64, so a note

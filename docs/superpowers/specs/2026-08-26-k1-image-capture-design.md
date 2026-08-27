@@ -239,7 +239,9 @@ something the user cannot get back.
 - **K3 — resize and export.** Drag-to-resize, which needs a width in the
   Markdown and therefore touches the schema; and images in Markdown (as a
   bundle), HTML (inlined) and PDF — the last of which is hard, because the
-  renderer is a separate container with deliberately no route off the host.
+  renderer is a separate container whose browser cannot resolve any host.
+  (Corrected 2026-08-27: this said "with deliberately no route off the host",
+  which is G's control 4, and control 4 is not implemented — see G's spec.)
 - **K4 — the thumbnail.** `src/features/notes/thumbnail.ts` reads the first
   REMOTE image URL out of the Markdown, because that was the only image source
   that existed when the note row was redesigned. Once files are stored it

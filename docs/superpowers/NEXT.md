@@ -1,26 +1,46 @@
 # Next up
 
-Written 2026-08-20 after M8 + M9a shipped; updated 2026-08-21 when B shipped.
+Written 2026-08-20 after M8 + M9a shipped; last reconciled against
+`CLAUDE.md` on **2026-08-27**, when M9b shipped.
+
 This file exists so a fresh session can resume without re-deriving decisions
 already made. Delete a section once its sub-project has a real spec in
 `docs/superpowers/specs/`.
 
+**`CLAUDE.md`'s status table is the authority on what has shipped; this file is
+the authority on WHY and in what order.** They drifted apart between 2026-08-21
+and 2026-08-27 — a K3 heading here read "NOT STARTED" directly above its own
+body announcing it shipped, M9b sat under "Cut, with a reason" after shipping,
+and "the item still missing from the goal" still claimed image storage had
+never been scheduled. All three are corrected below. When they disagree again,
+believe the table and fix this file.
+
 ## Where things stand
 
-- `main` carries M8 (export, tables, chrome), M9a (five themes, picker,
-  contrast harness, spacing and type scales, Soft Depth) and **B (collapsible
-  headings)**. Live on Pages.
-- 1221 unit tests, 64 end-to-end. All six gates green.
-- `m8-visual-and-export` and `b1-collapsible-headings` are merged and can be
-  deleted whenever.
+- `main` carries everything in `CLAUDE.md`'s status table marked complete —
+  through **M9b (callout blocks), 2026-08-27**. Live on Pages.
+- 2119 unit tests, 154 end-to-end. All six gates green.
+- Every sub-project branch named in this file is merged and deleted.
 
-**A shipped on 2026-08-21.** **B2 and C are what remain**, and their relative
-order is still undecided — nobody has ruled on whether either blocks the other.
-A fourth sub-project, **D — server sync and OAuth**, was added the same day and
-is deliberately last; see its section below.
+**What is actually left, as of 2026-08-27:**
 
-**E and F both shipped on 2026-08-24**, raised by the user from five requests
-after using the live app. Neither was in this file's ordering.
+| Open | State |
+| --- | --- |
+| **J2 touch parity** | not started — the largest real gap |
+| **J3 the editor on a phone** | not started |
+| **J4 platform chrome** | not started |
+| **B2 drag-to-reorder headings** | queued, unspecced |
+| **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
+
+**Mobile is the gap worth naming out loud.** J1 turned "unusable" into
+"usable" and J2a fixed the phone header's proportions, but "easy to use" — a
+clause of the stated goal — is still not true on a phone. J2 is where the
+touch rulings get made, and a wrong ruling there (long-press versus a visible
+affordance) is expensive to reverse once every surface has copied it.
+
+**Nothing blocks anything.** B2 and K4 are small enough to slot in anywhere;
+J3 depends on nothing but J1; J2's ordering ahead of J3 is a recommendation,
+not a dependency.
 
 ### E. Editor affordances — **SHIPPED 2026-08-24**
 
@@ -387,16 +407,41 @@ infrastructure.
   needs per-note and per-heading URLs, and this app has no routing at all — no
   history, no deep links. That is a fourth sub-project wearing a menu item's
   clothing.
-- **M9b callout blocks.** Specced in M9a's decomposition and deliberately not
-  chosen this round. Still unblocked and still worth doing.
+- ~~**M9b callout blocks.**~~ **SHIPPED 2026-08-27** — struck from this list
+  rather than deleted from it, because "deliberately not chosen this round"
+  was the right call at the time and the record of it is worth keeping. Spec:
+  `docs/superpowers/specs/2026-08-27-m9b-callout-blocks-design.md`. Plan:
+  `docs/superpowers/plans/2026-08-27-m9b-callout-blocks.md`.
 
-## The item that is still missing from the goal
+  **It opened with a corruption fix rather than a feature.** `> [!NOTE]`
+  serialized to `> \[!NOTE\]`, so merely opening and saving a note carrying a
+  GitHub alert rewrote it, and nothing in the suite could see it. Findings
+  worth carrying forward:
 
-**Image storage.** The stated goal is "lightweight, fast, beautiful, easy to
-use, markdown, **image storage**", and no milestone has ever scheduled it.
-Blobs in IndexedDB, an image node in the editor schema, Markdown round-trip,
-embedding in HTML and PDF export, backup and import, and a story for eviction
-and quota. Bigger than A, B and C together; none of them block it.
+  - **`extend({ addInputRules })` REPLACES the base implementation.** Extending
+    Blockquote silently cost it its own `> ` rule; no unit test could see it
+    because none of them type.
+  - **A lenient `renderMarkdown` would have HIDDEN data loss.** `calloutTitle`
+    has none deliberately, so a node in an invalid position serializes to
+    nothing and the loss is observable in a test rather than only in a note.
+  - **A fill identical to the page passes a 4.5 contrast check perfectly.**
+    Five extra rows exist purely to stop the other five being vacuous.
+
+## The goal, clause by clause
+
+The stated goal is "lightweight, fast, beautiful, easy to use, markdown,
+**image storage**".
+
+**Image storage is no longer the missing clause.** This section said for weeks
+that no milestone had ever scheduled it; K1 (capture and display), K2 (the Mac
+Mini as an image store) and K3 (resize, and images in every export) shipped
+between 2026-08-26 and 2026-08-27. What remains of K is K4's thumbnail, which
+is cosmetic.
+
+**"Easy to use" is the clause that is now furthest from true**, and it is
+furthest on a phone specifically. See J2–J4 above. That is the honest
+successor to this section's original claim, and it is why mobile leads the
+open list rather than B2.
 
 ## D. Server sync and OAuth login — **D1 AND D2 BOTH SHIPPED**
 
@@ -613,7 +658,7 @@ was needed to start using either.
   constraints they qualify.
 
 
-## J. Mobile — J1 SHIPPED 2026-08-26, J2–J4 named and unscheduled
+## J. Mobile — J1 and J2a SHIPPED 2026-08-26, J2–J4 named and unscheduled
 
 **The starting point was worse than "cramped".** Measured at 390×844 before
 anything was written: sidebar 240 + note list 320 + two resizers laid out wider
@@ -656,6 +701,9 @@ the platform back gesture works without a router.
 
 ### J2. Touch parity — NOT STARTED
 
+**J2a shipped separately on 2026-08-26** — the phone header's proportions and
+its 44px targets — and is NOT the whole of J2. Everything below is still open.
+
 Every hover-only affordance and every right-click route needs a touch
 equivalent, and tap targets need to reach 44px. The note row's pin shipped
 hover-revealed on 2026-08-26 with the row context menu as its non-hover route;
@@ -677,7 +725,7 @@ whether an installed PWA changes J1's answer on routing. J1 carved out one
 exception and only one: the FAB's own `env(safe-area-inset-bottom)`.
 
 
-## K. Image storage — K1 SHIPPED 2026-08-26, K2–K4 named and unscheduled
+## K. Image storage — K1, K2 and K3 SHIPPED; only K4 remains, and it is cosmetic
 
 The goal's one clause that had never been scheduled by any milestone or
 sub-project. Decomposed into four, because it touches the data layer, the
@@ -737,7 +785,7 @@ miss. Its own 2 GiB quota.
   modal: device B boots signed in with local notes and `AdoptNotesDialog`
   intercepts every click until answered.
 
-### K3. Resize and export — NOT STARTED (was K3, unchanged)
+### K3. Resize and export — SHIPPED 2026-08-26
 
 **SHIPPED 2026-08-26.** Spec:
 `docs/superpowers/specs/2026-08-26-k3-resize-and-export-design.md`. Plan:
@@ -753,8 +801,10 @@ store-only zip.
   image parsed to an INVALID document, and typing into it threw. Reachable by
   pasting an image into an empty note and reloading.
 - **The renderer's isolation shaped the design rather than being worked
-  around**: it has no route off the host, so images inline as data URIs, which
-  forced `MAX_EXPORT_BYTES` from 2 MiB to 20 MiB.
+  around**: its browser cannot resolve any host, so images inline as data
+  URIs, which forced `MAX_EXPORT_BYTES` from 2 MiB to 20 MiB. (Reworded
+  2026-08-27: this said "it has no route off the host", which is G's control 4
+  — and control 4 is NOT built. See `docs/rulings/export.md`.)
 - **A hand-written zip cannot be validated by its own reader.** `unzip -t` is
   the only thing that can catch a wrong CRC.
 - **A text extraction cannot see a missing image in a PDF**, the same way it

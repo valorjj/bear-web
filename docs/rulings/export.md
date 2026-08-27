@@ -211,10 +211,19 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
 ## Images in export (K3)
 
 - **HTML and PDF INLINE their images as `data:` URIs.** Not a convenience: the
-  PDF renderer runs in a container with deliberately no route off the host
-  (G's control 4 reasoning), so it could not fetch `files/<id>.webp` even if
-  the path were absolute. Inlining is what lets that isolation stay intact
-  while the image still arrives.
+  renderer's browser cannot resolve ANY host — `--host-resolver-rules=MAP *
+  ~NOTFOUND` at launch — so it could not fetch `files/<id>.webp` even if the
+  path were absolute. Inlining is what lets that isolation stay intact while
+  the image still arrives.
+
+  **Stated precisely, because an earlier version of this bullet was not.** It
+  read "a container with deliberately no route off the host (G's control 4
+  reasoning)", which contradicts the control-4 bullet above: control 4 is NOT
+  built, and the container does keep a real route to the internet. What is
+  built is the browser-level resolver block, and that is what this bullet
+  actually rests on. The two statements sat in one file for a day; a security
+  property asserted in one place and denied in another is worse than either
+  answer alone.
 
 - **An image whose bytes are missing is REMOVED from the output**, never left
   pointing at a dead path. A note synced before its image arrived still
