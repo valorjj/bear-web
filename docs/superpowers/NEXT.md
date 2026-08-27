@@ -26,27 +26,24 @@ believe the table and fix this file.
 
 | Open | State |
 | --- | --- |
-| **J3 the editor on a phone** | not started — the largest real gap |
-| **J4 platform chrome** | not started |
+| **J4 platform chrome** | not started — the last of the four |
 | **B2 drag-to-reorder headings** | queued, unspecced |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
 
-**Mobile is still the gap worth naming out loud.** J1 turned "unusable" into
-"usable", J2a fixed the phone header's proportions, and J2 made every
-affordance reachable by a finger. What is left is the editor itself: at 390px
-the top control pill still overlaps the note title, the virtual keyboard is
-unhandled, and `BottomToolbar` cannot reach a 44px target without the reflow
-J2 refused to make. That is J3.
+**Mobile is nearly done.** J1 turned "unusable" into "usable", J2a fixed the
+phone header's proportions, J2 made every affordance reachable by a finger, and
+J3 fixed the editor's layout — the keyboard, the toolbar and tables that
+scroll. Only J4 is left, and it is the smallest of the four: safe-area insets
+throughout, `100dvh` on the shell, installability, pull-to-refresh, and whether
+an installed PWA changes J1's answer on routing.
 
-**Nothing blocks anything.** B2 and K4 are small enough to slot in anywhere;
-J3 depends on nothing but J1.
+**Nothing blocks anything.** B2 and K4 are small enough to slot in anywhere.
 
-**J3 inherits one item by name.** `BottomToolbar` is `overflow-x-auto`, which
-forces a non-visible `overflow-y`, so a pseudo-element hit area is generated
-and then clipped to the 36px strip. The utility was applied, measured, and
-removed. Reaching 44px there means a taller strip, which reflows a floating
-toolbar whose reserved space (`RichEditor`'s `pb-24`) is asserted in
-`e2e/appearance.spec.ts`.
+**J4 inherits two things by name.** J1 carved out one safe-area exception and
+only one — the note list's FAB — so every other bottom-anchored surface still
+needs it, the editor's now-taller formatting toolbar included. And J3 moved
+three menu clamps to `100dvh` but deliberately left the app SHELL's own height
+alone; that is J4's.
 
 ### E. Editor affordances — **SHIPPED 2026-08-24**
 
@@ -746,12 +743,35 @@ invisible and the other four row actions have no touch route without it.
   before the design was written, because if it had come back false none of this
   would have been testable.
 
-### J3. The editor on a phone — NOT STARTED
+### J3. The editor on a phone — SHIPPED 2026-08-27
 
-`visualViewport` and the virtual keyboard, the floating top and bottom
-toolbars, selection handles, the code-language popover, tables. The J1
-screenshots already show the top control pill overlapping the note title at
-390px, which is J3's first item.
+Spec: `docs/superpowers/specs/2026-08-27-j3-phone-editor-design.md`.
+Rulings: `docs/rulings/design-tokens-and-layout.md`,
+`docs/rulings/testing-and-tooling.md`.
+
+The keyboard, the toolbar, tables that scroll, and three menu clamps moved off
+`100vh`.
+
+**Findings worth carrying forward:**
+
+- **Two keyboard mechanisms are safe together because of ARITHMETIC, not
+  feature detection.** `interactive-widget=resizes-content` shrinks the layout
+  viewport where honoured, so `innerHeight` and `visualViewport` agree and the
+  JS fallback's computed inset is naturally 0. There is no reliable way to
+  detect support, and none is needed.
+- **`window.innerHeight` is the wrong number for anything that must stay on
+  screen.** On iOS a keyboard does not change it. `useAnchoredMenu` was
+  deciding a menu "fits below" into covered space.
+- **Table layout does not reward reasoning.** Three plausible ways to floor a
+  column's width do nothing, silently and identically to no rule at all. Only
+  `col { min-width: … !important }` works, outranking Tiptap's inline style.
+- **A line no test can falsify came back out.** `coarse:pb-32` grew the
+  toolbar's reserve; the strip reaches 68px against `pb-24`'s 96, so nothing
+  could be made to fail with it absent.
+- **`expect.poll` hid a missing listener for a whole test.** Poll for a state
+  you are waiting for, never for one you are asserting did not drift.
+- **This item's own first line was stale.** The top pill does not overlap the
+  note title and had not for some time; `pt-12` reserves exactly its height.
 
 ### J4. Platform chrome — NOT STARTED
 

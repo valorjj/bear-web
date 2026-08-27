@@ -258,10 +258,10 @@
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
-      "font-size": "13px",
-      "font-weight": "400",
-      "line-height": "18.85px",
-      "letter-spacing": "normal",
+      "font-size": "16px",
+      "font-weight": "600",
+      "line-height": "21.6px",
+      "letter-spacing": "-0.176px",
       "color": "rgb(36, 31, 61)",
       "background-color": "rgb(255, 255, 255)",
       "padding": "4px 24px 4px 32px",
@@ -279,7 +279,7 @@
     "note": "Three stacked lines. Bear fits a two-line snippet in comparable height.",
     "box": {
       "width": 304,
-      "height": 96
+      "height": 100
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -304,7 +304,7 @@
     "note": "Unselected, for the divider and hover baseline.",
     "box": {
       "width": 304,
-      "height": 96
+      "height": 100
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -329,7 +329,7 @@
     "note": "Preview density small: no snippet line, its height reserved. The step between these three is the reserved snippet height.",
     "box": {
       "width": 304,
-      "height": 61
+      "height": 65
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -354,7 +354,7 @@
     "note": "Preview density medium: one snippet line, its height reserved. The step between these three is the reserved snippet height.",
     "box": {
       "width": 304,
-      "height": 79.5
+      "height": 83.5
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -379,7 +379,7 @@
     "note": "Preview density large: two snippet lines, its height reserved. The step between these three is the reserved snippet height.",
     "box": {
       "width": 304,
-      "height": 96
+      "height": 100
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
@@ -428,7 +428,7 @@
     "surface": "editor: bottom toolbar",
     "note": "Currently welded to the window edge; Bear floats a centred rounded bar.",
     "box": {
-      "width": 442,
+      "width": 462,
       "height": 36
     },
     "style": {

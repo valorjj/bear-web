@@ -133,7 +133,11 @@ export function EditorContextMenu({
         // plus a seven-row table section, ~530px, on a 720px-tall window),
         // and no flip/clamp choice between "above" and "below" can rescue
         // that; only a bounded height with its own scroll can. See Finding 1.
-        maxHeight: `calc(100vh - ${MENU_GAP * 2}px)`,
+        // `dvh`, not `vh`. On mobile `100vh` is the LARGE viewport: it
+        // ignores the browser's own collapsing chrome, so a tall menu clamped
+        // against it can still run past the bottom of the screen. `dvh` is
+        // the viewport as it actually is right now.
+        maxHeight: `calc(100dvh - ${MENU_GAP * 2}px)`,
       }}
       // `min-w-56`, wider than `HeadingMenu`'s `min-w-48`: five sections and a
       // table row list carry more content than a single level list, and

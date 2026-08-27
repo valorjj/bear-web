@@ -48,6 +48,45 @@ because a restyle made it fail.
   plain title line first. `e2e/appearance.spec.ts`'s fold-gutter fixture says
   the same thing at its own call site; `e2e/touch.spec.ts` learned it again.
 
+- **`expect.poll` can hide a missing listener completely.** J3's handle-drift
+  test scrolled a table and polled the handle's alignment; ANY unrelated
+  ProseMirror view update inside the five-second window re-measures the layer,
+  so the test passed with the scroll listener deleted. What a user sees during a
+  fling is the frame right after the scroll, so that is what the test must read:
+  scroll and measure in ONE `page.evaluate` round trip, two `requestAnimationFrame`s
+  later. It then fails at exactly the 120px it was scrolled by. Poll for a state
+  you are WAITING for; never for one you are asserting did not drift.
+
+- **Sabotaging several mechanisms at once can make a test vacuous rather than
+  red.** Removing the table's width floor and the handle scroll listener in the
+  same run left the table too narrow to scroll, so `scrollLeft = 120` did
+  nothing and the handle test passed. Falsify one mechanism at a time, or the
+  injection proves the opposite of what it looks like.
+
+- **Playwright cannot open a virtual keyboard, and resizing the viewport is not
+  a substitute.** On iOS a keyboard shrinks `visualViewport.height` WITHOUT
+  changing `window.innerHeight`; a viewport resize moves both, which is the one
+  case `src/lib/visibleViewport.ts` does not need help with.
+  `e2e/fixtures/fakeViewport.ts` replaces `visualViewport` through
+  `Object.defineProperty` in an init script — a plain assignment silently does
+  nothing, because it is a readonly accessor on the prototype. It must run
+  before boot, because the hook seeds during the app's first render.
+
+- **Nothing in the repo can prove the browser honoured
+  `interactive-widget=resizes-content`.** `e2e/phoneEditor.spec.ts` stays green
+  with the token misspelled — it drives the JS fallback.
+  `scripts/sourceLint.test.ts` asserts the token is present, which catches
+  deletion and a typo and nothing else. The spec's real-device checklist is the
+  only thing that covers the browser path, and item 1 on ANDROID is the only
+  thing that can show the two mechanisms do not double-apply.
+
+- **`npm run measure` drifts, because it is deliberately not in the gate.**
+  `docs/design/measurements.md` sat three days and three sub-projects stale
+  (J2a's 16px search field, I's row height, M9b's extra toolbar control).
+  Regenerate it at the end of any sub-project that touched a measured surface —
+  and when a diff appears, run `measure` on `main` too before attributing it:
+  J3's output was byte-identical to `main`'s, so none of that drift was J3's.
+
 - **Source-scanning tests live in `scripts/`, not `src/`.** `tsconfig.app.json`
   deliberately omits Node types (`"types": ["vite/client", "vitest/globals"]`,
   `"include": ["src"]`); `tsconfig.node.json` already includes `scripts`.

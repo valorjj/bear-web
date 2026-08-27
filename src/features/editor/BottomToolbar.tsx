@@ -227,7 +227,17 @@ export function BottomToolbar({
     <div
       role="toolbar"
       aria-label={t('editor.toolbar.bottom')}
-      className="flex h-9 w-fit max-w-full shrink-0 items-center gap-0.5 overflow-x-auto rounded-full bg-surface px-2 shadow-popover"
+      // `touch:h-14` grows the strip so its buttons can be 44px of real INK
+      // (J3). J2 could not do this: it expands hit areas with a pseudo-element
+      // and never reflows, and a pseudo-element cannot work here anyway —
+      // `overflow-x-auto` forces a non-visible `overflow-y`, so a 44px overlay
+      // on a 28px button is generated and then clipped to the strip. Growing
+      // the ink is the only route, and growing is a reflow, which is J3's.
+      //
+      // `bear-scroll-fade` is the edge affordance: the strip has always
+      // scrolled, and until now it was simply clipped at the right edge with
+      // nothing to say more existed.
+      className="bear-scroll-fade flex h-9 w-fit max-w-full shrink-0 items-center gap-0.5 overflow-x-auto rounded-full bg-surface px-2 shadow-popover coarse:h-14 coarse:gap-1 coarse:px-3"
     >
       {ACTIONS.map((action) => (
         <Fragment key={action.key}>
@@ -237,31 +247,15 @@ export function BottomToolbar({
             aria-pressed={flags[action.active] === true}
             disabled={editor === null}
             onClick={() => editor !== null && action.run(editor, t, highlightColor)}
-            // NO `touch-target-y` here, and the reason is a hard blocker
-            // rather than an oversight (J2).
+            // `touch:size-11` is 44x44 of real ink on a coarse pointer (J3).
             //
-            // This strip is `overflow-x-auto`, and CSS forces `overflow-y` to
-            // a non-visible value whenever `overflow-x` is not visible — the
-            // computed pair measures `auto`/`auto`. So a 44px `::after` on a
-            // 28px button inside a 36px strip is generated at its full height
-            // (verified: `height: 44px`) and then CLIPPED to the strip, which
-            // means it receives no tap the ink would not have received anyway.
-            // The utility would emit and do nothing, which is the exact shape
-            // of the dead `hover:bg-hover` this project shipped for two
-            // milestones.
-            //
-            // The only route to 44px here is a taller strip, and that is a
-            // reflow of a floating toolbar whose reserved bottom padding in
-            // `RichEditor` is asserted by `e2e/appearance.spec.ts` — J3's
-            // work, not J2's. `TopControls` is the same shape WITHOUT the
-            // overflow, so it does carry the utility and `e2e/touch.spec.ts`
-            // proves it works there.
-            //
-            // (That padding is named in prose rather than written as its
-            // utility: `scripts/sourceLint.test.ts`'s spacing scan reads
-            // comments too, and a backticked utility in a comment reads to it
-            // as an off-scale value in the markup.)
-            className={`h-7 shrink-0 rounded-sm text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40 ${
+            // J2 left this button at 28px deliberately and recorded why: it
+            // expands hit areas with a pseudo-element, and `overflow-x-auto`
+            // on the strip forces a non-visible `overflow-y` that clips one.
+            // The utility was applied, measured, and removed. Growing the ink
+            // is the only route and it reflows the strip, which J2 refused to
+            // do and J3 owns.
+            className={`h-7 shrink-0 rounded-sm text-ui text-muted coarse:size-11 coarse:rounded-md transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40 ${
               // The highlight pair reads as ONE control: the button loses its
               // trailing inset so the chevron sits against it rather than a
               // full gap away.
@@ -282,11 +276,11 @@ export function BottomToolbar({
               aria-expanded={action.key === 'highlight' ? colorMenuOpen : calloutMenuOpen}
               disabled={editor === null}
               onClick={action.key === 'highlight' ? onToggleColorMenu : onToggleCalloutMenu}
-              // Same clipping blocker as its sibling above, and the same
-              // deferral to J3 — despite this being the narrowest control in
-              // the app at ~18px and the only route to the highlight colours
-              // and the callout types.
-              className="h-7 shrink-0 rounded-sm pr-2 pl-0.5 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-expanded:bg-selected aria-expanded:text-text disabled:pointer-events-none disabled:opacity-40"
+              // The narrowest control in the app at ~18px, and the only route
+              // to the highlight colours and the callout types. It keeps its
+              // narrow width so it still reads as one control with the button
+              // it follows, and takes the strip's full height instead.
+              className="h-7 shrink-0 touch:h-11 rounded-sm pr-2 pl-0.5 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-expanded:bg-selected aria-expanded:text-text disabled:pointer-events-none disabled:opacity-40"
             >
               <Icon glyph={ChevronDown} size="sm" />
             </button>

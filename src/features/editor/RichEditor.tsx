@@ -6,6 +6,7 @@ import { ExportMenu, type ExportFormat } from '@/features/export';
 import { useT } from '@/i18n';
 
 import { BottomToolbar } from './BottomToolbar';
+import { useVisibleViewport } from '@/lib/visibleViewport';
 import type { ContextMenuRequest } from './ContextMenu';
 import { EMPTY_FLAGS, editorFlagsSelector } from './editorState';
 import { EditorContextMenu, type ContextMenuAction } from './EditorContextMenu';
@@ -155,6 +156,13 @@ export function RichEditor({
 }: RichEditorProps): ReactElement {
   const t = useT();
   const [infoOpen, setInfoOpen] = useState(false);
+  /*
+   * How many pixels at the bottom of the window are hidden — the virtual
+   * keyboard, in practice. Applied to the bottom toolbar's wrapper below and
+   * to nothing else: the top pill and the prose are unaffected by a keyboard,
+   * and moving them would fight the browser's own scroll-into-view.
+   */
+  const keyboardInset = useVisibleViewport();
   const [exportOpen, setExportOpen] = useState(false);
   const [menu, setMenu] = useState<HeadingMenuRequest | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
@@ -307,6 +315,16 @@ export function RichEditor({
         //
         // The vertical padding reserves room for the two floating toolbars
         // rather than merely spacing the prose: they overlay this surface, so
+        // The reserve is UNCHANGED by J3's taller toolbar, and that is a
+        // measured result rather than an assumption. J3 grows the strip from
+        // 36px to 56px on a coarse pointer, so its reach into the pane becomes
+        // 12 (the `bottom-3` inset) + 56 = 68 — still inside `pb-24`'s 96.
+        // A `coarse:pb-32` was written here first and then removed: nothing
+        // could be made to fail with it absent, and a line no test can
+        // falsify is a line that will be wrong later without anyone knowing.
+        // `e2e/phoneEditor.spec.ts` guards the relationship instead, and does
+        // fail if the strip grows past the reserve.
+        //
         // `pt-12` starts the first line below the top pill and `pb-24` lets the
         // last line scroll clear of the bottom one. Without the bottom reserve
         // the final line of every note sits permanently behind the formatting
@@ -675,7 +693,22 @@ export function RichEditor({
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10 flex justify-center">
+      <div
+        className="pointer-events-none absolute inset-x-3 bottom-3 z-10 flex justify-center"
+        // Lifted clear of the virtual keyboard (J3).
+        //
+        // A `transform` rather than an override of `bottom-3`: the two would
+        // be a utility and an inline style competing for the same property,
+        // and this project's rule is to never express "not this utility" as
+        // something that overrides it. A translate composes instead.
+        //
+        // No transition. The inset arrives from `visualViewport`'s own events,
+        // which the browser emits DURING its keyboard animation — adding a CSS
+        // transition on top would chase an animation that is already running
+        // and land late. On a browser that honours `interactive-widget` this
+        // is a no-op: the layout viewport shrank, so the inset is 0.
+        style={keyboardInset === 0 ? undefined : { transform: `translateY(-${keyboardInset}px)` }}
+      >
         {/*
          * The colour menu is a SIBLING of the toolbar, not a child of it. The
          * pill is `overflow-x-auto`, which clips in both axes, so a popover

@@ -176,9 +176,10 @@ Native cancel widget suppressed; our own clear button instead.
 | --- | --- |
 | box | 302 x 28 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
-| font-size | `13px` |
-| font-weight | `400` |
-| line-height | `18.85px` |
+| font-size | `16px` |
+| font-weight | `600` |
+| line-height | `21.6px` |
+| letter-spacing | `-0.176px` |
 | color | `rgb(36, 31, 61)` |
 | background-color | `rgb(255, 255, 255)` |
 | padding | `4px 24px 4px 32px` |
@@ -192,7 +193,7 @@ Three stacked lines. Bear fits a two-line snippet in comparable height.
 
 | Property | Value |
 | --- | --- |
-| box | 304 x 96 |
+| box | 304 x 100 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -208,7 +209,7 @@ Unselected, for the divider and hover baseline.
 
 | Property | Value |
 | --- | --- |
-| box | 304 x 96 |
+| box | 304 x 100 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -224,7 +225,7 @@ Preview density small: no snippet line, its height reserved. The step between th
 
 | Property | Value |
 | --- | --- |
-| box | 304 x 61 |
+| box | 304 x 65 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -240,7 +241,7 @@ Preview density medium: one snippet line, its height reserved. The step between 
 
 | Property | Value |
 | --- | --- |
-| box | 304 x 79.5 |
+| box | 304 x 83.5 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -256,7 +257,7 @@ Preview density large: two snippet lines, its height reserved. The step between 
 
 | Property | Value |
 | --- | --- |
-| box | 304 x 96 |
+| box | 304 x 100 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |
@@ -290,7 +291,7 @@ Currently welded to the window edge; Bear floats a centred rounded bar.
 
 | Property | Value |
 | --- | --- |
-| box | 442 x 36 |
+| box | 462 x 36 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
 | font-size | `16px` |
 | font-weight | `400` |

@@ -472,11 +472,61 @@
  * extension's colgroup expects: without it a column resize writes widths the
  * layout then ignores.
  */
+/*
+ * The scroll container Tiptap already wraps every table in (J3).
+ *
+ * Until J3 this element had no rule of its own, so a wide table simply
+ * squeezed: `width: 100%` with `table-layout: fixed` divides the pane equally
+ * between the columns, and at 390px four columns get about 69px each — which
+ * renders `colum` / `n one` and `gamm` / `a`, breaking words mid-character.
+ *
+ * Applied at EVERY width, not only on a phone. A four-column table in a narrow
+ * desktop pane squeezes exactly the same way, and a table that scrolls on a
+ * phone but squeezes on a laptop is two behaviours to hold in the head.
+ */
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+}
+
 .ProseMirror table {
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
   overflow: hidden;
+}
+
+/*
+ * The floor under a column's width, below which the table scrolls rather than
+ * squeezing.
+ *
+ * Three plausible ways to write this do NOTHING, and all three were measured
+ * rather than reasoned about — table layout does not reward reasoning:
+ *
+ * - `min-width` on `td`/`th` is IGNORED under `table-layout: fixed`. The
+ *   rendered result is byte-identical to no rule at all: 67px columns at
+ *   390px, same as today.
+ * - `min-width` on the TABLE loses to Tiptap's own inline `min-width: 50px`.
+ * - `min-width` on `col` without `!important` loses to Tiptap's inline
+ *   `min-width: 25px` on every `<col>`.
+ *
+ * So `!important` here is not a shortcut around specificity we control; it is
+ * the only way to outrank a third-party INLINE style, which is the one case
+ * the keyword exists for. Measured: 522px total, four equal 128px columns,
+ * wrapper scrolls.
+ *
+ * Safe against column resizing because there is none — `MarkdownTable` does
+ * not configure `resizable`, and `@tiptap/extension-table` defaults it off, so
+ * no user-authored column width exists for this to overrule. If resizing is
+ * ever enabled, this becomes a floor a user cannot drag below and needs
+ * revisiting.
+ *
+ * Equal columns are preserved deliberately. `table-layout: auto` with a cell
+ * minimum also scrolls (562px, measured) but sizes columns to their content,
+ * which would change how every existing table looks on a desktop for no
+ * benefit to the defect being fixed.
+ */
+.ProseMirror colgroup col {
+  min-width: var(--bear-table-column-min) !important;
 }
 
 .ProseMirror th,
