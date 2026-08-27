@@ -315,11 +315,15 @@ export function RichEditor({
         //
         // The vertical padding reserves room for the two floating toolbars
         // rather than merely spacing the prose: they overlay this surface, so
-        // `coarse:pb-32` because J3 grows the strip from 36px to 56px on a
-        // coarse pointer, and `e2e/appearance.spec.ts` asserts the reserve
-        // COVERS the toolbar's reach into the pane. That test runs at 1280 with
-        // no touch, so the desktop reserve is unchanged and only the phone
-        // needs the extra.
+        // The reserve is UNCHANGED by J3's taller toolbar, and that is a
+        // measured result rather than an assumption. J3 grows the strip from
+        // 36px to 56px on a coarse pointer, so its reach into the pane becomes
+        // 12 (the `bottom-3` inset) + 56 = 68 — still inside `pb-24`'s 96.
+        // A `coarse:pb-32` was written here first and then removed: nothing
+        // could be made to fail with it absent, and a line no test can
+        // falsify is a line that will be wrong later without anyone knowing.
+        // `e2e/phoneEditor.spec.ts` guards the relationship instead, and does
+        // fail if the strip grows past the reserve.
         //
         // `pt-12` starts the first line below the top pill and `pb-24` lets the
         // last line scroll clear of the bottom one. Without the bottom reserve
@@ -330,7 +334,7 @@ export function RichEditor({
         // actual reach into the pane, which is what keeps this correct if
         // either toolbar's height or inset changes.
         class:
-          'min-h-0 flex-1 bg-bg px-6 pt-12 pb-24 text-text focus-visible:outline-none coarse:pb-32',
+          'min-h-0 flex-1 bg-bg px-6 pt-12 pb-24 text-text focus-visible:outline-none',
       },
     },
   });
