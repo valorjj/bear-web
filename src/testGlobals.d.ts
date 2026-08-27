@@ -16,6 +16,12 @@ declare global {
    * Reset to 1280 — desktop — after each test.
    */
   var __setViewportWidth: (width: number) => void;
+  /**
+   * Sets whether `matchMedia` answers `true` to `(pointer: coarse)` and
+   * `(hover: none)`, and notifies every listener. Reset to `false` — a mouse —
+   * after each test.
+   */
+  var __setPointerCoarse: (coarse: boolean) => void;
 }
 
 export {};

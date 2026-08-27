@@ -37,6 +37,7 @@ interface MediaQueryListStub {
 
 declare global {
   var __setViewportWidth: (width: number) => void;
+  var __setPointerCoarse: (coarse: boolean) => void;
   var matchMedia: (query: string) => MediaQueryListStub;
 }
 
@@ -62,12 +63,31 @@ afterEach(() => {
  *
  * Deliberately not a `vi.fn()` returning `matches: false` for everything: that
  * would silently pin every test to the phone layout, and a desktop regression
- * would look green. This one parses the only query shape the app writes,
- * `(min-width: Npx)`, against a width a test sets with
- * `globalThis.__setViewportWidth`, and THROWS on any other shape rather than
+ * would look green. This one parses the three query shapes the app writes —
+ * `(min-width: Npx)`, `(pointer: coarse)` and `(hover: none)` — against state a
+ * test sets with `globalThis.__setViewportWidth` and
+ * `globalThis.__setPointerCoarse`, and THROWS on any other shape rather than
  * quietly answering `false` to a query it does not understand.
+ *
+ * The throw is the point. J2 added a hook calling `matchMedia('(pointer:
+ * coarse)')`, and without it every test rendering the shell would have gone on
+ * passing against a silent `false` — pinning the whole suite to the fine-pointer
+ * branch and making the touch rules untestable without anyone noticing.
  */
 let viewportWidth = DEFAULT_TEST_VIEWPORT_WIDTH;
+
+/**
+ * What `matchMedia` reports for `(pointer: coarse)` and `(hover: none)`.
+ *
+ * Defaults to a mouse, for the same reason the width defaults to desktop: a
+ * test that wants a fingertip has to say so.
+ *
+ * ONE flag drives both queries because no real device separates them in a way
+ * this app cares about. They stay separate in the SOURCE — each rule reads as
+ * the reason it exists — but a stub offering two independent switches would
+ * invite a test to set up hardware that does not exist.
+ */
+let pointerCoarse = false;
 
 const mediaListeners = new Set<() => void>();
 
@@ -76,9 +96,16 @@ globalThis.__setViewportWidth = (width: number): void => {
   for (const notify of [...mediaListeners]) notify();
 };
 
+globalThis.__setPointerCoarse = (coarse: boolean): void => {
+  pointerCoarse = coarse;
+  for (const notify of [...mediaListeners]) notify();
+};
+
 function queryMatches(query: string): boolean {
   const min = /\(min-width:\s*(\d+)px\)/.exec(query);
   if (min !== null) return viewportWidth >= Number(min[1]);
+  if (/\(pointer:\s*coarse\)/.test(query)) return pointerCoarse;
+  if (/\(hover:\s*none\)/.test(query)) return pointerCoarse;
   throw new Error(`matchMedia stub does not understand the query: ${query}`);
 }
 
@@ -97,5 +124,6 @@ globalThis.matchMedia = (query: string): MediaQueryListStub => ({
 
 afterEach(() => {
   viewportWidth = DEFAULT_TEST_VIEWPORT_WIDTH;
+  pointerCoarse = false;
   mediaListeners.clear();
 });
