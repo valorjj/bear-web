@@ -51,15 +51,16 @@ feature and is not yet scheduled.
 | J1 responsive shell: phone, tablet, desktop                       | complete |
 | J2a phone header proportions and 44px targets                     | complete |
 | J2 touch parity                                                   | complete |
+| J3 the editor on a phone                                          | complete |
 | K1 image capture and display, locally                             | complete |
 | K2 image sync: the Mac Mini as an image store                     | complete |
 | K3 image resize, and images in every export                       | complete |
 | G export: PDF, rendered server-side                               | complete |
 | M9b callout blocks                                                | complete |
 
-2138 unit tests (plus 127 server tests, 55 of which are integration tests that
+2152 unit tests (plus 127 server tests, 55 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 165 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 173 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **G moved PDF export off the client entirely, and it is the first capability
@@ -82,6 +83,42 @@ built; **control 4 ("the container has no route off the host") is NOT**, and
 the spec says so in place — `internal: true` denies egress and also kills the
 published port, so the API could never reach the renderer. See
 `docs/rulings/export.md` and `server/README.md`.
+
+**J3 fixed the editor's layout at 390px, and its most useful output was three
+things it disproved.** The virtual keyboard was entirely unhandled: the
+formatting toolbar sat at y=788 with an iPhone keyboard covering the bottom
+~336px, so it was hidden at exactly the moment the user was typing.
+`index.html` now asks for `interactive-widget=resizes-content` and
+`src/lib/visibleViewport.ts` is the fallback — **and arithmetic, not feature
+detection, is what stops the two double-applying**: where the browser honours
+it the LAYOUT viewport shrinks too, so `innerHeight` and `visualViewport` agree
+and the computed inset is naturally 0. `window.innerHeight` is the wrong number
+for anything that must stay on screen, and `useAnchoredMenu` went through the
+same fix — it was deciding a menu "fits below" into space the user cannot see.
+
+**Tables squeezed to mid-word breaks (`colum` / `n one`) and now scroll — but
+three plausible ways to write that do nothing at all, and each was measured
+rather than reasoned about.** `min-width` on a cell is IGNORED under
+`table-layout: fixed` and renders byte-identically to no rule; `min-width` on
+the table loses to Tiptap's inline `min-width: 50px`; `min-width` on `col`
+loses to its inline `25px`. Only `col { min-width: … !important }` works, which
+is the legitimate case for the keyword — outranking a third-party inline style.
+An earlier draft would have driven it from a variable set by `TableHandles`,
+which only mounts while the caret is inside that table, so every other table
+would have squeezed.
+
+**Three things J3 asserted turned out to be false, and saying so is the point.**
+`NEXT.md`'s "top pill overlaps the note title" was stale — measured flush, since
+`pt-12` reserves exactly the pill's height. The spec's predicted reference-set
+churn does not exist: `npm run measure` on `main` and on the branch produced
+byte-identical output, and the staleness that WAS there belonged to J2a, I and
+M9b. And `coarse:pb-32` grew the toolbar's reserve until nothing could be made
+to fail with it absent, so it came back out — the strip reaches 68px against
+`pb-24`'s 96, and the guard was itself checked by overgrowing the strip to
+`h-32`, where it fails at 96 < 140. **The toolbar now grows its INK on a coarse
+pointer**, which supersedes J2's "expand the hit area, never the ink" rule in
+the one place it had to: `overflow-x-auto` forces a non-visible `overflow-y`, so
+a pseudo-element is generated and then clipped. **J4 remains.**
 
 **J2 made every affordance reachable by a finger, and it opened by finding
 that three of its own tests could not fail.** Six controls were hover- or
@@ -132,11 +169,10 @@ stored, `src/lib/useOverlayHistory.ts` gives the drawer and the editor screen
 one history entry each so Android's back button and iOS's edge-swipe work
 without a router, and the tag sidebar becomes a `Dialog` drawer rendering
 `SidebarContent` — the same component the desktop pane renders. **Mobile is
-four sub-projects; J1, J2a and J2 are done**: J2a did the phone header's
-proportions and targets only, and J2 finished touch parity. J3 (the editor on a
-phone — virtual keyboard, floating toolbars) and J4 (platform chrome — safe
-areas, `100dvh`, installability) remain, and they are now the largest gap
-between the app and its stated goal. See
+four sub-projects; J1, J2a, J2 and J3 are done**: J2a did the phone header's
+proportions and targets only, and J2 finished touch parity. J3 fixed the editor's own layout. Only J4
+remains — platform chrome: safe areas, `100dvh` on the shell, installability,
+pull-to-refresh. See
 `docs/rulings/design-tokens-and-layout.md`'s J1 section and
 `docs/superpowers/NEXT.md`'s open table.
 

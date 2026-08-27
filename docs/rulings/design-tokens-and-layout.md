@@ -928,6 +928,87 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   pointer type: swallowing after a real right-click eats the user's click on
   the menu item they then choose.
 
+## The editor on a phone (J3)
+
+- **The keyboard is handled TWICE on purpose, and arithmetic — not feature
+  detection — is what stops the two double-applying.** `index.html` asks for
+  `interactive-widget=resizes-content`; where a browser honours it, the LAYOUT
+  viewport shrinks too, so `window.innerHeight` and `visualViewport` agree,
+  `keyboardInset()` returns 0, and the JavaScript fallback has nothing left to
+  correct. Do not add a support check: there is no reliable way to detect this,
+  and the arithmetic already covers it.
+
+- **`window.innerHeight` is the wrong number for anything that must stay on
+  screen.** It is the LAYOUT viewport, and on iOS a virtual keyboard does not
+  change it — it shrinks `visualViewport.height` instead. Reading `innerHeight`
+  means the app believes it has a full screen while a third of it is covered.
+  `src/lib/visibleViewport.ts` is the single source of truth; `useAnchoredMenu`
+  goes through it too, because it was deciding a menu "fits below" into space
+  the user cannot see.
+
+- **`offsetTop` is part of the answer, and `scroll` is part of the signal.** The
+  visual viewport can be SCROLLED within the layout viewport — which is what iOS
+  does to keep a focused field above the keyboard — so its bottom edge in client
+  coordinates is `offsetTop + height`, and it emits `scroll` with no size change
+  at all. A hook listening only to `resize` leaves the toolbar behind on exactly
+  that motion, and every other assertion about it still passes.
+
+- **`100dvh`, never `100vh`, for anything clamped to the screen.** `100vh` on
+  mobile is the LARGE viewport and ignores the browser's collapsing chrome, so a
+  menu clamped against it can still run past the bottom edge.
+
+- **Three plausible ways to floor a table column's width do NOTHING, and the
+  failures are silent and identical to no rule at all.** `min-width` on
+  `td`/`th` is ignored under `table-layout: fixed`; `min-width` on the table
+  loses to `@tiptap/extension-table`'s own inline `min-width: 50px`;
+  `min-width` on `col` loses to its inline `min-width: 25px`. Only
+  `.ProseMirror colgroup col { min-width: … !important }` works. That
+  `!important` is not a shortcut past specificity we control — it is the only
+  way to outrank a third-party INLINE style, which is the case the keyword
+  exists for. Measure any change here; this is not a domain that rewards
+  reasoning.
+
+- **The table floor is safe only while column resizing is off.**
+  `MarkdownTable` does not configure `resizable` and
+  `@tiptap/extension-table` defaults it off, so no user-authored column width
+  exists for the `!important` to overrule. Enable resizing and this becomes a
+  floor a user cannot drag below.
+
+- **Equal columns are kept deliberately.** `table-layout: auto` with a cell
+  minimum also scrolls — measured at 562px against the colgroup route's 522 —
+  but sizes columns to their content, which would change how every existing
+  table looks on a desktop for no benefit to the defect being fixed.
+
+- **The table handle layer is a SIBLING of the scroll container, not a child**
+  (verified in the DOM: `wrapper.contains(layer) === false`; it is also why the
+  reveal rule reads `:has(+ .tableWrapper:hover)`). So it neither moves with the
+  cells nor is clipped by the wrapper. Row handles therefore pin to the VISIBLE
+  left edge rather than the table's — tracking the table would walk them left
+  across the prose — and column handles hide with `visibility`, not `display`,
+  so a keyboard user's focus is not thrown out of the layer by a scroll.
+
+- **The toolbar grows its INK on a coarse pointer, which is the one place J2's
+  "expand the hit area, never the ink" rule is deliberately superseded.** It has
+  to be: `overflow-x-auto` forces a non-visible `overflow-y`, so a 44px
+  pseudo-element is generated and then clipped to the strip. J2 applied that
+  utility, measured it, and removed it again. Growing is a reflow, and reflow was
+  always J3's.
+
+- **The toolbar's reserve did NOT need to grow, and the line that grew it was
+  removed.** The taller strip reaches 68px into the pane against `pb-24`'s 96.
+  A `coarse:pb-32` was written first and nothing could be made to fail with it
+  absent; the guard in `e2e/phoneEditor.spec.ts` was itself verified by
+  overgrowing the strip to `h-32`, where it fails at 96 < 140. A line no test
+  can falsify is a line that will be wrong later without anyone knowing.
+
+- **The scroll fade's opaque stops are `currentColor`, and that is not
+  arbitrary.** A `mask-image` reads only the ALPHA channel, so the colour cannot
+  matter as long as it is opaque — and `scripts/sourceLint.test.ts` forbids a
+  colour literal outside `tokens.css`, correctly, because it cannot tell a
+  mask's alpha carrier from a real colour and should not have to. A gradient
+  OVERLAY was rejected instead: it would have to be painted in the strip's own
+  background colour, and this app has sixteen themes.
+
 ## The boot indicator
 
 - **`#root` must never be empty while the app is opening.** Until 2026-08-27 it

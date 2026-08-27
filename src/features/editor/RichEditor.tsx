@@ -333,8 +333,7 @@ export function RichEditor({
         // `e2e/appearance.spec.ts` asserts the reserve covers each pill's
         // actual reach into the pane, which is what keeps this correct if
         // either toolbar's height or inset changes.
-        class:
-          'min-h-0 flex-1 bg-bg px-6 pt-12 pb-24 text-text focus-visible:outline-none',
+        class: 'min-h-0 flex-1 bg-bg px-6 pt-12 pb-24 text-text focus-visible:outline-none',
       },
     },
   });

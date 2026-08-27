@@ -101,9 +101,15 @@ about 69px each regardless of content.
 Applied at EVERY width, not only below the tablet breakpoint. A four-column
 table in a narrow desktop pane squeezes exactly the same way, and a table that
 scrolls on a phone but squeezes on a laptop is two behaviours to hold in the
-head. The cost is the only reference-set churn in J3: `npm run shots` and
-`npm run measure` change for the table surfaces and must be regenerated and
-eyeballed.
+head.
+
+**This spec predicted reference-set churn here and was wrong.** Running
+`npm run measure` on `main` and on the implemented branch produces
+byte-identical output. A four-column table needs 512px and the measured desktop
+pane is 592, so it never scrolls there — and `measure` has no table surface at
+all, only a code block. `measurements.md` WAS stale, by three days and three
+unrelated sub-projects, and was regenerated in its own commit rather than
+inside J3's.
 
 `TableHandles` re-measures on the wrapper's scroll. It positions against
 `table.getBoundingClientRect()`, so without this the column handles drift out of
@@ -179,3 +185,42 @@ double-apply**, because Android honours `interactive-widget` and iOS may not.
 - **The top pill overlapping the title.** Measured as already correct; see
   above.
 - **Two-row or overflow-menu toolbars.** Considered and rejected in decision 2.
+
+## Corrections made while building
+
+Recorded here rather than silently fixed, because each one is a thing this spec
+asserted and the code disproved.
+
+- **Three plausible ways to floor a column's width do nothing**, and all three
+  were measured rather than reasoned about. `min-width` on `td`/`th` is IGNORED
+  under `table-layout: fixed` and renders byte-identically to no rule at all;
+  `min-width` on the table loses to Tiptap's own inline `min-width: 50px`;
+  `min-width` on `col` loses to its inline `min-width: 25px`. Only
+  `col { min-width: … !important }` works — outranking a third-party inline
+  style, which is the one case the keyword exists for. An earlier draft of this
+  spec proposed a `--bear-table-columns` variable set from `TableHandles`, which
+  would have been worse than wrong: that plugin only mounts while the caret is
+  inside the table, so every other table on screen would have fallen back and
+  squeezed.
+- **`coarse:pb-32` was written, could not be falsified, and was removed.** The
+  grown strip reaches 68px into the pane against `pb-24`'s 96, so the reserve
+  needed no change. The guard was itself verified by overgrowing the strip to
+  `h-32`, where it fails at 96 < 140.
+- **The reference-set churn this spec predicted does not exist.** See decision 3.
+- **`useAnchoredMenu`'s flip decision needed the same fix as the clamps.** It
+  asked `window.innerHeight` whether a menu "fits below", which on iOS reports a
+  full screen while a third of it is under a keyboard. It now asks
+  `visibleBottom()`. The spec scoped only the three `maxHeight` clamps.
+
+## Findings for whoever does J4
+
+- **A `poll`-based assertion can hide a missing listener entirely.** The
+  handle-drift test polled for five seconds; any unrelated ProseMirror view
+  update in that window re-measures the layer, so the test passed with the
+  scroll listener deleted. It now scrolls and measures in ONE round trip two
+  frames later — what a user sees during a fling — and fails at exactly 120px.
+- **The table handle layer is a SIBLING of the scroll container, not a child.**
+  Verified in the DOM rather than inferred: `wrapper.contains(layer) === false`.
+  So it neither moves with the cells nor gets clipped by the wrapper, which is
+  why row handles pin to the visible left edge and column handles hide by
+  `visibility` when their column scrolls away.
