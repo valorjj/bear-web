@@ -597,3 +597,53 @@ describe('stored images', () => {
     expect(html).not.toContain('<img');
   });
 });
+
+describe('callouts in an export', () => {
+  const NOTE = '# T\n\n> [!warning] Be careful\n>\n> Body text.';
+
+  it('carries the type onto the element so the stylesheet can find it', () => {
+    const body = renderNoteBody(NOTE);
+
+    expect(body).toContain('data-callout="warning"');
+    expect(body).toContain('data-callout-title');
+    expect(body).toContain('Be careful');
+  });
+
+  it('leaves a plain blockquote unmarked', () => {
+    expect(renderNoteBody('> just a quote')).not.toContain('data-callout');
+  });
+
+  it('carries no placeholder, because the hint is not content', () => {
+    // `renderNoteBody` builds its schema from the DEFAULT extensions, which
+    // carry no `calloutLabels`, so the decoration that draws the hint is never
+    // registered. An untitled callout exports as its icon and nothing else.
+    expect(renderNoteBody('> [!warning]')).not.toContain('data-placeholder');
+  });
+
+  it('styles every type in the roster, so none renders as a bare quote', () => {
+    // The failure this catches is a type added to the schema and forgotten
+    // here: it would export with `data-callout` set and no rule to match it,
+    // which is a plain quote wearing an attribute.
+    const document_ = renderNoteHtml(
+      { title: 'T', text: NOTE, updatedAt: 0 },
+      Object.fromEntries(EXPORT_TOKEN_NAMES.map((name) => [name, 'VALUE'])),
+    );
+
+    for (const type of ['info', 'tip', 'success', 'warning', 'danger']) {
+      expect(document_, type).toContain(`blockquote[data-callout='${type}']`);
+    }
+  });
+
+  it('asks for every callout token, so none silently falls back', () => {
+    const document_ = renderNoteHtml(
+      { title: 'T', text: NOTE, updatedAt: 0 },
+      Object.fromEntries(EXPORT_TOKEN_NAMES.map((name) => [name, `VALUE-${name}`])),
+    );
+
+    for (const type of ['info', 'tip', 'success', 'warning', 'danger']) {
+      expect(document_).toContain(`VALUE---bear-cal-fill-${type}`);
+      expect(document_).toContain(`VALUE---bear-cal-edge-${type}`);
+      expect(document_).toContain(`VALUE---bear-cal-icon-${type}`);
+    }
+  });
+});

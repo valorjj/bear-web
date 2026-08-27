@@ -40,6 +40,21 @@ export const EXPORT_TOKEN_NAMES = [
   '--bear-code-comment',
   '--bear-code-function',
   '--bear-code-type',
+  '--bear-cal-fill-info',
+  '--bear-cal-edge-info',
+  '--bear-cal-icon-info',
+  '--bear-cal-fill-tip',
+  '--bear-cal-edge-tip',
+  '--bear-cal-icon-tip',
+  '--bear-cal-fill-success',
+  '--bear-cal-edge-success',
+  '--bear-cal-icon-success',
+  '--bear-cal-fill-warning',
+  '--bear-cal-edge-warning',
+  '--bear-cal-icon-warning',
+  '--bear-cal-fill-danger',
+  '--bear-cal-edge-danger',
+  '--bear-cal-icon-danger',
   '--bear-radius-sm',
   '--bear-radius-md',
   '--bear-font-sans',
@@ -90,6 +105,30 @@ const FALLBACKS: Record<ExportTokenName, string> = {
   '--bear-code-comment': 'canvastext',
   '--bear-code-function': 'canvastext',
   '--bear-code-type': 'canvastext',
+  // A callout keeps its SHAPE when its colours are lost — the panel, the
+  // bar and the bold header still say "this part matters", which is the
+  // block's whole job. The fills degrade like the highlight tints above and
+  // the edges like the syntax roles, so the result is a legible grey panel
+  // rather than a guessed palette.
+  '--bear-cal-fill-info': 'buttonface',
+  '--bear-cal-fill-tip': 'buttonface',
+  '--bear-cal-fill-success': 'buttonface',
+  '--bear-cal-fill-warning': 'buttonface',
+  '--bear-cal-fill-danger': 'buttonface',
+  '--bear-cal-edge-info': 'canvastext',
+  '--bear-cal-edge-tip': 'canvastext',
+  '--bear-cal-edge-success': 'canvastext',
+  '--bear-cal-edge-warning': 'canvastext',
+  '--bear-cal-edge-danger': 'canvastext',
+  // `none` rather than a fallback glyph: a mask that fails to load paints
+  // the ELEMENT, so a missing icon would draw a solid square where the
+  // glyph should be. An absent mask with `none` collapses to nothing, and
+  // the header keeps its words.
+  '--bear-cal-icon-info': 'none',
+  '--bear-cal-icon-tip': 'none',
+  '--bear-cal-icon-success': 'none',
+  '--bear-cal-icon-warning': 'none',
+  '--bear-cal-icon-danger': 'none',
   '--bear-radius-sm': '4px',
   '--bear-radius-md': '6px',
   '--bear-font-sans': 'system-ui, sans-serif',
@@ -449,6 +488,83 @@ ${declarations}
       border-left: 2px solid var(--bear-border);
       padding-left: 1em;
       color: var(--bear-muted);
+    }
+
+    blockquote[data-callout='info'] {
+      --cal-edge: var(--bear-cal-edge-info);
+      --cal-fill: var(--bear-cal-fill-info);
+      --cal-icon: var(--bear-cal-icon-info);
+    }
+
+    blockquote[data-callout='tip'] {
+      --cal-edge: var(--bear-cal-edge-tip);
+      --cal-fill: var(--bear-cal-fill-tip);
+      --cal-icon: var(--bear-cal-icon-tip);
+    }
+
+    blockquote[data-callout='success'] {
+      --cal-edge: var(--bear-cal-edge-success);
+      --cal-fill: var(--bear-cal-fill-success);
+      --cal-icon: var(--bear-cal-icon-success);
+    }
+
+    blockquote[data-callout='warning'] {
+      --cal-edge: var(--bear-cal-edge-warning);
+      --cal-fill: var(--bear-cal-fill-warning);
+      --cal-icon: var(--bear-cal-icon-warning);
+    }
+
+    blockquote[data-callout='danger'] {
+      --cal-edge: var(--bear-cal-edge-danger);
+      --cal-fill: var(--bear-cal-fill-danger);
+      --cal-icon: var(--bear-cal-icon-danger);
+    }
+
+    blockquote[data-callout] {
+      border-left: 6px solid var(--cal-edge);
+      border-radius: var(--bear-radius-md);
+      background: var(--cal-fill);
+      padding: 0.75em 1em;
+      /* The quote rule above dims its body. A callout is the note's own
+         emphasis rather than a quotation, so the text comes back. */
+      color: var(--bear-text);
+    }
+
+    blockquote[data-callout] > [data-callout-title] {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      font-weight: 600;
+      min-height: 1.4em;
+    }
+
+    /* The glyph, drawn from the same token the editor uses: readExportTokens
+       copies custom properties verbatim, so there is no second copy of the
+       shape here to drift from the first. Written without backticks on
+       purpose — one inside a CSS comment terminates this whole template
+       literal, and the parse error it raises points at the prose. */
+    blockquote[data-callout] > [data-callout-title]::before {
+      content: '';
+      flex: none;
+      width: 1.15em;
+      height: 1.15em;
+      background: var(--cal-edge);
+      -webkit-mask-image: var(--cal-icon);
+      mask-image: var(--cal-icon);
+      -webkit-mask-size: contain;
+      mask-size: contain;
+      -webkit-mask-repeat: no-repeat;
+      mask-repeat: no-repeat;
+      -webkit-mask-position: center;
+      mask-position: center;
+    }
+
+    blockquote[data-callout] > :first-child {
+      margin-top: 0;
+    }
+
+    blockquote[data-callout] > :last-child {
+      margin-bottom: 0;
     }
 
     code {
