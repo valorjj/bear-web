@@ -697,6 +697,55 @@
   color: var(--bear-muted);
 }
 
+/*
+ * On a device that cannot hover, the gutter rests VISIBLE (J2).
+ *
+ * The rule above is the whole route to folding a section with a pointer, so on
+ * a phone it made folding unreachable: there is no hover to reveal the
+ * chevron, and no right-click to reach it another way. Long-press is not an
+ * alternative here — inside a `contenteditable` the OS already owns that
+ * gesture for select-word-and-callout.
+ *
+ * The cost is a chevron and a level badge resting in the gutter of every
+ * heading on a phone. That is accepted: an affordance the user can see and
+ * choose to ignore beats one that does not exist.
+ */
+@media (hover: none) {
+  .bear-fold-toggle,
+  .bear-fold-badge {
+    opacity: 1;
+  }
+}
+
+/*
+ * Fingertip-sized hit areas for the gutter (J2), without moving the glyphs.
+ *
+ * 24 x 44, not 44 x 44, and the width is the constrained axis for a reason
+ * the gutter's geometry forces: the toggle sits at `-3rem` and the badge at
+ * `-1.5rem`, each 1.5rem wide, so the two are exactly adjacent with no gap
+ * between them. A 44px-wide expansion would put half of each inside the
+ * other, and two overlapping targets turn a near-miss into the WRONG action
+ * — folding a section when the user meant to change its level — rather than
+ * into no action at all.
+ *
+ * 24px still clears WCAG 2.5.8 (AA), which asks for 24; the 44 this project
+ * usually holds is 2.5.5 (AAA) and Apple's HIG figure. Separating the two
+ * controls enough to reach 44 in both axes means moving them, and moving them
+ * is J3's.
+ */
+@media (pointer: coarse) {
+  .bear-fold-toggle::after,
+  .bear-fold-badge::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    width: 100%;
+    height: var(--bear-touch-target);
+  }
+}
+
 /* Inline, in flow, inside the measure: covers nothing at any pane width. */
 .bear-fold-marker {
   color: var(--bear-faint);
@@ -797,6 +846,45 @@
   color: var(--bear-text);
 }
 
+/*
+ * The handles rest VISIBLE where nothing can hover (J2).
+ *
+ * `TableHandleMenu` is the only touch route to adding or deleting a row or a
+ * column — the editor's own context menu carries those commands too, but J2
+ * ruled it has no touch route because everything else in it is reachable from
+ * `BottomToolbar`. These handles are what make that ruling true. Hiding them
+ * on a phone would leave table editing with no route at all.
+ */
+@media (hover: none) {
+  .bear-table-handle {
+    opacity: 1;
+  }
+}
+
+/*
+ * A fingertip-sized hit area for an 18px handle (J2).
+ *
+ * 44 wide, 32 tall. Width is free — a row handle sits alone in the gutter
+ * left of the table — but height is capped by the ROW PITCH: row handles are
+ * stacked one per row, and the editor's rows are about 32px (a 25.6px line
+ * plus cell padding). Expanding to 44 would overlap the neighbouring row's
+ * handle and insert a row against the wrong one.
+ *
+ * A column handle is under the same rule with its axes swapped, and columns
+ * are far wider than 44, so one declaration covers both.
+ */
+@media (pointer: coarse) {
+  .bear-table-handle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    width: var(--bear-touch-target);
+    height: 2rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bear-table-handle {
     transition: none;
@@ -841,6 +929,27 @@
 .bear-code-language-trigger[aria-expanded='true'] {
   background: var(--bear-hover);
   color: var(--bear-text);
+}
+
+/*
+ * The language trigger is always visible, so J2 owes it a hit area and not a
+ * reveal. Its ink is about 22px tall; it stands alone in the code block's
+ * corner with no neighbouring control, so it takes the full 44 x 44.
+ */
+@media (pointer: coarse) {
+  .bear-code-language-trigger {
+    position: relative;
+  }
+
+  .bear-code-language-trigger::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    width: max(100%, var(--bear-touch-target));
+    height: max(100%, var(--bear-touch-target));
+  }
 }
 
 /*
@@ -996,6 +1105,15 @@
 .bear-stored-image-wrap:hover .bear-image-grip,
 .bear-stored-image-wrap:focus-within .bear-image-grip {
   opacity: 1;
+}
+
+/* The grip rests visible where nothing can hover (J2). It is already 44px
+ * wide — K3 built it that way — so it needs no hit-area treatment, only a
+ * reason to be on screen. */
+@media (hover: none) {
+  .bear-image-grip {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -57,9 +57,26 @@ const VARIANTS: Record<ButtonVariant, string> = {
 const SIZES: Record<ButtonSize, string> = {
   sm: 'h-6 px-2 text-ui-sm rounded-sm',
   md: 'h-7 px-2 text-ui rounded-sm',
-  // 44x44 — the iOS and WCAG 2.5.8 minimum target. Square and circular,
-  // because at this size it holds one glyph and nothing else.
+  // 44x44 — Apple's HIG figure and WCAG 2.5.5 Target Size (Enhanced). NOT
+  // 2.5.8, which this comment used to cite: 2.5.8 is the AA criterion and asks
+  // for 24. Square and circular, because at this size it holds one glyph and
+  // nothing else.
   touch: 'h-11 w-11 rounded-full',
+};
+
+/*
+ * Which sizes need J2's hit-area treatment.
+ *
+ * `touch` is already 44 x 44 and needs nothing. `sm` (24px) and `md` (28px)
+ * are below a fingertip, so on a coarse pointer they get a 44px `::after`
+ * while the drawn button keeps its size — see `touch-target` in
+ * `src/styles/index.css`. Growing the button itself would reflow every
+ * header, menu and toolbar it appears in, which is J3's work, not J2's.
+ */
+const NEEDS_TOUCH_TARGET: Record<ButtonSize, string> = {
+  sm: 'touch-target',
+  md: 'touch-target',
+  touch: '',
 };
 
 export function Button({
@@ -81,7 +98,7 @@ export function Button({
       aria-expanded={ariaExpanded}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex shrink-0 items-center justify-center transition-colors duration-[var(--bear-duration-fast)] ease-bear disabled:pointer-events-none disabled:opacity-40 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center transition-colors duration-[var(--bear-duration-fast)] ease-bear disabled:pointer-events-none disabled:opacity-40 ${VARIANTS[variant]} ${SIZES[size]} ${NEEDS_TOUCH_TARGET[size]} ${className}`}
     >
       {children}
     </button>

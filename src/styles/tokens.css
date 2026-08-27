@@ -64,6 +64,17 @@
   --bear-duration: 160ms;
   --bear-ease: cubic-bezier(0.2, 0, 0.2, 1);
 
+  /*
+   * The minimum a fingertip can reliably hit (J2). 44px is Apple's HIG figure
+   * and WCAG 2.5.5 Target Size (Enhanced); WCAG 2.5.8, the AA criterion, asks
+   * only for 24. We hold the higher line — a note list is a list of things to
+   * tap, and 24px targets in a scrolling list mis-fire constantly.
+   *
+   * Tier 3, so NOT themeable: a fingertip is a property of the hand, not of
+   * the palette, and a theme able to shrink it could ship an untappable app.
+   */
+  --bear-touch-target: 44px;
+
   /* Editor typography, bound to the M8 preference sliders. */
   --bear-font-size: 16px;
   --bear-line-height: 1.6;

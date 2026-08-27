@@ -9,6 +9,7 @@ import { HighlightedText } from './HighlightedText';
 import type { NoteRowMenuRequest } from './NoteRowMenu';
 import { DEFAULT_PREVIEW_SIZE, type PreviewSize, snippetLines } from './preview';
 import { acquireObjectUrl, releaseObjectUrl } from '@/lib/objectUrls';
+import { useLongPress } from '@/lib/useLongPress';
 
 import { firstStoredImageId } from './thumbnail';
 
@@ -106,6 +107,24 @@ export function NoteListItem({
     onOpenMenu({ noteId: note.id, pinned: note.pinned, trashed: note.trashedAt !== null, rect });
   }
 
+  /*
+   * Right-click on a desktop, long-press on a phone, one callback (J2).
+   *
+   * `useLongPress` owns the `contextmenu` event that used to be handled inline
+   * here, because the two routes have to be deduplicated: Android Chrome
+   * raises `contextmenu` from a long press at very close to the moment the
+   * timer fires, and iOS Safari raises none at all. Handling them separately
+   * opens the menu twice on one platform and never on the other.
+   */
+  const longPress = useLongPress({
+    onPress: (point) => {
+      // A zero-size rect at the pointer — the menu's flip/clamp reads `.top`,
+      // `.bottom` and `.left` and nothing else, so a degenerate rect anchors
+      // it exactly at the press point with no special case.
+      openMenu(new DOMRect(point.x, point.y, 0, 0));
+    },
+  });
+
   return (
     <li
       // A chip, not a band. Soft Depth insets the row and rounds it, so the
@@ -114,16 +133,12 @@ export function NoteListItem({
       // `group` so the pin below can reveal itself on a hover of the WHOLE
       // row, not merely of its own 22px box — a control the user has to find
       // before they can hover it is not an affordance.
-      className={`ease-bear group relative mx-2 my-1 overflow-hidden rounded-md transition-colors duration-[var(--bear-duration-fast)] ${
+      // `touch-press` stops iOS raising its own selection callout over the
+      // menu a long press just opened.
+      className={`ease-bear group touch-press relative mx-2 my-1 overflow-hidden rounded-md transition-colors duration-[var(--bear-duration-fast)] ${
         selected ? 'bg-selected' : ''
       }`}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        // A zero-size rect at the pointer — the menu's flip/clamp reads
-        // `.top`, `.bottom` and `.left` and nothing else, so a degenerate
-        // rect anchors it exactly at the click point with no special case.
-        openMenu(new DOMRect(event.clientX, event.clientY, 0, 0));
-      }}
+      {...longPress}
     >
       <button
         type="button"
@@ -241,13 +256,22 @@ export function NoteListItem({
         // Playwright's `toBeVisible()` ignores `opacity`, so this rule can
         // only be covered by a polled `toHaveCSS`, which is what
         // `e2e/appearance.spec.ts` does.
-        className={`ease-bear absolute bottom-2 left-2 p-1 transition-[color,opacity] duration-[var(--bear-duration-fast)] hover:text-accent ${
+        // `touch-target` grows the hit area to 44px WITHOUT moving the 22px
+        // glyph. Consequence worth knowing: the row's bottom-left corner then
+        // pins rather than selects. On a row ~300x90 that is a corner, and an
+        // unreachable pin is worse than a corner that pins.
+        className={`ease-bear touch-target absolute bottom-2 left-2 p-1 transition-[color,opacity] duration-[var(--bear-duration-fast)] hover:text-accent ${
           // Reads by colour, never by glyph: a slashed pin in the unpinned
           // state reads as "pinning is unavailable" (the grammar of a
           // muted-mic glyph), not "click to pin".
           note.pinned
             ? 'text-accent opacity-100'
-            : 'text-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+            : // `touch:opacity-100` rests the pin visible where nothing can
+              // hover. Sub-project I hid it on the grounds that the row menu
+              // is another route to pinning — but on touch that route is a
+              // long press, which is invisible, so leaning on it alone would
+              // make the most common row action undiscoverable. Both ship.
+              'text-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 touch:opacity-100'
         }`}
       >
         <Icon glyph={Pin} size="sm" />

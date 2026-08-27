@@ -129,3 +129,134 @@ body {
     outline-offset: 2px;
   }
 }
+
+/*
+ * "This control can never be revealed" (J2).
+ *
+ * The literal statement of the defect: a control shown only on `:hover` is,
+ * on a device whose primary input cannot hover, permanently invisible. The
+ * `touch:` variant marks the rules that answer that.
+ *
+ * DECLARED rather than borrowed from whatever variant Tailwind happens to ship
+ * for this query. A built-in would tie the app's touch behaviour to a minor
+ * upgrade's naming, and the failure mode of a variant that stops matching is
+ * Tailwind's usual one: no warning, no error, the utility simply never emitted
+ * — which is exactly how `hover:bg-hover` stayed dead for two milestones.
+ *
+ * Deliberately NOT the same query as the hit-area rules below, which ask about
+ * a fingertip rather than about hover. See `src/lib/useCoarsePointer.ts`.
+ */
+@custom-variant touch (@media (hover: none));
+
+/*
+ * A tap target reaches 44px; the drawn control does not move (J2).
+ *
+ * The expansion is a pseudo-element, so the toolbar stays `h-9`, no menu
+ * reflows and no row grows. That is the line between J2 and J3: J2 makes a
+ * control REACHABLE, J3 decides how the editor is laid out at 390px. Growing
+ * the ink would have crossed it on the first commit.
+ *
+ * `::after` rather than padding because padding on a flex child changes its
+ * measured box, and the geometry of every pane in this app is asserted by
+ * `npm run measure` against numbers nobody wants to re-baseline for a
+ * behaviour no desktop user can see.
+ *
+ * Only under `(pointer: coarse)`: on a mouse the expansion would silently
+ * enlarge every control's hit area, and a 44px zone around a 22px pin is a
+ * mis-click a pointer user has no reason to suffer.
+ */
+@layer utilities {
+  @media (pointer: coarse) {
+    .touch-target,
+    .touch-target-y {
+      position: relative;
+    }
+
+    .touch-target::after,
+    .touch-target-y::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      translate: -50% -50%;
+      height: max(100%, var(--bear-touch-target));
+      /*
+       * The expansion must never eat the control's own focus ring or paint
+       * over its glyph, and it carries no colour of its own.
+       */
+      pointer-events: auto;
+    }
+
+    /* A control that stands alone: the full 44 x 44. */
+    .touch-target::after {
+      width: max(100%, var(--bear-touch-target));
+    }
+
+    /*
+     * A control inside a dense horizontal strip: full height, and NOT a pixel
+     * wider than the ink.
+     *
+     * `BottomToolbar` is the case. An `h-7` button with `px-2` around a 16px
+     * glyph is 32px wide at a 34px pitch, so a 44px-wide expansion would
+     * overlap its neighbour's — and two touch targets that overlap turn a
+     * near-miss into the WRONG action rather than into no action, which is
+     * strictly worse than a target that is slightly small. The 2px of `gap`
+     * is left as separation for the same reason.
+     *
+     * So these land at 32 x 44: full height, pitch-limited width. Reaching
+     * 44 x 44 here needs the strip to reflow, and reflow is J3's.
+     */
+    .touch-target-y::after {
+      width: 100%;
+    }
+  }
+
+  /*
+   * Menu items reach a fingertip by GROWING, not by overhanging (J2).
+   *
+   * This is the one place J2's "expand the hit area, never the ink" rule is
+   * deliberately reversed, and building it is what showed why. A menu is a
+   * VERTICAL list of items about 26px tall: a 44px `::after` on each one
+   * overlaps its neighbours by 9px top and bottom, so a near-miss selects the
+   * WRONG command instead of none — and in these menus the wrong command
+   * includes Delete. Overlapping targets are worse than small ones.
+   *
+   * A popover growing taller reflows nothing outside itself, which is why the
+   * rule that protects pane geometry does not apply here. Taller rows are also
+   * simply what a phone menu looks like.
+   *
+   * Applied by ROLE rather than by a shared class, which is why the seven
+   * menus keep their own item styling. These are EXPLICIT `role` attributes
+   * written into the JSX — 40 of them across ten menus — not implicit ARIA
+   * semantics, so an attribute selector really does match them. (An implicit
+   * role would NOT: `docs/rulings/testing-and-tooling.md` records the audit
+   * where `[role="region"]` silently matched nothing.)
+   */
+  @media (pointer: coarse) {
+    [role='menuitem'],
+    [role='menuitemradio'],
+    [role='menuitemcheckbox'] {
+      min-height: var(--bear-touch-target);
+    }
+  }
+
+  /*
+   * Marks an element as a long-press target (J2).
+   *
+   * Without this, resting a finger on a note row raises iOS Safari's own
+   * selection UI — a word highlighted, grab handles, and the Copy/Look Up
+   * callout — over the menu the press just opened. The two gestures are the
+   * same gesture; only one of them can own it.
+   *
+   * Under `(hover: none)` only. On a desktop, text in a note row must stay
+   * selectable, and `user-select: none` there would be a regression nobody
+   * asked for in exchange for a gesture that device does not make.
+   */
+  @media (hover: none) {
+    .touch-press {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+  }
+}

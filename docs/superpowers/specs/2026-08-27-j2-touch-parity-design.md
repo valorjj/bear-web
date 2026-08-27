@@ -114,10 +114,14 @@ J2 touches no layout — which is the line drawn above.
 
 **Its honest limit, recorded rather than hidden:** this reaches a full 44×44
 only where a control stands alone. Inside `BottomToolbar` an `h-7` button with
-`px-2` around a 16px glyph is 32px wide at a 34px pitch (`gap-0.5`), so
-expanding past 34 overlaps its neighbour. Those buttons land at **34×44** —
-full height, pitch-limited width. Reaching 44×44 there requires the strip to
-reflow, which is J3's.
+`px-2` around a 16px glyph is 32px wide at a 34px pitch (`gap-0.5`), so a 44px
+expansion would overlap its neighbour's. Those buttons land at **32×44** — full
+height, and not a pixel wider than the ink.
+
+The 2px of `gap` is deliberately left as separation rather than consumed: two
+touch targets that overlap turn a near-miss into the WRONG action rather than
+into no action, which is strictly worse than a target that is slightly small.
+Reaching 44×44 there requires the strip to reflow, which is J3's.
 
 ### 6. The resizer is in scope, despite J1
 
@@ -158,11 +162,29 @@ fingertip. It gets the same hit-area treatment as any other standalone control.
   its own selection callout over ours.
 - `src/ui/Button.tsx`, `src/ui/Resizer.tsx` — hit-area expansion on coarse
   pointers.
-- **One targeted extraction:** the seven menus (`ScopeMenu`, `NoteRowMenu`,
-  `EditorContextMenu`, `HeadingMenu`, `TableHandleMenu`, `CalloutMenu`,
-  `HighlightMenu`, `ExportMenu`) each carry their own inline item class string
-  today. Applying a hit-area rule to seven copies is how they drift, so they
-  collapse onto one shared class first. Nothing else is refactored.
+- **Menu items — CORRECTED DURING IMPLEMENTATION.** This spec called for
+  collapsing the seven menus' inline item classes onto one shared class, so the
+  hit-area rule would have one home. Building it showed two things wrong with
+  that.
+
+  First, the `::after` technique is actively wrong for a menu. A menu is a
+  vertical list of ~26px items; a 44px overlay on each overlaps its neighbours
+  by 9px top and bottom, so a near-miss selects the WRONG command rather than
+  none — and in these menus the wrong command includes Delete. Menu items
+  therefore grow their `min-height` instead. This is the one place J2's
+  "expand the hit area, never the ink" rule is deliberately reversed, and the
+  reason it can be is that a popover growing taller reflows nothing outside
+  itself.
+
+  Second, once the rule is `min-height` it can be applied by **role** —
+  `[role='menuitem']` and its radio/checkbox variants — in one declaration.
+  These are explicit `role` attributes written into the JSX (40 across ten
+  menus), not implicit ARIA semantics, so an attribute selector really matches
+  them; `docs/rulings/testing-and-tooling.md` records the audit where
+  `[role="region"]` silently matched nothing because that role WAS implicit.
+  That covers three more menus than the extraction would have, with no
+  refactor and no risk of a restyle across eight files. **No extraction was
+  performed.**
 - `vitest.setup.ts` + `src/testGlobals.d.ts` — the `matchMedia` stub parses
   `(hover: none)` and `(pointer: coarse)` behind a new `__setPointerCoarse`.
 
@@ -213,5 +235,5 @@ regenerate them looking for a diff.
 - Haptic feedback on long-press. iOS Safari implements no `navigator.vibrate` at
   all, so it would be an Android-only feel, and a behaviour that exists on one
   of two platforms is not worth a ruling.
-- Reaching 44×44 inside `BottomToolbar`. See decision 5 — it requires a reflow,
-  and reflow is J3.
+- Reaching 44×44 inside `BottomToolbar`. See decision 5 — the buttons land at
+  32×44, and going wider requires a reflow, which is J3.
