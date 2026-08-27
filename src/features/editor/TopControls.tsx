@@ -58,7 +58,7 @@ export function TopControls({
         aria-pressed={flags.bold}
         disabled={editor === null}
         onClick={() => editor?.chain().command(pinAllSelectionStep).focus().toggleBold().run()}
-        className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
+        className="touch-target-y h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
       >
         <Icon glyph={Bold} />
       </button>
@@ -68,7 +68,7 @@ export function TopControls({
         aria-pressed={flags.italic}
         disabled={editor === null}
         onClick={() => editor?.chain().command(pinAllSelectionStep).focus().toggleItalic().run()}
-        className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
+        className="touch-target-y h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40"
       >
         <Icon glyph={Italic} />
       </button>
@@ -79,7 +79,7 @@ export function TopControls({
           aria-haspopup="menu"
           aria-expanded={exportOpen ?? false}
           onClick={onToggleExport}
-          className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-expanded:text-text"
+          className="touch-target-y h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-expanded:text-text"
         >
           <Icon glyph={Download} />
         </button>
@@ -89,7 +89,7 @@ export function TopControls({
         aria-label={t('editor.info.show')}
         aria-expanded={infoOpen}
         onClick={onToggleInfo}
-        className="h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover"
+        className="touch-target-y h-7 rounded-sm px-2 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover"
       >
         <Icon glyph={Info} />
       </button>

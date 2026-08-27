@@ -46,6 +46,71 @@ export interface LongPressHandlers {
 const DEDUPE_WINDOW_MS = 1000;
 
 /**
+ * How long the synthetic mouse burst is swallowed after a press fires.
+ *
+ * A ceiling, not a duration: the listeners remove themselves on the first
+ * `click`, and this only covers the case where no click ever arrives (the
+ * finger lifted outside the element, the page navigated).
+ */
+const SYNTHETIC_MOUSE_WINDOW_MS = 1000;
+
+/**
+ * Swallows the compatibility mouse events a browser fires after a touch.
+ *
+ * After a touch sequence Chromium — and every mobile browser — replays it as
+ * `mousedown`, `mouseup`, `click` so that pointer-unaware pages keep working.
+ * Those events are indistinguishable from a real click to anything listening
+ * on `document`, and `useAnchoredMenu` dismisses on exactly that: an outside
+ * `mousedown` in the CAPTURE phase.
+ *
+ * The consequence, which cost an afternoon and which no unit test could see:
+ * a long press opened the row menu and the synthetic `mousedown` closed it
+ * again in the same frame, so the gesture appeared to do nothing at all. The
+ * element's own `onClickCapture` cannot help — a capture listener on
+ * `document` runs strictly before anything on the element.
+ *
+ * Returns its own disposer so a row unmounting mid-burst does not leave three
+ * document listeners behind.
+ */
+function swallowSyntheticMouse(): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const stop = (event: Event): void => {
+    event.preventDefault();
+    // `stopImmediatePropagation`, NOT `stopPropagation`. Both this listener and
+    // `useAnchoredMenu`'s dismissal are registered on `document` in the capture
+    // phase, and `stopPropagation` only stops propagation to OTHER NODES —
+    // every remaining listener on the same node still runs. With the weaker
+    // call the menu still closed the instant it opened, and the difference is
+    // one word.
+    event.stopImmediatePropagation();
+  };
+
+  const dispose = (): void => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    document.removeEventListener('mousedown', stop, true);
+    document.removeEventListener('mouseup', stop, true);
+    document.removeEventListener('click', onClick, true);
+  };
+
+  function onClick(event: Event): void {
+    stop(event);
+    // The click is the last event of the burst, so the window closes with it
+    // rather than waiting out the ceiling — otherwise a deliberate second tap
+    // inside the menu would be swallowed too.
+    dispose();
+  }
+
+  document.addEventListener('mousedown', stop, true);
+  document.addEventListener('mouseup', stop, true);
+  document.addEventListener('click', onClick, true);
+  timer = setTimeout(dispose, SYNTHETIC_MOUSE_WINDOW_MS);
+
+  return dispose;
+}
+
+/**
  * One secondary-action gesture, three triggers, fired once.
  *
  * The triggers exist because no single one covers the platforms:
@@ -79,6 +144,18 @@ export function useLongPress({
   // to it, which on a phone means the menu opens over a screen the user did
   // not ask for.
   const suppressClick = useRef(false);
+  const disposeSwallow = useRef<(() => void) | null>(null);
+  /**
+   * What kind of pointer opened the gesture, so `contextmenu` — which is a
+   * `MouseEvent` and carries no `pointerType` of its own — can tell a
+   * right-click from Android's long press.
+   *
+   * It decides whether the synthetic-mouse burst is swallowed, and getting it
+   * wrong is not cosmetic in either direction: swallowing after a real
+   * right-click eats the user's click on the menu item they then choose, and
+   * not swallowing after a touch lets the burst close the menu instantly.
+   */
+  const lastPointerType = useRef<string>('mouse');
   const onPressRef = useRef(onPress);
   onPressRef.current = onPress;
 
@@ -91,12 +168,22 @@ export function useLongPress({
   // A pending timer must not outlive the row. Note-list rows unmount
   // constantly — a scope change replaces every one of them — and a timer that
   // survives calls `onPress` for a note that is no longer on screen.
-  useEffect(() => cancelTimer, []);
+  useEffect(
+    () => () => {
+      cancelTimer();
+      disposeSwallow.current?.();
+    },
+    [],
+  );
 
   return useMemo<LongPressHandlers>(() => {
-    function fire(point: PressPoint, now: number): void {
+    function fire(point: PressPoint, now: number, fromTouch: boolean): void {
       firedAt.current = now;
       suppressClick.current = true;
+      if (fromTouch) {
+        disposeSwallow.current?.();
+        disposeSwallow.current = swallowSyntheticMouse();
+      }
       onPressRef.current(point);
     }
 
@@ -111,12 +198,13 @@ export function useLongPress({
         // A mouse has `contextmenu` and always has. Starting a timer for it
         // would mean holding the left button down opened a menu, which no
         // desktop app does.
+        lastPointerType.current = event.pointerType;
         if (event.pointerType === 'mouse') return;
         const point = { x: event.clientX, y: event.clientY };
         origin.current = point;
         timer.current = setTimeout(() => {
           timer.current = null;
-          fire(point, Date.now());
+          fire(point, Date.now(), true);
         }, delayMs);
       },
 
@@ -135,6 +223,8 @@ export function useLongPress({
 
       onPointerCancel() {
         cancelTimer();
+        disposeSwallow.current?.();
+        disposeSwallow.current = null;
         // The gesture was taken over by something else — a scroll, a system
         // sheet. Any click that follows is not ours to swallow.
         suppressClick.current = false;
@@ -150,7 +240,7 @@ export function useLongPress({
           return;
         }
         event.preventDefault();
-        fire({ x: event.clientX, y: event.clientY }, now);
+        fire({ x: event.clientX, y: event.clientY }, now, lastPointerType.current !== 'mouse');
       },
 
       onClickCapture(event) {
