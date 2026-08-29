@@ -1067,4 +1067,25 @@ describe('moving a section', () => {
     );
     editor.destroy();
   });
+
+  // Regression for a fault the move-undo snapshot stack introduced: a fold
+  // toggle is a zero-step transaction, which `prosemirror-history` never
+  // records, so a snapshot pushed for it could still be matched by a LATER,
+  // unrelated undo and wrongly roll the fold back. B1's shipped guarantee is
+  // that a fold survives ordinary editing, so this must never regress.
+  it('keeps a fold across an ordinary undo of unrelated typing', () => {
+    const editor = editorOf('Title\n\n## A\n\nbody');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+    expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
+
+    editor.commands.insertContentAt(a!.contentStart, 'X');
+    expect(serializeMarkdown(editor.getJSON())).toContain('X');
+
+    editor.commands.undo();
+
+    expect(serializeMarkdown(editor.getJSON())).not.toContain('X');
+    expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
+    editor.destroy();
+  });
 });

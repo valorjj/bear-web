@@ -68,6 +68,21 @@ interface FoldState {
 
 const headingFoldKey = new PluginKey<FoldState>('headingFold');
 
+/**
+ * Matches `prosemirror-history`'s own default `depth` option (100): its undo
+ * branch never grows past that many entries, so a snapshot older than that
+ * corresponds to a history entry that has already been dropped and can never
+ * be replayed back to. Left unbounded, an orphaned snapshot would sit in
+ * `past`/`future` forever, since nothing will ever again produce a `tr.doc`
+ * matching it.
+ */
+const MAX_FOLD_HISTORY = 100;
+
+function pushCapped(stack: readonly FoldSnapshot[], entry: FoldSnapshot): FoldSnapshot[] {
+  const next = [...stack, entry];
+  return next.length > MAX_FOLD_HISTORY ? next.slice(next.length - MAX_FOLD_HISTORY) : next;
+}
+
 /** Transaction meta carrying the next fold set. */
 interface FoldMeta {
   keys: string[];
@@ -418,11 +433,26 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               // THIS transaction has something to restore. Any pending redo
               // is discarded, same as `prosemirror-history` itself does for
               // a fresh edit.
-              return {
-                keys: meta.keys,
-                past: [...value.past, { doc: oldState.doc, keys: value.keys }],
-                future: [],
-              };
+              //
+              // Only pushed when `tr.docChanged`. A plain fold TOGGLE is a
+              // zero-step transaction, and `prosemirror-history` itself never
+              // records one (`if (tr.steps.length == 0) return history;`,
+              // `prosemirror-history`'s `applyTransaction`) — so it can never
+              // be the transaction a later undo replays. A snapshot pushed
+              // for it anyway would carry `doc: oldState.doc`, which for a
+              // zero-step transaction IS the current document; a later,
+              // unrelated undo (of an ordinary edit made afterward) can land
+              // back on that exact document and wrongly match it, rolling
+              // the fold back to before the toggle. Excluding zero-step
+              // transactions removes the only way a snapshot's document can
+              // equal a live one it wasn't meant to answer for.
+              return tr.docChanged
+                ? {
+                    keys: meta.keys,
+                    past: pushCapped(value.past, { doc: oldState.doc, keys: value.keys }),
+                    future: [],
+                  }
+                : { ...value, keys: meta.keys };
             }
 
             // No meta of ours: a normal edit (typing, an unrelated command)
@@ -432,20 +462,29 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
             // what it replays. Only a genuine history transaction is checked
             // against the snapshots at all, so a coincidentally-identical
             // document from ordinary typing can't misfire this.
+            //
+            // A structural-equality match is safe rather than merely
+            // convenient: fold identity is itself content-derived
+            // (`level:nth:text`), so if a document `eq`s a snapshot's
+            // document, that snapshot's keys ARE the correct keys for that
+            // content, whatever edit actually produced it. The only way this
+            // could go wrong is a snapshot whose document was never actually
+            // history-tracked — which is exactly what the `tr.docChanged`
+            // guard above rules out.
             if (isHistoryTransaction(tr)) {
               const undone = value.past.at(-1);
               if (undone && undone.doc.eq(tr.doc)) {
                 return {
                   keys: undone.keys,
                   past: value.past.slice(0, -1),
-                  future: [...value.future, { doc: oldState.doc, keys: value.keys }],
+                  future: pushCapped(value.future, { doc: oldState.doc, keys: value.keys }),
                 };
               }
               const redone = value.future.at(-1);
               if (redone && redone.doc.eq(tr.doc)) {
                 return {
                   keys: redone.keys,
-                  past: [...value.past, { doc: oldState.doc, keys: value.keys }],
+                  past: pushCapped(value.past, { doc: oldState.doc, keys: value.keys }),
                   future: value.future.slice(0, -1),
                 };
               }
