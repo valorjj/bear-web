@@ -26,9 +26,18 @@ import { describe, expect, it } from 'vitest';
  * described with was never right, four times over. See
  * `docs/superpowers/NEXT.md`'s C section for the full measurement history.
  *
- * The ceiling here is the measured `314,367 B` plus roughly 3% headroom for
- * ordinary churn — not a target, a limit. Raising it is a decision someone
- * makes in a diff, not a drift nobody notices.
+ * The ceiling is a measured figure plus **roughly 2.5-3 KB of headroom** —
+ * not a target, a limit. Raising it is a decision someone makes in a diff,
+ * not a drift nobody notices.
+ *
+ * That margin is the PRACTICE, and it is written down here because the rule
+ * this docblock used to state was "roughly 3%", which at today's size would be
+ * ~10 KB. Nobody has ever left 10 KB: the raises below left 89 B, 187 B and
+ * 745 B before settling on ~2.5-3 KB deliberately. Carrying a stated rule
+ * nobody follows alongside a practice nobody wrote down is how a ceiling
+ * silently comes to have 89 bytes of room. A small margin is the right choice
+ * — it forces each growth to be measured on both sides — but it has to be the
+ * one on the page.
  *
  * Raised from 333,000 by B2 Task 4 (drag the level badge to move a section)
  * on 2026-08-29, measured on both sides as this file's convention requires:

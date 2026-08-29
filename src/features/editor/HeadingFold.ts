@@ -730,6 +730,28 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               }
             }
 
+            // A document change under a LIVE DRAG abandons the drag, rather
+            // than mapping its positions forward. Reachable: the badge press
+            // calls `preventDefault` but does not move focus, so the caret is
+            // still live and a keystroke with the button held lands in the
+            // document.
+            //
+            // Clearing beats mapping for two reasons. The cheap one is that a
+            // shrinking document makes `dropAt` exceed `doc.content.size`, and
+            // `DecorationSet.create` then throws an uncaught `RangeError` from
+            // inside `decorations` — a crash, not a glitch. The real one is
+            // that `BadgePress.boundaries` was measured ONCE, against a
+            // document that no longer exists; `tr.mapping` could carry `dropAt`
+            // and `dragFrom` forward but nothing maps that array, so the drop
+            // would land somewhere the user never pointed at. A wrong result is
+            // exactly what this plugin's document-coordinate conversion exists
+            // to prevent, and abandoning the drag is what a user who just typed
+            // expects anyway. The release path already handles the cleared
+            // state: `dropAt === null` returns without dispatching.
+            if (tr.docChanged && value.dragFrom !== null) {
+              return { ...value, dragFrom: null, dropAt: null };
+            }
+
             // Keys are content-derived, so an ordinary document change needs
             // no mapping — the identity is re-matched against the new
             // document on every decoration pass. An unmatched key is
@@ -1151,6 +1173,12 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               // schema-only `editorExtensions` constant inert, and the shipped
               // app always wires `onOpenMenu` (see `RichEditor.tsx`).
               if (onOpenMenu === null) return false;
+
+              // A second press while one is live: end the first properly
+              // rather than overwriting it, which would strand its pointer
+              // capture forever. Not reachable through the real UI, but the
+              // state machine should not depend on that being true.
+              if (press !== null) endPress(true);
 
               // Guarded: jsdom has a real `PointerEvent` constructor but no
               // `Element.prototype.setPointerCapture` at all (measured
