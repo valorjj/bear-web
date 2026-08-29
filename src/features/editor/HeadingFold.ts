@@ -2,7 +2,7 @@ import { Extension, isMacOS } from '@tiptap/core';
 import { isHistoryTransaction } from '@tiptap/pm/history';
 import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 
 import {
   ChevronDown,
@@ -23,7 +23,12 @@ import {
   serializeFoldKey,
   type HeadingSection,
 } from './headingSections';
-import { planSectionMove, planSectionShift, type SectionMove } from './headingReorder';
+import {
+  dropBoundaries,
+  planSectionMove,
+  planSectionShift,
+  type SectionMove,
+} from './headingReorder';
 
 export interface HeadingFoldOptions {
   /**
@@ -64,6 +69,17 @@ interface FoldState {
   keys: string[];
   past: FoldSnapshot[];
   future: FoldSnapshot[];
+  /**
+   * The boundary a live badge drag is currently over, or `null` when no drag
+   * is running. Decoration-only, like everything else in this plugin: it moves
+   * a drop indicator and nothing else.
+   */
+  dropAt: number | null;
+  /**
+   * The `pos` of the section being carried, for the dimming decoration.
+   * `null` whenever `dropAt` is.
+   */
+  dragFrom: number | null;
 }
 
 const headingFoldKey = new PluginKey<FoldState>('headingFold');
@@ -88,6 +104,24 @@ interface FoldMeta {
   keys: string[];
 }
 
+/**
+ * Transaction meta carrying the live drag's decoration state, on the SAME
+ * plugin key as `FoldMeta`.
+ *
+ * A separate shape rather than a widened `FoldMeta`, because a drag
+ * transaction must never reach the snapshot branch below: it changes no
+ * document and no fold set, and pushing it onto `past`/`future` would corrupt
+ * the undo stack those exist to keep straight. `FoldMeta` is left exactly as
+ * it was — four fold commands and `applyMove` dispatch through `setKeys`.
+ */
+interface DragMeta {
+  drag: { dragFrom: number | null; dropAt: number | null };
+}
+
+function isDragMeta(meta: FoldMeta | DragMeta): meta is DragMeta {
+  return 'drag' in meta;
+}
+
 /** The fold keys currently held in plugin state, in the order they were folded. */
 export function foldedKeys(state: EditorState): string[] {
   return headingFoldKey.getState(state)?.keys ?? [];
@@ -95,6 +129,89 @@ export function foldedKeys(state: EditorState): string[] {
 
 function setKeys(tr: Transaction, keys: string[]): Transaction {
   return tr.setMeta(headingFoldKey, { keys } satisfies FoldMeta);
+}
+
+function setDrag(tr: Transaction, dragFrom: number | null, dropAt: number | null): Transaction {
+  return tr.setMeta(headingFoldKey, { drag: { dragFrom, dropAt } } satisfies DragMeta);
+}
+
+/**
+ * Distance in pixels a press must travel before it becomes a drag rather than
+ * a click. Small enough that a deliberate drag feels immediate, large enough
+ * that the hand tremor in an ordinary click never crosses it.
+ */
+const DRAG_THRESHOLD = 4;
+
+/** How close to the scroller's edge the pointer must get to auto-scroll. */
+const AUTO_SCROLL_EDGE = 40;
+
+/** Pixels scrolled per `requestAnimationFrame` tick while at an edge. */
+const AUTO_SCROLL_STEP = 12;
+
+/**
+ * The scrolling ancestor of the editor — `EditorContent`'s own
+ * `overflow-auto` box in this app (see `RichEditor.tsx`), not the window: in
+ * a three-pane shell the window never scrolls.
+ */
+function scrollerFor(view: EditorView): HTMLElement {
+  for (let el = view.dom.parentElement; el; el = el.parentElement) {
+    const { overflowY } = getComputedStyle(el);
+    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') return el;
+  }
+  return view.dom.parentElement ?? view.dom;
+}
+
+/**
+ * Every drop boundary's vertical position, in the SCROLLER'S DOCUMENT
+ * coordinates — `rect.top + scroller.scrollTop`, not the bare viewport
+ * `rect.top`.
+ *
+ * This is measured once, at drag start, and auto-scroll moves the scroller
+ * underneath it. A viewport-relative measurement would be correct until the
+ * first auto-scroll tick and then silently drop sections at the wrong
+ * boundary, which is a wrong RESULT rather than a visible glitch. Converting
+ * the pointer the same way (`clientY + scroller.scrollTop`) keeps both sides
+ * of the comparison on one origin, so the scroller's own offset cancels.
+ */
+function measureBoundaries(view: EditorView, scroller: HTMLElement): DropBoundary[] {
+  const scrollTop = scroller.scrollTop;
+  return dropBoundaries(view.state.doc).map((pos) => ({
+    pos,
+    y: view.coordsAtPos(pos).top + scrollTop,
+  }));
+}
+
+interface DropBoundary {
+  pos: number;
+  y: number;
+}
+
+/**
+ * A press on the badge that has not yet been released. Held per EDITOR (the
+ * closure inside `addProseMirrorPlugins`), never at module scope: two editors
+ * on one page would otherwise share one gesture.
+ */
+interface BadgePress {
+  view: EditorView;
+  badge: HTMLElement;
+  /**
+   * The dragged section's `pos`, resolved once at press time. The section
+   * itself is looked up again on release rather than captured here, because
+   * an edit during the press can move it.
+   */
+  pos: number;
+  pointerId: number;
+  pointerType: string;
+  startX: number;
+  startY: number;
+  /** Latest viewport Y, kept so an auto-scroll tick can re-pick without an event. */
+  clientY: number;
+  dragging: boolean;
+  boundaries: DropBoundary[];
+  scroller: HTMLElement | null;
+  frame: number | null;
+  /** -1 scrolling up, 1 scrolling down, 0 not at an edge. */
+  edge: -1 | 0 | 1;
 }
 
 /**
@@ -221,6 +338,19 @@ function badgeElement(level: number): HTMLElement {
   // `aria-hidden`, which would otherwise be its own violation.
   el.setAttribute('aria-hidden', 'true');
   el.tabIndex = -1;
+  return el;
+}
+
+/**
+ * The drop indicator drawn during a badge drag. Not a `button` and not
+ * focusable: it is pure feedback for a pointer gesture already in progress,
+ * and it exists only while the pointer is down.
+ */
+function dropElement(): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'bear-section-drop';
+  el.setAttribute('contenteditable', 'false');
+  el.setAttribute('aria-hidden', 'true');
   return el;
 }
 
@@ -420,14 +550,121 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
 
   addProseMirrorPlugins() {
     const { foldHint, onOpenMenu } = this.options;
+
+    // The live badge press, held per EDITOR in this closure rather than at
+    // module scope: two editors on one page would otherwise share one
+    // gesture. `null` whenever no button is down on a badge.
+    let press: BadgePress | null = null;
+
+    function stopAutoScroll(p: BadgePress): void {
+      if (p.frame !== null) {
+        cancelAnimationFrame(p.frame);
+        p.frame = null;
+      }
+    }
+
+    /**
+     * Ends the gesture and returns what it was, so the caller can decide what
+     * the release meant. Always clears the decoration BEFORE anything else
+     * dispatches, so a move transaction can never carry a stale drop
+     * indicator into the reordered document, where its position means
+     * something different.
+     *
+     * `dispatch` is `false` only when the view itself is going away — a
+     * dispatch into a destroyed view throws.
+     */
+    function endPress(dispatch: boolean): BadgePress | null {
+      const p = press;
+      press = null;
+      if (p === null) return null;
+      stopAutoScroll(p);
+      // `hasPointerCapture`/`releasePointerCapture` are guarded for the same
+      // reason `setPointerCapture` is: jsdom implements none of the three, and
+      // releasing a capture that was never taken throws in a real browser.
+      if (p.badge.hasPointerCapture?.(p.pointerId)) p.badge.releasePointerCapture?.(p.pointerId);
+      if (p.dragging && dispatch) p.view.dispatch(setDrag(p.view.state.tr, null, null));
+      return p;
+    }
+
+    /** Picks the boundary nearest the pointer and, if it changed, shows it. */
+    function updateDrop(p: BadgePress): void {
+      // Converted to the same document-scroll origin the boundaries were
+      // measured in; see `measureBoundaries`.
+      const y = p.clientY + (p.scroller?.scrollTop ?? 0);
+      let best: DropBoundary | null = null;
+      for (const boundary of p.boundaries) {
+        if (best === null || Math.abs(boundary.y - y) < Math.abs(best.y - y)) best = boundary;
+      }
+      const dropAt = best?.pos ?? null;
+      // Dispatch only on a real change. A pointermove fires per pixel, and
+      // every dispatch rebuilds the decoration set for the whole document.
+      const current = headingFoldKey.getState(p.view.state);
+      if (current?.dragFrom === p.pos && current.dropAt === dropAt) return;
+      p.view.dispatch(setDrag(p.view.state.tr, p.pos, dropAt));
+    }
+
+    /**
+     * Runs the scroller while the pointer sits within `AUTO_SCROLL_EDGE` of
+     * its top or bottom, so a section can be dragged past the visible page.
+     *
+     * The `scrollHeight <= clientHeight` guard is load-bearing, not defensive
+     * tidying: an unscrollable box (every box in jsdom, whose layout is all
+     * zeroes) would otherwise report the pointer as permanently at its bottom
+     * edge and spin a `requestAnimationFrame` loop for the rest of the
+     * process.
+     */
+    function updateAutoScroll(p: BadgePress): void {
+      const scroller = p.scroller;
+      if (scroller === null || scroller.scrollHeight <= scroller.clientHeight) {
+        p.edge = 0;
+        stopAutoScroll(p);
+        return;
+      }
+      const rect = scroller.getBoundingClientRect();
+      p.edge =
+        p.clientY - rect.top < AUTO_SCROLL_EDGE
+          ? -1
+          : rect.bottom - p.clientY < AUTO_SCROLL_EDGE
+            ? 1
+            : 0;
+      if (p.edge === 0) {
+        stopAutoScroll(p);
+        return;
+      }
+      if (p.frame !== null) return;
+      p.frame = requestAnimationFrame(function tick(): void {
+        // `press !== p` covers a release that landed between two frames.
+        if (press !== p || !p.dragging || p.edge === 0 || p.scroller === null) {
+          p.frame = null;
+          return;
+        }
+        p.scroller.scrollTop += p.edge * AUTO_SCROLL_STEP;
+        // Re-picked every tick: the pointer has not moved, but the document
+        // has moved under it, so the nearest boundary has changed.
+        updateDrop(p);
+        p.frame = requestAnimationFrame(tick);
+      });
+    }
+
     return [
       new Plugin<FoldState>({
         key: headingFoldKey,
 
         state: {
-          init: () => ({ keys: [], past: [], future: [] }),
+          init: () => ({ keys: [], past: [], future: [], dropAt: null, dragFrom: null }),
           apply(tr, value, oldState) {
-            const meta = tr.getMeta(headingFoldKey) as FoldMeta | undefined;
+            const meta = tr.getMeta(headingFoldKey) as FoldMeta | DragMeta | undefined;
+
+            // The drag's own branch, deliberately BEFORE the fold branch and
+            // deliberately touching nothing but the two drag fields. A drag
+            // transaction has no steps and no new fold set; if it fell through
+            // to the snapshot logic below it would push entries onto
+            // `past`/`future` for a document that never changed, which is the
+            // exact defect the `tr.docChanged` guard there exists to prevent.
+            if (meta && isDragMeta(meta)) {
+              return { ...value, dragFrom: meta.drag.dragFrom, dropAt: meta.drag.dropAt };
+            }
+
             if (meta) {
               // A real fold-set change: remember what it was, so an undo of
               // THIS transaction has something to restore. Any pending redo
@@ -448,6 +685,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               // equal a live one it wasn't meant to answer for.
               return tr.docChanged
                 ? {
+                    ...value,
                     keys: meta.keys,
                     past: pushCapped(value.past, { doc: oldState.doc, keys: value.keys }),
                     future: [],
@@ -475,6 +713,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               const undone = value.past.at(-1);
               if (undone && undone.doc.eq(tr.doc)) {
                 return {
+                  ...value,
                   keys: undone.keys,
                   past: value.past.slice(0, -1),
                   future: pushCapped(value.future, { doc: oldState.doc, keys: value.keys }),
@@ -483,6 +722,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               const redone = value.future.at(-1);
               if (redone && redone.doc.eq(tr.doc)) {
                 return {
+                  ...value,
                   keys: redone.keys,
                   past: pushCapped(value.past, { doc: oldState.doc, keys: value.keys }),
                   future: value.future.slice(0, -1),
@@ -502,7 +742,8 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
 
         props: {
           decorations(state) {
-            const keys = new Set(headingFoldKey.getState(state)?.keys ?? []);
+            const fold = headingFoldKey.getState(state);
+            const keys = new Set(fold?.keys ?? []);
 
             const decorations: Decoration[] = [];
             for (const range of hiddenRangesFor(state.doc, keys)) {
@@ -618,6 +859,54 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               }
             }
 
+            // The section currently being carried, dimmed so the drop
+            // indicator reads as the answer rather than competing with it.
+            // Top-level blocks only, for the same reason `bear-fold-hidden`
+            // above decorates only those: decorating a block and its
+            // descendants would apply the opacity twice and compound it.
+            if (fold?.dragFrom != null) {
+              const source = headingSections(state.doc).find((s) => s.pos === fold.dragFrom);
+              if (source) {
+                state.doc.nodesBetween(source.pos, source.end, (node, pos) => {
+                  if (pos < source.pos || pos >= source.end) return false;
+                  if (state.doc.resolve(pos).depth !== 0) return false;
+                  decorations.push(
+                    Decoration.node(
+                      pos,
+                      pos + node.nodeSize,
+                      { class: 'bear-section-dragging' },
+                      { sectionDrag: true },
+                    ),
+                  );
+                  return false;
+                });
+              }
+            }
+
+            // The drop indicator: a rule at the target boundary, drawn OUTSIDE
+            // any block. B1's `pos + 1` widget rule does NOT apply here, and
+            // that is deliberate rather than an oversight — that rule exists so
+            // a fold widget becomes a CHILD of its heading element, and this
+            // widget sits at a top-level boundary between blocks on purpose.
+            // `+ 1` would put the rule inside the following heading's text.
+            if (fold?.dropAt != null) {
+              const dropAt = fold.dropAt;
+              decorations.push(
+                Decoration.widget(dropAt, () => dropElement(), {
+                  side: -1,
+                  ignoreSelection: true,
+                  sectionDrop: true,
+                  // Required, not tidying: without a `key`, `WidgetType.eq`
+                  // compares the fresh arrow function's identity, always fails,
+                  // and rebuilds this element's DOM on every single
+                  // `decorations(state)` pass — the same cost the module-level
+                  // `renderIconMarkup` constants at the top of this file exist
+                  // to avoid, paid here on every pointermove of a live drag.
+                  key: `drop-${dropAt}`,
+                }),
+              );
+            }
+
             return DecorationSet.create(state.doc, decorations);
           },
 
@@ -703,6 +992,22 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
           // check on top keeps a PLAIN "h" or "d" keystroke (ordinary typing)
           // from ever matching, on any platform.
           handleKeyDown(view, event) {
+            // Escape aborts a live drag: the indicator disappears, the section
+            // stays exactly where it was, and NOTHING is dispatched to the
+            // document.
+            //
+            // Handled here rather than on a `window` keydown listener so every
+            // keyboard concern of this plugin stays in one place and is
+            // torn down with the plugin. `true` — consuming the key — ONLY
+            // while a drag is actually live: Escape has other jobs in this
+            // editor (closing the heading menu, the code-language list) and
+            // must keep them.
+            if (event.key === 'Escape') {
+              if (press === null || !press.dragging) return false;
+              endPress(true);
+              return true;
+            }
+
             // Enter at the end of a folded heading's own line runs
             // `splitBlock`, which inserts the new empty paragraph at that
             // position — INSIDE the section's hidden range (`hiddenRangesFor`
@@ -796,9 +1101,20 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
           },
 
           handleDOMEvents: {
-            mousedown(view, event) {
+            /**
+             * The badge is now a PRESS, not a click: it opens its menu on
+             * RELEASE, and a press that travels far enough becomes a drag that
+             * moves the whole section instead. The toggle is untouched — it
+             * still folds on press, which is what a disclosure control should
+             * do and what B1 shipped.
+             *
+             * Pointer events, not mouse events: one code path covers mouse,
+             * pen and touch, and `setPointerCapture` is what keeps the move and
+             * release events coming to the badge once the pointer has left it.
+             */
+            pointerdown(view, event) {
               const target = event.target as HTMLElement | null;
-              const badge = target?.closest('[data-fold-badge]');
+              const badge = target?.closest('[data-fold-badge]') as HTMLElement | null;
               const toggle = target?.closest('[data-fold-toggle]');
               if (!badge && !toggle) return false;
               if (event.button !== 0) return false;
@@ -830,16 +1146,121 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
                 return true;
               }
 
+              // The badge's whole gesture — menu and drag alike — is live only
+              // when someone is listening, exactly as before B2. This keeps the
+              // schema-only `editorExtensions` constant inert, and the shipped
+              // app always wires `onOpenMenu` (see `RichEditor.tsx`).
               if (onOpenMenu === null) return false;
-              onOpenMenu({
+
+              // Guarded: jsdom has a real `PointerEvent` constructor but no
+              // `Element.prototype.setPointerCapture` at all (measured
+              // 2026-08-29), so an unguarded call makes every unit test that
+              // presses this badge throw.
+              badge!.setPointerCapture?.(event.pointerId);
+
+              // No menu and no transaction yet. Which of the two this press
+              // turns out to be is not known until it moves or releases.
+              press = {
+                view,
+                badge: badge!,
                 pos: section.pos,
-                level: section.level,
-                folded: foldedKeys(view.state).includes(serializeFoldKey(foldKeyOf(section))),
-                rect: (badge as HTMLElement).getBoundingClientRect(),
-              });
+                pointerId: event.pointerId,
+                pointerType: event.pointerType,
+                startX: event.clientX,
+                startY: event.clientY,
+                clientY: event.clientY,
+                dragging: false,
+                boundaries: [],
+                scroller: null,
+                frame: null,
+                edge: 0,
+              };
+              return true;
+            },
+
+            pointermove(view, event) {
+              const p = press;
+              if (p === null || event.pointerId !== p.pointerId) return false;
+              p.clientY = event.clientY;
+
+              if (!p.dragging) {
+                // Mouse and pen only. On touch, a press that slides is the
+                // user scrolling the note, and stealing it to drag a section
+                // would make the editor unscrollable from its own gutter —
+                // which is also why this is checked against the POINTER TYPE
+                // rather than against a long-press timer.
+                if (p.pointerType !== 'mouse' && p.pointerType !== 'pen') return false;
+                const travelled = Math.hypot(event.clientX - p.startX, event.clientY - p.startY);
+                if (travelled <= DRAG_THRESHOLD) return false;
+
+                p.dragging = true;
+                p.scroller = scrollerFor(view);
+                // Measured ONCE, here. See `measureBoundaries` for why the
+                // result is in document rather than viewport coordinates.
+                p.boundaries = measureBoundaries(view, p.scroller);
+              }
+
+              updateDrop(p);
+              updateAutoScroll(p);
+              return true;
+            },
+
+            pointerup(view, event) {
+              const p = press;
+              if (p === null || event.pointerId !== p.pointerId) return false;
+              event.preventDefault();
+
+              // Read the chosen boundary BEFORE `endPress` clears it.
+              const dropAt = p.dragging
+                ? (headingFoldKey.getState(view.state)?.dropAt ?? null)
+                : null;
+              endPress(true);
+
+              if (!p.dragging) {
+                // A press that never travelled is a click, and a click opens
+                // the menu — the job the old `mousedown` handler did.
+                const section = headingSections(view.state.doc).find((s) => s.pos === p.pos);
+                if (!section || onOpenMenu === null) return false;
+                onOpenMenu({
+                  pos: section.pos,
+                  level: section.level,
+                  folded: foldedKeys(view.state).includes(serializeFoldKey(foldKeyOf(section))),
+                  rect: p.badge.getBoundingClientRect(),
+                });
+                return true;
+              }
+
+              if (dropAt === null) return true;
+              // A raw plugin cannot reach `editor.commands`, so the plan and
+              // its application are re-run here from the same two functions
+              // `moveHeadingSection` uses — not duplicated logic, the same
+              // logic reached from the other side. `planSectionMove` returns
+              // `null` for both no-op boundaries (the section's own start and
+              // its own end), which is exactly the drop that should do nothing.
+              const move = planSectionMove(view.state.doc, foldedKeys(view.state), p.pos, dropAt);
+              if (move !== null) view.dispatch(applyMove(view.state, move));
+              return true;
+            },
+
+            // A cancelled pointer (the OS took it, a gesture was interrupted)
+            // aborts exactly like Escape: clear, dispatch nothing.
+            pointercancel(_view, event) {
+              if (press === null || event.pointerId !== press.pointerId) return false;
+              endPress(true);
               return true;
             },
           },
+        },
+
+        // A press outlives no editor. Without this, an editor destroyed
+        // mid-drag leaves a `requestAnimationFrame` loop holding a reference
+        // to a torn-down view, which then dispatches into it.
+        view() {
+          return {
+            destroy() {
+              endPress(false);
+            },
+          };
         },
       }),
     ];

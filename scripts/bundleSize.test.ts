@@ -29,8 +29,18 @@ import { describe, expect, it } from 'vitest';
  * The ceiling here is the measured `314,367 B` plus roughly 3% headroom for
  * ordinary churn — not a target, a limit. Raising it is a decision someone
  * makes in a diff, not a drift nobody notices.
+ *
+ * Raised from 333,000 by B2 Task 4 (drag the level badge to move a section)
+ * on 2026-08-29, measured on both sides as this file's convention requires:
+ * the branch before this task was **332,255 B** — **745 bytes of headroom**,
+ * the third ceiling in a row to be all but exhausted before anyone looked —
+ * and the finished task measures **333,303 B**, a true cost of **1,048 B
+ * gzipped** for the pointer state machine, the boundary measurement, the
+ * auto-scroll loop and the two new decorations. No dependency was added, and
+ * the CSS is not in this asset. Headroom is again ~2.7 KB, deliberately,
+ * matching what K1 and M9b left.
  */
-const CEILING_BYTES = 333_000;
+const CEILING_BYTES = 336_000;
 
 /**
  * Raised from 328,000 by M9b (callout blocks) on 2026-08-27, measured on both
