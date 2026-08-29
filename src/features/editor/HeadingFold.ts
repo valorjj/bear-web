@@ -63,6 +63,16 @@ export interface HeadingMenuRequest {
  * `prosemirror-history` undo/redo — which replays inverted STEPS and carries
  * none of this plugin's meta — can still land the fold set back where it was,
  * rather than leaving it stranded mid-move. See `apply` below.
+ *
+ * Matching a snapshot by CONTENT equality has one inherent limit, narrow but
+ * real: `prosemirror-history` groups transactions made within `newGroupDelay`
+ * (500 ms by default), so typing immediately followed by a move can become a
+ * single undo event whose resulting document does not `eq` the move's
+ * snapshot — the folds are then simply not restored, and in a note with
+ * duplicate heading titles the retained keys can name the wrong sections.
+ * That is a consequence of identifying documents by content rather than a
+ * mistake in the code below; closing it would mean tracking history's own
+ * event boundaries, which this plugin deliberately does not do.
  */
 interface FoldSnapshot {
   doc: Node;
@@ -212,6 +222,13 @@ interface BadgePress {
   clientY: number;
   dragging: boolean;
   boundaries: DropBoundary[];
+  /**
+   * The document the `boundaries` were measured against, captured at the same
+   * moment they were. The plugin's `apply` abandons a drag when the document
+   * changes under it, but it cannot reach this closure — so the handlers below
+   * compare this against `view.state.doc` and end the press for good.
+   */
+  doc: Node;
   scroller: HTMLElement | null;
   frame: number | null;
   /** -1 scrolling up, 1 scrolling down, 0 not at an edge. */
@@ -590,6 +607,32 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
       return p;
     }
 
+    /**
+     * Makes the plugin's mid-drag abandon STICKY, and reports whether it
+     * fired. `apply` can clear the plugin's `dragFrom`/`dropAt` when the
+     * document changes under a live drag, but it cannot reach this closure:
+     * `p.dragging` stays `true` and `p.boundaries` keep naming positions in a
+     * document that no longer exists. Without this, the ordinary continuation
+     * of the same gesture re-arms the stale drag — `updateDrop`'s skip guard
+     * compares `current.dragFrom === p.pos`, which now FAILS precisely because
+     * the abandon set `dragFrom` to `null`, so the next `pointermove`
+     * re-dispatches `setDrag` with a drop measured against the old document
+     * and the release commits a move to a boundary the user never pointed at.
+     * That is the exact failure the abandon exists to prevent.
+     *
+     * Compares the DOCUMENT rather than testing the plugin's `dragFrom` for
+     * `null`, which would also work. `dragFrom` is plugin state that any
+     * future branch of `apply` could clear for a reason of its own, and this
+     * closure would then read that as an edit; "the boundaries were measured
+     * against a document that is gone" is the invariant the gesture actually
+     * depends on, and it is true independently of how `apply` evolves.
+     */
+    function abandonedByEdit(p: BadgePress, view: EditorView): boolean {
+      if (!p.dragging || view.state.doc === p.doc) return false;
+      endPress(true);
+      return true;
+    }
+
     /** Picks the boundary nearest the pointer and, if it changed, shows it. */
     function updateDrop(p: BadgePress): void {
       // Converted to the same document-scroll origin the boundaries were
@@ -669,6 +712,51 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               return { ...value, dragFrom: meta.drag.dragFrom, dropAt: meta.drag.dropAt };
             }
 
+            // A document change under a LIVE DRAG abandons the drag, rather
+            // than mapping its positions forward. Reachable: the badge press
+            // calls `preventDefault` but does not move focus, so the caret is
+            // still live and a keystroke with the button held lands in the
+            // document.
+            //
+            // Clearing beats mapping because `BadgePress.boundaries` was
+            // measured ONCE, against a document that no longer exists once
+            // `tr.docChanged` is true: `tr.mapping` could carry `dropAt` and
+            // `dragFrom` forward, but nothing maps the `boundaries` array
+            // itself, so the drop would land somewhere the user never pointed
+            // at. A wrong result is exactly what this plugin's document-
+            // coordinate conversion exists to prevent, and abandoning the drag
+            // is what a user who just typed expects anyway. The release path
+            // already handles the cleared state: `dropAt === null` returns
+            // without dispatching.
+            //
+            // Computed HERE, once, and used in place of `value` by EVERY
+            // branch below — not as a branch of its own at the bottom. As its
+            // own branch it was unreachable for the two transactions that most
+            // need it: a fold-meta transaction that also changes the document
+            // (`Mod-Alt-ArrowUp` with the badge held) and a history transaction
+            // matching a snapshot (`Mod-Z` with the badge held) both `return`
+            // above it, and the drag survived into a document it was never
+            // measured against.
+            //
+            // This does NOT guard against a crash. An earlier version of this
+            // comment claimed a stale `dropAt` past `doc.content.size` makes
+            // `DecorationSet.create` throw an uncaught `RangeError` from
+            // inside `decorations` — tested and FALSE (2026-08-29): a
+            // throwaway test monkey-patched `coordsAtPos` to force the LAST
+            // boundary to be selected, the exact condition the claim needed,
+            // then shrank the document. Nothing threw on any run; the widget
+            // silently disappeared instead. `prosemirror-view`'s
+            // `domFromPos` clamps backward for `side <= 0` rather than
+            // throwing (`node_modules/prosemirror-view/dist/index.js:922-960`),
+            // and the `RangeError` in that file (`domAfterPos`, ~:1014) is
+            // only on the selection-anchoring path, never widget rendering.
+            // Do not re-derive the crash claim; the misplaced-drop rationale
+            // above is the whole reason this exists.
+            const base =
+              tr.docChanged && value.dragFrom !== null
+                ? { ...value, dragFrom: null, dropAt: null }
+                : value;
+
             if (meta) {
               // A real fold-set change: remember what it was, so an undo of
               // THIS transaction has something to restore. Any pending redo
@@ -689,12 +777,12 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               // equal a live one it wasn't meant to answer for.
               return tr.docChanged
                 ? {
-                    ...value,
+                    ...base,
                     keys: meta.keys,
-                    past: pushCapped(value.past, { doc: oldState.doc, keys: value.keys }),
+                    past: pushCapped(base.past, { doc: oldState.doc, keys: base.keys }),
                     future: [],
                   }
-                : { ...value, keys: meta.keys };
+                : { ...base, keys: meta.keys };
             }
 
             // No meta of ours: a normal edit (typing, an unrelated command)
@@ -714,59 +802,24 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
             // history-tracked — which is exactly what the `tr.docChanged`
             // guard above rules out.
             if (isHistoryTransaction(tr)) {
-              const undone = value.past.at(-1);
+              const undone = base.past.at(-1);
               if (undone && undone.doc.eq(tr.doc)) {
                 return {
-                  ...value,
+                  ...base,
                   keys: undone.keys,
-                  past: value.past.slice(0, -1),
-                  future: pushCapped(value.future, { doc: oldState.doc, keys: value.keys }),
+                  past: base.past.slice(0, -1),
+                  future: pushCapped(base.future, { doc: oldState.doc, keys: base.keys }),
                 };
               }
-              const redone = value.future.at(-1);
+              const redone = base.future.at(-1);
               if (redone && redone.doc.eq(tr.doc)) {
                 return {
-                  ...value,
+                  ...base,
                   keys: redone.keys,
-                  past: pushCapped(value.past, { doc: oldState.doc, keys: value.keys }),
-                  future: value.future.slice(0, -1),
+                  past: pushCapped(base.past, { doc: oldState.doc, keys: base.keys }),
+                  future: base.future.slice(0, -1),
                 };
               }
-            }
-
-            // A document change under a LIVE DRAG abandons the drag, rather
-            // than mapping its positions forward. Reachable: the badge press
-            // calls `preventDefault` but does not move focus, so the caret is
-            // still live and a keystroke with the button held lands in the
-            // document.
-            //
-            // Clearing beats mapping because `BadgePress.boundaries` was
-            // measured ONCE, against a document that no longer exists once
-            // `tr.docChanged` is true: `tr.mapping` could carry `dropAt` and
-            // `dragFrom` forward, but nothing maps the `boundaries` array
-            // itself, so the drop would land somewhere the user never pointed
-            // at. A wrong result is exactly what this plugin's document-
-            // coordinate conversion exists to prevent, and abandoning the drag
-            // is what a user who just typed expects anyway. The release path
-            // already handles the cleared state: `dropAt === null` returns
-            // without dispatching.
-            //
-            // This does NOT guard against a crash. An earlier version of this
-            // comment claimed a stale `dropAt` past `doc.content.size` makes
-            // `DecorationSet.create` throw an uncaught `RangeError` from
-            // inside `decorations` — tested and FALSE (2026-08-29): a
-            // throwaway test monkey-patched `coordsAtPos` to force the LAST
-            // boundary to be selected, the exact condition the claim needed,
-            // then shrank the document. Nothing threw on any run; the widget
-            // silently disappeared instead. `prosemirror-view`'s
-            // `domFromPos` clamps backward for `side <= 0` rather than
-            // throwing (`node_modules/prosemirror-view/dist/index.js:922-960`),
-            // and the `RangeError` in that file (`domAfterPos`, ~:1014) is
-            // only on the selection-anchoring path, never widget rendering.
-            // Do not re-derive the crash claim; the misplaced-drop rationale
-            // above is the whole reason this branch exists.
-            if (tr.docChanged && value.dragFrom !== null) {
-              return { ...value, dragFrom: null, dropAt: null };
             }
 
             // Keys are content-derived, so an ordinary document change needs
@@ -775,7 +828,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
             // RETAINED rather than dropped: renaming a heading and renaming
             // it back should restore the fold, and a key that matches
             // nothing hides nothing anyway.
-            return value;
+            return base;
           },
         },
 
@@ -1216,6 +1269,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
                 clientY: event.clientY,
                 dragging: false,
                 boundaries: [],
+                doc: view.state.doc,
                 scroller: null,
                 frame: null,
                 edge: 0,
@@ -1226,6 +1280,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
             pointermove(view, event) {
               const p = press;
               if (p === null || event.pointerId !== p.pointerId) return false;
+              if (abandonedByEdit(p, view)) return true;
               p.clientY = event.clientY;
 
               if (!p.dragging) {
@@ -1243,6 +1298,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
                 // Measured ONCE, here. See `measureBoundaries` for why the
                 // result is in document rather than viewport coordinates.
                 p.boundaries = measureBoundaries(view, p.scroller);
+                p.doc = view.state.doc;
               }
 
               updateDrop(p);
@@ -1254,6 +1310,7 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
               const p = press;
               if (p === null || event.pointerId !== p.pointerId) return false;
               event.preventDefault();
+              if (abandonedByEdit(p, view)) return true;
 
               // Read the chosen boundary BEFORE `endPress` clears it.
               const dropAt = p.dragging

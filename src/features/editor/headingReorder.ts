@@ -157,6 +157,5 @@ export function planSectionShift(
 
   const next = siblings[index + 1];
   if (!next) return null;
-  const boundary = next.end === doc.content.size ? doc.content.size : next.end;
-  return planSectionMove(doc, folded, source.pos, boundary);
+  return planSectionMove(doc, folded, source.pos, next.end);
 }

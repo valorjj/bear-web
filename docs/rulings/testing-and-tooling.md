@@ -252,8 +252,8 @@ in `src/features/editor/HeadingFold.ts`'s badge handlers or
   drags, Escape aborts a live drag — is unit-testable in `headingFold.test.ts`
   by dispatching real `PointerEvent`s at `editor.view.dom`. The GEOMETRY is
   not: jsdom lays out nothing, so `measureBoundaries`, `coordsAtPos` and every
-  distance-to-boundary comparison are Playwright-only (`e2e/headings.spec.ts`
-  or equivalent), the same split `CLAUDE.md` already records for pointer-drag
+  distance-to-boundary comparison are Playwright-only (`e2e/headingReorder.spec.ts`,
+  which now exists), the same split `CLAUDE.md` already records for pointer-drag
   in general. Any call to `setPointerCapture` in this file's badge handlers
   must be `?.()`-guarded — an unguarded call throws in every unit test that
   presses the badge, not just the ones about capture.

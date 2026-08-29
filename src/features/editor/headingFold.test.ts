@@ -1385,11 +1385,18 @@ describe('the badge drag gesture', () => {
 
   // A document change under a live drag abandons it. Reachable in the real UI:
   // the badge press does not move focus, so a keystroke with the button held
-  // lands in the document. Two failure modes if the drag survived — a shrinking
-  // document puts `dropAt` past `doc.content.size` and `DecorationSet.create`
-  // throws an uncaught `RangeError` from inside `decorations`, and a shifting
-  // one leaves `boundaries` naming places that no longer exist, so the drop
-  // lands where the user never pointed.
+  // lands in the document. The failure mode if the drag survived is a MISPLACED
+  // DROP: `boundaries` are measured once and name positions in a document that
+  // no longer exists, so the release moves the section somewhere the user never
+  // pointed at. It is NOT a crash — the earlier claim that a stale `dropAt`
+  // past `doc.content.size` makes `DecorationSet.create` throw a `RangeError`
+  // was tested and is false (`prosemirror-view`'s `domFromPos` clamps backward
+  // for `side <= 0`); see the long comment in `HeadingFold.ts`'s `apply`.
+  //
+  // The abandon has to be STICKY, which is what the `pointermove` in the
+  // middle of this test covers: `apply` cannot clear the handler closure's
+  // `press`, so a gesture that simply CONTINUES after the edit would otherwise
+  // re-arm the stale drag and commit the misplaced drop on release.
   it('abandons a live drag when the document changes under it', () => {
     const onOpenMenu = vi.fn();
     const editor = dragEditor(onOpenMenu);
@@ -1400,15 +1407,21 @@ describe('the badge drag gesture', () => {
     expect(editor.view.dom.querySelectorAll('.bear-section-drop')).toHaveLength(1);
 
     // A document-changing transaction, exactly as a keystroke would produce.
-    // Deliberately a DELETION, so the document also shrinks: this is the case
-    // that throws rather than merely misplacing the drop.
+    // Deliberately a DELETION, so the document also shrinks and every measured
+    // boundary past the cut names a position that has moved.
     editor.commands.deleteRange({ from: 1, to: 4 });
     const after = serializeMarkdown(editor.getJSON());
 
     expect(editor.view.dom.querySelectorAll('.bear-section-drop')).toHaveLength(0);
     expect(editor.view.dom.querySelectorAll('.bear-section-dragging')).toHaveLength(0);
 
-    pointer('pointerup', badge!, { clientX: 10, clientY: 10 });
+    // The gesture CONTINUES: the user's hand has not stopped moving just
+    // because a keystroke landed. This must not re-arm the drag.
+    pointer('pointermove', badge!, { clientX: 10, clientY: 20 });
+    expect(editor.view.dom.querySelectorAll('.bear-section-drop')).toHaveLength(0);
+    expect(editor.view.dom.querySelectorAll('.bear-section-dragging')).toHaveLength(0);
+
+    pointer('pointerup', badge!, { clientX: 10, clientY: 20 });
 
     // The release moves nothing and opens nothing: the press is over.
     expect(serializeMarkdown(editor.getJSON())).toBe(after);

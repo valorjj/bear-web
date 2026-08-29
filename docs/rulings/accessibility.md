@@ -326,9 +326,13 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   to `editor.commands.focus()` — `TableHandleMenu`'s `onClose` calls
   `tableMenu.anchor.focus()` directly.
 
-- **An unavailable menu item is `aria-disabled`, never the HTML `disabled`
-  attribute — and Playwright then cannot click it at all.** `ExportMenu`'s PDF
-  item is unavailable when signed out, and the reason for a control to be
+- **An unavailable menu item whose unavailability needs EXPLAINING is
+  `aria-disabled`, never the HTML `disabled` attribute — and Playwright then
+  cannot click it at all.** (The exception, with its own reasoning, is an item
+  with no explanation to give: `EditorContextMenu`'s two Section items are
+  plain `disabled`, and the "heading badge and drag-to-reorder (B2)" section
+  below says why, including what roving focus does with them.) `ExportMenu`'s
+  PDF item is unavailable when signed out, and the reason for a control to be
   unavailable is exactly what the user needs to hear: an HTML-disabled button
   leaves the tab order, so a keyboard user could never reach it to find out
   why. `aria-disabled` keeps it reachable, `onClick` refuses the action itself,
@@ -458,7 +462,7 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
 
 ## The heading badge and drag-to-reorder (B2)
 
-- **`EditorContextMenu`'s Section group is B2's ONLY keyboard and
+- **`EditorContextMenu`'s Section group is B2's only DISCOVERABLE keyboard and
   screen-reader route to reordering, and must never be moved to the badge
   menu.** The badge (`HeadingFold.ts`'s `pointerdown`/`pointermove`/`pointerup`
   handlers) opens on a click and drags on a hold, both driven by real pointer
@@ -466,18 +470,39 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   could open it, matching Chromium's own measured behaviour that a widget
   decoration never receives programmatic focus the way a real `<button>`
   would. `flags.section` in `EditorContextMenu.tsx` is reachable by
-  `Shift+F10` or the keyboard `ContextMenu` key with no pointer at all, so it
-  is the only way a keyboard or screen-reader user can move a section.
-  Collapsing it into the badge's menu — even nominally "the same items" —
-  would delete that route.
+  `Shift+F10` or the keyboard `ContextMenu` key with no pointer at all.
 
-- **The two Section items use `disabled`, not `aria-disabled`, and need no
-  explanation for it.** `moveSectionUp`/`moveSectionDown` in
-  `EditorContextMenu.tsx` are plain `disabled` because Playwright refuses to
-  click an `aria-disabled="true"` element at all (see
-  `docs/rulings/export.md`'s PDF item, driven by keyboard for exactly that
-  reason) — but unlike that PDF item, there is no reason string a sighted or
-  screen-reader user needs: "already at the top/bottom of the note" is
-  self-evident from context the way "you're signed out" is not. Do not add an
-  `aria-disabled` + explanation pair here on the PDF item's precedent; the two
-  controls disable for different kinds of reasons.
+  **It is not the only keyboard route, and the earlier wording claiming it was
+  is false:** `Mod-Alt-ArrowUp` / `Mod-Alt-ArrowDown` ship in the same branch
+  (`HeadingFold.ts`'s keyboard shortcuts) and move a section from the caret
+  with no pointer whatever — the spec says B2 "reaches it three ways". The
+  argument for keeping the Section group is DISCOVERABILITY, and it is the
+  stronger argument anyway: a shortcut nobody can find is not a substitute for
+  a visible, announced menu item. A screen-reader user browsing the context
+  menu meets the command; nobody meets an undocumented chord. Collapsing the
+  group into the badge's menu — even nominally "the same items" — would leave
+  reordering reachable only by a keystroke the UI never mentions.
+
+- **The two Section items use `disabled`, not `aria-disabled`, because they
+  have no explanation to announce.** That is the reason, and it is a product
+  reason: `moveSectionUp`/`moveSectionDown` in `EditorContextMenu.tsx` disable
+  only when the section is already at the top or bottom of the note, which is
+  self-evident from the context the user is already in — unlike the PDF item's
+  "you're signed out", which is a state the control must explain. `aria-disabled`
+  exists to keep a control reachable so its reason can be read; with no reason
+  to read, the plain attribute is the honest markup. That it also lets
+  Playwright drive the item (Playwright refuses to click an
+  `aria-disabled="true"` element at all — see `docs/rulings/export.md`'s PDF
+  item, driven by keyboard for exactly that reason) is a convenience, not the
+  justification. Do not add an `aria-disabled` + explanation pair here on the
+  PDF item's precedent; the two controls disable for different kinds of
+  reasons.
+
+  **The consequence neither this nor the `:329` bullet recorded:**
+  `useAnchoredMenu.ts`'s focusable selector is `button:not([disabled])`, so an
+  HTML-disabled item is skipped ENTIRELY by the menu's roving keyboard
+  navigation — arrow keys step straight over it, and it is not announced in
+  passing. Acceptable here for the same reason as above (an unreachable item
+  whose unavailability is self-evident tells the user nothing they lose by not
+  hearing), but it is exactly what a future reader needs to know before
+  disabling a third item whose reason is NOT self-evident.
