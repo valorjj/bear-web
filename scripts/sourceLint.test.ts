@@ -290,6 +290,30 @@ describe('theme tokens', () => {
     }
   });
 
+  /*
+   * `color-scheme` is what makes the browser paint its NATIVE chrome — the
+   * scrollbar above all — in the theme's own scheme. It cannot be derived from
+   * `--bear-dark`, which is a number so `calc()` can interpolate the alpha
+   * scalars, so the two are declared side by side and this asserts they never
+   * drift. Getting it wrong is silent: a dark theme with no `color-scheme`
+   * simply shows a white scrollbar, which is how it shipped for nine
+   * milestones.
+   */
+  it('pairs every --bear-dark declaration with the matching color-scheme', () => {
+    const pairs = [...css.matchAll(/--bear-dark: ([\d.]+);\n\s*color-scheme: (light|dark);/g)];
+    const declarations = [...css.matchAll(/^\s*--bear-dark:/gm)];
+    expect(
+      pairs.length,
+      'a --bear-dark declaration is not immediately followed by color-scheme',
+    ).toBe(declarations.length);
+    expect(pairs.length, 'the regex found no pairs at all').toBeGreaterThanOrEqual(ids.length);
+    for (const [, dark, scheme] of pairs) {
+      expect(scheme, `--bear-dark: ${dark} paired with color-scheme: ${scheme}`).toBe(
+        Number(dark) >= 0.5 ? 'dark' : 'light',
+      );
+    }
+  });
+
   it('has no CSS theme block that is absent from the roster', () => {
     const declared = [...css.matchAll(/:root\[data-theme='([a-z-]+)'\]/g)].map(
       (match) => match[1]!,

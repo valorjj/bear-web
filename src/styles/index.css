@@ -67,6 +67,60 @@ body {
 }
 
 /*
+ * Scrollbars, themed.
+ *
+ * `color-scheme` in `tokens.css` is the first half of this and the more
+ * important one — without it the browser paints ALL its native chrome light,
+ * which is how a dark theme ended up with a white bar down the side of the
+ * sidebar. This is the second half: it replaces the native bar with a
+ * transparent track and a thumb that is a tint of the theme's own text, so the
+ * scroller shows the pane it is in rather than a grey strip laid over it.
+ *
+ * The two syntaxes are split by `@supports`, not written side by side, because
+ * they are not additive: Blink honours the standard properties and then IGNORES
+ * every `::-webkit-scrollbar` rule on the same element, so a hover state
+ * written in the WebKit syntax would silently never apply. Firefox gets the
+ * standard properties (no hover state exists for them); Blink and WebKit get
+ * the pseudo-elements, which do have one.
+ *
+ * The cost, stated because it is real: a custom scrollbar is never an OVERLAY
+ * one, so on a Mac set to "show scrollbars only when scrolling" the thumb is
+ * now always present and takes 8px of width. That is a deliberate trade for a
+ * scrollbar that matches the theme on every platform; it is also why the thumb
+ * alpha is low enough (`--bear-scroll-a`) to read as a hairline rather than a
+ * bar, and why `docs/design/measurements.md` moved when this landed.
+ */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--bear-scrollbar) transparent;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--bear-scrollbar);
+  border-radius: 999px;
+  /* Painted into the padding box, so the thumb is a 4px pill floating in an
+     8px gutter rather than a bar wedged against the pane edge. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--bear-scrollbar-hover);
+}
+
+/*
  * One global focus ring, replacing the per-component focus-visible utilities
  * that existed on `Button` and nowhere else. No component may set
  * `outline-none` without supplying a visible replacement — `Resizer` is the

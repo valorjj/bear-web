@@ -167,13 +167,23 @@
    * intent, so deriving the grouping would make it a side effect of a colour
    * edit. A theme wanting something between the two schemes may say `0.5`,
    * which no grouped selector could express.
+   *
+   * `color-scheme` cannot be derived from it — it is a keyword and
+   * `--bear-dark` is a number — so every block declaring one declares both,
+   * and `scripts/sourceLint.test.ts` asserts they never disagree. It is not
+   * cosmetic: with no `color-scheme` at all the browser paints its NATIVE
+   * chrome light on every theme, which is why a dark theme showed a white
+   * scrollbar down the side of the sidebar.
    */
   --bear-dark: 0;
+  color-scheme: light;
 
   --bear-tint: calc(0.1 + 0.09 * var(--bear-dark));
   --bear-tint-mid: calc(0.13 + 0.08 * var(--bear-dark));
   --bear-tint-strong: calc(0.28 + 0.07 * var(--bear-dark));
   --bear-hover-a: calc(0.05 + 0.01 * var(--bear-dark));
+  --bear-scroll-a: calc(0.16 + 0.08 * var(--bear-dark));
+  --bear-scroll-hover-a: calc(0.3 + 0.12 * var(--bear-dark));
   --bear-hl-a: calc(0.2 + 0.08 * var(--bear-dark));
 
   /*
@@ -217,6 +227,23 @@
    * spaces are deliberate; do not tidy them into one.
    */
   --bear-hover: color-mix(in srgb, var(--bear-text) calc(var(--bear-hover-a) * 100%), transparent);
+  /*
+   * The scrollbar is a TINT OF TEXT over a transparent track, not a colour of
+   * its own, so the pane's own background reads through it — which is the
+   * whole point: a scroller in the sidebar, the note list and the editor sits
+   * on three different backgrounds, and one opaque value would be wrong on at
+   * least two of them.
+   */
+  --bear-scrollbar: color-mix(
+    in srgb,
+    var(--bear-text) calc(var(--bear-scroll-a) * 100%),
+    transparent
+  );
+  --bear-scrollbar-hover: color-mix(
+    in srgb,
+    var(--bear-text) calc(var(--bear-scroll-hover-a) * 100%),
+    transparent
+  );
   --bear-selected: color-mix(
     in srgb,
     var(--bear-accent) calc(var(--bear-tint) * 100%),
@@ -498,6 +525,7 @@
  */
 :root:not([data-theme]) {
   --bear-dark: 0;
+  color-scheme: light;
   /* Indigo Light — see the named block below; the two must stay identical. */
   --bear-bg: #ffffff;
   --bear-surface: #f5f4fa;
@@ -540,6 +568,7 @@
 /* Paper — the light theme. Warm neutrals, one red. */
 [data-theme='paper'] {
   --bear-dark: 0;
+  color-scheme: light;
   --bear-bg: #ffffff;
   --bear-surface: #faf9f8;
   --bear-sidebar: #f1efec;
@@ -586,6 +615,7 @@
  */
 [data-theme='indigo-light'] {
   --bear-dark: 0;
+  color-scheme: light;
   /*
    * `bg` and `surface` must DIFFER, and the mockup had both at pure white.
    * The app uses each as the other's contrast: a Button and the search field
@@ -641,6 +671,7 @@
  */
 [data-theme='solarized-light'] {
   --bear-dark: 0;
+  color-scheme: light;
   --bear-bg: #fdf6e3;
   --bear-surface: #f7f0d8;
   --bear-sidebar: #eee8d5;
@@ -669,6 +700,7 @@
 /* Rosé Dawn — the Rosé Pine Dawn variant (MIT). */
 [data-theme='rose-dawn'] {
   --bear-dark: 0;
+  color-scheme: light;
   --bear-bg: #faf4ed;
   --bear-surface: #fffaf3;
   --bear-sidebar: #f2e9e1;
@@ -690,6 +722,7 @@
 /* Latte — the Catppuccin Latte flavour (MIT). */
 [data-theme='latte'] {
   --bear-dark: 0;
+  color-scheme: light;
   --bear-bg: #eff1f5;
   --bear-surface: #e6e9ef;
   --bear-sidebar: #dce0e8;
@@ -711,6 +744,7 @@
 /* Gruvbox Light — morhetz's scheme (MIT). */
 [data-theme='gruvbox-light'] {
   --bear-dark: 0;
+  color-scheme: light;
   --bear-bg: #fbf1c7;
   --bear-surface: #f2e5bc;
   --bear-sidebar: #ebdbb2;
@@ -735,6 +769,7 @@
  */
 [data-theme='snow'] {
   --bear-dark: 0;
+  color-scheme: light;
   --bear-bg: #eceff4;
   --bear-surface: #e5e9f0;
   --bear-sidebar: #d8dee9;
@@ -757,6 +792,7 @@
 /* Sepia — ours. A warm reading theme, the light counterpart to Ink. */
 [data-theme='sepia'] {
   --bear-dark: 0;
+  color-scheme: light;
   --bear-bg: #f4ecd8;
   --bear-surface: #efe6d0;
   --bear-sidebar: #e8dcc0;
@@ -771,6 +807,7 @@
    as a dimmer on one app rather than as a different product. */
 [data-theme='indigo-dark'] {
   --bear-dark: 1;
+  color-scheme: dark;
   /* Same rule as Indigo Light: `surface` steps toward the light in a dark
      theme, the way Ink's #201f1e steps off its #1a1a19. */
   --bear-bg: #1b1825;
@@ -810,6 +847,7 @@
 /* Ink — the dark theme, chosen explicitly. */
 [data-theme='ink'] {
   --bear-dark: 1;
+  color-scheme: dark;
   --bear-bg: #1a1a19;
   --bear-surface: #201f1e;
   --bear-sidebar: #262523;
@@ -847,6 +885,7 @@
 /* Nord — arcticicestudio's scheme (MIT). */
 [data-theme='nord'] {
   --bear-dark: 1;
+  color-scheme: dark;
   --bear-bg: #2e3440;
   --bear-surface: #3b4252;
   --bear-sidebar: #272c36;
@@ -861,6 +900,7 @@
 /* Dracula — Zeno Rocha's scheme (MIT). */
 [data-theme='dracula'] {
   --bear-dark: 1;
+  color-scheme: dark;
   --bear-bg: #282a36;
   --bear-surface: #343746;
   --bear-sidebar: #21222c;
@@ -880,6 +920,7 @@
  */
 [data-theme='solarized-dark'] {
   --bear-dark: 1;
+  color-scheme: dark;
   --bear-bg: #002b36;
   --bear-surface: #073642;
   --bear-sidebar: #00212b;
@@ -905,6 +946,7 @@
 /* Tokyo Night — enkia's scheme (MIT). */
 [data-theme='tokyo-night'] {
   --bear-dark: 1;
+  color-scheme: dark;
   --bear-bg: #1a1b26;
   --bear-surface: #24283b;
   --bear-sidebar: #16161e;
@@ -918,6 +960,7 @@
 /* Gruvbox Dark — morhetz's scheme (MIT). */
 [data-theme='gruvbox-dark'] {
   --bear-dark: 1;
+  color-scheme: dark;
   --bear-bg: #282828;
   --bear-surface: #3c3836;
   --bear-sidebar: #1d2021;
@@ -947,6 +990,7 @@
  */
 [data-theme='high-contrast'] {
   --bear-dark: 1;
+  color-scheme: dark;
   --bear-bg: #000000;
   --bear-surface: #000000;
   --bear-sidebar: #000000;
@@ -961,6 +1005,14 @@
   --bear-hover: #2a2a2a;
   --bear-selected: #4a3d00;
   --bear-shadow: transparent;
+  /*
+   * The derived scrollbar is a 24% tint of text, which on this theme's black
+   * ground is a grey hairline — the one theme where "blends into the
+   * background" is the wrong goal. Raised to a solid-looking tint for the same
+   * reason the overlays above are solid.
+   */
+  --bear-scroll-a: 0.6;
+  --bear-scroll-hover-a: 0.85;
   --bear-tag-fill: #4a3d00;
   --bear-tag-fill-strong: #6b5800;
   /*
@@ -1010,6 +1062,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --bear-dark: 1;
+    color-scheme: dark;
     --bear-bg: #1b1825;
     --bear-surface: #252131;
     --bear-sidebar: #14121b;

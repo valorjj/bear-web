@@ -231,3 +231,14 @@ because a restyle made it fail.
   `e2e/account.spec.ts` and `e2e/smoke.spec.ts` do. Same family as the
   `[role="..."]`/`.closest()` bullets above: a setup that throws nothing and
   covers nothing.
+
+- **Headless Chromium draws NO scrollbars at all, so `npm run shots` and
+  `npm run measure` are blind to every scrollbar rule in the stylesheet.**
+  Measured, not assumed: an `overflow: scroll` probe reports a gutter of 0
+  headless and 8 under `--headed`, with the same build. Two consequences.
+  `docs/design/measurements.md` did not move when the custom scrollbar landed,
+  which is correct rather than suspicious — the 8px gutter exists only in a
+  real browser. And a screenshot taken to review a scrollbar change must be
+  taken `--headed`; a headless one shows the pane with nothing in the gutter
+  and looks exactly like a rule that failed to apply.
+

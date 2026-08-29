@@ -1110,3 +1110,36 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   depend on the UI language at the last save) and a per-locale CSS `content:`
   string (Korean outside `useT`, where `ko.ts`'s completeness check cannot see
   it) were both rejected.
+
+## Scrollbars
+
+- **Every theme block declares `color-scheme` next to `--bear-dark`, and
+  `scripts/sourceLint.test.ts` asserts the two agree.** It cannot be derived
+  from the number, and no test could see the omission: with no `color-scheme`
+  at all the browser paints its native chrome in LIGHT mode on every theme, so
+  the dark themes shipped a white scrollbar down the side of the sidebar from
+  M0 to here. `color-scheme` also governs form controls and the `:focus-ring`
+  default, so this is not scrollbar-only cosmetics.
+
+- **The scrollbar is a tint of `--bear-text` over a TRANSPARENT track, never a
+  colour of its own.** The three scrollers sit on three different backgrounds
+  (`--bear-sidebar`, `--bear-surface`, `--bear-bg`); one opaque token would be
+  wrong on at least two of them. `--bear-scroll-a` interpolates on
+  `--bear-dark` the way `--bear-hover-a` does, and `high-contrast` overrides it
+  to 0.6 for the same reason its overlays are solid — that is the one theme
+  where blending into the background is the wrong goal.
+
+- **The standard properties and `::-webkit-scrollbar` are split by
+  `@supports`, not written side by side.** They are not additive: Blink
+  honours `scrollbar-width`/`scrollbar-color` and then IGNORES every
+  `::-webkit-scrollbar` rule on the same element, so a hover state written in
+  the WebKit syntax next to them would silently never apply. Firefox takes the
+  standard pair (which has no hover state); Blink and WebKit take the
+  pseudo-elements, which do.
+
+- **A custom scrollbar is never an OVERLAY one.** On a Mac set to "show
+  scrollbars only when scrolling" the thumb is now always drawn and takes 8px.
+  That is the accepted cost of a scrollbar that matches the theme on every
+  platform, and it is why the thumb alpha is low enough to read as a hairline
+  rather than a bar.
+
