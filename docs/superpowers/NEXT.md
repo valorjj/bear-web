@@ -27,7 +27,7 @@ believe the table and fix this file.
 | Open | State |
 | --- | --- |
 | **J4 platform chrome** | not started — the last of the four |
-| **B2 drag-to-reorder headings** | queued, unspecced |
+| **B2 drag-to-reorder headings** | specced 2026-08-29, not started |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
 
 **Mobile is nearly done.** J1 turned "unusable" into "usable", J2a fixed the
@@ -351,12 +351,17 @@ that does not know it.
 - **Callouts deliberately do NOT collapse.** B1's "no blockquote folding" was
   reopened in the brainstorm and upheld.
 
-### B2. Drag-to-reorder headings — queued, unspecced
+### B2. Drag-to-reorder headings — **SPECCED 2026-08-29**
 
-Grab the badge to move a heading and its whole subtree, with a drop indicator.
-Split out of B because it is a document mutation with its own coordinate math
-and undo semantics, and because jsdom has no `setPointerCapture`, so Playwright
-would be its only possible coverage. Ordering relative to C is undecided.
+Spec: `docs/superpowers/specs/2026-08-29-b2-drag-to-reorder-headings-design.md`.
+**Read the spec, not this.**
+
+Grab the badge to move a heading and its whole subtree, with a drop indicator —
+plus a Section group in the right-click editor menu and `Mod-Alt-ArrowUp/Down`,
+because the gutter can never be keyboard-reachable. Split out of B because it is
+a document mutation with its own coordinate math and undo semantics, and because
+jsdom has no `setPointerCapture`, so Playwright is the only possible coverage of
+the gesture.
 
 ### C. Code block language + syntax highlighting — SHIPPED 2026-08-24
 
