@@ -500,9 +500,9 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
 
   **The consequence neither this nor the `:329` bullet recorded:**
   `useAnchoredMenu.ts`'s focusable selector is `button:not([disabled])`, so an
-  HTML-disabled item is skipped ENTIRELY by the menu's roving keyboard
-  navigation — arrow keys step straight over it, and it is not announced in
-  passing. Acceptable here for the same reason as above (an unreachable item
-  whose unavailability is self-evident tells the user nothing they lose by not
-  hearing), but it is exactly what a future reader needs to know before
-  disabling a third item whose reason is NOT self-evident.
+  HTML-disabled item is excluded from the Tab order — Tab skips it entirely,
+  and it is not announced in passing. Acceptable here for the same reason as
+  above (an unreachable item whose unavailability is self-evident tells the
+  user nothing they lose by not hearing), but it is exactly what a future
+  reader needs to know before disabling a third item whose reason is NOT
+  self-evident.
