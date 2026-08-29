@@ -233,6 +233,18 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   gutter control, a keymap was the only way to give keyboard and
   screen-reader users any way at all to reveal `display: none` content.
 
+- **B2 adds `Mod-Alt-ArrowUp`/`Mod-Alt-ArrowDown` for `moveHeadingSectionUp`/
+  `moveHeadingSectionDown`, and they collide with nothing only because
+  `StoredImage.ts` claims the horizontal pair, not the vertical one.**
+  `StoredImage.ts` already binds `Mod-Alt-ArrowRight`/`Mod-Alt-ArrowLeft` (and
+  `Mod-Alt-0`) for image resize; B2's own `grep -rEn
+  "Mod-Alt-[0-9a-zA-Z]|Mod-Alt-\$\{" node_modules/@tiptap` turned up
+  `Mod-Alt-c` from an unrelated package, which is what actually surfaced the
+  need to check this family exhaustively rather than by inspection. Any
+  future `Mod-Alt-Arrow*` binding — a table nudge, say — must re-run that grep
+  against `node_modules/@tiptap`, not assume the arrow keys are still free
+  just because Up/Down and Left/Right look like a natural split.
+
 - **The level menu SETS a level; the `Mod-Alt-N` shortcut TOGGLES.** Choosing
   the level a heading already has via the menu is a no-op — the check mark is
   radio semantics, and toggling from a selected radio item would contradict

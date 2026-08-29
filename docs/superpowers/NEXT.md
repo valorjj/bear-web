@@ -1,7 +1,7 @@
 # Next up
 
 Written 2026-08-20 after M8 + M9a shipped; last reconciled against
-`CLAUDE.md` on **2026-08-27**, when M9b shipped.
+`CLAUDE.md` on **2026-08-29**, when B2 shipped.
 
 This file exists so a fresh session can resume without re-deriving decisions
 already made. Delete a section once its sub-project has a real spec in
@@ -18,16 +18,15 @@ believe the table and fix this file.
 ## Where things stand
 
 - `main` carries everything in `CLAUDE.md`'s status table marked complete —
-  through **M9b (callout blocks), 2026-08-27**. Live on Pages.
-- 2119 unit tests, 154 end-to-end. All six gates green.
+  through **B2 (drag-to-reorder headings), 2026-08-29**. Live on Pages.
+- 2143 unit tests, 181 end-to-end. All six gates green.
 - Every sub-project branch named in this file is merged and deleted.
 
-**What is actually left, as of 2026-08-27:**
+**What is actually left, as of 2026-08-29:**
 
 | Open | State |
 | --- | --- |
 | **J4 platform chrome** | not started — the last of the four |
-| **B2 drag-to-reorder headings** | specced 2026-08-29, not started |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
 
 **Mobile is nearly done.** J1 turned "unusable" into "usable", J2a fixed the
@@ -37,7 +36,7 @@ scroll. Only J4 is left, and it is the smallest of the four: safe-area insets
 throughout, `100dvh` on the shell, installability, pull-to-refresh, and whether
 an installed PWA changes J1's answer on routing.
 
-**Nothing blocks anything.** B2 and K4 are small enough to slot in anywhere.
+**Nothing blocks anything.** K4 is small enough to slot in anywhere.
 
 **J4 inherits two things by name.** J1 carved out one safe-area exception and
 only one — the note list's FAB — so every other bottom-anchored surface still
@@ -351,17 +350,79 @@ that does not know it.
 - **Callouts deliberately do NOT collapse.** B1's "no blockquote folding" was
   reopened in the brainstorm and upheld.
 
-### B2. Drag-to-reorder headings — **SPECCED 2026-08-29**
+### B2. Drag-to-reorder headings — **SHIPPED 2026-08-29**
 
 Spec: `docs/superpowers/specs/2026-08-29-b2-drag-to-reorder-headings-design.md`.
-**Read the spec, not this.**
+Plan: `docs/superpowers/plans/2026-08-29-b2-drag-to-reorder-headings.md`.
+Ledger: `.superpowers/sdd/2026-08-29-b2-drag-to-reorder-headings/progress.md`.
+Rulings: `docs/rulings/markdown-and-schema.md` (the new keybinding),
+`docs/rulings/accessibility.md` (the Section group as the only keyboard
+route), `docs/rulings/design-tokens-and-layout.md` (the drop indicator),
+`docs/rulings/testing-and-tooling.md` (the jsdom pointer split),
+`docs/rulings/deferred.md` (the pre-existing `ContextMenu.ts` staleness B2
+raises the stakes on).
 
 Grab the badge to move a heading and its whole subtree, with a drop indicator —
 plus a Section group in the right-click editor menu and `Mod-Alt-ArrowUp/Down`,
-because the gutter can never be keyboard-reachable. Split out of B because it is
-a document mutation with its own coordinate math and undo semantics, and because
-jsdom has no `setPointerCapture`, so Playwright is the only possible coverage of
-the gesture.
+because the gutter can never be keyboard-reachable. Shipped as six tasks: the
+pure move/fold-remap math, the commands and keybinding, the context-menu
+route, the pointer drag itself, Playwright-only coverage for the parts jsdom
+cannot see, and this documentation pass.
+
+**What diverged from the plan, and why — this is the part worth reading.**
+
+- **The undo problem the plan didn't see coming.** Task 2's brief asked for
+  "one undo step" per move and sketched satisfying it with transaction meta
+  alone. That cannot work: `prosemirror-history` replays UNDO/REDO as
+  inverted STEPS and carries none of a plugin's meta forward, so meta-only
+  coordination can never restore a fold set on undo. The implementer added a
+  past/future snapshot stack to `FoldState` instead — not in the plan, and it
+  became the whole focus of that task's review. The plan's Step 3 was wrong,
+  not the deviation from it.
+- **The zero-step-transaction hazard the first fix introduced.** Once
+  snapshots existed, a fold TOGGLE dispatches a transaction with zero steps —
+  `prosemirror-history` never records it — but the first version of the fix
+  pushed a snapshot for it anyway, tagged with the CURRENT document. Undoing
+  a later, unrelated typing edit could then land on a document that happened
+  to `eq` that snapshot and silently drop the fold — regressing B1's shipped
+  "a fold is durable across ordinary editing." The fix: snapshot only when
+  `tr.docChanged`, and cap both stacks at 100 entries
+  (`MAX_FOLD_HISTORY`, mirroring `prosemirror-history`'s own default `depth`
+  so an orphaned snapshot cannot accumulate forever).
+- **A claimed crash mode was tested and found false, mid-branch.** Task 4's
+  review asserted that a stale `dropAt` past `doc.content.size` makes
+  `DecorationSet.create` throw an uncaught `RangeError` — plausible enough
+  that it landed as a code comment. A later re-review disproved it directly:
+  monkey-patching `coordsAtPos` to force the exact condition claimed, then
+  shrinking the document, threw nothing on any run; the widget silently
+  disappears instead (`prosemirror-view`'s `domFromPos` clamps backward for
+  `side <= 0`, and the `RangeError` in that file is only on the
+  selection-anchoring path). The fix that abandons a drag on a document
+  change still stands — on its other, independently valid rationale: a drop
+  measured against boundaries from a document that no longer exists is wrong
+  regardless of whether it also crashes. `HeadingFold.ts`'s comment was
+  corrected in Task 6 rather than in another fix round.
+- **jsdom's pointer support turned out to split, not to be absent.** The spec
+  assumed jsdom's missing `setPointerCapture` made the whole gesture
+  Playwright-only. Measured 2026-08-29: jsdom DOES have a real `PointerEvent`
+  constructor, so the drag's STATE MACHINE (press vs. click, the drag
+  threshold, touch never dragging, Escape aborting) is unit-testable; only
+  the GEOMETRY (`measureBoundaries`, distance-to-boundary) needs a real
+  browser. Task 4 took the cheap coverage; Task 5 took the rest.
+- **Two plan-sketch defects, caught before they cost a round.** A test
+  scaffold in the plan reused a plugin key across two `Editor` instances in
+  one test file, which throws `RangeError: Adding different instances of a
+  keyed plugin` — the fix registers a fresh key per test. And the plan's
+  `section:` flag expression for the context-menu group had two redundant
+  disjuncts that, simplified naively, would have hidden the group entirely in
+  a note with exactly one section — caught by the task's own review with a
+  throwaway test before it shipped.
+
+**Left deliberately unresolved, and why:** `ContextMenu.ts`'s pre-existing
+keyboard-selection staleness (see `docs/rulings/deferred.md`) can now hide the
+whole Section group, not just show a stale toggle. Fixing it is a change to
+`ContextMenu`'s keyboard-selection handling with its own test surface —
+outside a documentation task, and outside B2's stated scope.
 
 ### C. Code block language + syntax highlighting — SHIPPED 2026-08-24
 

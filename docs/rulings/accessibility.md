@@ -20,7 +20,9 @@ buttons; `src/ui/Button.tsx`'s `VARIANTS` map (`default` / `ghost` / `danger`);
 `NoteListItem.tsx`; `src/ui/ConfirmDialog.tsx`'s
 Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
 (the `Decoration.node` call and its `aria-label`) and its `.focus()` /
-`tabindex` handling; `src/features/editor/TableHandles.ts`'s handle buttons
+`tabindex` handling; `EditorContextMenu.tsx`'s `flags.section` group (the
+`moveSectionUp`/`moveSectionDown` items, their `disabled` props, and
+`editor.section.group`); `src/features/editor/TableHandles.ts`'s handle buttons
 (`aria-haspopup`, `aria-expanded`) and `src/features/editor/
 TableHandleMenu.tsx`; and the hover/name tests in `e2e/appearance.spec.ts`,
 `src/ui/ui.test.tsx` and `src/features/notes/NoteListItem.test.tsx`.
@@ -453,3 +455,29 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
 - **Colour is never the only carrier of a callout's type.** Every type has a
   distinct glyph as well as a hue, and the title text stays `--bear-text` so
   the block does not depend on hue for legibility either.
+
+## The heading badge and drag-to-reorder (B2)
+
+- **`EditorContextMenu`'s Section group is B2's ONLY keyboard and
+  screen-reader route to reordering, and must never be moved to the badge
+  menu.** The badge (`HeadingFold.ts`'s `pointerdown`/`pointermove`/`pointerup`
+  handlers) opens on a click and drags on a hold, both driven by real pointer
+  coordinates measured against the DOM — there is no keyboard equivalent that
+  could open it, matching Chromium's own measured behaviour that a widget
+  decoration never receives programmatic focus the way a real `<button>`
+  would. `flags.section` in `EditorContextMenu.tsx` is reachable by
+  `Shift+F10` or the keyboard `ContextMenu` key with no pointer at all, so it
+  is the only way a keyboard or screen-reader user can move a section.
+  Collapsing it into the badge's menu — even nominally "the same items" —
+  would delete that route.
+
+- **The two Section items use `disabled`, not `aria-disabled`, and need no
+  explanation for it.** `moveSectionUp`/`moveSectionDown` in
+  `EditorContextMenu.tsx` are plain `disabled` because Playwright refuses to
+  click an `aria-disabled="true"` element at all (see
+  `docs/rulings/export.md`'s PDF item, driven by keyboard for exactly that
+  reason) — but unlike that PDF item, there is no reason string a sighted or
+  screen-reader user needs: "already at the top/bottom of the note" is
+  self-evident from context the way "you're signed out" is not. Do not add an
+  `aria-disabled` + explanation pair here on the PDF item's precedent; the two
+  controls disable for different kinds of reasons.

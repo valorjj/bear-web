@@ -36,7 +36,11 @@ export interface HeadingFoldOptions {
    * document position and the badge's screen rectangle. `null` when nobody is
    * listening, which is the state of the schema-only `editorExtensions`
    * constant — and, as with `TagPill.onActivate`, a non-null callback is what
-   * makes the plugin consume the click at all.
+   * makes the plugin consume the click at all. This gates the WHOLE badge
+   * gesture, not just the click: `pointerdown`'s handler returns false before
+   * `press` is ever set when `onOpenMenu` is `null` (B2), so a consumer that
+   * wires the badge but leaves this `null` silently loses drag-to-reorder
+   * along with the menu — there is no separate flag for the drag half.
    */
   onOpenMenu: ((request: HeadingMenuRequest) => void) | null;
   /** Already translated; an extension has no access to `useT`. */
@@ -736,18 +740,31 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
             // still live and a keystroke with the button held lands in the
             // document.
             //
-            // Clearing beats mapping for two reasons. The cheap one is that a
-            // shrinking document makes `dropAt` exceed `doc.content.size`, and
-            // `DecorationSet.create` then throws an uncaught `RangeError` from
-            // inside `decorations` — a crash, not a glitch. The real one is
-            // that `BadgePress.boundaries` was measured ONCE, against a
-            // document that no longer exists; `tr.mapping` could carry `dropAt`
-            // and `dragFrom` forward but nothing maps that array, so the drop
-            // would land somewhere the user never pointed at. A wrong result is
-            // exactly what this plugin's document-coordinate conversion exists
-            // to prevent, and abandoning the drag is what a user who just typed
-            // expects anyway. The release path already handles the cleared
-            // state: `dropAt === null` returns without dispatching.
+            // Clearing beats mapping because `BadgePress.boundaries` was
+            // measured ONCE, against a document that no longer exists once
+            // `tr.docChanged` is true: `tr.mapping` could carry `dropAt` and
+            // `dragFrom` forward, but nothing maps the `boundaries` array
+            // itself, so the drop would land somewhere the user never pointed
+            // at. A wrong result is exactly what this plugin's document-
+            // coordinate conversion exists to prevent, and abandoning the drag
+            // is what a user who just typed expects anyway. The release path
+            // already handles the cleared state: `dropAt === null` returns
+            // without dispatching.
+            //
+            // This does NOT guard against a crash. An earlier version of this
+            // comment claimed a stale `dropAt` past `doc.content.size` makes
+            // `DecorationSet.create` throw an uncaught `RangeError` from
+            // inside `decorations` — tested and FALSE (2026-08-29): a
+            // throwaway test monkey-patched `coordsAtPos` to force the LAST
+            // boundary to be selected, the exact condition the claim needed,
+            // then shrank the document. Nothing threw on any run; the widget
+            // silently disappeared instead. `prosemirror-view`'s
+            // `domFromPos` clamps backward for `side <= 0` rather than
+            // throwing (`node_modules/prosemirror-view/dist/index.js:922-960`),
+            // and the `RangeError` in that file (`domAfterPos`, ~:1014) is
+            // only on the selection-anchoring path, never widget rendering.
+            // Do not re-derive the crash claim; the misplaced-drop rationale
+            // above is the whole reason this branch exists.
             if (tr.docChanged && value.dragFrom !== null) {
               return { ...value, dragFrom: null, dropAt: null };
             }
