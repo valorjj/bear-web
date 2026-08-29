@@ -3,6 +3,8 @@ import type { ReactElement } from 'react';
 import { useT } from '@/i18n';
 import { MENU_GAP, useAnchoredMenu } from '@/lib/useAnchoredMenu';
 import {
+  ArrowDown,
+  ArrowUp,
   Ban,
   Bold,
   Code,
@@ -35,10 +37,11 @@ const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
 const HEADING_GLYPHS = [Heading1, Heading2, Heading3, Heading4, Heading5, Heading6] as const;
 
 /**
- * The sixteen actions this menu reports through `onAction` — the eleven
- * inline/block toggles, plus the seven table row names Task 8 supplies
- * commands for (heading levels and highlight colours go through their own
- * dedicated callbacks instead, since those are radio choices, not toggles).
+ * The eighteen actions this menu reports through `onAction` — the eleven
+ * inline/block toggles, the seven table row names Task 8 supplies commands
+ * for, and the two section moves B2 adds (heading levels and highlight
+ * colours go through their own dedicated callbacks instead, since those are
+ * radio choices, not toggles).
  */
 export type ContextMenuAction =
   | 'bold'
@@ -56,7 +59,9 @@ export type ContextMenuAction =
   | 'addColumnAfter'
   | 'deleteRow'
   | 'deleteColumn'
-  | 'deleteTable';
+  | 'deleteTable'
+  | 'moveSectionUp'
+  | 'moveSectionDown';
 
 export interface EditorContextMenuProps {
   request: ContextMenuRequest;
@@ -325,7 +330,40 @@ export function EditorContextMenu({
         </button>
       </div>
 
-      {/* 5. Table — one-shot actions, rendered only when the caret is
+      {/* 5. Section — moves the heading under the caret and everything it
+          owns. Rendered only inside a section, because the note's title is
+          not one. This is the KEYBOARD route to B2: the gutter's badge is
+          mouse-only (Chromium refuses focus inside a heading holding a
+          widget), and this menu answers Shift+F10. */}
+      {flags.section && (
+        <>
+          <div className="bg-border my-1 h-px" role="separator" />
+          <div role="group" aria-label={t('editor.section.group')} className="p-1">
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!flags.sectionUp}
+              onClick={() => act('moveSectionUp')}
+              className={ITEM_CLASS}
+            >
+              <Icon glyph={ArrowUp} size="sm" />
+              {t('editor.section.moveUp')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!flags.sectionDown}
+              onClick={() => act('moveSectionDown')}
+              className={ITEM_CLASS}
+            >
+              <Icon glyph={ArrowDown} size="sm" />
+              {t('editor.section.moveDown')}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* 6. Table — one-shot actions, rendered only when the caret is
           inside a table. The three deletes carry `data-destructive` and the
           danger token, matching what the old floating bar did. */}
       {flags.table && (

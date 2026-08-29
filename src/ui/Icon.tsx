@@ -281,4 +281,6 @@ export {
   Copy,
   ClipboardCopy,
   RotateCcw,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';

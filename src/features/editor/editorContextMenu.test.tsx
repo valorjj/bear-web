@@ -105,3 +105,40 @@ describe('EditorContextMenu', () => {
     expect(document.activeElement).toHaveAttribute('role', expect.stringContaining('menuitem'));
   });
 });
+
+describe('the Section group', () => {
+  it('is absent when the caret is not in a section', () => {
+    renderMenu({ flags: { ...EMPTY_FLAGS, section: false } });
+    expect(screen.queryByRole('group', { name: 'Section' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Move section up' })).toBeNull();
+  });
+
+  it('offers both moves when the caret is in a section', () => {
+    renderMenu({
+      flags: { ...EMPTY_FLAGS, section: true, sectionUp: true, sectionDown: true },
+    });
+    expect(screen.getByRole('menuitem', { name: 'Move section up' })).toBeEnabled();
+    expect(screen.getByRole('menuitem', { name: 'Move section down' })).toBeEnabled();
+  });
+
+  it('disables each direction independently at the ends of the document', () => {
+    renderMenu({
+      flags: { ...EMPTY_FLAGS, section: true, sectionUp: false, sectionDown: true },
+    });
+    // The FIRST section: nowhere up, somewhere down.
+    expect(screen.getByRole('menuitem', { name: 'Move section up' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Move section down' })).toBeEnabled();
+  });
+
+  it('reports the action and closes', async () => {
+    const user = userEvent.setup();
+    const { onAction, onClose } = renderMenu({
+      flags: { ...EMPTY_FLAGS, section: true, sectionUp: true, sectionDown: true },
+    });
+
+    await user.click(screen.getByRole('menuitem', { name: 'Move section down' }));
+
+    expect(onAction).toHaveBeenCalledWith('moveSectionDown');
+    expect(onClose).toHaveBeenCalled();
+  });
+});

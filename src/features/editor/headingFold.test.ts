@@ -13,6 +13,7 @@ import {
   renderIconMarkup,
 } from '@/ui/Icon';
 
+import { editorFlagsSelector } from './editorState';
 import { buildEditorExtensions, editorExtensions } from './extensions';
 import { HeadingFold, foldedKeys, type HeadingMenuRequest } from './HeadingFold';
 import { foldKeyOf, headingSections, serializeFoldKey } from './headingSections';
@@ -1086,6 +1087,34 @@ describe('moving a section', () => {
 
     expect(serializeMarkdown(editor.getJSON())).not.toContain('X');
     expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
+    editor.destroy();
+  });
+});
+
+describe('the section flags', () => {
+  it('reports where the caret is and which moves are available', () => {
+    const editor = new Editor({
+      extensions: editorExtensions,
+      content: parseMarkdown('Title\n\n## A\n\nx\n\n## B\n\ny'),
+    });
+    const [a, b] = headingSections(editor.state.doc);
+
+    editor.commands.setTextSelection(1);
+    expect(editorFlagsSelector({ editor }).section).toBe(false);
+
+    editor.commands.setTextSelection(a!.pos + 2);
+    expect(editorFlagsSelector({ editor })).toMatchObject({
+      section: true,
+      sectionUp: false,
+      sectionDown: true,
+    });
+
+    editor.commands.setTextSelection(b!.pos + 2);
+    expect(editorFlagsSelector({ editor })).toMatchObject({
+      section: true,
+      sectionUp: true,
+      sectionDown: false,
+    });
     editor.destroy();
   });
 });
