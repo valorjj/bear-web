@@ -976,3 +976,95 @@ describe('the fold-boundary guard only intercepts a collapsed caret', () => {
     editor.destroy();
   });
 });
+
+describe('moving a section', () => {
+  const THREE = 'Title\n\n## A\n\nbody a\n\n## B\n\nbody b\n\n## C\n\nbody c';
+
+  function editorOf(markdown: string) {
+    return new Editor({ extensions: editorExtensions, content: parseMarkdown(markdown) });
+  }
+
+  it('moves a section and its body above another', () => {
+    const editor = editorOf(THREE);
+    const [a, , c] = headingSections(editor.state.doc);
+
+    expect(editor.commands.moveHeadingSection(c!.pos, a!.pos)).toBe(true);
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      'Title\n\n## C\n\nbody c\n\n## A\n\nbody a\n\n## B\n\nbody b',
+    );
+    editor.destroy();
+  });
+
+  it('is ONE undo step that restores order and folds together', () => {
+    const editor = editorOf('Title\n\n## Notes\n\nfirst\n\n## Notes\n\nsecond');
+    const [first, second] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(second!.pos);
+    expect(foldedKeys(editor.state)).toEqual(['2:1:Notes']);
+    const before = serializeMarkdown(editor.getJSON());
+
+    editor.commands.moveHeadingSection(second!.pos, first!.pos);
+    // The remapping rode the same transaction: the fold followed its section.
+    expect(foldedKeys(editor.state)).toEqual(['2:0:Notes']);
+
+    editor.commands.undo();
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(before);
+    expect(foldedKeys(editor.state)).toEqual(['2:1:Notes']);
+    editor.destroy();
+  });
+
+  it('returns false for a rejected move and changes nothing', () => {
+    const editor = editorOf(THREE);
+    const [a] = headingSections(editor.state.doc);
+    const before = serializeMarkdown(editor.getJSON());
+
+    expect(editor.commands.moveHeadingSection(a!.pos, a!.pos)).toBe(false);
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(before);
+    editor.destroy();
+  });
+
+  it('moves the section under the caret up and down', () => {
+    const editor = editorOf(THREE);
+    const [, b] = headingSections(editor.state.doc);
+    editor.commands.setTextSelection(b!.pos + 2);
+
+    expect(editor.commands.moveHeadingSectionUp()).toBe(true);
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      'Title\n\n## B\n\nbody b\n\n## A\n\nbody a\n\n## C\n\nbody c',
+    );
+    editor.destroy();
+  });
+
+  it('returns false at the ends, so the keystroke falls through', () => {
+    const editor = editorOf(THREE);
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.setTextSelection(a!.pos + 2);
+
+    expect(editor.commands.moveHeadingSectionUp()).toBe(false);
+    editor.destroy();
+  });
+
+  it('returns false when the caret is in the title, which is not a section', () => {
+    const editor = editorOf(THREE);
+    editor.commands.setTextSelection(1);
+
+    expect(editor.commands.moveHeadingSectionUp()).toBe(false);
+    expect(editor.commands.moveHeadingSectionDown()).toBe(false);
+    editor.destroy();
+  });
+
+  it('binds Mod-Alt-ArrowUp and Mod-Alt-ArrowDown', () => {
+    const editor = editorOf(THREE);
+    const [, b] = headingSections(editor.state.doc);
+    editor.commands.setTextSelection(b!.pos + 2);
+
+    editor.commands.keyboardShortcut('Mod-Alt-ArrowUp');
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      'Title\n\n## B\n\nbody b\n\n## A\n\nbody a\n\n## C\n\nbody c',
+    );
+    editor.destroy();
+  });
+});

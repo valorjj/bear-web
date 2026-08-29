@@ -1,4 +1,6 @@
 import { Extension, isMacOS } from '@tiptap/core';
+import { isHistoryTransaction } from '@tiptap/pm/history';
+import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
@@ -21,6 +23,7 @@ import {
   serializeFoldKey,
   type HeadingSection,
 } from './headingSections';
+import { planSectionMove, planSectionShift, type SectionMove } from './headingReorder';
 
 export interface HeadingFoldOptions {
   /**
@@ -44,8 +47,23 @@ export interface HeadingMenuRequest {
   rect: DOMRect;
 }
 
+/**
+ * A snapshot taken every time an explicit fold-changing transaction rides
+ * through: the document as it stood BEFORE that transaction, and the keys as
+ * they stood before it too. `past`/`future` exist only so a raw
+ * `prosemirror-history` undo/redo — which replays inverted STEPS and carries
+ * none of this plugin's meta — can still land the fold set back where it was,
+ * rather than leaving it stranded mid-move. See `apply` below.
+ */
+interface FoldSnapshot {
+  doc: Node;
+  keys: string[];
+}
+
 interface FoldState {
   keys: string[];
+  past: FoldSnapshot[];
+  future: FoldSnapshot[];
 }
 
 const headingFoldKey = new PluginKey<FoldState>('headingFold');
@@ -211,8 +229,27 @@ declare module '@tiptap/core' {
       foldAllHeadings: () => ReturnType;
       unfoldAllHeadings: () => ReturnType;
       setHeadingFolds: (keys: string[]) => ReturnType;
+      moveHeadingSection: (fromPos: number, toBoundary: number) => ReturnType;
+      moveHeadingSectionUp: () => ReturnType;
+      moveHeadingSectionDown: () => ReturnType;
     };
   }
+}
+
+/**
+ * Applies a planned move as ONE transaction, so `history` gives one undo step
+ * that restores the order and the folds together.
+ *
+ * The fold set rides the same `tr` through `setKeys` rather than following in
+ * a second dispatch — two transactions would mean two `Mod-Z` presses, and the
+ * intermediate state (moved, folds not yet remapped) is exactly the wrong one
+ * to be able to stop at.
+ */
+function applyMove(state: EditorState, move: SectionMove): Transaction {
+  const slice = state.doc.slice(move.from, move.to);
+  const tr = state.tr.delete(move.from, move.to);
+  tr.insert(move.insertAt, slice.content);
+  return setKeys(tr, move.foldKeys);
 }
 
 /**
@@ -266,6 +303,33 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
         (keys: string[]) =>
         ({ state, dispatch }) => {
           if (dispatch) dispatch(setKeys(state.tr, [...keys]));
+          return true;
+        },
+
+      moveHeadingSection:
+        (fromPos: number, toBoundary: number) =>
+        ({ state, dispatch }) => {
+          const move = planSectionMove(state.doc, foldedKeys(state), fromPos, toBoundary);
+          if (move === null) return false;
+          if (dispatch) dispatch(applyMove(state, move));
+          return true;
+        },
+
+      moveHeadingSectionUp:
+        () =>
+        ({ state, dispatch }) => {
+          const move = planSectionShift(state.doc, foldedKeys(state), state.selection.from, -1);
+          if (move === null) return false;
+          if (dispatch) dispatch(applyMove(state, move));
+          return true;
+        },
+
+      moveHeadingSectionDown:
+        () =>
+        ({ state, dispatch }) => {
+          const move = planSectionShift(state.doc, foldedKeys(state), state.selection.from, 1);
+          if (move === null) return false;
+          if (dispatch) dispatch(applyMove(state, move));
           return true;
         },
     };
@@ -323,6 +387,19 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
         if (!section) return false;
         return this.editor.commands.toggleHeadingFold(section.pos);
       },
+
+      // `Mod-Alt-ArrowUp`/`Down`, symmetric with `StoredImage`'s shipped
+      // `Mod-Alt-ArrowLeft`/`Right` (image resize). Verified against
+      // `node_modules/@tiptap`. B1's ruling: a new binding is checked against
+      // the PACKAGE, not only against browser shortcuts, because Tiptap's
+      // reversed extension order lets a later extension silently win.
+      //
+      // Both return the command's own `false` when the caret is in no
+      // section or the section is already at its end, so the keystroke
+      // falls through rather than being swallowed for nothing — the rule
+      // `Mod-Alt-f` above follows.
+      'Mod-Alt-ArrowUp': () => this.editor.commands.moveHeadingSectionUp(),
+      'Mod-Alt-ArrowDown': () => this.editor.commands.moveHeadingSectionDown(),
     };
   },
 
@@ -333,15 +410,54 @@ export const HeadingFold = Extension.create<HeadingFoldOptions>({
         key: headingFoldKey,
 
         state: {
-          init: () => ({ keys: [] }),
-          apply(tr, value) {
+          init: () => ({ keys: [], past: [], future: [] }),
+          apply(tr, value, oldState) {
             const meta = tr.getMeta(headingFoldKey) as FoldMeta | undefined;
-            // Keys are content-derived, so a document change needs no mapping
-            // — the identity is re-matched against the new document on every
-            // decoration pass. An unmatched key is RETAINED rather than
-            // dropped: renaming a heading and renaming it back should restore
-            // the fold, and a key that matches nothing hides nothing anyway.
-            return meta ? { keys: meta.keys } : value;
+            if (meta) {
+              // A real fold-set change: remember what it was, so an undo of
+              // THIS transaction has something to restore. Any pending redo
+              // is discarded, same as `prosemirror-history` itself does for
+              // a fresh edit.
+              return {
+                keys: meta.keys,
+                past: [...value.past, { doc: oldState.doc, keys: value.keys }],
+                future: [],
+              };
+            }
+
+            // No meta of ours: a normal edit (typing, an unrelated command)
+            // or a `prosemirror-history` undo/redo replaying INVERTED STEPS,
+            // which carries none of the meta above — history stores steps,
+            // not plugin state, so the fold set is not naturally part of
+            // what it replays. Only a genuine history transaction is checked
+            // against the snapshots at all, so a coincidentally-identical
+            // document from ordinary typing can't misfire this.
+            if (isHistoryTransaction(tr)) {
+              const undone = value.past.at(-1);
+              if (undone && undone.doc.eq(tr.doc)) {
+                return {
+                  keys: undone.keys,
+                  past: value.past.slice(0, -1),
+                  future: [...value.future, { doc: oldState.doc, keys: value.keys }],
+                };
+              }
+              const redone = value.future.at(-1);
+              if (redone && redone.doc.eq(tr.doc)) {
+                return {
+                  keys: redone.keys,
+                  past: [...value.past, { doc: oldState.doc, keys: value.keys }],
+                  future: value.future.slice(0, -1),
+                };
+              }
+            }
+
+            // Keys are content-derived, so an ordinary document change needs
+            // no mapping — the identity is re-matched against the new
+            // document on every decoration pass. An unmatched key is
+            // RETAINED rather than dropped: renaming a heading and renaming
+            // it back should restore the fold, and a key that matches
+            // nothing hides nothing anyway.
+            return value;
           },
         },
 
