@@ -14,6 +14,7 @@ import {
 } from '@/features/editor';
 import { useT } from '@/i18n';
 
+import { BacklinksPanel } from './BacklinksPanel';
 import { useAutosave } from './useAutosave';
 
 /** Matches `AUTOSAVE_DELAY_MS`; folds are persisted on the same rhythm. */
@@ -54,6 +55,12 @@ export interface NoteEditorProps {
    */
   onActivateLink?: (title: string) => boolean;
   /**
+   * Called with a note's id when a row in the backlinks panel is clicked.
+   * The panel itself is not rendered at all when this is omitted — kept
+   * optional only to match the other callbacks' contract on this component.
+   */
+  onOpenNote?: (id: string) => void;
+  /**
    * Exposes the mounted `RichEditor`'s imperative handle to the caller.
    * Nothing in the app passes this — `AppShell` never needs to reach the
    * editor instance directly — it exists so tests can reach
@@ -87,6 +94,7 @@ export function NoteEditor({
   autoFocus = false,
   onActivateTag,
   onActivateLink,
+  onOpenNote,
   handleRef: externalHandleRef,
 }: NoteEditorProps): ReactElement {
   const t = useT();
@@ -417,6 +425,8 @@ export function NoteEditor({
         onImage={handleImage}
         onEditorReady={setFoldEditor}
       />
+
+      {onOpenNote !== undefined && <BacklinksPanel title={note.title} onOpenNote={onOpenNote} />}
 
       {(failed || serializeFailed || imageFailed || exportRunner.failureKey !== null) && (
         // `status`, not `alert`: `alert` is the degraded-storage banner's role

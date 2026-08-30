@@ -474,6 +474,7 @@ export function AppShell(): ReactElement {
                   autoFocus={justCreatedId === selectedNote.id}
                   onActivateTag={handleActivateTag}
                   onActivateLink={handleActivateLink}
+                  onOpenNote={select}
                 />
               )}
             </Pane>
