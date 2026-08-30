@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveLinkTarget } from './AppShell';
+import { resolveLinkTarget } from './resolveLinkTarget';
 
 /**
  * The only piece of Task 4's logic with real branching, and the one whose
