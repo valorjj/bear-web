@@ -67,6 +67,11 @@ function buildSupportedExtensions(
     // a working editor in which no callout ever gets a colour, which no
     // rendered-output test can see. `extensions.test.ts` asserts the surviving
     // `blockquote` carries the `callout` attribute.
+    // Configuring `history` here (a `depth` option, or disabling it) would
+    // silently desynchronise `HeadingFold.ts`'s `MAX_FOLD_HISTORY`, which
+    // exists ONLY because it currently mirrors `prosemirror-history`'s
+    // default depth (100) by coincidence of neither being touched. See that
+    // constant's comment before changing either.
     StarterKit.configure({ underline: false, codeBlock: false, blockquote: false }),
     // A callout IS a blockquote, so this is the blockquote — extended, not
     // added beside. Both ARE Nodes: they change the schema, so

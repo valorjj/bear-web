@@ -210,3 +210,38 @@ with is not resolved; only code can retire one.
   otherPane)` supplies it, and widths are WRITTEN in desktop mode only. The
   bug this closed was pre-existing and reachable: both panes dragged wide in a
   1024px window left the editor a negative width.
+
+- **A pre-existing `ContextMenu.ts` gap now costs more: the keyboard route can
+  open a menu missing the Section group entirely, not just show a stale
+  toggle.** `ContextMenu.ts`'s own docblock (on `ContextMenuRequest.selection`)
+  already documents that `state.selection` can be briefly stale after a
+  keyboard (arrow-key) selection change, because ProseMirror resyncs its model
+  from a browser-handled selection change asynchronously. The pointer route
+  works around exactly this by re-reading the live DOM `Selection` before
+  trusting it; the keyboard route does not — its comment claims
+  `state.selection` "IS authoritative" for a command executing synchronously,
+  which is true of the command itself but not of a selection change made by a
+  PRIOR keystroke that has not finished resyncing when the menu-opening
+  keystroke lands immediately after. **Repro: arrow into a section, then
+  press `Shift+F10` with no pause.** Before B2 the worst case reachable this
+  way was a stale checkbox/radio state in the menu. Since B2, `flags.section`
+  in `EditorContextMenu.tsx` is computed from that same selection at open
+  time, so the same staleness can make the whole group silently ABSENT, not
+  merely wrong — a menu that is missing an entry reads as "this note cannot do
+  that", where a stale checkbox reads as a glitch.
+
+  **The severity stops there, and an earlier draft of this entry overstated
+  it** by calling the Section group B2's only keyboard and screen-reader route
+  to reordering. It is not: `Mod-Alt-ArrowUp`/`Mod-Alt-ArrowDown` move a
+  section from the caret with no pointer and no menu, so a keyboard user who
+  hits the stale-selection window is not locked out of reordering — only out
+  of the discoverable route to it (see `docs/rulings/accessibility.md`). That
+  weakens the case for fixing this urgently; it does not remove it, because
+  the discoverable route is the only one an unfamiliar user has.
+  **Deferred, not fixed, on purpose:** this predates B2, and closing it
+  is a change to `ContextMenu`'s keyboard-selection handling with its own test
+  surface (something that resyncs the model, or re-reads a keyboard-side
+  ground truth analogous to the pointer route's DOM read) — out of scope for a
+  documentation task. Cost if wrong: a keyboard user occasionally opens the
+  context menu right after an arrow key and finds no Section group;
+  recoverable by closing and reopening the menu.

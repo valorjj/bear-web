@@ -2,6 +2,8 @@ import { getMarkRange } from '@tiptap/core';
 import type { Editor } from '@tiptap/core';
 
 import type { CalloutType } from './callouts';
+import { planSectionShift } from './headingReorder';
+import { headingSections } from './headingSections';
 import type { HighlightColor } from './Highlight';
 
 /**
@@ -39,6 +41,14 @@ export interface EditorFlags {
   highlightColor: HighlightColor | null;
   /** Document range of the highlight under the caret; the palette's anchor. */
   highlightRange: { from: number; to: number } | null;
+  /**
+   * The caret is inside a top-level section. False in the note's first block,
+   * which is its title and is not a section — see `headingSections`.
+   */
+  section: boolean;
+  /** That section has a sibling to move above / below. */
+  sectionUp: boolean;
+  sectionDown: boolean;
 }
 
 /**
@@ -62,6 +72,9 @@ export const EMPTY_FLAGS: EditorFlags = {
   table: false,
   highlightColor: null,
   highlightRange: null,
+  section: false,
+  sectionUp: false,
+  sectionDown: false,
 };
 
 /**
@@ -114,5 +127,13 @@ export function editorFlagsSelector({ editor }: { editor: Editor }): EditorFlags
     // the mark. Returning the library's object would work too; stating the
     // shape here is what pins it as two numbers and nothing more.
     highlightRange: range === null ? null : { from: range.from, to: range.to },
+    // Computed from the same planner the commands use, so a menu item is
+    // enabled exactly when its command would return true. Deriving the two
+    // independently is how a menu comes to offer a move that does nothing.
+    section: headingSections(editor.state.doc).some(
+      (s) => s.pos <= editor.state.selection.from && editor.state.selection.from < s.end,
+    ),
+    sectionUp: planSectionShift(editor.state.doc, [], editor.state.selection.from, -1) !== null,
+    sectionDown: planSectionShift(editor.state.doc, [], editor.state.selection.from, 1) !== null,
   };
 }

@@ -803,6 +803,28 @@
   user-select: none;
 }
 
+/*
+ * B2's drop indicator: where the dragged section will land.
+ *
+ * A rule across the measure rather than a gap that opens up. Reflowing the
+ * document under a live drag would move the very boundaries the pointer is
+ * being compared against, and that measurement is taken once at drag start
+ * (see `measureBoundaries` in `HeadingFold.ts`) — so an indicator that
+ * changed the layout would make its own answer wrong.
+ */
+.bear-section-drop {
+  height: 2px;
+  margin-block: -1px;
+  background: var(--bear-accent);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+/* The section being carried, dimmed so the indicator reads as the answer. */
+.ProseMirror .bear-section-dragging {
+  opacity: 0.4;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bear-fold-toggle,
   .bear-fold-badge {

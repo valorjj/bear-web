@@ -12,8 +12,10 @@ new `import ... from 'lucide-react'` outside `src/ui/Icon.tsx`; any
 `[role="..."]` selector; any assertion comparing a computed `backgroundColor`;
 any Playwright keyboard shortcut aimed at a Tiptap/ProseMirror binding; any
 `addInitScript` writing `localStorage` to seed app state; a push to `main`
-after any local merge; and any test whose expectation you are about to edit
-because a restyle made it fail.
+after any local merge; any test whose expectation you are about to edit
+because a restyle made it fail; and a `PointerEvent`/`setPointerCapture` call
+in `src/features/editor/HeadingFold.ts`'s badge handlers or
+`headingFold.test.ts`'s drag tests.
 
 - **A Playwright `name` is a case-insensitive SUBSTRING by default, and the
   failure reads as "element not found".** `getByRole('button', { name: 'Pin' })`
@@ -241,4 +243,29 @@ because a restyle made it fail.
   real browser. And a screenshot taken to review a scrollbar change must be
   taken `--headed`; a headless one shows the pane with nothing in the gutter
   and looks exactly like a rule that failed to apply.
+
+- **jsdom's pointer support splits down the middle: it has a real
+  `PointerEvent` constructor but no `Element.prototype.setPointerCapture` at
+  all (measured 2026-08-29).** Consequence for B2's drag-to-reorder: the
+  STATE MACHINE — a press does not open the menu, a release does, movement
+  past the threshold suppresses the click and starts a drag, touch never
+  drags, Escape aborts a live drag — is unit-testable in `headingFold.test.ts`
+  by dispatching real `PointerEvent`s at `editor.view.dom`. The GEOMETRY is
+  not: jsdom lays out nothing, so `measureBoundaries`, `coordsAtPos` and every
+  distance-to-boundary comparison are Playwright-only (`e2e/headingReorder.spec.ts`,
+  which now exists), the same split `CLAUDE.md` already records for pointer-drag
+  in general. Any call to `setPointerCapture` in this file's badge handlers
+  must be `?.()`-guarded — an unguarded call throws in every unit test that
+  presses the badge, not just the ones about capture.
+
+- **`npm run shots` cannot photograph the drop indicator, ever, by
+  construction.** `.bear-section-drop` (see
+  `docs/rulings/design-tokens-and-layout.md`) exists only in `FoldState` while
+  a drag is live — a `dropAt` set by a real pointer press held down. The shots
+  harness drives the fixed corpus with no live drag in progress, and there is
+  no meta/state hook that renders the indicator at rest for a screenshot to
+  find. B2 is therefore a visual change with genuinely zero screenshot
+  coverage, not an oversight to close later — a future automated capture
+  would need to hold a synthetic pointer down mid-drag, which is a different
+  and much more invasive harness than the corpus screenshots.
 

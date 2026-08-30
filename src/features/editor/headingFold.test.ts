@@ -1,7 +1,7 @@
 import { Editor, getSchema } from '@tiptap/core';
 import type { DecorationSet } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   Heading1,
@@ -13,10 +13,36 @@ import {
   renderIconMarkup,
 } from '@/ui/Icon';
 
+import { editorFlagsSelector } from './editorState';
 import { buildEditorExtensions, editorExtensions } from './extensions';
 import { HeadingFold, foldedKeys, type HeadingMenuRequest } from './HeadingFold';
 import { foldKeyOf, headingSections, serializeFoldKey } from './headingSections';
 import { parseMarkdown, serializeMarkdown } from './markdown';
+
+// jsdom has no layout engine, so ProseMirror's `coordsAtPos`/`posAtCoords`
+// (reached here via `posToDOMRect` and `view.posAtCoords`) throw on APIs
+// jsdom never implements. Same three stubs as `NoteEditor.test.tsx`'s header
+// (see CLAUDE.md's jsdom toolchain note) — harmless empty geometry so the
+// plugin's DOM-event and command paths can run without crashing.
+const emptyRect: DOMRect = {
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  toJSON: () => ({}),
+};
+Range.prototype.getBoundingClientRect = () => emptyRect;
+Range.prototype.getClientRects = () =>
+  ({
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: function* () {},
+  }) as unknown as DOMRectList;
+document.elementFromPoint = () => null;
 
 function docFor(html: string): Editor {
   return new Editor({ extensions: editorExtensions, content: html });
@@ -516,36 +542,62 @@ describe('Mod-Alt-f folds the section under the cursor', () => {
 });
 
 /**
- * Invokes the plugin's own `handleDOMEvents.mousedown` against the REAL,
- * mounted `EditorView` — not a fake `posAtCoords` stand-in like `TagPill`'s
- * `mousedownAt` needs, because this handler resolves through `posAtDOM`
- * against an actual DOM element rather than viewport coordinates, and
- * `posAtDOM` needs no layout engine to work in jsdom (only `posAtCoords`
+ * Invokes one of the plugin's own `handleDOMEvents` pointer handlers against
+ * the REAL, mounted `EditorView` — not a fake `posAtCoords` stand-in like
+ * `TagPill`'s `mousedownAt` needs, because `pointerdown` resolves through
+ * `posAtDOM` against an actual DOM element rather than viewport coordinates,
+ * and `posAtDOM` needs no layout engine to work in jsdom (only `posAtCoords`
  * does). `target` is set with `Object.defineProperty` because a
- * manually-constructed `MouseEvent` has a `null` target until the browser
+ * manually-constructed `PointerEvent` has a `null` target until the browser
  * dispatches it, and the handler is invoked directly here rather than
  * through a real DOM dispatch.
+ *
+ * `pointerdown`, not `mousedown`: B2 replaced the mouse handler outright, so
+ * the badge now opens its menu on RELEASE and a press that travels becomes a
+ * drag. The toggle is unchanged and still folds on press.
  */
-function mousedownOn(
+function pointerOn(
   editor: Editor,
+  type: 'pointerdown' | 'pointerup',
   element: Element,
-  init: MouseEventInit = {},
+  init: PointerEventInit = {},
 ): { handled: boolean; defaultPrevented: boolean } {
-  const event = new MouseEvent('mousedown', {
+  const event = new PointerEvent(type, {
     cancelable: true,
     bubbles: true,
     button: 0,
+    pointerType: 'mouse',
     ...init,
   });
   Object.defineProperty(event, 'target', { value: element, configurable: true });
   const handled =
-    editor.view.someProp('handleDOMEvents', (handlers) =>
-      handlers.mousedown === undefined ? false : handlers.mousedown(editor.view, event as never),
-    ) === true;
+    editor.view.someProp('handleDOMEvents', (handlers) => {
+      const handler = handlers[type];
+      return handler === undefined ? false : handler(editor.view, event as never);
+    }) === true;
   return { handled, defaultPrevented: event.defaultPrevented };
 }
 
-describe('the mousedown handler on the badge and toggle', () => {
+function pointerdownOn(
+  editor: Editor,
+  element: Element,
+  init: PointerEventInit = {},
+): { handled: boolean; defaultPrevented: boolean } {
+  return pointerOn(editor, 'pointerdown', element, init);
+}
+
+/** A press and its release, with no movement between them — i.e. a click. */
+function clickOn(
+  editor: Editor,
+  element: Element,
+  init: PointerEventInit = {},
+): { handled: boolean; defaultPrevented: boolean } {
+  const down = pointerdownOn(editor, element, init);
+  pointerOn(editor, 'pointerup', element, init);
+  return down;
+}
+
+describe('the pointer handlers on the badge and toggle', () => {
   it('toggles the fold when the toggle is clicked, and does not open the menu', () => {
     const opened: HeadingMenuRequest[] = [];
     const editor = new Editor({
@@ -554,7 +606,7 @@ describe('the mousedown handler on the badge and toggle', () => {
     });
 
     const toggle = editor.view.dom.querySelector('[data-fold-toggle]')!;
-    const result = mousedownOn(editor, toggle);
+    const result = pointerdownOn(editor, toggle);
 
     expect(result.handled).toBe(true);
     expect(result.defaultPrevented).toBe(true);
@@ -582,7 +634,7 @@ describe('the mousedown handler on the badge and toggle', () => {
     const badges = editor.view.dom.querySelectorAll('[data-fold-badge]');
     expect(badges).toHaveLength(2);
 
-    const result = mousedownOn(editor, badges[1]!);
+    const result = clickOn(editor, badges[1]!);
 
     expect(result.handled).toBe(true);
     expect(result.defaultPrevented).toBe(true);
@@ -606,7 +658,7 @@ describe('the mousedown handler on the badge and toggle', () => {
     editor.commands.toggleHeadingFold(a!.pos);
 
     const badge = editor.view.dom.querySelector('[data-fold-badge]')!;
-    mousedownOn(editor, badge);
+    clickOn(editor, badge);
 
     expect(opened).toHaveLength(1);
     expect(opened[0]!.folded).toBe(true);
@@ -627,7 +679,7 @@ describe('the mousedown handler on the badge and toggle', () => {
 
     const badge = editor.view.dom.querySelector('[data-fold-badge]');
     expect(badge).not.toBeNull();
-    const result = mousedownOn(editor, badge!, { button: 2 });
+    const result = clickOn(editor, badge!, { button: 2 });
 
     expect(result.handled).toBe(false);
     expect(result.defaultPrevented).toBe(false);
@@ -645,7 +697,7 @@ describe('the mousedown handler on the badge and toggle', () => {
     const editor = docFor('<p>Title</p><h2>A</h2><p>x</p>');
 
     const badge = editor.view.dom.querySelector('[data-fold-badge]')!;
-    const result = mousedownOn(editor, badge);
+    const result = pointerdownOn(editor, badge);
 
     // `handled` is false — ProseMirror's own mousedown handling is otherwise
     // free to run. `defaultPrevented` is still true, because `preventDefault`
@@ -973,6 +1025,430 @@ describe('the fold-boundary guard only intercepts a collapsed caret', () => {
     // without deleting anything, which is not the intended asymmetry.
     expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
     expect(editor.getHTML()).not.toBe(before);
+    editor.destroy();
+  });
+});
+
+describe('moving a section', () => {
+  const THREE = 'Title\n\n## A\n\nbody a\n\n## B\n\nbody b\n\n## C\n\nbody c';
+
+  function editorOf(markdown: string) {
+    return new Editor({ extensions: editorExtensions, content: parseMarkdown(markdown) });
+  }
+
+  it('moves a section and its body above another', () => {
+    const editor = editorOf(THREE);
+    const [a, , c] = headingSections(editor.state.doc);
+
+    expect(editor.commands.moveHeadingSection(c!.pos, a!.pos)).toBe(true);
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      'Title\n\n## C\n\nbody c\n\n## A\n\nbody a\n\n## B\n\nbody b',
+    );
+    editor.destroy();
+  });
+
+  it('is ONE undo step that restores order and folds together', () => {
+    const editor = editorOf('Title\n\n## Notes\n\nfirst\n\n## Notes\n\nsecond');
+    const [first, second] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(second!.pos);
+    expect(foldedKeys(editor.state)).toEqual(['2:1:Notes']);
+    const before = serializeMarkdown(editor.getJSON());
+
+    editor.commands.moveHeadingSection(second!.pos, first!.pos);
+    // The remapping rode the same transaction: the fold followed its section.
+    expect(foldedKeys(editor.state)).toEqual(['2:0:Notes']);
+
+    editor.commands.undo();
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(before);
+    expect(foldedKeys(editor.state)).toEqual(['2:1:Notes']);
+    editor.destroy();
+  });
+
+  it('returns false for a rejected move and changes nothing', () => {
+    const editor = editorOf(THREE);
+    const [a] = headingSections(editor.state.doc);
+    const before = serializeMarkdown(editor.getJSON());
+
+    expect(editor.commands.moveHeadingSection(a!.pos, a!.pos)).toBe(false);
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(before);
+    editor.destroy();
+  });
+
+  it('moves the section under the caret up and down', () => {
+    const editor = editorOf(THREE);
+    const [, b] = headingSections(editor.state.doc);
+    editor.commands.setTextSelection(b!.pos + 2);
+
+    expect(editor.commands.moveHeadingSectionUp()).toBe(true);
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      'Title\n\n## B\n\nbody b\n\n## A\n\nbody a\n\n## C\n\nbody c',
+    );
+    editor.destroy();
+  });
+
+  it('returns false at the ends, so the keystroke falls through', () => {
+    const editor = editorOf(THREE);
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.setTextSelection(a!.pos + 2);
+
+    expect(editor.commands.moveHeadingSectionUp()).toBe(false);
+    editor.destroy();
+  });
+
+  it('returns false when the caret is in the title, which is not a section', () => {
+    const editor = editorOf(THREE);
+    editor.commands.setTextSelection(1);
+
+    expect(editor.commands.moveHeadingSectionUp()).toBe(false);
+    expect(editor.commands.moveHeadingSectionDown()).toBe(false);
+    editor.destroy();
+  });
+
+  it('binds Mod-Alt-ArrowUp and Mod-Alt-ArrowDown', () => {
+    const editor = editorOf(THREE);
+    const [, b] = headingSections(editor.state.doc);
+    editor.commands.setTextSelection(b!.pos + 2);
+
+    editor.commands.keyboardShortcut('Mod-Alt-ArrowUp');
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(
+      'Title\n\n## B\n\nbody b\n\n## A\n\nbody a\n\n## C\n\nbody c',
+    );
+    editor.destroy();
+  });
+
+  // Regression for a fault the move-undo snapshot stack introduced: a fold
+  // toggle is a zero-step transaction, which `prosemirror-history` never
+  // records, so a snapshot pushed for it could still be matched by a LATER,
+  // unrelated undo and wrongly roll the fold back. B1's shipped guarantee is
+  // that a fold survives ordinary editing, so this must never regress.
+  it('keeps a fold across an ordinary undo of unrelated typing', () => {
+    const editor = editorOf('Title\n\n## A\n\nbody');
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+    expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
+
+    editor.commands.insertContentAt(a!.contentStart, 'X');
+    expect(serializeMarkdown(editor.getJSON())).toContain('X');
+
+    editor.commands.undo();
+
+    expect(serializeMarkdown(editor.getJSON())).not.toContain('X');
+    expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
+    editor.destroy();
+  });
+});
+
+describe('the section flags', () => {
+  it('reports where the caret is and which moves are available', () => {
+    const editor = new Editor({
+      extensions: editorExtensions,
+      content: parseMarkdown('Title\n\n## A\n\nx\n\n## B\n\ny'),
+    });
+    const [a, b] = headingSections(editor.state.doc);
+
+    editor.commands.setTextSelection(1);
+    expect(editorFlagsSelector({ editor }).section).toBe(false);
+
+    editor.commands.setTextSelection(a!.pos + 2);
+    expect(editorFlagsSelector({ editor })).toMatchObject({
+      section: true,
+      sectionUp: false,
+      sectionDown: true,
+    });
+
+    editor.commands.setTextSelection(b!.pos + 2);
+    expect(editorFlagsSelector({ editor })).toMatchObject({
+      section: true,
+      sectionUp: true,
+      sectionDown: false,
+    });
+    editor.destroy();
+  });
+});
+
+/**
+ * The badge drag, B2's pointer gesture.
+ *
+ * These cover the STATE MACHINE only. jsdom has no layout engine — every
+ * `coordsAtPos` rect the three stubs at the top of this file produce is zero —
+ * so no test here may assert WHICH boundary a drag chose. That belongs to the
+ * Playwright spec, where the geometry is real.
+ *
+ * Built through `buildEditorExtensions({ onOpenMenu })`, NOT
+ * `[...editorExtensions, HeadingFold.configure(…)]`: `editorExtensions`
+ * already registers `HeadingFold`, and a second instance on the same
+ * `PluginKey` throws `RangeError: Adding different instances of a keyed
+ * plugin (headingFold$)` before a single assertion runs (measured
+ * 2026-08-29).
+ *
+ * Events are dispatched for REAL on the badge rather than handed straight to
+ * `handleDOMEvents` like `pointerOn` above does, because the gesture spans
+ * four separate events and one keydown, and the thing most worth proving is
+ * that they reach the plugin the way a browser delivers them.
+ */
+describe('the badge drag gesture', () => {
+  function dragEditor(onOpenMenu: (request: HeadingMenuRequest) => void): Editor {
+    return new Editor({
+      extensions: buildEditorExtensions({ onOpenMenu, foldHint: 'fold' }),
+      content: parseMarkdown('Title\n\n## A\n\nbody a\n\n## B\n\nbody b'),
+    });
+  }
+
+  function badgesOf(editor: Editor): HTMLElement[] {
+    const badges = [...editor.view.dom.querySelectorAll('[data-fold-badge]')] as HTMLElement[];
+    expect(badges).toHaveLength(2);
+    return badges;
+  }
+
+  function pointer(type: string, target: HTMLElement, init: PointerEventInit = {}): void {
+    target.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerType: 'mouse',
+        ...init,
+      }),
+    );
+  }
+
+  it('does NOT open the menu on press — only on release', () => {
+    const onOpenMenu = vi.fn();
+    const editor = dragEditor(onOpenMenu);
+    const [badge] = badgesOf(editor);
+
+    pointer('pointerdown', badge!, { clientX: 10, clientY: 10 });
+    expect(onOpenMenu).not.toHaveBeenCalled();
+
+    pointer('pointerup', badge!, { clientX: 10, clientY: 10 });
+    expect(onOpenMenu).toHaveBeenCalledTimes(1);
+    editor.destroy();
+  });
+
+  it('suppresses the menu once the press has become a drag', () => {
+    const onOpenMenu = vi.fn();
+    const editor = dragEditor(onOpenMenu);
+    const [badge] = badgesOf(editor);
+
+    pointer('pointerdown', badge!, { clientX: 10, clientY: 10 });
+    pointer('pointermove', badge!, { clientX: 10, clientY: 60 });
+    pointer('pointerup', badge!, { clientX: 10, clientY: 60 });
+
+    expect(onOpenMenu).not.toHaveBeenCalled();
+    editor.destroy();
+  });
+
+  // A move SHORTER than `DRAG_THRESHOLD` (4px) is the hand tremor in an
+  // ordinary click, not a drag — without this the first test above passes for
+  // a threshold of zero, which would make every click a one-pixel drag.
+  it('treats a press that barely moves as a click, not a drag', () => {
+    const onOpenMenu = vi.fn();
+    const editor = dragEditor(onOpenMenu);
+    const [badge] = badgesOf(editor);
+
+    pointer('pointerdown', badge!, { clientX: 10, clientY: 10 });
+    pointer('pointermove', badge!, { clientX: 11, clientY: 12 });
+    pointer('pointerup', badge!, { clientX: 11, clientY: 12 });
+
+    expect(onOpenMenu).toHaveBeenCalledTimes(1);
+    editor.destroy();
+  });
+
+  it('never drags for a touch pointer, and still opens the menu', () => {
+    const onOpenMenu = vi.fn();
+    const editor = dragEditor(onOpenMenu);
+    const [badge] = badgesOf(editor);
+
+    pointer('pointerdown', badge!, { clientX: 10, clientY: 10, pointerType: 'touch' });
+    pointer('pointermove', badge!, { clientX: 10, clientY: 60, pointerType: 'touch' });
+    pointer('pointerup', badge!, { clientX: 10, clientY: 60, pointerType: 'touch' });
+
+    // The move never started, so the release is still a tap.
+    expect(onOpenMenu).toHaveBeenCalledTimes(1);
+    editor.destroy();
+  });
+
+  it('shows a drop indicator while dragging and removes it on release', () => {
+    const editor = dragEditor(vi.fn());
+    const [badge] = badgesOf(editor);
+    const indicators = (): number => editor.view.dom.querySelectorAll('.bear-section-drop').length;
+    const dimmed = (): number => editor.view.dom.querySelectorAll('.bear-section-dragging').length;
+
+    expect(indicators()).toBe(0);
+
+    pointer('pointerdown', badge!, { clientX: 10, clientY: 10 });
+    expect(indicators()).toBe(0);
+
+    pointer('pointermove', badge!, { clientX: 10, clientY: 60 });
+    expect(indicators()).toBe(1);
+    // The carried section is dimmed: its heading and its one body paragraph.
+    expect(dimmed()).toBe(2);
+
+    pointer('pointerup', badge!, { clientX: 10, clientY: 60 });
+    expect(indicators()).toBe(0);
+    expect(dimmed()).toBe(0);
+    editor.destroy();
+  });
+
+  // The SECOND badge, deliberately. With jsdom's all-zero geometry every
+  // boundary measures at y = 0 and the nearest is simply the first one, so
+  // dragging the FIRST section is a no-op move (a section cannot be dropped at
+  // its own start) and this test would pass without Escape doing anything at
+  // all. The control below is what proves it does not.
+  it('leaves the document untouched when Escape aborts a drag', () => {
+    const onOpenMenu = vi.fn();
+    const editor = dragEditor(onOpenMenu);
+    const [, badge] = badgesOf(editor);
+    const before = serializeMarkdown(editor.getJSON());
+
+    pointer('pointerdown', badge!, { clientX: 10, clientY: 60 });
+    pointer('pointermove', badge!, { clientX: 10, clientY: 10 });
+    editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(editor.view.dom.querySelectorAll('.bear-section-drop')).toHaveLength(0);
+
+    pointer('pointerup', badge!, { clientX: 10, clientY: 10 });
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(before);
+    // The aborted press is gone entirely, not merely un-dragged: its release
+    // must not fall back to opening the menu either.
+    expect(onOpenMenu).not.toHaveBeenCalled();
+    editor.destroy();
+  });
+
+  // The control for the test above: the identical gesture WITHOUT Escape does
+  // change the document. Deliberately asserts only THAT it changed, never
+  // which boundary jsdom's zero geometry picked — that is Playwright's job.
+  it('does move the document when the same drag is released normally', () => {
+    const editor = dragEditor(vi.fn());
+    const [, badge] = badgesOf(editor);
+    const before = serializeMarkdown(editor.getJSON());
+
+    pointer('pointerdown', badge!, { clientX: 10, clientY: 60 });
+    pointer('pointermove', badge!, { clientX: 10, clientY: 10 });
+    pointer('pointerup', badge!, { clientX: 10, clientY: 10 });
+
+    expect(serializeMarkdown(editor.getJSON())).not.toBe(before);
+    editor.destroy();
+  });
+
+  it('aborts on pointercancel exactly as Escape does', () => {
+    const onOpenMenu = vi.fn();
+    const editor = dragEditor(onOpenMenu);
+    const [, badge] = badgesOf(editor);
+    const before = serializeMarkdown(editor.getJSON());
+
+    pointer('pointerdown', badge!, { clientX: 10, clientY: 60 });
+    pointer('pointermove', badge!, { clientX: 10, clientY: 10 });
+    pointer('pointercancel', badge!, { clientX: 10, clientY: 10 });
+    pointer('pointerup', badge!, { clientX: 10, clientY: 10 });
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(before);
+    expect(onOpenMenu).not.toHaveBeenCalled();
+    editor.destroy();
+  });
+
+  // Escape has other jobs in this editor (closing the heading menu, the
+  // code-language list). Consuming it when no drag is live would break them,
+  // and nothing else in the suite would notice.
+  it('does not consume Escape when no drag is running', () => {
+    const editor = dragEditor(vi.fn());
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    const handled = editor.view.someProp('handleKeyDown', (handler) =>
+      handler(editor.view, event as never),
+    );
+
+    expect(handled).toBeFalsy();
+    editor.destroy();
+  });
+
+  it('is not started by the fold toggle, which still folds on press', () => {
+    const onOpenMenu = vi.fn();
+    const editor = dragEditor(onOpenMenu);
+    const toggle = editor.view.dom.querySelector('[data-fold-toggle]') as HTMLElement;
+
+    pointer('pointerdown', toggle, { clientX: 10, clientY: 10 });
+
+    // The toggle still folds on PRESS, unchanged by B2.
+    expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
+
+    // And a move afterwards starts nothing: no indicator, no menu on release.
+    pointer('pointermove', toggle, { clientX: 10, clientY: 60 });
+    expect(editor.view.dom.querySelectorAll('.bear-section-drop')).toHaveLength(0);
+    pointer('pointerup', toggle, { clientX: 10, clientY: 60 });
+    expect(onOpenMenu).not.toHaveBeenCalled();
+    editor.destroy();
+  });
+
+  // A document change under a live drag abandons it. Reachable in the real UI:
+  // the badge press does not move focus, so a keystroke with the button held
+  // lands in the document. The failure mode if the drag survived is a MISPLACED
+  // DROP: `boundaries` are measured once and name positions in a document that
+  // no longer exists, so the release moves the section somewhere the user never
+  // pointed at. It is NOT a crash — the earlier claim that a stale `dropAt`
+  // past `doc.content.size` makes `DecorationSet.create` throw a `RangeError`
+  // was tested and is false (`prosemirror-view`'s `domFromPos` clamps backward
+  // for `side <= 0`); see the long comment in `HeadingFold.ts`'s `apply`.
+  //
+  // The abandon has to be STICKY, which is what the `pointermove` in the
+  // middle of this test covers: `apply` cannot clear the handler closure's
+  // `press`, so a gesture that simply CONTINUES after the edit would otherwise
+  // re-arm the stale drag and commit the misplaced drop on release.
+  it('abandons a live drag when the document changes under it', () => {
+    const onOpenMenu = vi.fn();
+    const editor = dragEditor(onOpenMenu);
+    const [, badge] = badgesOf(editor);
+
+    pointer('pointerdown', badge!, { clientX: 10, clientY: 60 });
+    pointer('pointermove', badge!, { clientX: 10, clientY: 10 });
+    expect(editor.view.dom.querySelectorAll('.bear-section-drop')).toHaveLength(1);
+
+    // A document-changing transaction, exactly as a keystroke would produce.
+    // Deliberately a DELETION, so the document also shrinks and every measured
+    // boundary past the cut names a position that has moved.
+    editor.commands.deleteRange({ from: 1, to: 4 });
+    const after = serializeMarkdown(editor.getJSON());
+
+    expect(editor.view.dom.querySelectorAll('.bear-section-drop')).toHaveLength(0);
+    expect(editor.view.dom.querySelectorAll('.bear-section-dragging')).toHaveLength(0);
+
+    // The gesture CONTINUES: the user's hand has not stopped moving just
+    // because a keystroke landed. This must not re-arm the drag.
+    pointer('pointermove', badge!, { clientX: 10, clientY: 20 });
+    expect(editor.view.dom.querySelectorAll('.bear-section-drop')).toHaveLength(0);
+    expect(editor.view.dom.querySelectorAll('.bear-section-dragging')).toHaveLength(0);
+
+    pointer('pointerup', badge!, { clientX: 10, clientY: 20 });
+
+    // The release moves nothing and opens nothing: the press is over.
+    expect(serializeMarkdown(editor.getJSON())).toBe(after);
+    expect(onOpenMenu).not.toHaveBeenCalled();
+    editor.destroy();
+  });
+
+  // The undo stack Task 2 fixed must not see a drag at all: a drag changes no
+  // document and no fold set, so a snapshot pushed for one would be matched by
+  // a later, unrelated undo and roll the folds back to the wrong place.
+  it('keeps a fold across an undo after a drag has run', () => {
+    const editor = dragEditor(vi.fn());
+    const [, badge] = badgesOf(editor);
+    const [a] = headingSections(editor.state.doc);
+    editor.commands.toggleHeadingFold(a!.pos);
+    expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
+
+    pointer('pointerdown', badge!, { clientX: 10, clientY: 60 });
+    pointer('pointermove', badge!, { clientX: 10, clientY: 10 });
+    pointer('pointercancel', badge!, { clientX: 10, clientY: 10 });
+
+    editor.commands.insertContentAt(1, 'X');
+    expect(serializeMarkdown(editor.getJSON())).toContain('X');
+    editor.commands.undo();
+
+    expect(serializeMarkdown(editor.getJSON())).not.toContain('X');
+    expect(foldedKeys(editor.state)).toEqual(['2:0:A']);
     editor.destroy();
   });
 });

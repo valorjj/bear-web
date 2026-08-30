@@ -47,7 +47,7 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | B collapsible headings + level badge                              | complete |
 | E editor affordances (heading icon, highlight colours, table bar) | complete |
 | F theme system: derivation, 16 themes, card picker                | complete |
-| B2 drag-to-reorder headings                                       | queued   |
+| B2 drag-to-reorder headings                                       | complete |
 | D1 server: hosting, accounts, Google login                        | complete |
 | D2 server: the sync protocol                                      | complete |
 | C code block language + highlighting                              | complete |
@@ -63,9 +63,9 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | G export: PDF, rendered server-side                               | complete |
 | M9b callout blocks                                                | complete |
 
-2152 unit tests (plus 127 server tests, 55 of which are integration tests that
+2143 unit tests (plus 127 server tests, 76 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 173 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 181 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**

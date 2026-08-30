@@ -41,6 +41,20 @@ Range.prototype.getClientRects = () =>
   }) as unknown as DOMRectList;
 document.elementFromPoint = () => null;
 
+/**
+ * Opens a heading's level menu by pressing AND RELEASING its badge.
+ *
+ * A bare `mouseDown` no longer does it. B2 turned the badge into a pointer
+ * gesture: the menu opens on RELEASE, because a press that travels far enough
+ * becomes a drag that moves the whole section instead (see `HeadingFold.ts`'s
+ * `handleDOMEvents`). The two events must carry the same `pointerId`, which is
+ * how the plugin recognises the release as belonging to its own press.
+ */
+function pressBadge(badge: Element): void {
+  fireEvent.pointerDown(badge, { button: 0, pointerId: 1, pointerType: 'mouse' });
+  fireEvent.pointerUp(badge, { button: 0, pointerId: 1, pointerType: 'mouse' });
+}
+
 describe('RichEditor', () => {
   it('does not take focus by default', async () => {
     // Selecting an existing row must not steal focus from whatever the user
@@ -201,7 +215,7 @@ describe('RichEditor', () => {
 
     const badges = editor.view.dom.querySelectorAll('[data-fold-badge]');
     expect(badges).toHaveLength(2);
-    fireEvent.mouseDown(badges[1]!, { button: 0 });
+    pressBadge(badges[1]!);
 
     const menu = await screen.findByRole('menu');
     await userEvent.click(within(menu).getByRole('menuitemradio', { name: /Heading 4/ }));
@@ -241,7 +255,7 @@ describe('RichEditor', () => {
     await screen.findByRole('heading', { name: 'Heading A' });
     const editor = handleRef.current!.editor!;
     const badge = editor.view.dom.querySelector('[data-fold-badge]')!;
-    fireEvent.mouseDown(badge, { button: 0 });
+    pressBadge(badge);
 
     const menu = await screen.findByRole('menu');
     return { editor, menu };

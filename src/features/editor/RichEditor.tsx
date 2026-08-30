@@ -490,6 +490,12 @@ export function RichEditor({
       case 'blockquote':
         chain.toggleBlockquote().run();
         break;
+      case 'moveSectionUp':
+        chain.moveHeadingSectionUp().run();
+        break;
+      case 'moveSectionDown':
+        chain.moveHeadingSectionDown().run();
+        break;
     }
   }
 

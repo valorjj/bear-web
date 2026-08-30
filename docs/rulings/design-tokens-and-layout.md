@@ -18,7 +18,9 @@ the `#boot` removal in `src/main.tsx`, `src/ui/Pane.tsx`,
 `src/features/notes/SearchField.tsx`, `<main>`'s class list in
 `src/app/AppShell.tsx`; the `.bear-fold-toggle` / `.bear-fold-badge` /
 `.bear-fold-marker` / `.bear-fold-hidden` rules in `src/styles/editor.css` and
-`EditorContent`'s own class list in `src/features/editor/RichEditor.tsx`; a
+`EditorContent`'s own class list in `src/features/editor/RichEditor.tsx`; the
+`.bear-section-drop` / `.bear-section-dragging` rules in `src/styles/editor.css`
+and `measureBoundaries` in `src/features/editor/HeadingFold.ts`; a
 new `--bear-*` custom property or a new `[data-theme='…']` block; any Tailwind
 spacing, `rounded-*`, `shadow-*` or `outline-none` utility; a plain CSS
 `outline: none` under any `:focus`/`:focus-visible` selector; the six
@@ -1040,6 +1042,21 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   stands in for replaces it within a frame of being able to. There is no
   translated string to give it — it exists before React and therefore before
   `useT`.
+
+## The section drop indicator (B2)
+
+- **The indicator is a RULE across the measure, never a gap that opens up.**
+  `.bear-section-drop` in `src/styles/editor.css` is a 2px bar, not a spacer
+  that grows the document to make room for it. A gap-that-opens would reflow
+  the note under a live drag, and that reflow would move the very drop
+  boundaries the pointer is being compared against — `measureBoundaries` in
+  `HeadingFold.ts` measures every boundary's position ONCE, at drag start, in
+  the scroller's document coordinates, and never re-measures mid-drag. An
+  indicator that changed layout would therefore invalidate its own
+  measurement on every frame it was visible. This is the same reason a
+  document change mid-drag abandons the drag outright rather than trying to
+  map `dropAt` forward — see `HeadingFold.ts`'s `apply`, the `tr.docChanged &&
+  value.dragFrom !== null` branch.
 
 ## Callout colour and icons (M9b)
 
