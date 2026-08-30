@@ -91,6 +91,7 @@ describe('fold state and the backup bundle', () => {
     const bundle = await exportDatabase(db);
     await importDatabase(db, JSON.parse(JSON.stringify(bundle)), {
       rebuildTagIndex: vi.fn(async () => 0),
+      rebuildLinkIndex: vi.fn(async () => 0),
     });
 
     expect(await folds.get(note.id)).toEqual([]);
