@@ -39,7 +39,7 @@ describe('the folds repository', () => {
 
   it('purging a note clears its folds, so the table cannot outlive its notes', async () => {
     const folds = createFoldsRepository(db);
-    const notes = createNotesRepository({ db, parseTags: () => [] });
+    const notes = createNotesRepository({ db, parseTags: () => [], parseLinks: () => [] });
 
     const note = await notes.create('# A');
     await folds.set(note.id, ['1:0:A']);
@@ -50,7 +50,7 @@ describe('the folds repository', () => {
 
   it('emptying the trash clears folds for every note it purges', async () => {
     const folds = createFoldsRepository(db);
-    const notes = createNotesRepository({ db, parseTags: () => [] });
+    const notes = createNotesRepository({ db, parseTags: () => [], parseLinks: () => [] });
 
     const note = await notes.create('# A');
     await folds.set(note.id, ['1:0:A']);
@@ -64,7 +64,7 @@ describe('the folds repository', () => {
 describe('fold state and the backup bundle', () => {
   it('is absent from an exported bundle, because it is view state', async () => {
     const folds = createFoldsRepository(db);
-    const notes = createNotesRepository({ db, parseTags: () => [] });
+    const notes = createNotesRepository({ db, parseTags: () => [], parseLinks: () => [] });
     const note = await notes.create('# A');
     await folds.set(note.id, ['1:0:A']);
 
@@ -82,7 +82,7 @@ describe('fold state and the backup bundle', () => {
   // end up empty.
   it('clears existing fold rows on import, even though the bundle never carries them', async () => {
     const folds = createFoldsRepository(db);
-    const notes = createNotesRepository({ db, parseTags: () => [] });
+    const notes = createNotesRepository({ db, parseTags: () => [], parseLinks: () => [] });
     const note = await notes.create('# A');
     await folds.set(note.id, ['1:0:A']);
 

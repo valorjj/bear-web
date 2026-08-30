@@ -7,6 +7,7 @@ import {
   LAST_PULLED_REV_KEY,
   markAllDirty,
   notes,
+  parseLinks,
   parseTags,
   SYNCED_ACCOUNT_KEY,
   SyncQuotaError,
@@ -68,7 +69,10 @@ export function useSync(state: SessionState): SyncController {
 
   const accountId = state.status === 'signedIn' ? state.account.userId : null;
 
-  const engine = useMemo(() => createEngine({ db, transport: createTransport(), parseTags }), []);
+  const engine = useMemo(
+    () => createEngine({ db, transport: createTransport(), parseTags, parseLinks }),
+    [],
+  );
 
   // Two concurrent `syncOnce` calls both read the cursor before either
   // writes it, and the second push carries stale `baseRev`s for rows the

@@ -4,6 +4,7 @@ import type {
   FileRecord,
   Note,
   NoteFolds,
+  NoteLink,
   NoteTag,
   SettingRecord,
   SyncKind,
@@ -30,6 +31,12 @@ export class BearDatabase extends Dexie {
    * `EntityTable` would be wrong here.
    */
   syncState!: Table<SyncState, [SyncKind, string]>;
+  /**
+   * Compound primary key `[noteId+toTitle]`, same shape as `noteTags` and for
+   * the same reason: both directions of the join (a note's own links, and who
+   * links to a title) are single-index queries.
+   */
+  noteLinks!: Table<NoteLink, [string, string]>;
 
   constructor(name: string) {
     super(name);
@@ -82,6 +89,17 @@ export class BearDatabase extends Dexie {
     // 40, and `e2e/fixtures/seed.ts` MUST move with it in the same commit.
     this.version(4).stores({
       files: 'id, noteId',
+    });
+
+    // Version 5 adds the L2 backlinks index. Same compound-key shape as
+    // `noteTags`, and for the same reason: both directions of the join (a
+    // note's own outgoing links, and who links to a title) are single-index
+    // queries.
+    //
+    // Dexie multiplies declared versions by ten, so this is IndexedDB version
+    // 50, and `e2e/fixtures/seed.ts` MUST move with it in the same commit.
+    this.version(5).stores({
+      noteLinks: '[noteId+toTitle], noteId, toTitle',
     });
   }
 }

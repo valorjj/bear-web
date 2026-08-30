@@ -37,6 +37,7 @@ describe('tag parser seam', () => {
     const notes = createNotesRepository({
       db,
       parseTags: (text) => (text.includes('urgent') ? ['urgent'] : []),
+      parseLinks: () => [],
     });
 
     const note = await notes.create('this is urgent');

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
+import { parseLinks } from '../links';
 import { markAllDirty, markDeleted } from './markDirty';
 import { parseTags } from '../tags';
 import { SyncQuotaError } from './transport';
@@ -83,7 +84,7 @@ describe('sync engine', () => {
   });
 
   function engine(now = () => 1000, generateId = () => 'generated') {
-    return createEngine({ db, transport, parseTags, now, generateId });
+    return createEngine({ db, transport, parseTags, parseLinks, now, generateId });
   }
 
   it('writes a pulled note into IndexedDB with a derived title', async () => {
@@ -853,7 +854,14 @@ describe('image upload', () => {
   });
 
   function engine() {
-    return createEngine({ db, transport, parseTags, now: () => 1000, generateId: () => 'gen' });
+    return createEngine({
+      db,
+      transport,
+      parseTags,
+      parseLinks,
+      now: () => 1000,
+      generateId: () => 'gen',
+    });
   }
 
   async function addImage(id: string, noteId = 'n1'): Promise<void> {

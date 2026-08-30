@@ -6,6 +6,7 @@ import {
   openDatabase,
   persistStorage,
   runStartupFileSweep,
+  runStartupLinkMigrations,
   runStartupMigrations,
   runStartupSweep,
 } from '@/data';
@@ -25,6 +26,7 @@ void openDatabase().then((status) => {
   // what a rebuild sees mid-purge. Still unawaited as a pair, so neither
   // blocks first paint.
   void runStartupMigrations()
+    .then(() => runStartupLinkMigrations())
     .then(() => runStartupSweep(BOOT_AT))
     // Sequenced AFTER the blank-note sweep, not alongside it: that sweep
     // purges notes, and purging already reclaims their files, so running both

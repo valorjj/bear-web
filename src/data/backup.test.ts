@@ -342,7 +342,7 @@ describe('import rebuilds the derived tag index', () => {
   });
 
   it('rebuilds from the real repository, proving the notes are inserted before the rebuild runs', async () => {
-    const targetNotes = createNotesRepository({ db: target, parseTags });
+    const targetNotes = createNotesRepository({ db: target, parseTags, parseLinks: () => [] });
 
     const bundle = {
       format: BACKUP_FORMAT,
