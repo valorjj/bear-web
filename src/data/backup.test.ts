@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, exportDatabase, importDatabase } from './backup';
 import type { BearDatabase } from './db';
+import { parseLinks } from './links';
 import { createNotesRepository } from './repositories/notes';
 import { parseTags } from './tags';
 import { LAST_PULLED_REV_KEY, SYNCED_ACCOUNT_KEY } from './sync/engine';
 import { createTestDatabase } from './testing';
 
-const noRebuild = { rebuildTagIndex: vi.fn(async () => 0) };
+const noRebuild = {
+  rebuildTagIndex: vi.fn(async () => 0),
+  rebuildLinkIndex: vi.fn(async () => 0),
+};
 
 // `noRebuild` is declared once at module scope and shared across every test in
 // this file. Call-count assertions against it are inert today (nothing here
@@ -17,6 +21,7 @@ const noRebuild = { rebuildTagIndex: vi.fn(async () => 0) };
 // assertion added against it.
 beforeEach(() => {
   noRebuild.rebuildTagIndex.mockClear();
+  noRebuild.rebuildLinkIndex.mockClear();
 });
 
 async function seed(db: BearDatabase): Promise<void> {
@@ -122,7 +127,14 @@ describe('importDatabase', () => {
 
     // noteTags now reports the rebuilt row count, not the bundle's; noRebuild
     // is a no-op fake, so it is 0 here regardless of the seeded bundle.
-    expect(result).toEqual({ notes: 1, noteTags: 0, tags: 1, files: 1, settings: 1 });
+    expect(result).toEqual({
+      notes: 1,
+      noteTags: 0,
+      noteLinks: 0,
+      tags: 1,
+      files: 1,
+      settings: 1,
+    });
 
     const note = await target.notes.get('n1');
     expect(note?.text).toBe('# Groceries\n\n- [ ] milk #food');
@@ -304,8 +316,9 @@ describe('import rebuilds the derived tag index', () => {
       await target.noteTags.bulkPut([{ noteId: 'n1', tag: 'work' }]);
       return 1;
     });
+    const rebuildLinkIndex = vi.fn(async () => 0);
 
-    const result = await importDatabase(target, bundle, { rebuildTagIndex });
+    const result = await importDatabase(target, bundle, { rebuildTagIndex, rebuildLinkIndex });
 
     expect(rebuildTagIndex).toHaveBeenCalledTimes(1);
     expect(result.noteTags).toBe(1);
@@ -335,14 +348,18 @@ describe('import rebuilds the derived tag index', () => {
     };
 
     const rebuildTagIndex = vi.fn(async () => 0);
+    const rebuildLinkIndex = vi.fn(async () => 0);
 
-    await expect(importDatabase(target, bundle, { rebuildTagIndex })).rejects.toThrow(/noteTags/);
+    await expect(
+      importDatabase(target, bundle, { rebuildTagIndex, rebuildLinkIndex }),
+    ).rejects.toThrow(/noteTags/);
     expect(rebuildTagIndex).not.toHaveBeenCalled();
+    expect(rebuildLinkIndex).not.toHaveBeenCalled();
     expect(await target.notes.count()).toBe(1);
   });
 
   it('rebuilds from the real repository, proving the notes are inserted before the rebuild runs', async () => {
-    const targetNotes = createNotesRepository({ db: target, parseTags });
+    const targetNotes = createNotesRepository({ db: target, parseTags, parseLinks: () => [] });
 
     const bundle = {
       format: BACKUP_FORMAT,
@@ -370,9 +387,70 @@ describe('import rebuilds the derived tag index', () => {
 
     const result = await importDatabase(target, bundle, {
       rebuildTagIndex: () => targetNotes.rebuildTagIndex(),
+      rebuildLinkIndex: () => targetNotes.rebuildLinkIndex(),
     });
 
     expect(result.noteTags).toBe(1);
     expect(await target.noteTags.toArray()).toEqual([{ noteId: 'n1', tag: 'work' }]);
   });
+});
+
+describe('import rebuilds the derived link index', () => {
+  let target: BearDatabase;
+
+  beforeEach(async () => {
+    target = createTestDatabase();
+    await target.open();
+  });
+
+  it(
+    'drops a stale noteLinks row for a note the bundle no longer has, and ' +
+      'indexes a link from a note the bundle DOES have',
+    async () => {
+      // A row surviving from whatever database `target` held before this
+      // restore, keyed by a note id the imported bundle knows nothing about.
+      // A restore that forgets to rebuild `noteLinks` leaves this exact row
+      // behind: backlinks would then point at a note that no longer exists,
+      // and miss the real link the import just brought in.
+      await target.noteLinks.add({ noteId: 'stale-note', toTitle: 'ghost' });
+
+      const targetNotes = createNotesRepository({ db: target, parseTags, parseLinks });
+
+      const bundle = {
+        format: BACKUP_FORMAT,
+        schemaVersion: BACKUP_SCHEMA_VERSION,
+        exportedAt: 0,
+        notes: [
+          {
+            id: 'n1',
+            title: '',
+            text: 'One\n\nlinks to [[Other]]',
+            createdAt: 1,
+            updatedAt: 1,
+            pinned: false,
+            trashedAt: null,
+            archivedAt: null,
+          },
+        ],
+        noteTags: [],
+        tags: [],
+        files: [],
+        settings: [],
+      };
+
+      const result = await importDatabase(target, bundle, {
+        rebuildTagIndex: () => targetNotes.rebuildTagIndex(),
+        rebuildLinkIndex: () => targetNotes.rebuildLinkIndex(),
+      });
+
+      const rows = await target.noteLinks.toArray();
+
+      // Both assertions, by value: a restore that rebuilt nothing but left
+      // the stale row alone would pass a "some rows exist" check just as
+      // easily as a correct one.
+      expect(rows).not.toContainEqual(expect.objectContaining({ noteId: 'stale-note' }));
+      expect(rows).toContainEqual({ noteId: 'n1', toTitle: 'other' });
+      expect(result.noteLinks).toBe(1);
+    },
+  );
 });

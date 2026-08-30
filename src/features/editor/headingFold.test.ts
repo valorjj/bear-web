@@ -1,4 +1,5 @@
 import { Editor, getSchema } from '@tiptap/core';
+import { skipTrailingNodeMeta } from '@tiptap/extensions';
 import type { DecorationSet } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import { describe, expect, it, vi } from 'vitest';
@@ -1166,6 +1167,115 @@ describe('the section flags', () => {
       sectionUp: true,
       sectionDown: false,
     });
+    editor.destroy();
+  });
+});
+
+/**
+ * StarterKit's `TrailingNode` appends an empty paragraph whenever the document
+ * does not end in a typeable node — and its `appendTransaction` is NOT gated on
+ * `docChanged`, so a transaction whose only content is `tr.setMeta` still trips
+ * it. Every fold change is exactly such a transaction, and `NoteEditor` fires
+ * `setHeadingFolds` from a mount effect once persisted folds resolve, so merely
+ * OPENING a note that ends in a list used to grow it a blank paragraph that
+ * autosave then wrote back. See `docs/rulings/markdown-and-schema.md`.
+ *
+ * The trap these tests are shaped around: `TrailingNode`'s vulnerability flag
+ * is computed at plugin `init` and only recomputed when `tr.docChanged`, so the
+ * FIRST untagged transaction consumes it — including one used only to build the
+ * fixture. Every test below therefore reaches the dispatch under test using
+ * nothing but tagged transactions, the same discipline `linkAutocomplete.test.ts`
+ * spells out as `quietlySelect`. Falsified by deleting the tag from `setKeys`:
+ * all three fold cases fail with an extra `paragraph` in the document.
+ */
+describe('a fold change does not mutate a note ending in a list', () => {
+  const LIST_ENDING = 'Title\n\n## A\n\nbody a\n\n## B\n\n- one\n- two';
+
+  function listEndingEditor(): Editor {
+    // `onOpenMenu` must be non-null or the badge gesture is never consumed at
+    // all — see the `badge drag gesture` docblock below — and the drag case
+    // would then dispatch no `setDrag` to test.
+    return new Editor({
+      extensions: buildEditorExtensions({ onOpenMenu: vi.fn(), foldHint: 'fold' }),
+      content: parseMarkdown(LIST_ENDING),
+    });
+  }
+
+  it('leaves the document byte-identical when setHeadingFolds fires on mount', () => {
+    const editor = listEndingEditor();
+    // The very first transaction this editor ever sees, exactly as
+    // `NoteEditor`'s mount effect dispatches it.
+    const before = editor.getJSON();
+
+    const first = headingSections(editor.state.doc)[0]!;
+    editor.commands.setHeadingFolds([serializeFoldKey(foldKeyOf(first))]);
+
+    expect(editor.getJSON()).toEqual(before);
+    expect(foldedKeys(editor.state)).toHaveLength(1);
+    editor.destroy();
+  });
+
+  it('leaves it byte-identical when the fold change is not the first transaction', () => {
+    const editor = listEndingEditor();
+    // A raw, EXPLICITLY tagged no-op, not `setHeadingFolds`: routing the setup
+    // through the code under test would make this test pass with the fix
+    // removed, since a single untagged fold change burns the vulnerability for
+    // good and the second one then has nothing left to trip. Measured: written
+    // that way, this case survived the fault injection while the other two
+    // failed.
+    editor.view.dispatch(editor.state.tr.setMeta(skipTrailingNodeMeta, true));
+    const before = editor.getJSON();
+
+    const section = headingSections(editor.state.doc)[0]!;
+    expect(editor.commands.toggleHeadingFold(section.pos)).toBe(true);
+
+    expect(editor.getJSON()).toEqual(before);
+    expect(foldedKeys(editor.state)).toHaveLength(1);
+    editor.destroy();
+  });
+
+  it('leaves it byte-identical across foldAll and unfoldAll', () => {
+    const editor = listEndingEditor();
+    const before = editor.getJSON();
+
+    editor.commands.foldAllHeadings();
+    expect(editor.getJSON()).toEqual(before);
+
+    editor.commands.unfoldAllHeadings();
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it('leaves it byte-identical while a badge drag is running and when it aborts', () => {
+    const editor = listEndingEditor();
+    const before = editor.getJSON();
+    const badge = editor.view.dom.querySelector('[data-fold-badge]') as HTMLElement;
+    expect(badge).not.toBeNull();
+
+    const pointer = (type: string, init: PointerEventInit): void => {
+      badge.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          pointerType: 'mouse',
+          ...init,
+        }),
+      );
+    };
+
+    // `setDrag`, the other meta-only builder in this file. The drop-indicator
+    // decoration is asserted first so a gesture that silently failed to start
+    // cannot leave this test passing vacuously.
+    pointer('pointerdown', { clientX: 10, clientY: 10 });
+    pointer('pointermove', { clientX: 10, clientY: 60 });
+    expect(editor.view.dom.querySelectorAll('.bear-section-drop')).toHaveLength(1);
+    expect(editor.getJSON()).toEqual(before);
+
+    editor.view.dom.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+    expect(editor.getJSON()).toEqual(before);
     editor.destroy();
   });
 });

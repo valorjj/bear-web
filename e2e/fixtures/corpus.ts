@@ -115,6 +115,10 @@ const TODO_NOTE = `Sprint checklist
 - [x] Freeze the clock in the shots spec
 - [ ] Floating toolbar pill group #work/urgent
 - [ ] Density pass across all three panes #work/later
+
+See [[Seeding IndexedDB before the app boots]] for how the fixture's own seed
+works — L2's own shot: a real backlink between two corpus notes, so
+\`e2e/backlinks.spec.ts\` has a linking pair to exercise without inventing one.
 `;
 
 const LONG_TITLE_NOTE = `A deliberately long note title that has to truncate somewhere in the middle of the note list row rather than wrap onto a second line
@@ -133,6 +137,7 @@ await page.addInitScript(({ notes }) => {
   const request = indexedDB.open('bear-web', 1);
   request.onupgradeneeded = () => {
     /* create stores, then put(notes) */
+    // Not a real link: [[Sprint checklist]] inside a fence is inert.
   };
 }, corpus);
 \`\`\`

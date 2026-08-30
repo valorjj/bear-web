@@ -47,6 +47,8 @@ export const en = {
   'note.copyText': 'Copy text',
   'note.copyText.failed': 'This note could not be copied.',
 
+  'backlinks.title': 'Linked from',
+
   'sidebar.open': 'Show tags',
   'sidebar.drawer': 'Tags and lists',
   'nav.backToList': 'Back to notes',
@@ -188,6 +190,11 @@ export const en = {
   'editor.link.prompt': 'Link address',
   'editor.tagPill.hint.mac': 'Cmd-click to filter by this tag',
   'editor.tagPill.hint.other': 'Ctrl-click to filter by this tag',
+  'editor.linkPill.hint.mac': 'Cmd-click to open this note',
+  'editor.linkPill.hint.other': 'Ctrl-click to open this note',
+
+  'editor.linkAutocomplete.listLabel': 'Link to note',
+  'editor.linkAutocomplete.empty': 'No matching note',
 
   'theme.indigoLight': 'Indigo Light',
   'theme.indigoDark': 'Indigo Dark',

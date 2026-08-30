@@ -49,6 +49,8 @@ export const ko: Record<TranslationKey, string> = {
   'note.copyText': '텍스트 복사',
   'note.copyText.failed': '메모를 복사하지 못했습니다.',
 
+  'backlinks.title': '여기로 연결된 메모',
+
   'sidebar.open': '태그 보기',
   'sidebar.drawer': '태그 및 목록',
   'nav.backToList': '메모 목록으로',
@@ -183,6 +185,11 @@ export const ko: Record<TranslationKey, string> = {
   'editor.link.prompt': '링크 주소',
   'editor.tagPill.hint.mac': 'Cmd-클릭하면 이 태그로 필터링됩니다',
   'editor.tagPill.hint.other': 'Ctrl-클릭하면 이 태그로 필터링됩니다',
+  'editor.linkPill.hint.mac': 'Cmd-클릭하면 이 노트가 열립니다',
+  'editor.linkPill.hint.other': 'Ctrl-클릭하면 이 노트가 열립니다',
+
+  'editor.linkAutocomplete.listLabel': '노트 링크',
+  'editor.linkAutocomplete.empty': '일치하는 노트가 없습니다',
 
   'theme.indigoLight': 'Indigo Light',
   'theme.indigoDark': 'Indigo Dark',

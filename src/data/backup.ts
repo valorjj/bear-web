@@ -10,6 +10,7 @@ export const BACKUP_SCHEMA_VERSION = 1;
 export interface ImportResult {
   notes: number;
   noteTags: number;
+  noteLinks: number;
   tags: number;
   files: number;
   settings: number;
@@ -21,6 +22,14 @@ export interface ImportDeps {
    * `backup.ts` has no tag parser and must not acquire one.
    */
   rebuildTagIndex: () => Promise<number>;
+  /**
+   * Rebuilds the derived link index from note text, for the same reason and
+   * in the same way as `rebuildTagIndex`: `noteLinks` is derived data too,
+   * and every derived table added here needs its own rebuild call in the
+   * import transaction below — trusting a file's copy of ANY derived table is
+   * exactly what once made a restore's tag index come back empty.
+   */
+  rebuildLinkIndex: () => Promise<number>;
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -146,6 +155,7 @@ export async function importDatabase(
   const notes = bundle.notes.map((n) => ({ ...n, title: deriveTitle(n.text) }));
 
   let rebuiltRows = 0;
+  let rebuiltLinkRows = 0;
 
   // Belt and braces against `exportDatabase`'s filter above: bundles written
   // before that filter existed are already in the wild, and one of them
@@ -166,16 +176,26 @@ export async function importDatabase(
   // the import as orphans, and worse, a note id that happens to match one
   // (the common case: a user re-importing their own backup) reopens with a
   // section folded that was never folded in the restored database.
-  // The array form of `transaction`, not the up-to-five-tables overload: six
-  // tables (five original plus `noteFolds`) exceed Dexie's fixed-arity
-  // overloads, which stop at five.
+  // The array form of `transaction`, not the up-to-five-tables overload:
+  // eight tables (five original plus `noteFolds`, then `noteLinks`) exceed
+  // Dexie's fixed-arity overloads, which stop at five.
   await db.transaction(
     'rw',
-    [db.notes, db.noteTags, db.tags, db.files, db.settings, db.noteFolds, db.syncState],
+    [
+      db.notes,
+      db.noteTags,
+      db.noteLinks,
+      db.tags,
+      db.files,
+      db.settings,
+      db.noteFolds,
+      db.syncState,
+    ],
     async () => {
       await Promise.all([
         db.notes.clear(),
         db.noteTags.clear(),
+        db.noteLinks.clear(),
         db.tags.clear(),
         db.files.clear(),
         db.settings.clear(),
@@ -189,11 +209,17 @@ export async function importDatabase(
         db.settings.bulkAdd(settings),
       ]);
 
-      // `noteTags` is derived data. Trusting a file's copy of it contradicts
-      // the rule that the index comes from `notes.text` and is never
-      // authoritative, and it is what made a pre-M5 backup restore an empty
-      // index.
+      // `noteTags` and `noteLinks` are BOTH derived data. Trusting a file's
+      // copy of either contradicts the rule that each index comes from
+      // `notes.text` and is never authoritative — it is what made a pre-M5
+      // backup restore an empty tag index, and the same gap in `noteLinks`
+      // would leave stale rows keyed by note ids from the database just
+      // replaced, and none for the notes just imported. Every derived table
+      // gets its own rebuild call here, not a shared one, so adding a future
+      // derived table is an obvious addition to this list rather than a
+      // guess.
       rebuiltRows = await deps.rebuildTagIndex();
+      rebuiltLinkRows = await deps.rebuildLinkIndex();
 
       // `syncState` is deliberately NOT cleared above. A note or tag id
       // that survives the import (the ordinary case: a signed-in user
@@ -219,6 +245,7 @@ export async function importDatabase(
   return {
     notes: notes.length,
     noteTags: rebuiltRows,
+    noteLinks: rebuiltLinkRows,
     tags: bundle.tags.length,
     files: files.length,
     settings: importedSettings,

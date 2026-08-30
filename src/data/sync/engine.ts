@@ -52,6 +52,7 @@ export interface EngineDeps {
   db: BearDatabase;
   transport: Transport;
   parseTags: (markdown: string) => string[];
+  parseLinks: (markdown: string) => string[];
   now?: () => number;
   generateId?: () => string;
 }
@@ -117,20 +118,27 @@ function toTagMeta(remote: RemoteTag): TagMeta {
 }
 
 export function createEngine(deps: EngineDeps) {
-  const { db, transport, parseTags } = deps;
+  const { db, transport, parseTags, parseLinks } = deps;
   const now = deps.now ?? (() => Date.now());
   const generateId = deps.generateId ?? newId;
 
   /**
-   * Replaces a note's derived tag rows.
+   * Replaces a note's derived tag AND link rows.
    *
    * Deliberately the SHARED `reindexNote` that `repositories/notes.ts` calls,
    * not a private copy: the tag index has already disagreed with its own
    * rebuild once in this project's history, and a second implementation of
-   * "how tags are derived from text" is exactly how that regresses.
+   * "how tags (or links) are derived from text" is exactly how that
+   * regresses. A note arriving from another device that skipped this call
+   * would get tag rows and no link rows — an incompleteness that only shows
+   * up after a sync, which is the hardest kind of bug to reproduce.
+   *
+   * `deriveTitle(text)` is the same derivation `toNote` uses for the note's
+   * own title, so a self-link in a pulled note is dropped exactly as it is
+   * for a locally-edited one.
    */
   async function reindex(noteId: string, text: string): Promise<void> {
-    await reindexNote(db, noteId, text, parseTags);
+    await reindexNote(db, noteId, text, parseTags, parseLinks, deriveTitle(text));
   }
 
   async function readCursor(accountId: string): Promise<number> {
@@ -163,13 +171,10 @@ export function createEngine(deps: EngineDeps) {
       if (remote.deleted) {
         await db.transaction(
           'rw',
-          db.notes,
-          db.noteTags,
-          db.files,
-          db.noteFolds,
-          db.syncState,
+          [db.notes, db.noteTags, db.noteLinks, db.files, db.noteFolds, db.syncState],
           async () => {
             await db.noteTags.where('noteId').equals(remote.id).delete();
+            await db.noteLinks.where('noteId').equals(remote.id).delete();
             await db.files.where('noteId').equals(remote.id).delete();
             await db.noteFolds.delete(remote.id);
             await db.notes.delete(remote.id);
@@ -177,7 +182,7 @@ export function createEngine(deps: EngineDeps) {
           },
         );
       } else {
-        await db.transaction('rw', db.notes, db.noteTags, db.syncState, async () => {
+        await db.transaction('rw', db.notes, db.noteTags, db.noteLinks, db.syncState, async () => {
           await db.notes.put(toNote(remote));
           await reindex(remote.id, remote.text);
           await db.syncState.put({
@@ -367,7 +372,7 @@ export function createEngine(deps: EngineDeps) {
    */
   async function resolveConflicts(remotes: RemoteNote[]): Promise<void> {
     for (const remote of remotes) {
-      await db.transaction('rw', db.notes, db.noteTags, db.syncState, async () => {
+      await db.transaction('rw', db.notes, db.noteTags, db.noteLinks, db.syncState, async () => {
         // Read INSIDE the transaction that then writes from it: this decides
         // whether a copy is needed and is immediately followed by the write
         // that overwrites the same row with the server's version.

@@ -1,3 +1,5 @@
+export { BacklinksPanel } from './BacklinksPanel';
+export type { BacklinksPanelProps } from './BacklinksPanel';
 export { NoteEditor } from './NoteEditor';
 export type { NoteEditorProps } from './NoteEditor';
 export { NoteList } from './NoteList';

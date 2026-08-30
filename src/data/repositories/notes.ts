@@ -1,16 +1,19 @@
 import type { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
+import { normalizeTitle } from '../links';
 import { compareNotes, DEFAULT_NOTE_ORDER, type NoteOrder } from '../order';
 import { newId } from '../ids';
 import { reindexNote } from '../reindex';
 import { markDeleted, markDirty } from '../sync/markDirty';
-import type { Note, NoteTag } from '../types';
+import type { Note, NoteLink, NoteTag } from '../types';
 
 export type TagParser = (markdown: string) => string[];
+export type LinkParser = (markdown: string) => string[];
 
 export interface NotesRepositoryDeps {
   db: BearDatabase;
   parseTags: TagParser;
+  parseLinks: LinkParser;
   now?: () => number;
   generateId?: () => string;
 }
@@ -46,10 +49,17 @@ export interface NotesRepository {
   listByTag(tag: string, options?: ListByTagOptions): Promise<Note[]>;
   /** Every row of the derived tag index. The sidebar's only door to it. */
   allTagRows(): Promise<NoteTag[]>;
+  /** Active notes whose text links to `title`, in `[[…]]` form. Normalizes `title` itself. */
+  linksTo(title: string): Promise<Note[]>;
+  rebuildLinkIndex(): Promise<number>;
+  /** Every row of the derived link index. */
+  allLinkRows(): Promise<NoteLink[]>;
+  /** Titles of every non-trashed note. What `[[` autocomplete and link-pill resolution match against. */
+  allNoteTitles(): Promise<string[]>;
 }
 
 export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepository {
-  const { db, parseTags } = deps;
+  const { db, parseTags, parseLinks } = deps;
   const now = deps.now ?? (() => Date.now());
   const generateId = deps.generateId ?? newId;
 
@@ -95,9 +105,9 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
       archivedAt: null,
     };
 
-    await db.transaction('rw', db.notes, db.noteTags, db.syncState, async () => {
+    await db.transaction('rw', db.notes, db.noteTags, db.noteLinks, db.syncState, async () => {
       await db.notes.add(note);
-      await reindexNote(db, note.id, text, parseTags);
+      await reindexNote(db, note.id, text, parseTags, parseLinks, note.title);
       await markDirty(db, 'note', note.id, timestamp);
     });
 
@@ -128,7 +138,7 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     },
 
     async save(id, text) {
-      return db.transaction('rw', db.notes, db.noteTags, db.syncState, async () => {
+      return db.transaction('rw', db.notes, db.noteTags, db.noteLinks, db.syncState, async () => {
         const existing = await requireNote(id);
         const timestamp = now();
         const updated: Note = {
@@ -139,7 +149,7 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
         };
 
         await db.notes.put(updated);
-        await reindexNote(db, id, text, parseTags);
+        await reindexNote(db, id, text, parseTags, parseLinks, updated.title);
 
         await markDirty(db, 'note', id, timestamp);
 
@@ -157,26 +167,28 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     },
 
     async trash(id) {
-      // The tag index reflects active notes only (see rebuildTagIndex), so a
-      // trashed note's rows are removed here to keep both paths agreeing.
-      await db.transaction('rw', db.notes, db.noteTags, db.syncState, async () => {
+      // The tag and link indexes reflect active notes only (see
+      // rebuildTagIndex / rebuildLinkIndex), so a trashed note's rows are
+      // removed here to keep every path agreeing.
+      await db.transaction('rw', db.notes, db.noteTags, db.noteLinks, db.syncState, async () => {
         await requireNote(id);
         const timestamp = now();
         await db.notes.update(id, { trashedAt: timestamp, updatedAt: timestamp });
         await db.noteTags.where('noteId').equals(id).delete();
+        await db.noteLinks.where('noteId').equals(id).delete();
         await markDirty(db, 'note', id, timestamp);
       });
     },
 
     async restore(id) {
       // Reindex from the note's text, exactly as `save` does: a rebuild that
-      // ran while this note was trashed would have dropped its tag rows, and
-      // restoring must not leave them permanently gone.
-      await db.transaction('rw', db.notes, db.noteTags, db.syncState, async () => {
+      // ran while this note was trashed would have dropped its tag and link
+      // rows, and restoring must not leave them permanently gone.
+      await db.transaction('rw', db.notes, db.noteTags, db.noteLinks, db.syncState, async () => {
         const note = await requireNote(id);
         const timestamp = now();
         await db.notes.update(id, { trashedAt: null, updatedAt: timestamp });
-        await reindexNote(db, id, note.text, parseTags);
+        await reindexNote(db, id, note.text, parseTags, parseLinks, note.title);
         await markDirty(db, 'note', id, timestamp);
       });
     },
@@ -190,9 +202,10 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     async purge(id) {
       await db.transaction(
         'rw',
-        [db.notes, db.noteTags, db.files, db.noteFolds, db.syncState],
+        [db.notes, db.noteTags, db.noteLinks, db.files, db.noteFolds, db.syncState],
         async () => {
           await db.noteTags.where('noteId').equals(id).delete();
+          await db.noteLinks.where('noteId').equals(id).delete();
           await db.files.where('noteId').equals(id).delete();
           await db.noteFolds.delete(id);
           await db.notes.delete(id);
@@ -204,7 +217,7 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     async emptyTrash() {
       return db.transaction(
         'rw',
-        [db.notes, db.noteTags, db.files, db.noteFolds, db.syncState],
+        [db.notes, db.noteTags, db.noteLinks, db.files, db.noteFolds, db.syncState],
         async () => {
           // The trashedAt index holds only trashed notes, since IndexedDB omits
           // nulls. Use aboveOrEqual(0), not above(0), so a note trashed at epoch
@@ -214,6 +227,7 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
           const timestamp = now();
 
           await db.noteTags.where('noteId').anyOf(ids).delete();
+          await db.noteLinks.where('noteId').anyOf(ids).delete();
           await db.files.where('noteId').anyOf(ids).delete();
           await db.noteFolds.bulkDelete(ids);
           await db.notes.bulkDelete(ids);
@@ -261,6 +275,25 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
       });
     },
 
+    async rebuildLinkIndex() {
+      return db.transaction('rw', db.notes, db.noteLinks, async () => {
+        await db.noteLinks.clear();
+
+        const all = await db.notes.toArray();
+        const rows = all
+          .filter((n) => n.trashedAt === null)
+          .flatMap((n) => {
+            const ownTitle = normalizeTitle(n.title);
+            return [...new Set(parseLinks(n.text))]
+              .filter((title) => title !== ownTitle)
+              .map((toTitle) => ({ noteId: n.id, toTitle }));
+          });
+
+        await db.noteLinks.bulkPut(rows);
+        return rows.length;
+      });
+    },
+
     async listByTag(tag, options = {}) {
       const { order = DEFAULT_NOTE_ORDER, includeDescendants = true } = options;
 
@@ -284,6 +317,27 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
 
     async allTagRows() {
       return db.noteTags.toArray();
+    },
+
+    async linksTo(title) {
+      // `normalizeTitle` is the ONLY place a title becomes a key — normalizing
+      // here, on the query side, so an un-normalized caller-supplied title
+      // still finds what the index side stored normalized.
+      const key = normalizeTitle(title);
+      const rows = await db.noteLinks.where('toTitle').equals(key).toArray();
+      const ids = [...new Set(rows.map((row) => row.noteId))];
+      const found = await db.notes.bulkGet(ids);
+
+      return found.filter((note): note is Note => note !== undefined && note.trashedAt === null);
+    },
+
+    async allLinkRows() {
+      return db.noteLinks.toArray();
+    },
+
+    async allNoteTitles() {
+      const all = await db.notes.toArray();
+      return all.filter((n) => n.trashedAt === null).map((n) => n.title);
     },
   };
 }

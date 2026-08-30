@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { BearDatabase } from '../db';
+import { parseLinks } from '../links';
 import { createTestDatabase } from '../testing';
 import { parseTags } from '../tags';
 import { createNotesRepository, type NotesRepository } from './notes';
@@ -22,6 +23,7 @@ describe('notesRepository', () => {
     notes = createNotesRepository({
       db,
       parseTags: fakeParseTags,
+      parseLinks,
       now: () => clock,
       generateId: () => `id-${++seq}`,
     });
@@ -320,7 +322,7 @@ describe('notesRepository', () => {
 
   describe('tag queries', () => {
     it('listByTag includes descendants but not sibling prefixes', async () => {
-      const repo = createNotesRepository({ db, parseTags });
+      const repo = createNotesRepository({ db, parseTags, parseLinks });
 
       const parent = await repo.create('#work');
       const child = await repo.create('#work/urgent');
@@ -332,7 +334,7 @@ describe('notesRepository', () => {
     });
 
     it('listByTag excludes trashed notes', async () => {
-      const repo = createNotesRepository({ db, parseTags });
+      const repo = createNotesRepository({ db, parseTags, parseLinks });
 
       const kept = await repo.create('#work');
       const gone = await repo.create('#work');
@@ -348,7 +350,7 @@ describe('notesRepository', () => {
       // rebuild that ran while the note was trashed, or a bug in a future
       // change to trash()/restore() — to prove listByTag's own filter is a
       // real, load-bearing second guard, not just a mirror of trash()'s.
-      const repo = createNotesRepository({ db, parseTags });
+      const repo = createNotesRepository({ db, parseTags, parseLinks });
 
       const kept = await repo.create('#work');
       const trashedNote = await repo.create('#work');
@@ -361,7 +363,7 @@ describe('notesRepository', () => {
 
     it('listByTag returns most recently updated first', async () => {
       let clock = 1000;
-      const repo = createNotesRepository({ db, parseTags, now: () => (clock += 10) });
+      const repo = createNotesRepository({ db, parseTags, parseLinks, now: () => (clock += 10) });
 
       const first = await repo.create('#work');
       const second = await repo.create('#work');
@@ -371,7 +373,7 @@ describe('notesRepository', () => {
     });
 
     it('allTagRows returns one row per note per tag', async () => {
-      const repo = createNotesRepository({ db, parseTags });
+      const repo = createNotesRepository({ db, parseTags, parseLinks });
 
       const note = await repo.create('#work #home');
       const rows = await repo.allTagRows();
@@ -385,7 +387,7 @@ describe('notesRepository', () => {
   describe('pinned ordering', () => {
     it('puts pinned notes first in listActive, newest-first within each group', async () => {
       let clock = 1000;
-      const repo = createNotesRepository({ db, parseTags, now: () => (clock += 10) });
+      const repo = createNotesRepository({ db, parseTags, parseLinks, now: () => (clock += 10) });
 
       const old = await repo.create('old');
       const mid = await repo.create('mid');
@@ -399,7 +401,7 @@ describe('notesRepository', () => {
 
     it('puts pinned notes first in listByTag', async () => {
       let clock = 1000;
-      const repo = createNotesRepository({ db, parseTags, now: () => (clock += 10) });
+      const repo = createNotesRepository({ db, parseTags, parseLinks, now: () => (clock += 10) });
 
       const a = await repo.create('a #work');
       const b = await repo.create('b #work');
@@ -410,7 +412,7 @@ describe('notesRepository', () => {
 
     it('leaves listTrashed ordered by deletion time, ignoring pinned', async () => {
       let clock = 1000;
-      const repo = createNotesRepository({ db, parseTags, now: () => (clock += 10) });
+      const repo = createNotesRepository({ db, parseTags, parseLinks, now: () => (clock += 10) });
 
       const first = await repo.create('first');
       const second = await repo.create('second');
@@ -425,7 +427,7 @@ describe('notesRepository', () => {
 
   describe('rebuild determinism', () => {
     it('produces an identical row set when run twice', async () => {
-      const repo = createNotesRepository({ db, parseTags });
+      const repo = createNotesRepository({ db, parseTags, parseLinks });
       await repo.create('#Work/Urgent and #home');
       await repo.create('#work/urgent');
 
@@ -447,6 +449,7 @@ describe('notesRepository', () => {
         const repo = createNotesRepository({
           db,
           parseTags,
+          parseLinks,
           generateId: (() => {
             let n = 0;
             return () => `note-${order[n++]}`;
@@ -531,6 +534,53 @@ describe('notesRepository', () => {
 
       const list = await notes.listByTag('work', { includeDescendants: false });
       expect(list.map((n) => n.title)).toEqual(['parent']);
+    });
+  });
+
+  describe('backlinks', () => {
+    it('finds the notes that link to a title, ignoring case and spacing', async () => {
+      // `create` takes a raw `text` string here, not `{ text }` — matching
+      // every other test in this file and `NotesRepository.create`'s real
+      // signature.
+      await notes.create('One\n\nlinks to [[Deploy  Checklist]]');
+      await notes.create('Two\n\nno links here');
+
+      const found = await notes.linksTo('deploy checklist');
+
+      // A specific count AND the right note — "not empty" would pass against a
+      // query that ignored its argument entirely.
+      expect(found).toHaveLength(1);
+      expect(found[0]?.title).toBe('One');
+    });
+
+    it('rebuilds the link index to exactly what the incremental path wrote', async () => {
+      // The assertion whose absence let the TAG index disagree with its own
+      // rebuild once already. Same failure, one table over.
+      await notes.create('One\n\n[[a]] [[b]]');
+      await notes.create('Two\n\n[[b]] `[[masked]]`');
+      const incremental = (await notes.allLinkRows()).map((r) => `${r.noteId}:${r.toTitle}`).sort();
+
+      await notes.rebuildLinkIndex();
+      const rebuilt = (await notes.allLinkRows()).map((r) => `${r.noteId}:${r.toTitle}`).sort();
+
+      expect(rebuilt).toEqual(incremental);
+    });
+
+    it('excludes trashed notes from a backlinks list', async () => {
+      const one = await notes.create('One\n\n[[target]]');
+      await notes.trash(one.id);
+
+      expect(await notes.linksTo('target')).toHaveLength(0);
+    });
+
+    it('lists every note title, and none from the trash', async () => {
+      const kept = await notes.create('Kept');
+      const tossed = await notes.create('Tossed');
+      await notes.trash(tossed.id);
+
+      const titles = await notes.allNoteTitles();
+      expect(titles).toContain(kept.title);
+      expect(titles).not.toContain(tossed.title);
     });
   });
 });

@@ -16,12 +16,16 @@ export { newId } from './ids';
 export { compareNotes, DEFAULT_NOTE_ORDER, isNoteOrder } from './order';
 export type { NoteOrder, NoteOrderField } from './order';
 export {
+  LINK_INDEX_VERSION,
+  LINK_INDEX_VERSION_KEY,
+  runLinkMigrations,
   runMigrations,
+  runStartupLinkMigrations,
   runStartupMigrations,
   TAG_INDEX_VERSION,
   TAG_INDEX_VERSION_KEY,
 } from './migrations';
-export type { MigrationDeps } from './migrations';
+export type { LinkMigrationDeps, MigrationDeps } from './migrations';
 export { openDatabase, resolveDatabase } from './open';
 export { persistStorage, requestPersistentStorage } from './persist';
 export type { PersistDeps, PersistOutcome } from './persist';
@@ -49,11 +53,14 @@ export type {
 } from './sync/transport';
 export { findTagRanges, parseTags } from './tags';
 export type { TagRange } from './tags';
+export { findLinkRanges, normalizeTitle, parseLinks } from './links';
+export type { LinkRange } from './links';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
 export { files, folds, notes, settings, tags } from './repositories';
 export type {
   FilesRepository,
   FoldsRepository,
+  LinkParser,
   NotesRepository,
   SettingsRepository,
   TagParser,
@@ -64,6 +71,7 @@ export type {
   FileRecord,
   Note,
   NoteFolds,
+  NoteLink,
   NoteTag,
   SerializedFile,
   SettingRecord,

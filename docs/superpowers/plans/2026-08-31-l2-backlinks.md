@@ -1,0 +1,634 @@
+# L2 — Backlinks: implementation plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** `[[Note title]]` links between notes, a derived `noteLinks` index, an
+inline pill, a backlinks panel, and `[[` autocomplete.
+
+**Architecture:** The code masker moves out of `parseTags.ts` into a shared
+module so link parsing cannot grow a second copy of the fence rules. Link
+parsing is a pure module beside it. `reindexNote` — already the single
+authority for deriving rows from note text — writes both tables. The view
+layer follows `TagPill`'s decoration pattern.
+
+**Tech Stack:** TypeScript 6 (`erasableSyntaxOnly`, `verbatimModuleSyntax`),
+Dexie, Tiptap v3 / ProseMirror, React 19, Vitest + jsdom, Playwright, oxlint.
+
+**Spec:** `docs/superpowers/specs/2026-08-31-l2-backlinks-design.md`
+
+## Global Constraints
+
+- **All six gates before any commit**: `npm test`, `npm run test:e2e`,
+  `npm run lint`, `npm run typecheck`, `npm run format`, `npm run build`. Plus
+  `npm run measure:check` for anything visual.
+- **Budget the machine.** Fanless Mac Mini also hosting an API service. Scope
+  every iteration to one test file. `npm test -- --run --maxWorkers=4` only at
+  task boundaries. **Never generate synthetic load.** If load exceeds 20, stop
+  and report. Check `uptime` before blaming a diff for an e2e failure.
+- **`lsof -ti:4173 | xargs -r kill -9` before trusting any e2e result** that
+  follows a source change, and always before a fault injection.
+- **Dexie's declared version is multiplied by ten.** `version(5)` is IndexedDB
+  version 50, and **`e2e/fixtures/seed.ts` must move to 50 in the same
+  commit** or every Playwright test hangs on a blocked upgrade with no error —
+  `openDatabase()` never settles and the page renders an empty `#root`.
+- **A seeded note must exist BEFORE Dexie opens the database** — `seedDatabase`
+  uses `page.addInitScript`, never `page.evaluate` after `goto`.
+- **The mask character is `\u0000` and must never reach disk as a literal NUL.**
+  Writing `\u0000` through a file-writing tool's JSON string parameter produces
+  a REAL NUL byte, because the JSON layer interprets the escape first. This has
+  happened four times in this project. Write the escape, then **verify the
+  bytes** with `grep -c $'\u0000' <file>` (expect 0 outside string literals).
+- **No user-facing string is hardcoded.** `useT` only; `ko.ts` is
+  `Record<TranslationKey, string>` so a missing translation is a compile error.
+  Never weaken that annotation.
+- **Every colour from a CSS custom property.** Literals outside `tokens.css`
+  fail `scripts/sourceLint.test.ts`.
+- **`src/data/` must not import from `src/features/`.** `parseLinks` is
+  injected at `src/data/repositories/index.ts`, exactly as `parseTags` is.
+- **Check exit codes, not pass counts.** An undestroyed `Editor` throws at
+  jsdom teardown and exits 1 with every assertion passing.
+- **A test must assert a value or a count that CHANGES with the behaviour.**
+  Demonstrate each new test failing against a sabotaged implementation.
+
+---
+
+### Task 1: Move the code masker to a shared module
+
+**Files:**
+
+- Create: `src/data/markdown/mask.ts`
+- Modify: `src/data/tags/parseTags.ts` (delete `MASK`, `maskInlineCode`,
+  `maskCode`; import them instead)
+- Modify: `docs/rulings/tag-grammar.md` (the `**Trigger:**` line names those
+  three symbols and `parseTags.ts`; it must now name the new file too)
+
+**Interfaces — Produces:**
+
+```ts
+export const MASK = '\u0000';
+export function maskInlineCode(line: string): string;
+export function maskCode(input: string): string;
+```
+
+This is a **pure move**. Do not improve, rename, or reformat the moved code;
+its fence handling is governed by four rulings bought by real bugs (an unclosed
+fence silently deleting every tag after it; a closer with an info string
+inverting fence state; the mask being `\u0000` rather than a space so
+`` `x`#work `` cannot become a tag; indented code deliberately left unmasked).
+
+- [ ] **Step 1: Confirm the current behaviour is pinned before touching it**
+
+Run: `npx vitest run src/data/tags/parseTags.test.ts`
+Expected: PASS. Record the test count — it is the proof the move is
+behaviour-preserving, and it must be identical afterwards.
+
+- [ ] **Step 2: Move the three symbols verbatim**
+
+Cut `MASK`, `maskInlineCode` and `maskCode` — with every comment — from
+`parseTags.ts` into `src/data/markdown/mask.ts`, exporting all three. In
+`parseTags.ts`, add `import { MASK, maskCode } from '../markdown/mask';` (plus
+`maskInlineCode` if it is referenced there directly).
+
+Give the new file a docblock saying why it is not in `src/data/tags/`: it is
+shared by tag parsing and link parsing, and a second copy of the fence rules is
+the duplicated grammar this project forbids.
+
+- [ ] **Step 3: Verify the move changed nothing**
+
+Run: `npx vitest run src/data/tags/parseTags.test.ts`
+Expected: PASS with the **same count** as Step 1.
+
+Then verify no literal NUL reached disk:
+Run: `grep -c $'\u0000' src/data/markdown/mask.ts src/data/tags/parseTags.ts`
+Expected: `0` for both. A literal NUL looks identical to the escape sequence in
+an editor and is silently mangled by `grep` and `diff`.
+
+- [ ] **Step 4: Update the ruling's trigger line**
+
+`docs/rulings/tag-grammar.md`'s `**Trigger:**` line lists `maskCode`,
+`maskInlineCode` and `MASK` under `parseTags.ts`. Add
+`src/data/markdown/mask.ts` so the trigger still points at where the code
+actually lives. A ruling whose trigger names the wrong file never fires.
+
+- [ ] **Step 5: Gates and commit**
+
+```bash
+npm run typecheck && npm run lint && npm run format
+npx vitest run src/data
+git add -A && git commit -m "refactor(l2): share the code masker between tag and link parsing"
+```
+
+---
+
+### Task 2: `parseLinks` — the grammar
+
+**Files:**
+
+- Create: `src/data/links/parseLinks.ts`, `src/data/links/index.ts`
+- Test: `src/data/links/parseLinks.test.ts`
+
+**Interfaces:**
+
+- Consumes: `MASK`, `maskCode` from `src/data/markdown/mask.ts` (Task 1).
+- Produces:
+
+```ts
+export interface LinkRange {
+  /** Index of the first `[` in the source string. */
+  start: number;
+  /** Index one past the final `]`. */
+  end: number;
+  /** The raw title as written, before normalization. */
+  raw: string;
+  /** Lowercased, whitespace-collapsed, trimmed. The index key. */
+  title: string;
+}
+
+export function normalizeTitle(raw: string): string;
+export function findLinkRanges(markdown: string): LinkRange[];
+export function parseLinks(markdown: string): string[];
+```
+
+`parseLinks` returns **normalized, de-duplicated** titles in first-appearance
+order.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+import { describe, expect, it } from 'vitest';
+
+import { findLinkRanges, normalizeTitle, parseLinks } from './parseLinks';
+
+describe('normalizeTitle', () => {
+  it('lowercases, trims, and collapses internal whitespace', () => {
+    expect(normalizeTitle('  Deploy   Checklist ')).toBe('deploy checklist');
+    expect(normalizeTitle('Deploy\tChecklist')).toBe('deploy checklist');
+  });
+});
+
+describe('parseLinks', () => {
+  it('finds a link and returns its normalized title', () => {
+    expect(parseLinks('See [[Deploy Checklist]] first.')).toEqual(['deploy checklist']);
+  });
+
+  it('finds several, de-duplicated, in first-appearance order', () => {
+    expect(parseLinks('[[b]] then [[a]] then [[B]]')).toEqual(['b', 'a']);
+  });
+
+  it('ignores a link inside a fenced code block', () => {
+    // The whole reason the masker is shared: this must agree with how
+    // `parseTags` decides what is code.
+    expect(parseLinks('text\n\n```\n[[not a link]]\n```\n\n[[real]]')).toEqual(['real']);
+  });
+
+  it('ignores a link inside inline code', () => {
+    expect(parseLinks('`[[not a link]]` but [[real]]')).toEqual(['real']);
+  });
+
+  it('is not fooled by a fence closer carrying an info string', () => {
+    // `parseTags` has a ruling for exactly this: a closer with an info string
+    // inverted fence state and invented tags from inside code blocks.
+    expect(parseLinks('```js\n[[hidden]]\n```js\n[[also hidden]]\n```')).toEqual([]);
+  });
+
+  it('ignores an unclosed `[[`', () => {
+    expect(parseLinks('an [[unclosed link')).toEqual([]);
+  });
+
+  it('rejects an empty or whitespace-only target', () => {
+    expect(parseLinks('[[]] and [[   ]]')).toEqual([]);
+  });
+
+  it('does not treat a single-bracket Markdown link as a note link', () => {
+    expect(parseLinks('[text](https://example.com)')).toEqual([]);
+  });
+
+  it('stops at the first `]]`, so a title cannot swallow the rest of the line', () => {
+    expect(parseLinks('[[one]] and [[two]]')).toEqual(['one', 'two']);
+  });
+});
+
+describe('findLinkRanges', () => {
+  it('reports offsets that slice the original text back out', () => {
+    const text = 'See [[Deploy Checklist]] first.';
+    const [range] = findLinkRanges(text);
+
+    // A range whose offsets are merely "present" would pass a laxer test;
+    // slicing proves they address the real characters.
+    expect(text.slice(range!.start, range!.end)).toBe('[[Deploy Checklist]]');
+    expect(range!.raw).toBe('Deploy Checklist');
+    expect(range!.title).toBe('deploy checklist');
+  });
+
+  it('reports offsets into the ORIGINAL text, not the masked copy', () => {
+    // Masking replaces code with `\u0000` of the SAME LENGTH, so offsets stay
+    // valid. If a future edit made the mask a different length, this fails.
+    const text = '`code` then [[target]]';
+    const [range] = findLinkRanges(text);
+
+    expect(text.slice(range!.start, range!.end)).toBe('[[target]]');
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `npx vitest run src/data/links/parseLinks.test.ts`
+Expected: FAIL — `Failed to resolve import "./parseLinks"`.
+
+- [ ] **Step 3: Implement**
+
+```ts
+import { maskCode } from '../markdown/mask';
+
+export interface LinkRange {
+  start: number;
+  end: number;
+  raw: string;
+  title: string;
+}
+
+/**
+ * The index key for a link target.
+ *
+ * Case-insensitive and whitespace-collapsed so `[[Deploy Checklist]]`,
+ * `[[deploy checklist]]` and `[[Deploy  Checklist]]` all name one note. This
+ * is the only place a title becomes a key; `notes.linksTo` must use it too, or
+ * the two sides of the join disagree and every backlink list is empty.
+ */
+export function normalizeTitle(raw: string): string {
+  return raw.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+const LINK = /\[\[([^\]\n]*)\]\]/g;
+
+/**
+ * Every `[[…]]` outside code, with offsets into the ORIGINAL string.
+ *
+ * The scan runs over a MASKED copy, in which fenced and inline code has been
+ * replaced character-for-character by `\u0000`. Same length in, same length
+ * out, so an offset found in the masked copy addresses the same character in
+ * the original — which is what lets the editor decorate the real text.
+ *
+ * `[^\]\n]*` refuses to cross a newline or a `]`, so an unclosed `[[` cannot
+ * swallow the rest of the note and two links on one line stay two links.
+ */
+export function findLinkRanges(markdown: string): LinkRange[] {
+  const masked = maskCode(markdown);
+  const ranges: LinkRange[] = [];
+
+  for (const match of masked.matchAll(LINK)) {
+    const raw = match[1] ?? '';
+    const title = normalizeTitle(raw);
+    if (title === '') continue;
+    ranges.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      // Read from the ORIGINAL, not the masked copy: a title is displayed and
+      // stored, and the masked copy is only ever a coordinate system.
+      raw: markdown.slice(match.index + 2, match.index + match[0].length - 2),
+      title,
+    });
+  }
+
+  return ranges;
+}
+
+export function parseLinks(markdown: string): string[] {
+  return [...new Set(findLinkRanges(markdown).map((range) => range.title))];
+}
+```
+
+`src/data/links/index.ts` re-exports all three.
+
+- [ ] **Step 4: Run to verify they pass**
+
+Run: `npx vitest run src/data/links/parseLinks.test.ts`
+Expected: PASS, exit code 0.
+
+- [ ] **Step 5: Add the shared-masker agreement test**
+
+Append to `parseLinks.test.ts`:
+
+```ts
+import { parseTags } from '../tags';
+
+it('agrees with parseTags about what counts as code', () => {
+  // The one test a COPIED masker would fail. One fixture, both parsers: a
+  // fence, an inline span, and a live token of each kind after them.
+  const fixture = '```\n#nope [[nope]]\n```\n\n`#no [[no]]`\n\n#yes [[yes]]';
+
+  expect(parseTags(fixture)).toEqual(['yes']);
+  expect(parseLinks(fixture)).toEqual(['yes']);
+});
+```
+
+- [ ] **Step 6: Fault injection**
+
+Temporarily change `findLinkRanges` to scan `markdown` instead of `masked`.
+Expected: the three code-masking tests and the agreement test fail; the plain
+ones still pass. Revert.
+
+- [ ] **Step 7: Gates and commit**
+
+```bash
+npm run typecheck && npm run lint && npm run format
+npx vitest run src/data
+git add -A && git commit -m "feat(l2): the [[wikilink]] grammar"
+```
+
+---
+
+### Task 3: The `noteLinks` index
+
+**Files:**
+
+- Modify: `src/data/db.ts` (a `noteLinks` store on a new `version(5)`)
+- Modify: `src/data/types.ts` (`NoteLink`)
+- Modify: `src/data/reindex.ts` (write both tables)
+- Modify: `src/data/repositories/notes.ts` (`linksTo`, `rebuildLinkIndex`,
+  `allLinkRows`)
+- Modify: `src/data/repositories/index.ts` (inject `parseLinks`)
+- Modify: `src/data/migrations.ts` (`LINK_INDEX_VERSION`, rebuild hook)
+- Modify: `e2e/fixtures/seed.ts` (**IndexedDB version 50, and the new store**)
+- Test: `src/data/reindex.test.ts`, `src/data/repositories/notes.test.ts`
+
+**Interfaces — Produces:**
+
+```ts
+export interface NoteLink {
+  noteId: string;
+  /** Normalized target title — `normalizeTitle`'s output. */
+  toTitle: string;
+}
+
+// repositories/notes.ts
+linksTo(title: string): Promise<Note[]>;       // callers pass a RAW title; it normalizes
+rebuildLinkIndex(): Promise<number>;
+allLinkRows(): Promise<NoteLink[]>;
+```
+
+`reindexNote` gains a `parseLinks` parameter alongside `parseTags`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// src/data/reindex.test.ts — append
+it('writes BOTH derived tables from one call', async () => {
+  await reindexNote(db, 'n1', 'A #work note linking [[Other Note]].', parseTags, parseLinks);
+
+  expect(await db.noteTags.where('noteId').equals('n1').toArray()).toHaveLength(1);
+  expect((await db.noteLinks.where('noteId').equals('n1').toArray())[0]?.toTitle).toBe(
+    'other note',
+  );
+});
+
+it('drops a self-link, which is noise rather than information', async () => {
+  // The note is titled "Self"; a link to itself must not appear in its own
+  // backlinks list.
+  await reindexNote(db, 'n1', 'Self\n\nsee [[Self]] and [[Other]]', parseTags, parseLinks, 'Self');
+
+  const rows = await db.noteLinks.where('noteId').equals('n1').toArray();
+  expect(rows.map((r) => r.toTitle)).toEqual(['other']);
+});
+
+it('replaces rows rather than accumulating them', async () => {
+  await reindexNote(db, 'n1', '[[a]] [[b]]', parseTags, parseLinks);
+  await reindexNote(db, 'n1', '[[c]]', parseTags, parseLinks);
+
+  const rows = await db.noteLinks.where('noteId').equals('n1').toArray();
+  expect(rows.map((r) => r.toTitle)).toEqual(['c']);
+});
+```
+
+```ts
+// src/data/repositories/notes.test.ts — append
+it('finds the notes that link to a title, ignoring case and spacing', async () => {
+  await notes.create({ text: 'One\n\nlinks to [[Deploy  Checklist]]' });
+  await notes.create({ text: 'Two\n\nno links here' });
+
+  const found = await notes.linksTo('deploy checklist');
+
+  // A specific count AND the right note — "not empty" would pass against a
+  // query that ignored its argument entirely.
+  expect(found).toHaveLength(1);
+  expect(found[0]?.title).toBe('One');
+});
+
+it('rebuilds the link index to exactly what the incremental path wrote', async () => {
+  // The assertion whose absence let the TAG index disagree with its own
+  // rebuild once already. Same failure, one table over.
+  await notes.create({ text: 'One\n\n[[a]] [[b]]' });
+  await notes.create({ text: 'Two\n\n[[b]] `[[masked]]`' });
+  const incremental = (await notes.allLinkRows())
+    .map((r) => `${r.noteId}:${r.toTitle}`)
+    .sort();
+
+  await notes.rebuildLinkIndex();
+  const rebuilt = (await notes.allLinkRows()).map((r) => `${r.noteId}:${r.toTitle}`).sort();
+
+  expect(rebuilt).toEqual(incremental);
+});
+
+it('excludes trashed notes from a backlinks list', async () => {
+  const one = await notes.create({ text: 'One\n\n[[target]]' });
+  await notes.trash(one.id);
+
+  expect(await notes.linksTo('target')).toHaveLength(0);
+});
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `npx vitest run src/data`
+Expected: FAIL — `db.noteLinks` is undefined.
+
+- [ ] **Step 3: Implement**
+
+`db.ts`:
+
+```ts
+noteLinks!: Table<NoteLink, [string, string]>;
+
+// …inside the constructor, after version(4):
+    // Dexie multiplies declared versions by ten, so this is IndexedDB version
+    // 50, and `e2e/fixtures/seed.ts` MUST move with it in the same commit.
+    // Same compound-key shape as `noteTags`, and for the same reason: both
+    // directions of the join are single-index queries.
+    this.version(5).stores({
+      noteLinks: '[noteId+toTitle], noteId, toTitle',
+    });
+```
+
+`reindex.ts` writes both tables, taking the note's own title so a self-link can
+be dropped. `migrations.ts` gains `LINK_INDEX_VERSION` and a
+`rebuildLinkIndex` dep, following the existing marker pattern exactly — a
+settings marker, never a Dexie `upgrade()` hook, because a throw inside a
+versioning transaction bricks the database with the user's notes unreachable.
+
+`notes.linksTo(title)` normalizes its argument, queries `noteLinks` by
+`toTitle`, loads those notes, and **filters out trashed ones**.
+
+- [ ] **Step 4: Move the e2e seed to version 50**
+
+`e2e/fixtures/seed.ts` opens IndexedDB directly. Change its version to **50**
+and create the `noteLinks` store with key path `[noteId+toTitle]` and both
+indexes, matching `db.ts` exactly — Dexie compares the schema it finds against
+the one it declares and throws `SchemaError` on any mismatch.
+
+Getting this wrong does not fail loudly: Dexie waits forever for an upgrade the
+still-open seeding connection blocks, `openDatabase()` never settles,
+`main.tsx` never calls `createRoot`, and the page renders a bare `#root` with
+one `console.warn` as the only clue.
+
+- [ ] **Step 5: Run**
+
+Run: `npx vitest run src/data && lsof -ti:4173 | xargs -r kill -9 && npx playwright test e2e/smoke.spec.ts --reporter=line`
+Expected: PASS both. The e2e run is what proves Step 4 — a wrong version hangs
+every test.
+
+- [ ] **Step 6: Fault injection**
+
+Temporarily make `rebuildLinkIndex` skip masked code (e.g. parse the raw text).
+Expected: the rebuild-agreement test fails. Revert.
+
+- [ ] **Step 7: Gates and commit**
+
+```bash
+npm run typecheck && npm run lint && npm run format
+npm test -- --run --maxWorkers=4
+git add -A && git commit -m "feat(l2): the noteLinks index, derived and rebuilt like noteTags"
+```
+
+---
+
+### Task 4: The link pill
+
+**Files:**
+
+- Create: `src/features/editor/LinkPill.ts`
+- Test: `src/features/editor/linkPill.test.ts`
+- Modify: `src/features/editor/extensions.ts`, `src/features/editor/RichEditor.tsx`,
+  `src/app/AppShell.tsx` (an `onActivateLink` handler), `src/styles/editor.css`,
+  both i18n files
+
+**Interfaces:**
+
+- Consumes: `findLinkRanges` (Task 2).
+- Produces: `LinkPillOptions { onActivateLink: ((title: string) => boolean) | null; linkActivateHint: string | null }`.
+
+Follow `TagPill.ts` closely — it is the working precedent for an inline
+decoration with modifier-click activation, and `docs/rulings/tag-pills.md`
+governs it. Read that file first.
+
+- [ ] **Step 1: Write the failing tests**
+
+Assert: a pill decoration exists for each link and none for a link inside a
+fence; `Mod`-click calls `onActivateLink` with the **normalized** title; a
+plain click does NOT (it must place the caret); a pill for a target that
+exists carries `data-resolved="true"` and one for a missing target
+`data-resolved="false"`, so the two are distinguishable in CSS and in tests.
+
+- [ ] **Step 2: Run to verify they fail.** `npx vitest run src/features/editor/linkPill.test.ts`
+
+- [ ] **Step 3: Implement**, mirroring `TagPill`'s decoration and `mousedown`
+      handling. Resolution state comes from a set of known normalized titles
+      passed in as an option, so the extension performs no database access.
+
+- [ ] **Step 4: Run.** Expected PASS, exit 0.
+
+- [ ] **Step 5: Fault injection** — make plain click activate too; the
+      caret-placement test must fail. Revert.
+
+- [ ] **Step 6: Gates and commit.**
+
+---
+
+### Task 5: The backlinks panel
+
+**Files:**
+
+- Create: `src/features/notes/BacklinksPanel.tsx`
+- Test: `src/features/notes/backlinksPanel.test.tsx`
+- Modify: `src/features/notes/NoteEditor.tsx`, both i18n files
+
+- [ ] **Step 1: Write the failing tests.** Assert: nothing renders when there
+      are no backlinks (not an empty section); each linking note appears by
+      title; clicking a row calls `onOpenNote` with that note's id; the count
+      in the header matches the number of rows.
+- [ ] **Step 2: Run to verify they fail.**
+- [ ] **Step 3: Implement.** `useLiveQuery` on `notes.linksTo(title)`, keyed to
+      the current note's title. Rows reuse `SidebarRow` if it fits; otherwise
+      match `NoteListItem`'s markup rather than inventing a third row style.
+- [ ] **Step 4: Run.**
+- [ ] **Step 5: Fault injection** — render the empty section unconditionally;
+      the "nothing renders" test must fail. Revert.
+- [ ] **Step 6: Gates and commit.**
+
+---
+
+### Task 6: `[[` autocomplete
+
+**Files:**
+
+- Create: `src/features/editor/LinkAutocomplete.ts`
+- Test: `src/features/editor/linkAutocomplete.test.ts`
+- Modify: `extensions.ts`, `RichEditor.tsx`, both i18n files, `editor.css`
+
+Model it on `CodeLanguageControls.ts`, which is this repo's working example of
+a filtered list rendered as a ProseMirror widget with keyboard navigation.
+
+- [ ] **Step 1: Write the failing tests.** Assert: typing `[[` opens the list;
+      the list filters to titles containing the typed text; `Enter` inserts
+      `[[Exact Title]]` and closes; `Escape` closes and leaves the literal text
+      alone; the list caps at 8 rows; it does NOT open inside a code block.
+- [ ] **Step 2: Run to verify they fail.**
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run.**
+- [ ] **Step 5: Fault injection** — remove the code-block guard; that test must
+      fail. Revert.
+- [ ] **Step 6: Gates and commit.**
+
+---
+
+### Task 7: End-to-end, and the documentation
+
+**Files:**
+
+- Create: `e2e/backlinks.spec.ts`
+- Modify: `docs/rulings/tag-grammar.md` (link grammar shares the masker),
+  `docs/rulings/notes-lifecycle.md` (a second derived index rides
+  `reindexNote`), `docs/rulings/tag-pills.md` (the link pill's activation
+  matches the tag pill's, and why), `CLAUDE.md` (status table, test counts),
+  `docs/superpowers/NEXT.md`
+- Modify: `e2e/fixtures/corpus.ts` **only if** no existing note pair can carry
+  a link; prefer adding a link to an existing note over inventing one.
+
+- [ ] **Step 1: Write the spec.** `Mod`-click navigates to the target note;
+      plain click does not; the backlinks panel lists the linking note and
+      opens it on click; autocomplete completes a real title; a link inside a
+      code block is inert.
+- [ ] **Step 2: Kill 4173, run, and confirm it fails before the feature works.**
+- [ ] **Step 3: Fault injection** on the navigation assertion.
+- [ ] **Step 4: Write the rulings**, each with a trigger visible in a diff.
+- [ ] **Step 5: Measure the real test counts** for `CLAUDE.md`; do not guess.
+- [ ] **Step 6: Full gates, then commit.**
+
+---
+
+## Self-review notes
+
+**Spec coverage.** Grammar → Tasks 1–2; index and rebuild → Task 3; pill →
+Task 4; panel → Task 5; autocomplete → Task 6; e2e and rulings → Task 7.
+
+**The two riskiest points, both given their own fault injection.** The masker
+move (Task 1) is behaviour-preserving only if `parseTags.test.ts` passes with
+an identical count — that is the whole proof. And the rebuild-agreement test in
+Task 3 is the one whose absence already let a derived index in this project
+disagree with its own rebuild.
+
+**Signatures were read from the code, not recalled**: `reindexNote(db, noteId,
+text, parseTags)` is the real current signature and gains parameters rather
+than being replaced; `TAG_INDEX_VERSION` lives in `migrations.ts` with a
+settings-marker rebuild, not a Dexie upgrade hook; `db.version(4)` is current,
+so links are `version(5)` and IndexedDB 50.

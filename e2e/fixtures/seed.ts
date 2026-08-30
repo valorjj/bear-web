@@ -20,8 +20,9 @@ import type { Corpus } from './corpus.ts';
  *   schema against the one it finds and throws `SchemaError` on a mismatch, so
  *   a drift fails loudly on the first shot rather than silently.
  * - **The IndexedDB version is Dexie's version times ten.** Dexie's
- *   `version(4)` (K1's image metadata, on top of D2's sync bookkeeping) is
- *   IndexedDB version 40, not 4. Seeding at the wrong number leaves Dexie wanting to upgrade further while
+ *   `version(5)` (L2's `noteLinks` backlinks index, on top of K1's image
+ *   metadata and D2's sync bookkeeping) is IndexedDB version 50, not 5.
+ *   Seeding at the wrong number leaves Dexie wanting to upgrade further while
  *   this script still holds a connection open, which blocks the upgrade
  *   forever: `openDatabase` never settles, so `main.tsx` never calls
  *   `createRoot` and the page stays a blank `#root` with one console warning
@@ -38,9 +39,9 @@ import type { Corpus } from './corpus.ts';
  */
 export async function seedDatabase(page: Page, corpus: Corpus): Promise<void> {
   await page.addInitScript((data: Corpus) => {
-    // Mirrors `src/data/db.ts`'s `version(1)` through `version(4)` stores
-    // together; 40 is how Dexie encodes version 4. See the docblock.
-    const request = indexedDB.open('bear-web', 40);
+    // Mirrors `src/data/db.ts`'s `version(1)` through `version(5)` stores
+    // together; 50 is how Dexie encodes version 5. See the docblock.
+    const request = indexedDB.open('bear-web', 50);
 
     request.onupgradeneeded = () => {
       const database = request.result;
@@ -78,6 +79,16 @@ export async function seedDatabase(page: Page, corpus: Corpus): Promise<void> {
       syncState.createIndex('dirty', 'dirty');
       syncState.createIndex('kind', 'kind');
       syncState.createIndex('deleted', 'deleted');
+
+      // Added at version 5 (L2). Created empty here, exactly as Dexie would:
+      // the app's own startup rebuild fills it from `notes.text`, the same
+      // way it does `noteTags`. Key path and index names must match
+      // src/data/db.ts exactly or Dexie throws SchemaError on the first shot.
+      const noteLinks = database.createObjectStore('noteLinks', {
+        keyPath: ['noteId', 'toTitle'],
+      });
+      noteLinks.createIndex('noteId', 'noteId');
+      noteLinks.createIndex('toTitle', 'toTitle');
 
       for (const note of data.notes) notes.put(note);
       for (const setting of data.settings) settings.put(setting);

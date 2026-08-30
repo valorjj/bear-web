@@ -8,10 +8,26 @@ import { notes, settings } from './repositories';
 export const TAG_INDEX_VERSION = 1;
 export const TAG_INDEX_VERSION_KEY = 'tagIndexVersion';
 
+/**
+ * Bumped whenever the link parser changes in a way that alters its output.
+ * Its own marker, own key, and own `runMigrations` call — deliberately not
+ * folded into `TAG_INDEX_VERSION`, so a change to one parser never forces an
+ * unrelated rebuild of the other index.
+ */
+export const LINK_INDEX_VERSION = 1;
+export const LINK_INDEX_VERSION_KEY = 'linkIndexVersion';
+
 export interface MigrationDeps {
   getVersion: () => Promise<number>;
   setVersion: (version: number) => Promise<void>;
   rebuildTagIndex: () => Promise<number>;
+  onError?: (error: unknown) => void;
+}
+
+export interface LinkMigrationDeps {
+  getVersion: () => Promise<number>;
+  setVersion: (version: number) => Promise<void>;
+  rebuildLinkIndex: () => Promise<number>;
   onError?: (error: unknown) => void;
 }
 
@@ -46,6 +62,34 @@ export async function runMigrations(deps: MigrationDeps): Promise<boolean> {
   }
 }
 
+/**
+ * The link-index twin of `runMigrations`. A separate function rather than a
+ * generalised one: the two rebuilds have different failure messages and, more
+ * importantly, keeping them textually separate means a future third index
+ * follows an obvious pattern instead of threading a new case through a shared
+ * one.
+ *
+ * Same contract: a settings marker, never a Dexie `upgrade()` hook, and never
+ * rejects.
+ */
+export async function runLinkMigrations(deps: LinkMigrationDeps): Promise<boolean> {
+  try {
+    const current = await deps.getVersion();
+    if (current >= LINK_INDEX_VERSION) return false;
+
+    await deps.rebuildLinkIndex();
+    await deps.setVersion(LINK_INDEX_VERSION);
+    return true;
+  } catch (error) {
+    try {
+      deps.onError?.(error);
+    } catch {
+      // Nothing useful left to do: the reporter is the thing that broke.
+    }
+    return false;
+  }
+}
+
 export function runStartupMigrations(): Promise<boolean> {
   return runMigrations({
     getVersion: () => settings.get(TAG_INDEX_VERSION_KEY, 0),
@@ -55,6 +99,23 @@ export function runStartupMigrations(): Promise<boolean> {
       // Reported, not swallowed: an empty tag index with no trace is worse
       // than an empty tag index with one.
       console.error('bear-web: tag index rebuild failed', error);
+    },
+  });
+}
+
+/**
+ * Sequenced after the tag rebuild, not alongside it, for the same reason
+ * `runStartupSweep` follows `runStartupMigrations` in `main.tsx`: both touch
+ * `notes`-derived tables, and running them one after another removes any
+ * question of what one rebuild sees mid-write from the other.
+ */
+export function runStartupLinkMigrations(): Promise<boolean> {
+  return runLinkMigrations({
+    getVersion: () => settings.get(LINK_INDEX_VERSION_KEY, 0),
+    setVersion: (version) => settings.set(LINK_INDEX_VERSION_KEY, version),
+    rebuildLinkIndex: () => notes.rebuildLinkIndex(),
+    onError: (error) => {
+      console.error('bear-web: link index rebuild failed', error);
     },
   });
 }

@@ -1,4 +1,5 @@
 import { Extension, isMacOS } from '@tiptap/core';
+import { skipTrailingNodeMeta } from '@tiptap/extensions';
 import { isHistoryTransaction } from '@tiptap/pm/history';
 import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
@@ -141,12 +142,34 @@ export function foldedKeys(state: EditorState): string[] {
   return headingFoldKey.getState(state)?.keys ?? [];
 }
 
+/**
+ * Tags a transaction that carries NO document steps so StarterKit's
+ * `TrailingNode` leaves the document alone.
+ *
+ * `TrailingNode`'s `appendTransaction` is ungated on `docChanged` — verified
+ * at `@tiptap/extensions`' own compiled source — so a transaction whose only
+ * content is a `setMeta` still makes it append an empty paragraph to a note
+ * ending in a list or a table, and autosave then writes that edit back. This
+ * needs no typing to reach: `NoteEditor` calls `setHeadingFolds` from a mount
+ * effect once persisted folds resolve, so merely OPENING such a note grew it
+ * a blank paragraph. See the `TrailingNode` entry in
+ * `docs/rulings/markdown-and-schema.md`.
+ *
+ * Applied only when the transaction changed nothing, because `setKeys` is
+ * shared: `applyMove` rides a real section move on the same `tr`, and there
+ * `TrailingNode`'s append is the wanted behaviour — identical to what any
+ * ordinary edit gets.
+ */
+function quiet(tr: Transaction): Transaction {
+  return tr.docChanged ? tr : tr.setMeta(skipTrailingNodeMeta, true);
+}
+
 function setKeys(tr: Transaction, keys: string[]): Transaction {
-  return tr.setMeta(headingFoldKey, { keys } satisfies FoldMeta);
+  return quiet(tr.setMeta(headingFoldKey, { keys } satisfies FoldMeta));
 }
 
 function setDrag(tr: Transaction, dragFrom: number | null, dropAt: number | null): Transaction {
-  return tr.setMeta(headingFoldKey, { drag: { dragFrom, dropAt } } satisfies DragMeta);
+  return quiet(tr.setMeta(headingFoldKey, { drag: { dragFrom, dropAt } } satisfies DragMeta));
 }
 
 /**

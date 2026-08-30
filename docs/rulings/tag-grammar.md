@@ -2,7 +2,7 @@
 
 How a `#tag` is recognized, normalized and bounded in a note's Markdown — the single grammar that `src/data/tags/parseTags.ts` implements and that both the tag index and the editor's tag pills read through.
 
-**Trigger:** any change under `src/data/tags/` — `parseTags.ts`, `parseTags.test.ts`, `tagRanges.test.ts` — or to the symbols in it: `findTagRanges`, `parseTags`, `normalizeTag`, `trimTrailing`, `MASK`, `LEADING_REJECT`, `BACKTICK_OPENER`, `TILDE_OPENER`, `closesFence`, `maskCode`, `maskInlineCode`, `canStart`, `isBoundary`. Also `notes.rebuildTagIndex` and `TAG_INDEX_VERSION` in `src/data/repositories/notes.ts` and `src/data/migrations.ts`, and any prose or code introducing the literal escape sequence for the mask character.
+**Trigger:** any change under `src/data/tags/` — `parseTags.ts`, `parseTags.test.ts`, `tagRanges.test.ts` — or under `src/data/markdown/mask.ts`, or to the symbols in either: `findTagRanges`, `parseTags`, `normalizeTag`, `trimTrailing`, `MASK`, `LEADING_REJECT`, `BACKTICK_OPENER`, `TILDE_OPENER`, `closesFence`, `maskCode`, `maskInlineCode`, `canStart`, `isBoundary`. Also `notes.rebuildTagIndex` and `TAG_INDEX_VERSION` in `src/data/repositories/notes.ts` and `src/data/migrations.ts`, and any prose or code introducing the literal escape sequence for the mask character.
 
 - **Tags are keyed lowercase, and that is what makes `rebuildTagIndex`
   deterministic.** `#Work` and `#work` are one tag. Bear preserves first-seen
@@ -43,6 +43,19 @@ How a `#tag` is recognized, normalized and bounded in a note's Markdown — the 
   obvious cases (`# comment`, `#!/bin/sh`) reject on the grammar alone. Do not
   "fix" this with more masking.
 
+- **The masker moved to `src/data/markdown/mask.ts` in L2 (Task 1) and is now
+  shared between tag and link parsing** — `src/data/links/parseLinks.ts`'s
+  `findLinkRanges` calls the exact same `maskCode` this file's grammar uses,
+  rather than re-implementing fence and inline-code detection a second time.
+  A second copy of this grammar anywhere else (a new parser masking code by
+  hand, rather than importing `maskCode`) is the duplicated-grammar defect
+  this project forbids, not a legitimate variation. The move was verified
+  byte-identical against the pre-move file (`git show` diffed against the new
+  module) after review caught a first attempt that silently turned a
+  doubled-backslash escape into a literal tab byte and retyped three em dashes
+  as `--` — a "pure move" is only safe when it is proven byte-verbatim, not
+  merely behaviourally equivalent today.
+
 - **Fenced-code recognition needs tail assertions on the fence regex.**
   Without them, `'```code``` is inline'` opens a fence that never closes,
   silently deleting every tag in the rest of the note; and a closer carrying an
@@ -64,3 +77,17 @@ How a `#tag` is recognized, normalized and bounded in a note's Markdown — the 
   git ls-files -z | python3 -c "import sys,pathlib; files=sys.stdin.buffer.read().split(b'\x00'); print([f.decode() for f in files if f and b'\x00' in pathlib.Path(f.decode()).read_bytes()] or 'none')"
   ```
   Run this before every commit that touches tag-grammar prose or code.
+
+  **For a single file, do not reach for `grep -c $'\0' <file>`.** It reports
+  the file's LINE COUNT on a clean file (3 on a 3-line file with no NUL
+  anywhere), not zero — bash truncates the `$'\0'` pattern at the NUL byte,
+  so the regex `grep` actually receives is empty, and an empty pattern
+  matches every line. It can never detect a NUL; a broken verification that
+  reports success is worse than no verification, because the next person
+  believes the bytes were checked. This was invented and caught during L2 the
+  same way the earlier four incidents were: measure it (0 hits on a NUL-free
+  file, 1 on a file with one NUL) rather than trust that it reads correctly.
+  The command that actually works:
+  ```
+  python3 -c "import sys;print(open(sys.argv[1],'rb').read().count(b'\0'))" <file>
+  ```

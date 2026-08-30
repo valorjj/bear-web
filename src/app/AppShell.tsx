@@ -1,5 +1,7 @@
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useLiveQuery } from 'dexie-react-hooks';
+
 import { DEFAULT_NOTE_ORDER, isNoteOrder, type NoteOrder, notes } from '@/data';
 import {
   ACTIVE_SCOPE,
@@ -31,6 +33,7 @@ import { ProgressBar } from '@/ui/ProgressBar';
 import { Resizer } from '@/ui/Resizer';
 
 import { maxPaneWidth, MIN_PANE_WIDTH } from './paneWidths';
+import { resolveLinkTarget } from './resolveLinkTarget';
 import { SidebarContent } from './SidebarContent';
 import { SidebarDrawer } from './SidebarDrawer';
 import { usePaneWidths } from './usePaneWidths';
@@ -68,6 +71,16 @@ export function AppShell(): ReactElement {
   const { items, selectedNoteId, selectedNote, select } = useNotes(scope, scopeQuery);
   const tree = useTagTree();
   const counts = useSmartListCounts();
+
+  /**
+   * Every active note's id/title/updatedAt, live-queried independently of
+   * `items` — `items` is filtered by the CURRENT scope, but a `[[link]]`
+   * pill must resolve to its target regardless of what the sidebar happens
+   * to be showing. `undefined` while the query hasn't resolved yet, handled
+   * by `handleActivateLink` the same way `handleActivateTag` treats
+   * `tree.nodes === undefined`: as "not yet known", never as "no notes".
+   */
+  const noteIndex = useLiveQuery(() => notes.listActive(), []);
 
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
@@ -191,6 +204,28 @@ export function AppShell(): ReactElement {
 
     setScope(tagScope(tag));
     tree.reveal(tag);
+    return true;
+  };
+
+  // Answers a Mod-click on a `[[link]]` pill in the editor. Same contract as
+  // `handleActivateTag` right above: returns whether it acted, so a decline
+  // costs the user a navigation but never the caret.
+  //
+  // Deliberately a plain function, not `useCallback`, for the identical
+  // reason `handleActivateTag` is: `noteIndex` is a fresh array from
+  // `useLiveQuery` whenever the underlying data actually changes, and a
+  // `[noteIndex]` dependency array would recompute this on every render the
+  // query returns a result for anyway.
+  const handleActivateLink = (title: string): boolean => {
+    // `undefined` means the live query has not resolved yet — treated as
+    // "not yet known", never as "no notes", the same discipline
+    // `handleActivateTag` applies to `tree.nodes === undefined`.
+    if (noteIndex === undefined) return false;
+
+    const target = resolveLinkTarget(noteIndex, title);
+    if (target === null) return false;
+
+    select(target.id);
     return true;
   };
 
@@ -438,6 +473,8 @@ export function AppShell(): ReactElement {
                   seedText={seed?.id === selectedNote.id ? seed.text : undefined}
                   autoFocus={justCreatedId === selectedNote.id}
                   onActivateTag={handleActivateTag}
+                  onActivateLink={handleActivateLink}
+                  onOpenNote={select}
                 />
               )}
             </Pane>

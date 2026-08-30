@@ -127,6 +127,17 @@ with is not resolved; only code can retire one.
   the assertion message first** — run the full suite in a loop redirecting
   output, rather than re-running the file alone, which has never failed.
 
+- **`e2e/imageResize.spec.ts:32` is a SECOND load-sensitive spec, and it is not the
+  resize flake below.** "dragging the grip resizes the image, and the width survives a
+  reload" times out under full parallel e2e load and passes in isolation in well under a
+  second. Confirmed pre-existing rather than assumed: during L1 it failed on the branch, and
+  a full e2e run on `main` failed the identical test on the first try — so the controlled
+  comparison, not the file list, is what settled it. Note that "the diff does not touch
+  images" is the WRONG reason to dismiss it, and it was nearly used: the test drives a
+  pointer drag inside the editor, and both B2 and L2 added editor-wide pointer and
+  transaction handlers. Different file proves nothing about shared plugin behaviour; only
+  running the suite on the base does.
+
 - **An intermittent Playwright resize-test flake.** Seen once during M5.5, not
   reproducible afterwards across three consecutive full runs (18/18 each). Not
   actionable without a failing artifact, but worth naming because `jsdom` has
@@ -245,3 +256,73 @@ with is not resolved; only code can retire one.
   documentation task. Cost if wrong: a keyboard user occasionally opens the
   context menu right after an arrow key and finds no Section group;
   recoverable by closing and reopening the menu.
+
+## L2 (backlinks)
+
+- **`LinkPill.setKnownNoteTitles` still has no trailing-node regression
+  test.** It dispatches a meta-only transaction and it carries
+  `skipTrailingNodeMeta` today, verified by reading the source — but only
+  `LinkAutocomplete.ts`'s `move`/`dismiss` paths and `HeadingFold.ts`'s
+  `setKeys` have a test that would catch the tag being dropped. `LinkPill`
+  has no `aria-activedescendant` question at all, because it renders a
+  decoration, not a listbox — nothing to defer there. Deliberately not
+  widened into L2 Task 6: the fix belongs with whichever future change next
+  touches that file, using `quietlySelect`'s all-tagged-transactions pattern
+  (see `docs/rulings/markdown-and-schema.md`'s `TrailingNode` entry) rather
+  than invented fresh. Cost if wrong: a future edit to `setKnownNoteTitles`
+  silently reintroduces a growing-note bug with nothing to catch it.
+  **This item named `CodeLanguageControls` until the L2 final review, and
+  that was simply false**: it holds zero `setMeta` calls and its only
+  dispatch is a `setNodeMarkup`, so `TrailingNode`'s behaviour there is
+  correct and nothing is owed. The file that WAS exposed and named nowhere
+  was `HeadingFold.ts` — nine untagged meta-only dispatches, reachable
+  without typing a character, since `NoteEditor` calls `setHeadingFolds` from
+  a mount effect. Fixed in the same review; the lesson is that a deferred
+  item pointing at the wrong file is worse than no item, because it retires
+  the worry.
+- **The backlinks panel shipped always-expanded; the spec said
+  "collapsible".** Mitigated by an existing `max-h-48 overflow-y-auto` cap on
+  `BacklinksPanel`'s `<nav>`, so a note with many backlinks scrolls inside a
+  bounded box rather than pushing the editor off-screen — judged defensible
+  by both the implementer and the task review. No persisted expand/collapse
+  state interface exists anywhere in the app to hang a real toggle off of.
+  The spec is corrected in the same commit as this entry
+  (`docs/superpowers/specs/2026-08-31-l2-backlinks-design.md`) to describe
+  what shipped. Cost if wrong: a note with an unusually long backlinks list
+  keeps a modest, non-collapsible scroll region rather than a toggle.
+- **`NoteEditorProps.onOpenNote` is optional, so a future second consumer
+  that forgets to wire it gets a silently absent panel, not a type error.**
+  `AppShell` is the only caller today and always supplies it
+  (`onOpenNote={select}`). Cost if wrong: a new host of `NoteEditor` ships
+  with no visible backlinks panel and no compiler error pointing at why.
+- **`LinkAutocomplete`'s listbox/option ids are keyed on `from` + index, not
+  namespaced per editor instance.** Safe under the app's actual one-editor-
+  at-a-time usage; would collide (duplicate DOM ids) if two autocomplete-
+  bearing editors ever shared one DOM tree. Cost if wrong: exactly that
+  collision, the day a second simultaneous editor instance is built.
+- **A cross-scope link leaves the note list with no visible selection.**
+  Ruled deliberately in Task 4: `AppShell.handleActivateLink` does not change
+  `scope` when the target note is outside the current filter, because a link
+  is a lateral move and silently re-scoping would lose the user's place
+  mid-triage in a filtered list. The editor can therefore show a note the
+  list does not currently contain, with no row marked current anywhere.
+  `e2e/backlinks.spec.ts` exercises only the same-scope case (both corpus
+  notes are in "All notes") and asserts the resulting `aria-current`
+  honestly, per the controller's instruction not to paper over this with a
+  same-scope-only test that implies more coverage than it has. Cost if
+  wrong: a user who Mod-clicks a cross-scope link may wonder, briefly, which
+  row in the list corresponds to what they are now reading — recoverable by
+  clicking any list scope, which reselects normally.
+- **The rename-while-panel-open stale-title guard (`BacklinksPanel`'s
+  `result?.title === title` discard) has no direct Playwright test.**
+  Attempted and left out: forcing the actual race — a rename landing between
+  `useLiveQuery`'s dispatch and its resolution — needs either an artificial
+  delay instrumented into the app itself (which would make the test assert
+  against harness behaviour, not the app's) or advancing fake timers past
+  autosave's debounce at a precise instant relative to an async IndexedDB
+  read, neither of which Playwright can do deterministically from the
+  outside. The guard is unit-testable in principle by mocking `notes.linksTo`
+  with a controllable delay; that is a `BacklinksPanel.test.tsx` addition,
+  not an e2e one, and is left for whoever next touches that component. Cost
+  if wrong: the guard's only protection is the reviewer's source-level
+  verification recorded in the L2 progress ledger.

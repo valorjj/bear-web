@@ -20,6 +20,12 @@ export interface NoteTag {
   tag: string;
 }
 
+export interface NoteLink {
+  noteId: string;
+  /** Normalized target title — `normalizeTitle`'s output. */
+  toTitle: string;
+}
+
 export interface TagMeta {
   tag: string;
   collapsed: boolean;
