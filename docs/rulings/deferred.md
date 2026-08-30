@@ -127,6 +127,17 @@ with is not resolved; only code can retire one.
   the assertion message first** — run the full suite in a loop redirecting
   output, rather than re-running the file alone, which has never failed.
 
+- **`e2e/imageResize.spec.ts:32` is a SECOND load-sensitive spec, and it is not the
+  resize flake below.** "dragging the grip resizes the image, and the width survives a
+  reload" times out under full parallel e2e load and passes in isolation in well under a
+  second. Confirmed pre-existing rather than assumed: during L1 it failed on the branch, and
+  a full e2e run on `main` failed the identical test on the first try — so the controlled
+  comparison, not the file list, is what settled it. Note that "the diff does not touch
+  images" is the WRONG reason to dismiss it, and it was nearly used: the test drives a
+  pointer drag inside the editor, and both B2 and L2 added editor-wide pointer and
+  transaction handlers. Different file proves nothing about shared plugin behaviour; only
+  running the suite on the base does.
+
 - **An intermittent Playwright resize-test flake.** Seen once during M5.5, not
   reproducible afterwards across three consecutive full runs (18/18 each). Not
   actionable without a failing artifact, but worth naming because `jsdom` has
