@@ -14,7 +14,7 @@
  * Terminates a tag, but never permits one to start.
  *
  * Must be typed as the four-character escape sequence shown below, never
- * pasted as a literal NUL byte -- a raw NUL byte looks identical in most
+ * pasted as a literal NUL byte — a raw NUL byte looks identical in most
  * editors but silently breaks plain-text tools like `grep` run against this
  * file.
  */
@@ -51,7 +51,7 @@ function openingFence(line: string): { char: string; length: number } | null {
  */
 function closesFence(line: string, fence: { char: string; length: number }): boolean {
   const escaped = fence.char === '`' ? '`' : '~';
-  const pattern = new RegExp(`^ {0,3}(${escaped}{${fence.length},})[ \t]*$`);
+  const pattern = new RegExp(`^ {0,3}(${escaped}{${fence.length},})[ \\t]*$`);
   return pattern.test(line);
 }
 
@@ -99,7 +99,7 @@ export function maskInlineCode(line: string): string {
 
 /**
  * Masks fenced code blocks and inline code spans. Indented code blocks and raw
- * HTML blocks are deliberately left unmasked -- see the spec.
+ * HTML blocks are deliberately left unmasked — see the spec.
  */
 export function maskCode(input: string): string {
   let fence: { char: string; length: number } | null = null;
@@ -108,7 +108,7 @@ export function maskCode(input: string): string {
     .split('\n')
     .map((line) => {
       if (fence !== null) {
-        // Only the closer rule applies to interior lines -- the opener check
+        // Only the closer rule applies to interior lines — the opener check
         // does not re-run, so a stray `` ```txt `` inside a fence is just
         // more masked content, not a nested (or accidentally re-opened) fence.
         if (closesFence(line, fence)) fence = null;
