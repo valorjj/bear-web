@@ -7,6 +7,7 @@ import { TaskList } from '@tiptap/extension-task-list';
 import StarterKit from '@tiptap/starter-kit';
 
 import { Callout, CalloutTitle, type CalloutOptions } from './Callout';
+import { CodeCopy, type CodeCopyOptions } from './CodeCopy';
 import { CodeLanguageControls, type CodeLanguageControlsOptions } from './CodeLanguageControls';
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
 import { ContextMenu, type ContextMenuOptions } from './ContextMenu';
@@ -37,6 +38,7 @@ function buildSupportedExtensions(
       TableHandlesOptions &
       ContextMenuOptions &
       CodeLanguageControlsOptions &
+      CodeCopyOptions &
       CalloutOptions
   >,
 ): Extensions {
@@ -143,6 +145,9 @@ function buildSupportedExtensions(
     // schema change, and no plugin registered at all without `codeLabels`.
     // See `CodeLanguageControls.ts`.
     CodeLanguageControls.configure(options),
+    // One copy button per code block. Separate from the control above, which
+    // anchors a single widget to the block under the caret — see `CodeCopy.ts`.
+    CodeCopy.configure(options),
   ];
 }
 
@@ -198,6 +203,7 @@ export function buildEditorExtensions(
       TableHandlesOptions &
       ContextMenuOptions &
       CodeLanguageControlsOptions &
+      CodeCopyOptions &
       CalloutOptions &
       StoredImageOptions &
       ImagePasteOptions

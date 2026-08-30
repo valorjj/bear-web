@@ -289,6 +289,94 @@
   overflow-x: auto;
 }
 
+/*
+ * The code block's copy button (`CodeCopy.ts`).
+ *
+ * The anchor is a ZERO-HEIGHT block immediately before the `<pre>`, and the
+ * button is positioned against it. The button cannot live inside the `<pre>`:
+ * that box is `overflow-x: auto` (above), so a child of it scrolls away with a
+ * long line and is clipped at the edge — no CSS rescues a child of a scroll
+ * container from that. Anchoring outside also means horizontal code scrolling
+ * cannot move the button, which is the behaviour you want anyway.
+ */
+.bear-code-copy-anchor {
+  display: block;
+  position: relative;
+  height: 0;
+}
+
+.bear-code-copy {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--bear-radius-sm);
+  color: var(--bear-faint);
+  background-color: var(--bear-bg);
+  border: var(--bear-border-width) solid var(--bear-border);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--bear-duration-fast) var(--bear-ease);
+}
+
+/*
+ * Quiet at rest, revealed on hover — the same treatment the fold gutter gets,
+ * and for the same reason: a control that is always lit competes with the code
+ * it sits on top of.
+ *
+ * The reveal is on `:focus`, NOT `:focus-visible`. Focus landing on a control
+ * with `opacity: 0` is a defect however the focus arrived, and
+ * `:focus-visible` does not match a programmatic `.focus()` — so the narrower
+ * pseudo-class leaves a real hole. The global focus RING in `index.css` stays
+ * `:focus-visible`, which is the right split: reveal always, ring for keyboard.
+ */
+/*
+ * `:has(+ pre:hover)`, not a previous-sibling combinator — CSS has none, and
+ * the anchor deliberately sits BEFORE the `<pre>` (see above). Same shape as
+ * the table handles' `:has(+ table:hover)`.
+ */
+.bear-code-copy-anchor:has(+ pre:hover) .bear-code-copy,
+.bear-code-copy-anchor:hover .bear-code-copy,
+.bear-code-copy:focus {
+  opacity: 1;
+}
+
+.bear-code-copy:hover {
+  color: var(--bear-text);
+  background-color: var(--bear-hover);
+}
+
+.bear-code-copy[data-state='copied'] {
+  color: var(--bear-accent);
+  opacity: 1;
+}
+
+.bear-code-copy[data-state='failed'] {
+  color: var(--bear-danger);
+  opacity: 1;
+}
+
+/*
+ * "This control can never be revealed" (J2): on a device whose primary input
+ * cannot hover, an opacity-0 control is permanently invisible. The cost is a
+ * button resting on every code block on a phone, which is the accepted trade —
+ * an affordance you can see and ignore beats one that does not exist.
+ */
+@media (hover: none) {
+  .bear-code-copy {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bear-code-copy {
+    transition: none;
+  }
+}
+
 /* The inline rule above would double up inside a block. */
 .ProseMirror pre code {
   background: none;
