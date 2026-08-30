@@ -127,10 +127,13 @@ with is not resolved; only code can retire one.
   the assertion message first** — run the full suite in a loop redirecting
   output, rather than re-running the file alone, which has never failed.
 
-- **`e2e/imageResize.spec.ts:32` is a SECOND load-sensitive spec, and it is not the
-  resize flake below.** "dragging the grip resizes the image, and the width survives a
-  reload" times out under full parallel e2e load and passes in isolation in well under a
-  second. Confirmed pre-existing rather than assumed: during L1 it failed on the branch, and
+- **`e2e/imageResize.spec.ts:32` flakes on its own, and it is not the resize flake
+  below.** "dragging the grip resizes the image, and the width survives a reload" times
+  out both under full parallel e2e load AND, less often, when run alone — measured at
+  1 failure in 5 isolated repeats on `main` before L2, and 1 in 3 after. Calling it
+  "load-sensitive" was this file's first description of it and was too narrow: load
+  raises the rate, it does not cause it, so re-running it alone is NOT sufficient
+  evidence that a diff is innocent. Confirmed pre-existing rather than assumed: during L1 it failed on the branch, and
   a full e2e run on `main` failed the identical test on the first try — so the controlled
   comparison, not the file list, is what settled it. Note that "the diff does not touch
   images" is the WRONG reason to dismiss it, and it was nearly used: the test drives a
