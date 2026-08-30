@@ -48,6 +48,12 @@ export interface NoteEditorProps {
    */
   onActivateTag?: (tag: string) => boolean;
   /**
+   * Called with the normalized title when the user Mod-clicks a `[[link]]`
+   * pill. Returns whether the app acted on it; `false` makes the gesture
+   * behave like a plain click — same contract as `onActivateTag`.
+   */
+  onActivateLink?: (title: string) => boolean;
+  /**
    * Exposes the mounted `RichEditor`'s imperative handle to the caller.
    * Nothing in the app passes this — `AppShell` never needs to reach the
    * editor instance directly — it exists so tests can reach
@@ -80,6 +86,7 @@ export function NoteEditor({
   seedText,
   autoFocus = false,
   onActivateTag,
+  onActivateLink,
   handleRef: externalHandleRef,
 }: NoteEditorProps): ReactElement {
   const t = useT();
@@ -405,6 +412,7 @@ export function NoteEditor({
         createdAt={note.createdAt}
         updatedAt={note.updatedAt}
         onActivateTag={onActivateTag}
+        onActivateLink={onActivateLink}
         onExport={handleExport}
         onImage={handleImage}
         onEditorReady={setFoldEditor}

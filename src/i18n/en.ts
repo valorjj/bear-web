@@ -188,6 +188,8 @@ export const en = {
   'editor.link.prompt': 'Link address',
   'editor.tagPill.hint.mac': 'Cmd-click to filter by this tag',
   'editor.tagPill.hint.other': 'Ctrl-click to filter by this tag',
+  'editor.linkPill.hint.mac': 'Cmd-click to open this note',
+  'editor.linkPill.hint.other': 'Ctrl-click to open this note',
 
   'theme.indigoLight': 'Indigo Light',
   'theme.indigoDark': 'Indigo Dark',

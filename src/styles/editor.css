@@ -760,6 +760,50 @@
 }
 
 /*
+ * `[[title]]` rendered as a pill. Shares `--bear-tag-fill`/`--bear-accent`
+ * with `.bear-tag` above rather than inventing a second colour family — a
+ * link and a tag are the same kind of thing to the eye (a piece of inline
+ * chrome over plain text), and this is the resolved, common case.
+ *
+ * The brackets stay visible for the same reason `#` does on a tag pill: this
+ * app never hides Markdown syntax.
+ */
+.ProseMirror .bear-link {
+  border-radius: var(--bear-radius-sm);
+  padding: 0.05em 0.15em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.ProseMirror .bear-link[data-resolved='true'] {
+  color: var(--bear-accent);
+  background-color: var(--bear-tag-fill);
+}
+
+/*
+ * A link to a title with no matching note. Fail-open, not an error: the spec
+ * is explicit that this is a normal way to work, so the pill stays legible
+ * and clickable (Mod-click still fires, and the app still decides whether it
+ * acted) rather than reading as broken. Muted text plus a dashed underline —
+ * no fill at all — is what keeps it visually subordinate to a resolved link
+ * without looking like a warning or an error.
+ */
+.ProseMirror .bear-link[data-resolved='false'] {
+  color: var(--bear-muted);
+  text-decoration: underline dashed;
+  text-underline-offset: 0.15em;
+}
+
+[data-mod-held='true'] .ProseMirror .bear-link[data-resolved='true'] {
+  cursor: pointer;
+  background-color: var(--bear-tag-fill-strong);
+}
+
+[data-mod-held='true'] .ProseMirror .bear-link[data-resolved='false'] {
+  cursor: pointer;
+}
+
+/*
  * A folded section's blocks. `display: none` rather than `visibility` or a
  * height clamp: the block must take no space at all, and ProseMirror keeps the
  * positions regardless, since the document is untouched.

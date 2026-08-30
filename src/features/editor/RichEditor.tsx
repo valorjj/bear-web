@@ -1,7 +1,9 @@
 import { isMacOS, posToDOMRect } from '@tiptap/core';
 import { EditorContent, type Editor, useEditor, useEditorState } from '@tiptap/react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
 
+import { notes } from '@/data';
 import { ExportMenu, type ExportFormat } from '@/features/export';
 import { useT } from '@/i18n';
 
@@ -73,6 +75,13 @@ export interface RichEditorProps {
    * click, caret placement and all.
    */
   onActivateTag?: (tag: string) => boolean;
+  /**
+   * Called with the normalized title when the user Mod-clicks a `[[link]]`
+   * pill. Returns whether the app acted on it; `false` makes the gesture
+   * behave exactly like a plain click, caret placement and all — same
+   * contract as `onActivateTag`.
+   */
+  onActivateLink?: (title: string) => boolean;
   /**
    * Called with the chosen destination when the user picks one from the export
    * menu. Omit it and no export control is rendered at all.
@@ -150,6 +159,7 @@ export function RichEditor({
   createdAt,
   updatedAt,
   onActivateTag,
+  onActivateLink,
   onExport,
   onImage,
   onEditorReady,
@@ -185,6 +195,27 @@ export function RichEditor({
   // callback the very first render supplied.
   const activateRef = useRef(onActivateTag);
   activateRef.current = onActivateTag;
+
+  // Same discipline as `activateRef` above, for `LinkPill.onActivateLink`.
+  const activateLinkRef = useRef(onActivateLink);
+  activateLinkRef.current = onActivateLink;
+
+  /**
+   * The titles a `[[link]]` pill resolves against, live-queried rather than
+   * threaded in as a prop: `notes.allNoteTitles()` is the one door
+   * `LinkPill`'s resolution is meant to read through, and re-querying it here
+   * is what lets a note created mid-session start resolving without a
+   * remount. `undefined` while the very first query hasn't resolved yet.
+   *
+   * Deliberately NOT passed to `buildEditorExtensions` as an option — see
+   * `LinkPill.ts`'s module docblock: options are read once at construction,
+   * so a title set passed that way would never refresh and every link to a
+   * note created during the session would render unresolved forever. The
+   * effect below pushes it into the plugin's own state instead, through
+   * `setKnownNoteTitles`, which the plugin recomputes decorations from on
+   * every transaction.
+   */
+  const noteTitles = useLiveQuery(() => notes.allNoteTitles(), []);
 
   // Same discipline as `activateRef`: the plugin captures this once at
   // construction, so the ref keeps the identity stable while the behaviour
@@ -243,6 +274,14 @@ export function RichEditor({
       // the two now share.
       onActivate: onActivateTag === undefined ? null : (tag) => activateRef.current?.(tag) === true,
       activateHint: t(isMacOS() ? 'editor.tagPill.hint.mac' : 'editor.tagPill.hint.other'),
+      // Same `null`-when-nobody-listening contract as `onActivate` above, and
+      // the same boolean-propagation requirement: the plugin gates
+      // `preventDefault()` on this return value, so a wrapper collapsing
+      // `undefined` to a falsy-but-not-`false` value would read as "declined"
+      // for every case, including a successful one.
+      onActivateLink:
+        onActivateLink === undefined ? null : (title) => activateLinkRef.current?.(title) === true,
+      linkActivateHint: t(isMacOS() ? 'editor.linkPill.hint.mac' : 'editor.linkPill.hint.other'),
       // Unlike `onActivate`, this is unconditionally wired: the level menu is
       // a built-in editor affordance, not an opt-in prop the app may omit, so
       // there is no "nobody is listening" state to represent with `null` here.
@@ -359,6 +398,18 @@ export function RichEditor({
    * kind of optionality that quietly turns back into "assume false".
    */
   const flags = useEditorState({ editor, selector: editorFlagsSelector }) ?? EMPTY_FLAGS;
+
+  // Pushes the live title set into `LinkPill`'s own plugin state on every
+  // change — see `noteTitles`'s docblock above for why this rides a command
+  // rather than an option. `noteTitles === undefined` (the query hasn't
+  // resolved yet) is left alone rather than clearing the plugin's set to
+  // empty: the plugin already starts with an empty set of its own, and
+  // dispatching one here first would just be a redundant, empty-then-real
+  // pair of transactions on every mount.
+  useEffect(() => {
+    if (editor === null || noteTitles === undefined) return;
+    editor.commands.setKnownNoteTitles(noteTitles);
+  }, [editor, noteTitles]);
 
   // CONTROLLER RULING R12: move the selection when the menu OPENS, not
   // before each command. Reassigned every render (like every other ref-held

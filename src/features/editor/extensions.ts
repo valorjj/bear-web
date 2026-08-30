@@ -19,6 +19,8 @@ import { ImagePaste, type ImagePasteOptions } from './ImagePaste';
 import { StoredImage, type StoredImageOptions } from './StoredImage';
 import type { TagPillOptions } from './TagPill';
 import { TagPill } from './TagPill';
+import type { LinkPillOptions } from './LinkPill';
+import { LinkPill } from './LinkPill';
 import { MarkdownTable } from './tableMarkdown';
 import { TaskItemPromotion } from './taskItemPromotion';
 
@@ -34,6 +36,7 @@ import { TaskItemPromotion } from './taskItemPromotion';
 function buildSupportedExtensions(
   options: Partial<
     TagPillOptions &
+      LinkPillOptions &
       HeadingFoldOptions &
       TableHandlesOptions &
       ContextMenuOptions &
@@ -126,6 +129,11 @@ function buildSupportedExtensions(
     // decorates `#tag` text as a pill; the document and its Markdown are
     // untouched. See `TagPill.ts` and `tagPill.test.ts`.
     TagPill.configure(options),
+    // An `Extension` (not a `Node` or `Mark`), same shape as `TagPill` right
+    // above it: it registers nothing in the schema, and the document and its
+    // Markdown are untouched. It contributes one plugin that decorates
+    // `[[title]]` text as a pill; see `LinkPill.ts` and `linkPill.test.ts`.
+    LinkPill.configure(options),
     // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
     // schema — `computeRecognizedHtmlTags()` and every round-trip suite are
     // unaffected. It contributes one plugin that decorates folded sections;
@@ -199,6 +207,7 @@ function computeRecognizedHtmlTags(): Set<string> {
 export function buildEditorExtensions(
   options: Partial<
     TagPillOptions &
+      LinkPillOptions &
       HeadingFoldOptions &
       TableHandlesOptions &
       ContextMenuOptions &
