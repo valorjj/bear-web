@@ -193,6 +193,9 @@ export const en = {
   'editor.linkPill.hint.mac': 'Cmd-click to open this note',
   'editor.linkPill.hint.other': 'Ctrl-click to open this note',
 
+  'editor.linkAutocomplete.listLabel': 'Link to note',
+  'editor.linkAutocomplete.empty': 'No matching note',
+
   'theme.indigoLight': 'Indigo Light',
   'theme.indigoDark': 'Indigo Dark',
   'theme.paper': 'Paper',

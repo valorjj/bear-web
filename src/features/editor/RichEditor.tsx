@@ -338,6 +338,15 @@ export function RichEditor({
         filter: t('editor.code.filter'),
         empty: t('editor.code.empty'),
       },
+      // Read once at mount like every option above it. This is the labels
+      // half of the contract only — the actual title LIST rides plugin
+      // state via `setLinkAutocompleteTitles`, pushed by the effect below,
+      // exactly like `codeLabels`' sibling `LinkPill` does for its own
+      // known-title set.
+      linkAutocompleteLabels: {
+        listLabel: t('editor.linkAutocomplete.listLabel'),
+        empty: t('editor.linkAutocomplete.empty'),
+      },
     }),
   );
 
@@ -409,6 +418,13 @@ export function RichEditor({
   useEffect(() => {
     if (editor === null || noteTitles === undefined) return;
     editor.commands.setKnownNoteTitles(noteTitles);
+    // Same `noteTitles` query result, not a second `useLiveQuery` — see
+    // `LinkAutocompleteOptions`' own command docblock for why the two
+    // plugins cannot share the array's REPRESENTATION (one wants
+    // normalized titles for a membership test, the other wants exactly-cased
+    // titles to insert verbatim) while still sharing this one source, so
+    // the two never drift out of sync with each other.
+    editor.commands.setLinkAutocompleteTitles(noteTitles);
   }, [editor, noteTitles]);
 
   // CONTROLLER RULING R12: move the selection when the menu OPENS, not

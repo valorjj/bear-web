@@ -188,6 +188,9 @@ export const ko: Record<TranslationKey, string> = {
   'editor.linkPill.hint.mac': 'Cmd-클릭하면 이 노트가 열립니다',
   'editor.linkPill.hint.other': 'Ctrl-클릭하면 이 노트가 열립니다',
 
+  'editor.linkAutocomplete.listLabel': '노트 링크',
+  'editor.linkAutocomplete.empty': '일치하는 노트가 없습니다',
+
   'theme.indigoLight': 'Indigo Light',
   'theme.indigoDark': 'Indigo Dark',
   'theme.paper': 'Paper',

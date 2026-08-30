@@ -21,6 +21,8 @@ import type { TagPillOptions } from './TagPill';
 import { TagPill } from './TagPill';
 import type { LinkPillOptions } from './LinkPill';
 import { LinkPill } from './LinkPill';
+import type { LinkAutocompleteOptions } from './LinkAutocomplete';
+import { LinkAutocomplete } from './LinkAutocomplete';
 import { MarkdownTable } from './tableMarkdown';
 import { TaskItemPromotion } from './taskItemPromotion';
 
@@ -37,6 +39,7 @@ function buildSupportedExtensions(
   options: Partial<
     TagPillOptions &
       LinkPillOptions &
+      LinkAutocompleteOptions &
       HeadingFoldOptions &
       TableHandlesOptions &
       ContextMenuOptions &
@@ -134,6 +137,13 @@ function buildSupportedExtensions(
     // Markdown are untouched. It contributes one plugin that decorates
     // `[[title]]` text as a pill; see `LinkPill.ts` and `linkPill.test.ts`.
     LinkPill.configure(options),
+    // An `Extension`, same shape as `LinkPill` right above it and for the
+    // same reason: it registers nothing in the schema, and the document and
+    // its Markdown are untouched — it offers existing titles while `[[` is
+    // being typed, but the user still has to accept a row (Enter or a
+    // click) before anything is inserted. See `LinkAutocomplete.ts` and
+    // `linkAutocomplete.test.ts`.
+    LinkAutocomplete.configure(options),
     // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
     // schema — `computeRecognizedHtmlTags()` and every round-trip suite are
     // unaffected. It contributes one plugin that decorates folded sections;
@@ -208,6 +218,7 @@ export function buildEditorExtensions(
   options: Partial<
     TagPillOptions &
       LinkPillOptions &
+      LinkAutocompleteOptions &
       HeadingFoldOptions &
       TableHandlesOptions &
       ContextMenuOptions &
