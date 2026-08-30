@@ -50,6 +50,30 @@ export async function postLogout(): Promise<void> {
   }
 }
 
+export interface ImageUsage {
+  /** Bytes this account's images occupy on the server. */
+  used: number;
+  /** The quota, read from the server rather than hardcoded here. */
+  limit: number;
+}
+
+/**
+ * How much of the image quota this account has used.
+ *
+ * `limit` comes from the server on purpose. Hardcoding the figure on both
+ * sides is how a meter comes to show a percentage of the wrong denominator
+ * after someone changes the quota, and nothing would fail.
+ *
+ * Returns `null` rather than throwing when the caller is not signed in: a
+ * signed-out visitor has no usage, which is not an error condition.
+ */
+export async function fetchImageUsage(): Promise<ImageUsage | null> {
+  const response = await call('/files/usage');
+  if (response.status === 401) return null;
+  if (!response.ok) throw new ServerUnavailableError(`/files/usage returned ${response.status}`);
+  return (await response.json()) as ImageUsage;
+}
+
 /** Full-page navigation, because an OAuth redirect cannot happen in `fetch`. */
 export function startGoogleSignIn(): void {
   window.location.assign(`${API_ORIGIN}/auth/google`);

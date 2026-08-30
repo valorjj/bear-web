@@ -237,6 +237,8 @@ export const en = {
   // the next person can read these notes — which is why it is stated rather
   // than tucked into a footnote.
   'account.notesLocal': 'Notes stay on this device.',
+  'account.images': 'Images',
+  'account.images.used': '{used} of {limit}',
   // The spec makes this sentence a requirement, not decoration: on a shared
   // browser the next person opens the app and reads these notes. The
   // mitigation is disclosure, so the user's choice is an informed one.

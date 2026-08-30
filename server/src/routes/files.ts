@@ -104,6 +104,24 @@ export function fileRoutes(deps: AppDeps): Hono {
     return c.json({ ok: true });
   });
 
+  /**
+   * How much of the image quota this account has used.
+   *
+   * Registered BEFORE `/files/:id`, and that is required rather than tidy:
+   * Hono matches routes in registration order, so with the parameterised route
+   * first, `usage` binds to `:id`, fails the `ID` shape check, and this
+   * endpoint answers 400 forever.
+   *
+   * `limit` is returned rather than left for the client to hardcode, so the
+   * two cannot drift when the quota changes.
+   */
+  app.get('/files/usage', async (c) => {
+    const userId = await authenticate(c.req.header('cookie'));
+    if (userId === null) return c.json({ error: 'not signed in' }, 401);
+
+    return c.json({ used: await usedImageBytes(deps.query, userId), limit: IMAGE_QUOTA_BYTES });
+  });
+
   app.get('/files/:id', async (c) => {
     const userId = await authenticate(c.req.header('cookie'));
     if (userId === null) return c.json({ error: 'not signed in' }, 401);

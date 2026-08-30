@@ -222,6 +222,8 @@ export const ko: Record<TranslationKey, string> = {
   'account.signIn.google': 'Google로 로그인',
   'account.signOut': '로그아웃',
   'account.notesLocal': '메모는 이 기기에 그대로 남습니다.',
+  'account.images': '이미지',
+  'account.images.used': '{limit} 중 {used}',
   'account.signOut.title': '로그아웃할까요?',
   'account.signOut.body':
     '로그아웃해도 메모는 이 기기에 그대로 남습니다. 이 브라우저를 사용하는 다른 사람이 메모를 볼 수 있습니다.',
