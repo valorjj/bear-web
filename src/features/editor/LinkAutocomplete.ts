@@ -85,6 +85,22 @@ export function linkAutocompleteMatchAt(state: EditorState): LinkAutocompleteMat
   // boundary this grammar cannot see into.
   if (query.includes(']') || query.includes('\n') || query.includes(MASK)) return null;
 
+  // The caret sits INSIDE an already-complete `[[Title]]`. Nothing before the
+  // caret can tell: the `]]` is on the far side of it, so every guard above
+  // passes and the popover opens inside a finished link — where `Enter` runs
+  // `insertLink`, which replaces `[[` → caret and leaves the original tail
+  // behind, yielding `[[Full Title]] Title]]`. Refuse whenever the rest of the
+  // block closes this link, using the same `[^\]\n]*` title grammar
+  // `findLinkRanges` scans with.
+  //
+  // Deliberately cheap, with one known and accepted false negative: opening a
+  // NEW link to the left of an existing one on the same line
+  // (`[[Be| and [[Alpha]]`) also sees a closing `]]` ahead and stays shut.
+  // Typing the closing brackets, or finishing the link on its own line, both
+  // work; the alternative is a real scan for the nearest opener, which is more
+  // machinery than this edge deserves.
+  if (/^[^\]\n]*\]\]/.test(text.slice($from.parentOffset))) return null;
+
   const blockStart = $from.before() + 1;
   return { from: blockStart + openAt, to: blockStart + upto.length, query };
 }

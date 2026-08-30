@@ -133,14 +133,22 @@ dispatch anywhere in `src/features/editor/`.
   paragraph the instant the known-titles command fired, and autosave wrote it
   back: a note silently growing a blank paragraph on every open, invisible to
   anyone not diffing the stored Markdown. The same hazard applies to
-  `LinkAutocomplete.ts`'s `move`/`dismiss` meta transactions and
-  `CodeLanguageControls`'s meta-only path — any transaction whose only
-  purpose is to update plugin state, not the document, is vulnerable.
+  `LinkAutocomplete.ts`'s `move`/`dismiss` meta transactions and to
+  `HeadingFold.ts`'s `setKeys`/`setDrag`, which build nine meta-only
+  dispatches between them — any transaction whose only purpose is to update
+  plugin state, not the document, is vulnerable. (`CodeLanguageControls` is
+  NOT such a case, and an earlier version of this bullet said it was: that
+  file contains zero `setMeta` calls and dispatches only a `setNodeMarkup`,
+  a genuine document change for which `TrailingNode`'s append is correct and
+  wanted.)
   **The fix is `.setMeta(skipTrailingNodeMeta, true)` (from
   `@tiptap/extensions`, the same constant `TrailingNode` itself reads) on
-  every meta-only dispatch, with no exceptions** — there is no partial or
-  conditional form of this fix; a meta-only transaction either carries the
-  tag or it is a live instance of this bug.
+  every meta-only dispatch, with no exceptions** — a transaction carrying no
+  document steps either has the tag or is a live instance of this bug. The
+  test is the transaction, never the call site: `HeadingFold`'s `setKeys` is
+  shared between four meta-only commands and `applyMove`, which rides a real
+  section move on the same `tr`, so it tags on `!tr.docChanged` and leaves a
+  document-changing move to behave exactly as ordinary typing does.
   **The testing trap, which is why this is easy to "fix" without actually
   fixing it:** the vulnerability flag `TrailingNode` tracks is computed once
   at plugin `init` and is BURNED PERMANENTLY by the first untagged

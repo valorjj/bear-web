@@ -14,6 +14,9 @@ route into it) and `src/features/editor/HighlightPalette.tsx`; `src/ui/Icon.tsx`
 buttons; `src/ui/Button.tsx`'s `VARIANTS` map (`default` / `ghost` / `danger`);
 `src/features/notes/NoteList.tsx`'s header strip and its scope-header button;
 `src/features/notes/ScopeMenu.tsx`'s `role` attributes and disabled-group copy;
+`src/features/editor/LinkAutocomplete.ts`'s `view()` lifecycle (the
+`role`/`aria-expanded`/`aria-controls`/`aria-activedescendant` mirror,
+`optionId` and `listboxId`);
 `src/features/notes/preview.ts`'s `snippetLines`;
 `src/features/notes/NoteRowMenu.tsx`'s roles, its `Shift+F10` route in
 `NoteListItem.tsx` and its `aria-disabled` PDF item; the thumbnail's `alt` in
@@ -506,3 +509,25 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   user nothing they lose by not hearing), but it is exactly what a future
   reader needs to know before disabling a third item whose reason is NOT
   self-evident.
+
+## The `[[` autocomplete swaps the editor's own role
+
+- **`LinkAutocomplete.ts`'s `view()` changes `.ProseMirror`'s `role` from
+  `textbox` to `combobox` for as long as the popover is open, and roughly ten
+  e2e files locate the editor by `role="textbox"`.** This is the standard
+  editable-combobox pattern with one twist: the app has no dedicated input to
+  hang it on, so the ALREADY-FOCUSED editor surface plays the combobox itself,
+  and `aria-expanded`, `aria-controls` and `aria-activedescendant` go onto the
+  same element. The alternative — a real `<input>` — would have to steal focus
+  from the editor mid-typing, which is worse for every user, not only a
+  screen-reader one. Two consequences a diff must respect. First, the swap is
+  GLOBAL to the editor surface while it lasts: a test or a query that assumes
+  `.ProseMirror` is permanently a `textbox` is wrong at exactly the moment a
+  `[[` menu is open, and its failure will read as "the editor disappeared".
+  Second, `originalRole` is captured once in `view()` and restored on BOTH the
+  close path and `destroy()` — restoring a hardcoded `"textbox"` instead would
+  be a silent lie in any harness that mounts the editor without one (a bare
+  test editor carries no role at all), so a future refactor must keep the
+  capture-and-restore rather than assuming a baseline. `aria-activedescendant`
+  is removed rather than set when nothing is active, because pointing at an
+  option id that no longer exists is worse than pointing at nothing.

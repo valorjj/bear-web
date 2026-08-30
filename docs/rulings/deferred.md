@@ -248,20 +248,27 @@ with is not resolved; only code can retire one.
 
 ## L2 (backlinks)
 
-- **`LinkPill` and `CodeLanguageControls` have the same missing
-  trailing-node regression test that the autocomplete had before its own fix
-  round.** All three dispatch meta-only transactions (`setKnownNoteTitles`;
-  the language-select command) and all three carry `skipTrailingNodeMeta`
-  today, verified by reading the source — but only `LinkAutocomplete.ts`'s
-  `move`/`dismiss` paths have a test that would catch the tag being dropped.
-  `LinkPill` additionally has no `aria-activedescendant` question at all,
-  because it renders a decoration, not a listbox — nothing to defer there.
-  Deliberately not widened into L2 Task 6: the fix belongs with whichever
-  future change next touches either file, using `quietlySelect`'s
-  all-tagged-transactions pattern (see
-  `docs/rulings/markdown-and-schema.md`'s `TrailingNode` entry) rather than
-  invented fresh. Cost if wrong: a future edit to either file's meta dispatch
+- **`LinkPill.setKnownNoteTitles` still has no trailing-node regression
+  test.** It dispatches a meta-only transaction and it carries
+  `skipTrailingNodeMeta` today, verified by reading the source — but only
+  `LinkAutocomplete.ts`'s `move`/`dismiss` paths and `HeadingFold.ts`'s
+  `setKeys` have a test that would catch the tag being dropped. `LinkPill`
+  has no `aria-activedescendant` question at all, because it renders a
+  decoration, not a listbox — nothing to defer there. Deliberately not
+  widened into L2 Task 6: the fix belongs with whichever future change next
+  touches that file, using `quietlySelect`'s all-tagged-transactions pattern
+  (see `docs/rulings/markdown-and-schema.md`'s `TrailingNode` entry) rather
+  than invented fresh. Cost if wrong: a future edit to `setKnownNoteTitles`
   silently reintroduces a growing-note bug with nothing to catch it.
+  **This item named `CodeLanguageControls` until the L2 final review, and
+  that was simply false**: it holds zero `setMeta` calls and its only
+  dispatch is a `setNodeMarkup`, so `TrailingNode`'s behaviour there is
+  correct and nothing is owed. The file that WAS exposed and named nowhere
+  was `HeadingFold.ts` — nine untagged meta-only dispatches, reachable
+  without typing a character, since `NoteEditor` calls `setHeadingFolds` from
+  a mount effect. Fixed in the same review; the lesson is that a deferred
+  item pointing at the wrong file is worse than no item, because it retires
+  the worry.
 - **The backlinks panel shipped always-expanded; the spec said
   "collapsible".** Mitigated by an existing `max-h-48 overflow-y-auto` cap on
   `BacklinksPanel`'s `<nav>`, so a note with many backlinks scrolls inside a

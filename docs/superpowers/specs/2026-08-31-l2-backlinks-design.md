@@ -82,7 +82,10 @@ what proves it.
 
 ### The index is `noteLinks`, derived and never synced
 
-`noteLinks: '[fromId+toTitle], fromId, toTitle'`. Derived from note text, so
+`noteLinks: '[noteId+toTitle], noteId, toTitle'`. (This spec said `fromId`
+until after L2 shipped; the field is `noteId`, matching `noteTags`' own key
+name, and `src/data/db.ts`'s `version(5)` is the authority.) Derived from note
+text, so
 it is rebuilt rather than transferred — the same treatment `noteTags` gets in
 `sync.md`'s rulings. `reindexNote` writes both tables in one place.
 

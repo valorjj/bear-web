@@ -89,6 +89,40 @@ describe('linkAutocompleteMatchAt', () => {
     editor.destroy();
   });
 
+  /**
+   * Everything BEFORE the caret inside a finished `[[Title]]` is
+   * indistinguishable from a live, still-open link — the `]]` is on the far
+   * side of the caret — so without a look-ahead the popover opens inside a
+   * complete link and `Enter` there replaces `[[` → caret while leaving the
+   * original tail behind, yielding `[[Deploy Checklist]] Checklist]]`.
+   */
+  it('is null with the caret INSIDE an already-complete [[Title]]', () => {
+    const editor = editorWith('see [[Deploy Checklist]] here');
+    // Between "Deploy" and " Checklist", i.e. squarely inside the link.
+    const inside = editor.state.doc.textContent.indexOf('Deploy') + 'Deploy'.length + 1;
+    editor.commands.setTextSelection(inside);
+    expect(linkAutocompleteMatchAt(editor.state)).toBeNull();
+    editor.destroy();
+  });
+
+  it('is null with the caret immediately before the closing ]]', () => {
+    const editor = editorWith('see [[Deploy Checklist]] here');
+    const beforeClose = editor.state.doc.textContent.indexOf(']]') + 1;
+    editor.commands.setTextSelection(beforeClose);
+    expect(linkAutocompleteMatchAt(editor.state)).toBeNull();
+    editor.destroy();
+  });
+
+  it('still finds a genuinely unclosed [[Tit with text following the caret', () => {
+    // The control for the two above: text AFTER the caret is not on its own a
+    // reason to refuse — only text that CLOSES this link is.
+    const editor = editorWith('see [[Design and more');
+    const caret = editor.state.doc.textContent.indexOf(' and more') + 1;
+    editor.commands.setTextSelection(caret);
+    expect(linkAutocompleteMatchAt(editor.state)?.query).toBe('Design');
+    editor.destroy();
+  });
+
   it('is null inside a code block', () => {
     const editor = editorWith('```\nsome code\n```');
     let pos: number | null = null;
@@ -205,6 +239,24 @@ describe('keyboard interaction', () => {
     expect(activeOption(editor)?.textContent).toBe('Design Notes');
     expect(keydown(editor, 'Enter')).toBe(true);
     expect(editor.getText()).toBe('[[Design Notes]]');
+    editor.destroy();
+  });
+
+  it('Enter inside an already-complete link does nothing, and leaves the text intact', () => {
+    const editor = editorWith('see [[Deploy Checklist]] here');
+    const inside = editor.state.doc.textContent.indexOf('Deploy') + 'Deploy'.length + 1;
+    editor.commands.setTextSelection(inside);
+
+    // No popover, so this plugin declines the key and it falls through to the
+    // editor's ordinary paragraph split. That split is why the return value is
+    // NOT asserted and why the newlines are stripped below: what is on trial is
+    // whether `insertLink` ran, not where the paragraph broke.
+    expect(popover(editor)).toBeNull();
+    keydown(editor, 'Enter');
+    // Asserted by VALUE, not by "unchanged": the regression this guards
+    // produced `see [[Deploy Checklist]] Checklist]] here`, which any
+    // count- or truthiness-shaped assertion would have waved through.
+    expect(editor.getText().replaceAll('\n', '')).toBe('see [[Deploy Checklist]] here');
     editor.destroy();
   });
 
