@@ -130,10 +130,27 @@ function widgetKey(match: LinkAutocompleteMatch, activeIndex: number): string {
   return `link-autocomplete-${match.from}-${match.query}-${activeIndex}`;
 }
 
+/**
+ * Stable across keystrokes typing the same link (keyed on `from`, the
+ * opening `[[`'s position, not on the query), unlike `widgetKey` above:
+ * these are read back by the `view()` lifecycle below to point
+ * `aria-activedescendant`/`aria-controls` at a real element, which needs an
+ * id that does not change out from under a screen reader mid-selection the
+ * way the widget's own rebuild-every-keystroke key deliberately does.
+ */
+function listboxId(from: number): string {
+  return `bear-link-autocomplete-listbox-${from}`;
+}
+
+function optionId(from: number, index: number): string {
+  return `bear-link-autocomplete-option-${from}-${index}`;
+}
+
 function renderPopover(
   labels: NonNullable<LinkAutocompleteOptions['linkAutocompleteLabels']>,
   matches: readonly string[],
   activeIndex: number,
+  from: number,
 ): HTMLElement {
   const container = document.createElement('div');
   container.className = 'bear-link-autocomplete';
@@ -144,6 +161,7 @@ function renderPopover(
   popover.contentEditable = 'false';
 
   const list = document.createElement('ul');
+  list.id = listboxId(from);
   list.className = 'bear-link-autocomplete-list';
   list.setAttribute('role', 'listbox');
   list.setAttribute('aria-label', labels.listLabel);
@@ -158,6 +176,7 @@ function renderPopover(
   } else {
     matches.forEach((title, index) => {
       const item = document.createElement('li');
+      item.id = optionId(from, index);
       item.setAttribute('role', 'option');
       item.setAttribute('data-link-autocomplete-option', String(index));
       item.setAttribute('aria-selected', String(index === activeIndex));
@@ -202,6 +221,23 @@ function clampedActiveIndex(activeIndex: number, matchCount: number): number {
  * change — so its widget can simply be rebuilt fresh every keystroke (see
  * `widgetKey`) with no DOM to preserve.
  *
+ * Focus itself never leaves the main editable surface while this menu is
+ * open — there is no separate input to carry the standard combobox ARIA, the
+ * way `CodeLanguageControls`'s filter input does. So the ARIA instead rides
+ * the ALREADY-FOCUSED host, `view.dom`, following the editable-combobox
+ * pattern (the one GitHub/Twitter `@mention` menus use): `role="combobox"`
+ * and `aria-expanded` on the host while the menu is open, `aria-controls`
+ * naming the listbox, `aria-activedescendant` naming the active option —
+ * all applied and torn down through the plugin's `view()` lifecycle's
+ * `update()`/`destroy()`, since `decorations()` itself has no side-effecting
+ * hook and no reason to run when the selection alone changes without the
+ * document changing. Skipping this wiring would be the same class of
+ * silent failure `docs/rulings` already treats as blocking elsewhere in this
+ * app — a `NaN` contrast ratio that passes because `NaN < min` is false, PDF
+ * text that extracts correctly while every glyph renders as tofu — a
+ * keyboard user sees the list open and move with no signal a screen reader
+ * can announce at all.
+ *
  * An `Extension`, not a `Node`: it registers nothing in the schema and
  * mutates no document merely by existing, so every Markdown round-trip test
  * is blind to whether it runs at all.
@@ -225,6 +261,8 @@ export const LinkAutocomplete = Extension.create<LinkAutocompleteOptions>({
             // not gated on `docChanged` — without this tag it would insert
             // and autosave a spurious trailing paragraph into any note
             // ending in a list, the instant this command fires on mount.
+            // `linkAutocomplete.test.ts`'s "the trailing-node hazard" suite
+            // pins this with a fault injection, not just by reading the tag.
             dispatch(
               tr
                 .setMeta(linkAutocompleteKey, { type: 'titles', titles })
@@ -302,11 +340,15 @@ export const LinkAutocomplete = Extension.create<LinkAutocompleteOptions>({
             const activeIndex = clampedActiveIndex(pluginState.activeIndex, matches.length);
 
             return DecorationSet.create(state.doc, [
-              Decoration.widget(match.to, () => renderPopover(labels, matches, activeIndex), {
-                side: 1,
-                ignoreSelection: true,
-                key: widgetKey(match, activeIndex),
-              }),
+              Decoration.widget(
+                match.to,
+                () => renderPopover(labels, matches, activeIndex, match.from),
+                {
+                  side: 1,
+                  ignoreSelection: true,
+                  key: widgetKey(match, activeIndex),
+                },
+              ),
             ]);
           },
 
@@ -396,6 +438,61 @@ export const LinkAutocomplete = Extension.create<LinkAutocompleteOptions>({
               return false;
             },
           },
+        },
+
+        // Exists for exactly one thing: mirroring the open/active state onto
+        // `view.dom` as `role`/`aria-expanded`/`aria-controls`/
+        // `aria-activedescendant`, the standard editable-combobox pattern,
+        // applied to the ALREADY-FOCUSED host rather than to a dedicated
+        // input this control does not have — see the module docblock.
+        // `originalRole` is captured once so closing restores whatever the
+        // host carried before this plugin ever touched it (`"textbox"` in
+        // `RichEditor`, nothing in a bare test harness) rather than assuming
+        // a fixed baseline.
+        view(editorView) {
+          const originalRole = editorView.dom.getAttribute('role');
+
+          const clear = (view: EditorView): void => {
+            if (originalRole === null) view.dom.removeAttribute('role');
+            else view.dom.setAttribute('role', originalRole);
+            view.dom.removeAttribute('aria-expanded');
+            view.dom.removeAttribute('aria-controls');
+            view.dom.removeAttribute('aria-activedescendant');
+          };
+
+          const sync = (view: EditorView): void => {
+            const match = linkAutocompleteMatchAt(view.state);
+            const pluginState = linkAutocompleteKey.getState(view.state);
+            if (
+              match === null ||
+              pluginState === undefined ||
+              pluginState.dismissedFrom === match.from
+            ) {
+              clear(view);
+              return;
+            }
+
+            const matches = matchingTitles(pluginState.titles, match.query);
+            const activeIndex = clampedActiveIndex(pluginState.activeIndex, matches.length);
+
+            view.dom.setAttribute('role', 'combobox');
+            view.dom.setAttribute('aria-expanded', 'true');
+            view.dom.setAttribute('aria-controls', listboxId(match.from));
+            if (activeIndex >= 0) {
+              view.dom.setAttribute('aria-activedescendant', optionId(match.from, activeIndex));
+            } else {
+              view.dom.removeAttribute('aria-activedescendant');
+            }
+          };
+
+          sync(editorView);
+
+          return {
+            update: sync,
+            destroy() {
+              clear(editorView);
+            },
+          };
         },
       }),
     ];

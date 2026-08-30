@@ -1,4 +1,6 @@
 import { Editor, getSchema } from '@tiptap/core';
+import { skipTrailingNodeMeta } from '@tiptap/extensions';
+import { TextSelection } from '@tiptap/pm/state';
 import { describe, expect, it } from 'vitest';
 
 import { buildEditorExtensions, editorExtensions } from './extensions';
@@ -223,6 +225,179 @@ describe('keyboard interaction', () => {
     expect(popover(editor)).toBeNull();
     type(editor, 'x');
     expect(popover(editor)).not.toBeNull();
+    editor.destroy();
+  });
+});
+
+describe('aria wiring on the editor host', () => {
+  // Focus never leaves `.ProseMirror` while this menu is open — there is no
+  // dedicated filter input the way `CodeLanguageControls` has one — so the
+  // standard editable-combobox ARIA (`role`, `aria-expanded`,
+  // `aria-controls`, `aria-activedescendant`) rides `view.dom` itself. Every
+  // assertion below is BY VALUE against a real option id, not merely
+  // "the attribute exists": `toHaveProperty('pos')`-shaped assertions are
+  // exactly the near-vacuous pattern this project's CLAUDE.md calls out as
+  // having passed against a sabotaged implementation before.
+  const DESIGN_TITLES = ['Design Review', 'Design Notes', 'Design Draft', 'Weekly Standup'];
+
+  it('sets role=combobox and aria-expanded=true only while the menu is open', () => {
+    const editor = editorWith('', LABELS, DESIGN_TITLES);
+    // Tiptap's own `Editor` stamps `role="textbox"` on `view.dom` at
+    // construction, with no `editorProps.attributes` involved — this is the
+    // REAL baseline a bare test-harness editor carries, measured rather than
+    // assumed; `RichEditor` carries the same value through its own explicit
+    // `editorProps.attributes`, so the baseline this plugin must restore to
+    // is identical either way.
+    const baseline = editor.view.dom.getAttribute('role');
+    expect(baseline).toBe('textbox');
+
+    type(editor, '[[design');
+    expect(editor.view.dom.getAttribute('role')).toBe('combobox');
+    expect(editor.view.dom.getAttribute('aria-expanded')).toBe('true');
+
+    keydown(editor, 'Escape');
+    expect(editor.view.dom.getAttribute('role')).toBe(baseline);
+    expect(editor.view.dom.getAttribute('aria-expanded')).toBeNull();
+    expect(editor.view.dom.getAttribute('aria-activedescendant')).toBeNull();
+
+    editor.destroy();
+  });
+
+  it('aria-controls names the actual rendered listbox id', () => {
+    const editor = editorWith('', LABELS, DESIGN_TITLES);
+    type(editor, '[[design');
+
+    const list = editor.view.dom.querySelector('[role="listbox"]') as HTMLElement;
+    expect(list.id).not.toBe('');
+    expect(editor.view.dom.getAttribute('aria-controls')).toBe(list.id);
+
+    editor.destroy();
+  });
+
+  it('aria-activedescendant names the active option BY VALUE, and tracks ArrowDown', () => {
+    const editor = editorWith('', LABELS, DESIGN_TITLES);
+    type(editor, '[[design');
+
+    // Three matches: 'Design Review', 'Design Notes', 'Design Draft'.
+    const rows = () => options(editor);
+    expect(rows()).toHaveLength(3);
+
+    // Move off the first row before asserting, per the coordinator's brief:
+    // pin the SECOND row active, then prove ArrowDown moves it to the third
+    // — a check that would pass with a stale or entirely absent attribute
+    // must fail here.
+    expect(keydown(editor, 'ArrowDown')).toBe(true);
+    const second = rows()[1]!;
+    expect(second.textContent).toBe('Design Notes');
+    expect(editor.view.dom.getAttribute('aria-activedescendant')).toBe(second.id);
+
+    expect(keydown(editor, 'ArrowDown')).toBe(true);
+    const third = rows()[2]!;
+    expect(third.textContent).toBe('Design Draft');
+    expect(editor.view.dom.getAttribute('aria-activedescendant')).toBe(third.id);
+    expect(editor.view.dom.getAttribute('aria-activedescendant')).not.toBe(second.id);
+
+    editor.destroy();
+  });
+
+  it('restores whatever role the host carried before, on close and on destroy', () => {
+    // `originalRole` is captured once per plugin-view instance, so whatever
+    // baseline this particular editor happened to carry (`"textbox"` here,
+    // via Tiptap's own default — see the test above) is what a close or a
+    // destroy must return to, not a hardcoded assumption.
+    const editor = editorWith('', LABELS, DESIGN_TITLES);
+    const dom = editor.view.dom;
+    const baseline = dom.getAttribute('role');
+    type(editor, '[[design');
+    expect(dom.getAttribute('role')).toBe('combobox');
+
+    keydown(editor, 'Escape');
+    expect(dom.getAttribute('role')).toBe(baseline);
+
+    type(editor, 'x');
+    expect(dom.getAttribute('role')).toBe('combobox');
+
+    editor.destroy();
+    expect(dom.getAttribute('role')).toBe(baseline);
+    expect(dom.getAttribute('aria-expanded')).toBeNull();
+    expect(dom.getAttribute('aria-controls')).toBeNull();
+    expect(dom.getAttribute('aria-activedescendant')).toBeNull();
+  });
+});
+
+describe('the trailing-node hazard', () => {
+  // `TrailingNode.appendTransaction` (from `@tiptap/extensions`, bundled by
+  // StarterKit) is NOT gated on `docChanged`, and its own tracked
+  // "does the doc still end in a disallowed node" flag is set once, from the
+  // INITIAL document, at plugin-state `init` — before any transaction is
+  // ever dispatched. Consequence, measured directly rather than assumed: on
+  // a note ending in a list, the very FIRST dispatched transaction against
+  // that editor appends a trailing paragraph UNLESS it carries
+  // `skipTrailingNodeMeta` — and this is true of ANY transaction, including
+  // a bare `editor.commands.setTextSelection()` that touches nothing this
+  // extension owns. Once that first append happens, the doc's last node is
+  // a plain paragraph, the flag flips permanently false, and every
+  // subsequent transaction — tagged or not — is a no-op for this hazard.
+  //
+  // That makes the obvious test shape wrong: "type `[[de`, then fire
+  // Escape/ArrowDown, then diff the doc" does NOT exercise Escape's or
+  // ArrowDown's own tag, because typing `[[de` is itself an untagged real
+  // edit that already consumes the vulnerability before Escape ever runs —
+  // verified by deliberately sabotaging Escape's tag and watching that
+  // version of the test keep passing anyway. `quietlySelect` below is what
+  // keeps the vulnerability alive going into the dispatch under test: it
+  // moves the caret with a RAW, explicitly-tagged transaction that bypasses
+  // `editor.commands.setTextSelection` (which is not tagged, and would burn
+  // the vulnerability itself).
+  const LIST_ENDING_MARKDOWN = 'note [[de\n\n- one\n- two';
+
+  function docJSON(editor: Editor): unknown {
+    return editor.getJSON();
+  }
+
+  function quietlySelect(editor: Editor, pos: number): void {
+    const selection = TextSelection.near(editor.state.doc.resolve(pos));
+    editor.view.dispatch(
+      editor.state.tr.setSelection(selection).setMeta(skipTrailingNodeMeta, true),
+    );
+  }
+
+  it('setLinkAutocompleteTitles does not mutate a note ending in a list', () => {
+    // No `editorWith` here, deliberately: that helper's own convenience call
+    // to `setLinkAutocompleteTitles` would itself be the first dispatch, so
+    // testing a SECOND call after it would miss a missing tag on the first.
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ linkAutocompleteLabels: LABELS }),
+      content: parseMarkdown(LIST_ENDING_MARKDOWN),
+    });
+    const before = docJSON(editor);
+    // The first transaction ever dispatched against this editor.
+    editor.commands.setLinkAutocompleteTitles(['Another Title']);
+    expect(docJSON(editor)).toEqual(before);
+    editor.destroy();
+  });
+
+  it('the Escape dismissal does not mutate a note ending in a list', () => {
+    const editor = editorWith(LIST_ENDING_MARKDOWN);
+    // Position 10 is right after "note [[de" (9 characters, content starts
+    // at position 1) — an open, unclosed match with query "de".
+    quietlySelect(editor, 10);
+    expect(linkAutocompleteMatchAt(editor.state)?.query).toBe('de');
+
+    const before = docJSON(editor);
+    expect(keydown(editor, 'Escape')).toBe(true);
+    expect(docJSON(editor)).toEqual(before);
+    editor.destroy();
+  });
+
+  it('an ArrowDown move does not mutate a note ending in a list', () => {
+    const editor = editorWith(LIST_ENDING_MARKDOWN);
+    quietlySelect(editor, 10);
+    expect(linkAutocompleteMatchAt(editor.state)?.query).toBe('de');
+
+    const before = docJSON(editor);
+    expect(keydown(editor, 'ArrowDown')).toBe(true);
+    expect(docJSON(editor)).toEqual(before);
     editor.destroy();
   });
 });
