@@ -248,6 +248,12 @@ export function RichEditor({
       // there is no "nobody is listening" state to represent with `null` here.
       onOpenMenu: (request) => openMenuRef.current(request),
       foldHint: t('editor.fold.toggle'),
+      // The code block's copy button. Three names, because the button's
+      // accessible name carries the OUTCOME — an `aria-live` region on a
+      // widget ProseMirror may rebuild is unreliable, the name is not.
+      codeCopyLabel: t('editor.code.copy'),
+      codeCopiedLabel: t('editor.code.copied'),
+      codeCopyFailedLabel: t('editor.code.copyFailed'),
       // Read once at mount, like `foldHint` above. These drive the empty-header
       // hint and nothing else: they are a writer's aid, never content, so they
       // never reach the Markdown or an export. Supplying them here is also what

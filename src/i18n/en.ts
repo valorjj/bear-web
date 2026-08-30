@@ -175,6 +175,9 @@ export const en = {
   'editor.code.none': 'Plain text',
   'editor.code.filter': 'Filter languages',
   'editor.code.empty': 'No matching language',
+  'editor.code.copy': 'Copy code',
+  'editor.code.copied': 'Copied',
+  'editor.code.copyFailed': 'Could not copy',
   'editor.toolbar.top': 'Top controls',
   'editor.toolbar.bottom': 'Formatting toolbar',
   'editor.info.show': 'Note information',
@@ -234,6 +237,8 @@ export const en = {
   // the next person can read these notes — which is why it is stated rather
   // than tucked into a footnote.
   'account.notesLocal': 'Notes stay on this device.',
+  'account.images': 'Images',
+  'account.images.used': '{used} of {limit}',
   // The spec makes this sentence a requirement, not decoration: on a shared
   // browser the next person opens the app and reads these notes. The
   // mitigation is disclosure, so the user's choice is an informed one.

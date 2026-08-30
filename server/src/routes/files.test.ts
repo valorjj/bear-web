@@ -167,6 +167,40 @@ describe.skipIf(!url)('/files', () => {
     expect(await readImage(root, alice, 'big')).toBeNull();
   });
 
+  it('reports usage, and counts only this account’s bytes', async () => {
+    await upload('f1', { body: new Uint8Array([1, 2, 3, 4, 5]) });
+    await upload('f2', { body: new Uint8Array([1, 2, 3]) });
+    // Bob's upload must not appear in Alice's total. A `SUM(bytes)` missing
+    // its `user_id` predicate is a cross-account leak of exactly the shape
+    // `scripts/serverBoundaries.test.ts`'s tenancy guard exists to reject —
+    // and it would still return a plausible-looking number.
+    await upload('f3', { cookie: bobCookie, body: new Uint8Array([9, 9, 9, 9, 9, 9, 9, 9]) });
+
+    const response = await app.request('/files/usage', {
+      headers: { origin: APP_ORIGIN, cookie: aliceCookie },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ used: 8, limit: IMAGE_QUOTA_BYTES });
+  });
+
+  it('does not let the id route swallow /files/usage', async () => {
+    // Hono matches in registration order. With `/files/:id` registered first,
+    // `usage` binds to `:id` and fails the id-shape check, so this endpoint
+    // answers 400 forever — a failure that looks like a client bug.
+    const response = await app.request('/files/usage', {
+      headers: { origin: APP_ORIGIN, cookie: aliceCookie },
+    });
+
+    expect(response.status).not.toBe(400);
+  });
+
+  it('refuses usage to a caller who is not signed in', async () => {
+    const response = await app.request('/files/usage', { headers: { origin: APP_ORIGIN } });
+
+    expect(response.status).toBe(401);
+  });
+
   it('refuses a type that is not image/webp, and writes nothing', async () => {
     const response = await upload('f1', { type: 'image/png' });
 

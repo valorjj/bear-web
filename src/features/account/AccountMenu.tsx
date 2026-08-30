@@ -5,9 +5,12 @@ import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { Icon, UserRound } from '@/ui/Icon';
 import { Popover } from '@/ui/Popover';
 
+import { formatBytes } from '@/lib/formatBytes';
+
 import { AdoptNotesDialog } from './AdoptNotesDialog';
 import { useSessionValue } from './SessionContext';
 import { Status, syncSummary, SyncStatus, type StatusTone } from './SyncStatus';
+import { useImageUsage } from './useImageUsage';
 import { useSync, type SyncStatusValue } from './useSync';
 
 /**
@@ -19,6 +22,18 @@ const BADGE_TONE: Record<StatusTone, string> = {
   faint: 'bg-faint',
   danger: 'bg-danger',
 };
+
+/**
+ * The filled fraction of the quota bar, clamped.
+ *
+ * Clamped at both ends rather than trusted: a bar wider than its track breaks
+ * the rounded corner it sits in, and the server's `used` can legitimately
+ * exceed `limit` for an account that was over quota before the limit changed.
+ */
+function usagePercent(used: number, limit: number): number {
+  if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) return 0;
+  return Math.min(100, Math.max(0, (used / limit) * 100));
+}
 
 /** Matches the previous `w-64`, kept so the visual size is unchanged. */
 const MENU_WIDTH = 256;
@@ -43,6 +58,8 @@ export function AccountMenu(): ReactElement {
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [placement, setPlacement] = useState<CSSProperties | null>(null);
+  // Fetched only while the menu is open — see `useImageUsage`.
+  const usage = useImageUsage(open && state.status === 'signedIn');
 
   function row(label: string, onClick: () => void): ReactElement {
     return (
@@ -106,6 +123,40 @@ export function AccountMenu(): ReactElement {
             lastSyncedAt={sync.lastSyncedAt}
           />
         ) : null}
+
+        {usage === null ? null : (
+          <div className="flex flex-col gap-1 px-2 py-1">
+            <div className="text-ui-sm flex items-baseline justify-between gap-2">
+              {/*
+                "Images", not "Storage". The quota counts image bytes only —
+                notes are text and are negligible beside them — so the broader
+                word would be a small lie, and the first confusing thing about
+                it would be that the number never matches the disk.
+              */}
+              <span className="text-muted">{t('account.images')}</span>
+              <span className="text-text font-mono tabular-nums">
+                {t('account.images.used')
+                  .replace('{used}', formatBytes(usage.used))
+                  .replace('{limit}', formatBytes(usage.limit))}
+              </span>
+            </div>
+            <div
+              className="bg-hover h-1 overflow-hidden rounded-full"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={usage.limit}
+              aria-valuenow={usage.used}
+              aria-label={t('account.images')}
+            >
+              <div
+                className="bg-accent h-full rounded-full"
+                // The one inline style here, and it has to be: the width is a
+                // computed percentage, which no utility class can express.
+                style={{ width: `${String(usagePercent(usage.used, usage.limit))}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         <p className="text-ui text-text px-2">{t('account.notesLocal')}</p>
 

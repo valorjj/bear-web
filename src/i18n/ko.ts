@@ -170,6 +170,9 @@ export const ko: Record<TranslationKey, string> = {
   'editor.code.none': '일반 텍스트',
   'editor.code.filter': '언어 검색',
   'editor.code.empty': '일치하는 언어가 없습니다',
+  'editor.code.copy': '코드 복사',
+  'editor.code.copied': '복사됨',
+  'editor.code.copyFailed': '복사하지 못했습니다',
   'editor.toolbar.top': '상단 컨트롤',
   'editor.toolbar.bottom': '서식 도구 모음',
   'editor.info.show': '노트 정보',
@@ -219,6 +222,8 @@ export const ko: Record<TranslationKey, string> = {
   'account.signIn.google': 'Google로 로그인',
   'account.signOut': '로그아웃',
   'account.notesLocal': '메모는 이 기기에 그대로 남습니다.',
+  'account.images': '이미지',
+  'account.images.used': '{limit} 중 {used}',
   'account.signOut.title': '로그아웃할까요?',
   'account.signOut.body':
     '로그아웃해도 메모는 이 기기에 그대로 남습니다. 이 브라우저를 사용하는 다른 사람이 메모를 볼 수 있습니다.',

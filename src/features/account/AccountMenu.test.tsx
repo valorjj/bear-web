@@ -114,3 +114,67 @@ describe('AccountMenu', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 });
+
+describe('the image usage meter', () => {
+  const usage = (used: number, limit: number) =>
+    new Response(JSON.stringify({ used, limit }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  function route(usageResponse: () => Response) {
+    return (url: string) => (url.includes('/files/usage') ? usageResponse() : signedIn());
+  }
+
+  it('shows what is used against the server’s own limit', async () => {
+    mount(route(() => usage(512 * 1024 * 1024, 2 * 1024 ** 3)));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /account/i })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: /account/i }));
+
+    // A specific rendered string, not merely "a meter exists". A formatter
+    // dividing by 1000, or one reading a hardcoded limit, both fail here.
+    expect(await screen.findByText('512 MB of 2 GB')).toBeInTheDocument();
+  });
+
+  it('reports the fraction through the progressbar, not only in text', async () => {
+    mount(route(() => usage(1024 ** 3, 2 * 1024 ** 3)));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /account/i })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: /account/i }));
+
+    const bar = await screen.findByRole('progressbar', { name: 'Images' });
+    expect(bar).toHaveAttribute('aria-valuenow', String(1024 ** 3));
+    expect(bar).toHaveAttribute('aria-valuemax', String(2 * 1024 ** 3));
+  });
+
+  it('says Images, never Storage — the quota counts image bytes only', async () => {
+    mount(route(() => usage(1, 2 * 1024 ** 3)));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /account/i })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: /account/i }));
+
+    expect(await screen.findByText('Images')).toBeInTheDocument();
+    expect(screen.queryByText(/storage/i)).toBeNull();
+  });
+
+  it('draws nothing at all when the server cannot be reached', async () => {
+    mount((url) => (url.includes('/files/usage') ? new Response('', { status: 500 }) : signedIn()));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /account/i })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: /account/i }));
+
+    // Absent, not an error line: the user opened this menu to do something
+    // else, and a failed background fetch is not their problem to read about.
+    expect(screen.getByRole('menuitem', { name: /sign out/i })).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+
+  it('shows no meter at all when signed out', async () => {
+    mount(() => new Response('{}', { status: 401 }));
+
+    await userEvent.click(await screen.findByRole('button', { name: /account/i }));
+
+    expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+});

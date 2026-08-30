@@ -1,6 +1,9 @@
 import {
+  Check,
   ChevronDown,
   ChevronRight,
+  CircleAlert,
+  Copy,
   GripHorizontal,
   GripVertical,
   Heading1,
@@ -193,6 +196,25 @@ const ICON_NODES = new Map<LucideIcon, IconNode>([
       ['path', { d: 'M20 10c-2 2-3 3.5-3 6' }],
     ],
   ],
+  // The code block's copy button (`CodeCopy.ts`) is a `Decoration.widget`, so
+  // it cannot render React and needs the path data here. Three states, three
+  // glyphs: at rest, after a successful copy, and after a failure.
+  [
+    Copy,
+    [
+      ['rect', { width: '14', height: '14', x: '8', y: '8', rx: '2', ry: '2' }],
+      ['path', { d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2' }],
+    ],
+  ],
+  [Check, [['path', { d: 'M20 6 9 17l-5-5' }]]],
+  [
+    CircleAlert,
+    [
+      ['circle', { cx: '12', cy: '12', r: '10' }],
+      ['line', { x1: '12', x2: '12', y1: '8', y2: '12' }],
+      ['line', { x1: '12', x2: '12.01', y1: '16', y2: '16' }],
+    ],
+  ],
 ]);
 
 export function renderIconMarkup(glyph: LucideIcon, size: IconProps['size'] = 'md'): string {
@@ -283,4 +305,6 @@ export {
   RotateCcw,
   ArrowUp,
   ArrowDown,
+  Check,
+  CircleAlert,
 } from 'lucide-react';
