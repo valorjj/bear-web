@@ -62,10 +62,12 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | K3 image resize, and images in every export                       | complete |
 | G export: PDF, rendered server-side                               | complete |
 | M9b callout blocks                                                | complete |
+| L1 code copy button, image quota meter                            | complete |
+| L2 backlinks: `[[wikilink]]`, index, pill, panel, autocomplete    | complete |
 
-2143 unit tests (plus 127 server tests, 76 of which are integration tests that
-skip when `TEST_DATABASE_URL` is unset, and 21 renderer tests behind
-`npm run test:pdf`), 181 end-to-end tests. `main` is always green and
+2239 unit tests (plus 130 server tests, 79 of which are integration tests that
+skip when `TEST_DATABASE_URL` is unset, and 23 renderer tests behind
+`npm run test:pdf`), 190 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**

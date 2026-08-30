@@ -49,7 +49,7 @@ import { describe, expect, it } from 'vitest';
  * the CSS is not in this asset. Headroom is again ~2.7 KB, deliberately,
  * matching what K1 and M9b left.
  */
-const CEILING_BYTES = 336_000;
+const CEILING_BYTES = 340_000;
 
 /**
  * Raised from 328,000 by M9b (callout blocks) on 2026-08-27, measured on both
@@ -72,6 +72,27 @@ const CEILING_BYTES = 336_000;
  *
  * Headroom is ~2.75 KB, matching what K1 deliberately left, so the next
  * ordinary change does not have to touch this line.
+ */
+
+/**
+ * Raised from 336,000 by L2 (backlinks: the `[[wikilink]]` grammar, the
+ * `noteLinks` derived index, the link pill, the backlinks panel and `[[`
+ * autocomplete) on 2026-08-31, measured on both sides per this file's
+ * convention: `main` (`8987ae6`, L1 merged) was **334,590 B** gzipped, and the
+ * finished branch measures **337,236 B** — a true cost of **2,646 B gzipped**
+ * across all six of L2's tasks combined (the shared masker move added
+ * nothing; the grammar, index-repository wiring, pill decorations and
+ * commands, backlinks panel, and autocomplete plugin account for the rest).
+ * The branch was already **over** the previous 336,000 ceiling before this
+ * raise, exactly as Task 4's own mid-milestone measurement predicted it would
+ * be once Tasks 5 and 6 landed. `@tiptap/extensions` (for
+ * `skipTrailingNodeMeta`) was added as a direct dependency but was already
+ * present transitively via `@tiptap/extension-*` packages, so it cost
+ * nothing new to the graph.
+ *
+ * Headroom is **2,764 B**, matching the ~2.5-3 KB this file's practice calls
+ * for — not the ~10 KB the docblock above still describes as the historical
+ * rule nobody has followed since K1.
  */
 
 /**

@@ -15,8 +15,31 @@ symbols `autoFocus`, `seedText`,
 `src/features/tags/useTagTree.ts`'s `reveal` and `collapsed`; any new
 `useLiveQuery(` call site whose dependency array is not `[]`; `folds.get` /
 `folds.set` call sites; the Backspace/Delete guard in
-`src/features/editor/HeadingFold.ts`'s `handleKeyDown`; and `notes.purge` /
-`notes.save` call sites.
+`src/features/editor/HeadingFold.ts`'s `handleKeyDown`; `notes.purge` /
+`notes.save` call sites; and `src/data/reindex.ts`'s `reindexNote` and its
+call sites.
+
+- **A SECOND derived index, `noteLinks`, now rides `reindexNote` alongside
+  `noteTags` (L2)** — `reindexNote(db, noteId, text, parseTags, parseLinks,
+  noteTitle?)` replaces both tables' rows for one note from its current text
+  in a single call, and it has **four call sites**: `notes.create`,
+  `notes.save`, `notes.restore` (all in `src/data/repositories/notes.ts`) and
+  `src/data/sync/engine.ts`'s apply path. The sync one matters most: a note
+  arriving from another device that only got `noteTags` rows (not
+  `noteLinks`) would make backlinks silently incomplete on exactly that
+  device — the hardest kind of gap to reproduce, because the OTHER device
+  that authored the note would show its backlinks correctly. Any new call
+  site that reindexes a note's tags without also reindexing its links repeats
+  this bug in a new place.
+- **Restore must rebuild `noteLinks`, not just `noteTags`.** `src/data/backup.ts`'s
+  import transaction clears and rebuilds every derived index — it now calls
+  both `rebuildTagIndex` and `rebuildLinkIndex` for the same reason the tag
+  index has always been rebuilt after a restore rather than trusted: derived
+  data from a database whose exported rows may be stale must be recomputed,
+  not copied. Task 3 found `rebuildLinkIndex` missing from this path after
+  `rebuildTagIndex` had already been wired — same shape of gap as the
+  sync-engine one above, one table over, and worth checking again the next
+  time a THIRD derived index is added here.
 
 - **`NoteEditor`'s `seedText` is scoped to the just-created note, and `AppShell`
   must clear it when the selection leaves that note.** A note created inside a

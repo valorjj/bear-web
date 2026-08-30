@@ -1,7 +1,7 @@
 # Next up
 
 Written 2026-08-20 after M8 + M9a shipped; last reconciled against
-`CLAUDE.md` on **2026-08-29**, when B2 shipped.
+`CLAUDE.md` on **2026-08-31**, when L2 (backlinks) shipped.
 
 This file exists so a fresh session can resume without re-deriving decisions
 already made. Delete a section once its sub-project has a real spec in
@@ -423,6 +423,84 @@ keyboard-selection staleness (see `docs/rulings/deferred.md`) can now hide the
 whole Section group, not just show a stale toggle. Fixing it is a change to
 `ContextMenu`'s keyboard-selection handling with its own test surface —
 outside a documentation task, and outside B2's stated scope.
+
+### L2. Backlinks — **SHIPPED 2026-08-31**
+
+Spec: `docs/superpowers/specs/2026-08-31-l2-backlinks-design.md`.
+Ledger: `.superpowers/sdd/2026-08-31-l2-backlinks/progress.md`.
+Rulings: `docs/rulings/tag-grammar.md` (the shared masker, and the working
+NUL-byte check), `docs/rulings/notes-lifecycle.md` (a second derived index on
+`reindexNote`, and the backup-restore gap), `docs/rulings/tag-pills.md` (the
+link pill's activation contract), `docs/rulings/markdown-and-schema.md` (the
+`TrailingNode` hazard), `docs/rulings/testing-and-tooling.md` (two grep false
+negatives), `docs/rulings/deferred.md` (five items, listed there).
+
+`[[Note title]]` links a note to another by title, fails open (a link to a
+title with no matching note is inert, not an error), and both directions —
+the pill's `Mod`-click and a "Linked from" panel beneath the editor — are
+built on one derived index, `noteLinks`, following `noteTags`'s existing
+shape and rebuild discipline exactly. Shipped as seven tasks: share the code
+masker, add the link grammar, derive and rebuild the index, the pill and its
+activation, the backlinks panel, `[[` autocomplete, and this documentation
+pass.
+
+**What diverged from the plan, and why:**
+
+- **A "pure move" is only safe when it is proven byte-verbatim, and the first
+  attempt was not.** Task 1 moved the masker (`maskCode`, `maskInlineCode`,
+  `MASK`) into `src/data/markdown/mask.ts` for both parsers to share, and its
+  own review caught two mutations that a passing test suite could not:
+  `closesFence`'s doubled-backslash escape (`[ \\t]*$`, a two-character
+  escape for a literal backslash-t) had been retyped as a single backslash,
+  which template-literal parsing turns into an actual TAB BYTE in the regex
+  source — behaviourally identical today, but only by accident, since nothing
+  about "the fence's trailing whitespace" changes if a tab appears in the
+  input either way. Three em dashes in moved comments had also become `--`.
+  Both are the failure mode a "pure move" mandate exists to catch: a silent,
+  equivalent-today change that is not actually equivalent, discovered by
+  diffing `.source` strings byte-by-byte against `git show`, not by running
+  the tests (which stayed 170/170 green throughout, before and after the
+  bug).
+- **The derivation path had two gaps the plan's file list did not name,
+  because the plan named only the repository.** `reindexNote` — the single
+  function meant to be the only producer of a note's derived rows — has four
+  call sites, and Task 3 found the sync engine's apply path
+  (`src/data/sync/engine.ts`) was not among the ones the plan called out
+  explicitly; missing it would have meant a note arriving from another
+  device got tag rows and no link rows, so backlinks would be silently
+  incomplete on exactly the second device — the hardest kind of gap to
+  reproduce, because the OTHER device would show correct backlinks. Separately,
+  the controller found `backup.ts`'s restore path rebuilt the tag index but
+  not the link index — same shape of gap, one table over, in a path later
+  confirmed to have no UI caller today (a latent defect in unreachable public
+  API, not a live one, a correction the controller made to its own earlier,
+  overstated severity). Both fixed with one call each to the existing
+  rebuild function.
+- **The most valuable thing this sub-project found: a meta-only transaction
+  can silently corrupt a note, and StarterKit's own extension is why.**
+  `TrailingNode`'s `appendTransaction` runs on EVERY dispatched transaction,
+  not only ones that changed the document, so `LinkPill`'s
+  `setKnownNoteTitles` — a transaction whose only content is a `setMeta`
+  call, fired from `RichEditor`'s mount effect — inserted a spurious trailing
+  paragraph into any note ending in a list or table, with no user edit at
+  all, which autosave then persisted. The fix is
+  `.setMeta(skipTrailingNodeMeta, true)` on every meta-only dispatch; see
+  `docs/rulings/markdown-and-schema.md` for the full mechanism and the two
+  other call sites (`LinkAutocomplete`'s `move`/`dismiss`) that needed it too.
+- **The vacuous-test episode: the first regression test for that exact bug
+  passed with the fix removed.** `TrailingNode`'s vulnerability flag is
+  computed once at plugin `init` and burned permanently by the FIRST
+  untagged transaction dispatched afterward — including one a test uses only
+  to set up its own fixture. Task 6's first trailing-node test typed `[[de`
+  to open the autocomplete menu as setup, an ordinary untagged transaction,
+  which consumed the vulnerability before the code under test ever ran; the
+  test then asserted the document was unchanged and passed whether or not
+  `skipTrailingNodeMeta` was present. The implementer caught this by
+  distrusting a suspiciously easy green rather than accepting it, and rebuilt
+  the fixture around a `quietlySelect` helper that reaches the dispatch under
+  test using only tagged transactions from the very first one. A scoped
+  re-review then verified the mechanism at the dependency's own compiled
+  source rather than accepting the plausible-sounding story.
 
 ### C. Code block language + syntax highlighting — SHIPPED 2026-08-24
 

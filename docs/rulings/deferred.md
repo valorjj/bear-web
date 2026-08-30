@@ -245,3 +245,66 @@ with is not resolved; only code can retire one.
   documentation task. Cost if wrong: a keyboard user occasionally opens the
   context menu right after an arrow key and finds no Section group;
   recoverable by closing and reopening the menu.
+
+## L2 (backlinks)
+
+- **`LinkPill` and `CodeLanguageControls` have the same missing
+  trailing-node regression test that the autocomplete had before its own fix
+  round.** All three dispatch meta-only transactions (`setKnownNoteTitles`;
+  the language-select command) and all three carry `skipTrailingNodeMeta`
+  today, verified by reading the source — but only `LinkAutocomplete.ts`'s
+  `move`/`dismiss` paths have a test that would catch the tag being dropped.
+  `LinkPill` additionally has no `aria-activedescendant` question at all,
+  because it renders a decoration, not a listbox — nothing to defer there.
+  Deliberately not widened into L2 Task 6: the fix belongs with whichever
+  future change next touches either file, using `quietlySelect`'s
+  all-tagged-transactions pattern (see
+  `docs/rulings/markdown-and-schema.md`'s `TrailingNode` entry) rather than
+  invented fresh. Cost if wrong: a future edit to either file's meta dispatch
+  silently reintroduces a growing-note bug with nothing to catch it.
+- **The backlinks panel shipped always-expanded; the spec said
+  "collapsible".** Mitigated by an existing `max-h-48 overflow-y-auto` cap on
+  `BacklinksPanel`'s `<nav>`, so a note with many backlinks scrolls inside a
+  bounded box rather than pushing the editor off-screen — judged defensible
+  by both the implementer and the task review. No persisted expand/collapse
+  state interface exists anywhere in the app to hang a real toggle off of.
+  The spec is corrected in the same commit as this entry
+  (`docs/superpowers/specs/2026-08-31-l2-backlinks-design.md`) to describe
+  what shipped. Cost if wrong: a note with an unusually long backlinks list
+  keeps a modest, non-collapsible scroll region rather than a toggle.
+- **`NoteEditorProps.onOpenNote` is optional, so a future second consumer
+  that forgets to wire it gets a silently absent panel, not a type error.**
+  `AppShell` is the only caller today and always supplies it
+  (`onOpenNote={select}`). Cost if wrong: a new host of `NoteEditor` ships
+  with no visible backlinks panel and no compiler error pointing at why.
+- **`LinkAutocomplete`'s listbox/option ids are keyed on `from` + index, not
+  namespaced per editor instance.** Safe under the app's actual one-editor-
+  at-a-time usage; would collide (duplicate DOM ids) if two autocomplete-
+  bearing editors ever shared one DOM tree. Cost if wrong: exactly that
+  collision, the day a second simultaneous editor instance is built.
+- **A cross-scope link leaves the note list with no visible selection.**
+  Ruled deliberately in Task 4: `AppShell.handleActivateLink` does not change
+  `scope` when the target note is outside the current filter, because a link
+  is a lateral move and silently re-scoping would lose the user's place
+  mid-triage in a filtered list. The editor can therefore show a note the
+  list does not currently contain, with no row marked current anywhere.
+  `e2e/backlinks.spec.ts` exercises only the same-scope case (both corpus
+  notes are in "All notes") and asserts the resulting `aria-current`
+  honestly, per the controller's instruction not to paper over this with a
+  same-scope-only test that implies more coverage than it has. Cost if
+  wrong: a user who Mod-clicks a cross-scope link may wonder, briefly, which
+  row in the list corresponds to what they are now reading — recoverable by
+  clicking any list scope, which reselects normally.
+- **The rename-while-panel-open stale-title guard (`BacklinksPanel`'s
+  `result?.title === title` discard) has no direct Playwright test.**
+  Attempted and left out: forcing the actual race — a rename landing between
+  `useLiveQuery`'s dispatch and its resolution — needs either an artificial
+  delay instrumented into the app itself (which would make the test assert
+  against harness behaviour, not the app's) or advancing fake timers past
+  autosave's debounce at a precise instant relative to an async IndexedDB
+  read, neither of which Playwright can do deterministically from the
+  outside. The guard is unit-testable in principle by mocking `notes.linksTo`
+  with a controllable delay; that is a `BacklinksPanel.test.tsx` addition,
+  not an e2e one, and is left for whoever next touches that component. Cost
+  if wrong: the guard's only protection is the reviewer's source-level
+  verification recorded in the L2 progress ledger.

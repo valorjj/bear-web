@@ -12,7 +12,38 @@ handler), `src/features/editor/blockText.ts` (`maskedBlockText`, `MASK`),
 `AppShell.handleActivateTag`, the `--bear-tag-fill` and `--bear-tag-fill-strong`
 tokens or the `.bear-tag` rules in `src/styles/editor.css`, and the suites
 `tagPill.test.ts`, `tagAgreement.test.ts`, `blockText.test.ts`,
-`src/data/tags/tagRanges.test.ts`.
+`src/data/tags/tagRanges.test.ts`. Also `src/features/editor/LinkPill.ts`
+(`linkDecorations`, `linkRangeAt`, `linkHitsIn`, `LinkPillOptions`, its
+`handleDOMEvents.mousedown`), `AppShell.handleActivateLink`, and
+`linkPill.test.ts` — the link pill's activation is a deliberate copy of this
+file's contract, not an independent design.
+
+- **`LinkPill`'s activation matches `TagPill`'s exactly: `Mod`-click
+  activates, a plain click places the caret, and `onActivateLink === null`
+  makes the plugin inert — same reasons, same shape.** `mousedown`, not
+  `handleClick`, because the browser moves the DOM selection natively during
+  mousedown and by mouseup the caret has already moved and the pill has
+  already vanished. `preventDefault()` is called only AFTER
+  `onActivateLink` answers true, for the identical reason as `onActivate`
+  above: calling it first would make every declined case (no note has that
+  title, the index has not caught up with a just-typed link) cost the user
+  the caret as well as the navigation, turning a decline into the gesture
+  simply vanishing. `RichEditor` passes `null` for `onActivateLink` when no
+  `onActivateLink` prop is supplied, matching `onActivate`'s `null` contract
+  bullet above verbatim: the schema-only `editorExtensions` constant (used
+  wherever the editor is mounted with no app wiring, e.g. some tests) gets a
+  plugin that never even hit-tests a click, not one that asks and is always
+  told no.
+
+- **One divergence from `TagPill`, and it is deliberate: link resolution
+  reads a KNOWN-TITLES SET held in plugin state, not a Tiptap option.**
+  Options are read once at construction; a title set passed as an option
+  would never refresh, and every link created during a session would render
+  unresolved forever. `RichEditor` dispatches `setKnownNoteTitles` as a
+  meta-only transaction whenever `notes.allNoteTitles()` resolves, and that
+  transaction must carry `skipTrailingNodeMeta` — see
+  `docs/rulings/markdown-and-schema.md`'s `TrailingNode` entry for why a
+  meta-only, zero-document-step dispatch is dangerous without it.
 
 - **`parseTags` is the deduped name-only view of `findTagRanges`, and the tag
   grammar exists in exactly one place.** The scanner always computed each

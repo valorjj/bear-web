@@ -106,6 +106,24 @@ in `src/features/editor/HeadingFold.ts`'s badge handlers or
   assertion in that file must use it. The same trap applies to any test that
   greps prose-bearing source for a symbol it expects to be CALLED.
 
+- **"I searched and found nothing" is weak evidence a ruling does not
+  exist — grep produced two false negatives in L2 alone.** First: verifying a
+  NUL-byte escape with `grep -c $'\0' <file>` reports the file's LINE COUNT on
+  a clean file, not zero, because bash truncates the `$'\0'` pattern at the
+  NUL and the empty pattern that reaches `grep` matches every line — it can
+  never detect a NUL, and the false confidence is worse than not checking (see
+  `docs/rulings/tag-grammar.md`'s working replacement). Second, and more
+  dangerous because it looks like due diligence: a reviewer concluded the
+  duplicate-title tie-break rule was undocumented in the spec, when the spec
+  DOES state it ("Where two notes share a title, the most recently updated one
+  wins") — Prettier had wrapped the prose so "most recently updated" and
+  "share a title" each straddle a line break, and a line-based grep for either
+  fragment alone matches nothing. The controller's own grep repeated the exact
+  same miss independently. **Search for a short fragment unlikely to be split
+  by a reflow, or read the section directly, before concluding a rule is
+  absent** — a `grep` hit proves presence, but a miss proves nothing about a
+  prose document Prettier is free to rewrap.
+
 - **Source-scanning tests live in `scripts/`, not `src/`.** `tsconfig.app.json`
   deliberately omits Node types (`"types": ["vite/client", "vitest/globals"]`,
   `"include": ["src"]`); `tsconfig.node.json` already includes `scripts`.

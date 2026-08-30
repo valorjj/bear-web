@@ -23,7 +23,10 @@ removed Tiptap extension, input rule or `markdownTokenName`; a new or changed
 (`lowlight`, `lowlightForEditor`), `src/features/editor/codeLanguages.ts`
 (`resolveLanguage`), `src/features/editor/highlightClasses.ts`
 (`roleOfFlattenedClasses`, `KNOWN_FLATTENED_COLLISIONS`), and
-`src/features/editor/CodeLanguageControls.ts`.
+`src/features/editor/CodeLanguageControls.ts`. Also `LinkPill.ts`'s
+`setKnownNoteTitles`, `LinkAutocomplete.ts`'s `move`/`dismiss` dispatches, and
+any other `skipTrailingNodeMeta` call site or meta-only `tr.setMeta(...)`
+dispatch anywhere in `src/features/editor/`.
 
 - **`markdown.ts` is the only importer of `@tiptap/markdown`.** The round-trip
   suite drives `MarkdownManager` standalone, with no `Editor` and no DOM, which
@@ -114,6 +117,49 @@ removed Tiptap extension, input rule or `markdownTokenName`; a new or changed
   `selectAll()` path and the real keyboard `Ctrl/Cmd+A` path — the two are
   driven by the identical `AllSelection` mechanism and the identical fix closes
   both.
+
+- **`TrailingNode`'s `appendTransaction` runs on EVERY dispatched transaction,
+  not only `docChanged` ones, and a meta-only dispatch into a note ending in a
+  list or table WILL insert a spurious trailing paragraph that autosave then
+  silently persists.** Found in L2 (Task 4): `LinkPill.setKnownNoteTitles`
+  dispatches a transaction whose only content is a `setMeta` call — zero
+  document steps — fired from `RichEditor`'s mount effect once
+  `notes.allNoteTitles()` resolves. StarterKit's `TrailingNode` extension
+  checks the document's last node type and appends an empty paragraph
+  whenever it needs one to be typeable into, and that check is NOT gated on
+  whether the transaction actually changed the document — it runs after
+  every transaction, unconditionally. So opening a note that happens to end
+  in a bullet list, with no user edit at all, picked up a trailing empty
+  paragraph the instant the known-titles command fired, and autosave wrote it
+  back: a note silently growing a blank paragraph on every open, invisible to
+  anyone not diffing the stored Markdown. The same hazard applies to
+  `LinkAutocomplete.ts`'s `move`/`dismiss` meta transactions and
+  `CodeLanguageControls`'s meta-only path — any transaction whose only
+  purpose is to update plugin state, not the document, is vulnerable.
+  **The fix is `.setMeta(skipTrailingNodeMeta, true)` (from
+  `@tiptap/extensions`, the same constant `TrailingNode` itself reads) on
+  every meta-only dispatch, with no exceptions** — there is no partial or
+  conditional form of this fix; a meta-only transaction either carries the
+  tag or it is a live instance of this bug.
+  **The testing trap, which is why this is easy to "fix" without actually
+  fixing it:** the vulnerability flag `TrailingNode` tracks is computed once
+  at plugin `init` and is BURNED PERMANENTLY by the first untagged
+  transaction a test dispatches — including one the test itself uses only to
+  set up its fixture. L2 Task 6's first trailing-node test typed `[[de` to
+  open the autocomplete menu as setup, then asserted the document was
+  unchanged; it passed even with `skipTrailingNodeMeta` deleted from the
+  command under test, because typing `[[de` (an ordinary, untagged,
+  `docChanged` transaction) had already consumed the vulnerability before the
+  code under test ever ran — nothing was left for the tag to protect against.
+  The implementer caught this by investigating a suspiciously easy green
+  rather than trusting it, and rebuilt the fixture around a `quietlySelect`
+  helper that reaches the dispatch under test using ONLY tagged transactions
+  from the start. **Any test asserting a meta-only dispatch does not corrupt
+  the document must ensure every transaction before the one under test — the
+  fixture setup included — also carries the tag, or the test proves nothing
+  while appearing to prove everything.** Verified at the dependency's own
+  source (`@tiptap/extensions`'s compiled `appendTransaction`, ungated on
+  `docChanged`), not merely from the symptom.
 
 - **Before M7, typing `- [ ] milk` did not create a task item, and that was an
   editor input-rule defect, not a Todo defect.** StarterKit's bullet-list input
