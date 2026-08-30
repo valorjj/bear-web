@@ -2,7 +2,7 @@
 
 How a `#tag` is recognized, normalized and bounded in a note's Markdown — the single grammar that `src/data/tags/parseTags.ts` implements and that both the tag index and the editor's tag pills read through.
 
-**Trigger:** any change under `src/data/tags/` — `parseTags.ts`, `parseTags.test.ts`, `tagRanges.test.ts` — or to the symbols in it: `findTagRanges`, `parseTags`, `normalizeTag`, `trimTrailing`, `MASK`, `LEADING_REJECT`, `BACKTICK_OPENER`, `TILDE_OPENER`, `closesFence`, `maskCode`, `maskInlineCode`, `canStart`, `isBoundary`. Also `notes.rebuildTagIndex` and `TAG_INDEX_VERSION` in `src/data/repositories/notes.ts` and `src/data/migrations.ts`, and any prose or code introducing the literal escape sequence for the mask character.
+**Trigger:** any change under `src/data/tags/` — `parseTags.ts`, `parseTags.test.ts`, `tagRanges.test.ts` — or under `src/data/markdown/mask.ts`, or to the symbols in either: `findTagRanges`, `parseTags`, `normalizeTag`, `trimTrailing`, `MASK`, `LEADING_REJECT`, `BACKTICK_OPENER`, `TILDE_OPENER`, `closesFence`, `maskCode`, `maskInlineCode`, `canStart`, `isBoundary`. Also `notes.rebuildTagIndex` and `TAG_INDEX_VERSION` in `src/data/repositories/notes.ts` and `src/data/migrations.ts`, and any prose or code introducing the literal escape sequence for the mask character.
 
 - **Tags are keyed lowercase, and that is what makes `rebuildTagIndex`
   deterministic.** `#Work` and `#work` are one tag. Bear preserves first-seen
