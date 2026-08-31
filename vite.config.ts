@@ -11,6 +11,16 @@ export default defineConfig({
   // rather than retargeted, because there is no longer an environment with a
   // path prefix.
   base: '/',
+  // `scripts/bundleSize.test.ts` reads `dist/.vite/manifest.json` to walk the
+  // entry chunk's transitive STATIC import closure — the largest-single-asset
+  // heuristic it used before this stopped being a valid proxy for "what the
+  // browser downloads eagerly" once a second lazy boundary caused Rolldown to
+  // split eager code across multiple chunks. Turning this off defangs that
+  // guard silently; it is meant to fail loudly instead if the file goes
+  // missing.
+  build: {
+    manifest: true,
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
