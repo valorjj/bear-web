@@ -15,7 +15,8 @@ any Playwright keyboard shortcut aimed at a Tiptap/ProseMirror binding; any
 after any local merge; any test whose expectation you are about to edit
 because a restyle made it fail; and a `PointerEvent`/`setPointerCapture` call
 in `src/features/editor/HeadingFold.ts`'s badge handlers or
-`headingFold.test.ts`'s drag tests.
+`headingFold.test.ts`'s drag tests; `e2e/graph.spec.ts`; `src/lib/usePanZoom.ts`;
+`src/features/graph/runLayout.ts` and `layoutGraph.ts`.
 
 - **A Playwright `name` is a case-insensitive SUBSTRING by default, and the
   failure reads as "element not found".** `getByRole('button', { name: 'Pin' })`
@@ -287,3 +288,42 @@ in `src/features/editor/HeadingFold.ts`'s badge handlers or
   would need to hold a synthetic pointer down mid-drag, which is a different
   and much more invasive harness than the corpus screenshots.
 
+
+## L3: two traps from the relationship graph
+
+- **jsdom has no `Worker` at all**, so every unit test of `runLayout`
+  exercises only the synchronous fallback (`layoutGraph` on the main thread);
+  the branch that actually offloads to `layoutWorker.ts` is reachable only
+  from `e2e/graph.spec.ts`. A test asserting "the worker path is taken above
+  `WORKER_THRESHOLD`" cannot exist in Vitest — the seam (`createWorker`
+  injected into `runLayout`) proves the fallback and error-handling logic
+  around the worker, never the worker itself.
+- **`@types/d3-force` is a required dependency, not optional** — the package
+  ships no types of its own. Determinism (`layoutGraph`'s output being
+  byte-identical run to run) comes from d3's phyllotaxis initial placement
+  plus a fixed `LAYOUT_TICKS`, not from `simulation.randomSource()`; see
+  `layoutGraph.ts`'s `seededRandom` docblock and the spec's corrected
+  determinism paragraph. `randomSource` is retained only as insurance against
+  `jiggle()`, which a `buildGraph` output never triggers — so changing
+  `SEED` does NOT reshuffle a real graph, and the claim that it would was
+  wrong and was measured wrong (deleting `randomSource` and changing `SEED`
+  both leave every test green). What actually protects the shots is the
+  committed golden-fingerprint test in `layoutGraph.test.ts`.
+- **`setPointerCapture` taken on `pointerdown` retargets the subsequent
+  native `click` to the capturing element, and no unit test can see it.**
+  The graph's node clicks did nothing in every real browser while
+  `graphCanvas.test.tsx` passed, because `fireEvent.click` bypasses real
+  pointer capture and hit-testing entirely — it fires the click handler
+  directly rather than routing a synthesized click through the DOM the way a
+  browser does. `src/lib/usePanZoom.ts` now defers `setPointerCapture` until
+  real movement crosses a 3px drag threshold (`passedDragThreshold`), so a
+  plain click is never captured and its `click` reaches its real target. Only
+  Playwright, against a real browser, caught this.
+- **A required behaviour can ship with a fully green suite if no test names
+  it.** `Escape` closing the relationship graph was in the plan and in a task
+  brief, was never implemented, and passed that task's review — the shell
+  test exercised only the keyboard shortcut that OPENS the graph and the Back
+  button that closes it, never Escape. A review that verifies "does the
+  described behaviour exist" by re-reading the existing tests, rather than by
+  checking each requirement individually, will not catch an omission the
+  tests never asserted in the first place.

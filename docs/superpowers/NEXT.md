@@ -1,7 +1,7 @@
 # Next up
 
 Written 2026-08-20 after M8 + M9a shipped; last reconciled against
-`CLAUDE.md` on **2026-08-31**, when L2 (backlinks) shipped.
+`CLAUDE.md` on **2026-08-31**, when L3 (relationship graph) shipped.
 
 This file exists so a fresh session can resume without re-deriving decisions
 already made. Delete a section once its sub-project has a real spec in
@@ -18,16 +18,15 @@ believe the table and fix this file.
 ## Where things stand
 
 - `main` carries everything in `CLAUDE.md`'s status table marked complete —
-  through **L2 (backlinks), 2026-08-31**. Live on Pages.
-- 2247 unit tests, 190 end-to-end. All six gates green.
+  through **L3 (relationship graph), 2026-08-31**. Live on Pages.
+- 2299 unit tests, 197 end-to-end. All six gates green.
 - Every sub-project branch named in this file is merged and deleted.
 
 **What is actually left, as of 2026-08-31:**
 
 | Open | State |
 | --- | --- |
-| **L3 relationship graph** | next — a rendering of L2's `noteLinks` index |
-| **L4 command palette** | queued, unspecced |
+| **L4 command palette** | next — queued, unspecced |
 | **L5 Mermaid, server-rendered** | queued, unspecced — see the measurement below |
 | **J4 platform chrome** | not started — the last of the four |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
@@ -44,9 +43,10 @@ compounds; a feature that adds a **new runtime or a second authoring surface**
 is a whole product. Backlinks (L2) was the first kind, which is why it was
 first. So is L3.
 
-- **L3, the graph** — a rendering of `noteLinks`, not a new system. Do it while
-  the model is fresh. It also delivers most of what a "mind map" would, without
-  a second editor to sync, export and round-trip.
+- **L3, the graph — SHIPPED 2026-08-31.** A rendering of `noteLinks`, not a new
+  system; see its own section below for what shipped and what the build
+  corrected. It delivers most of what a "mind map" would, without a second
+  editor to sync, export and round-trip.
 - **L4, the command palette** — not on the user's list, added because it is the
   strongest "built for developers" signal and it makes everything else
   discoverable. It is assembly, not invention: `useScopeShortcuts.ts` owns
@@ -87,8 +87,8 @@ scroll. Only J4 is left, and it is the smallest of the four: safe-area insets
 throughout, `100dvh` on the shell, installability, pull-to-refresh, and whether
 an installed PWA changes J1's answer on routing.
 
-**Nothing blocks anything except L3, which wants L2's index and therefore has
-it.** K4 is small enough to slot in anywhere.
+**Nothing blocks anything now that L3 has shipped.** K4 is small enough to
+slot in anywhere.
 
 **J4 inherits two things by name.** J1 carved out one safe-area exception and
 only one — the note list's FAB — so every other bottom-anchored surface still
@@ -553,6 +553,73 @@ pass.
   test using only tagged transactions from the very first one. A scoped
   re-review then verified the mechanism at the dependency's own compiled
   source rather than accepting the plausible-sounding story.
+
+### L3. Relationship graph — **SHIPPED 2026-08-31**
+
+Spec: `docs/superpowers/specs/2026-08-31-l3-relationship-graph-design.md`.
+Ledger: `.superpowers/sdd/2026-08-31-l3-relationship-graph/progress.md`.
+Rulings: `docs/rulings/notes-lifecycle.md` (the graph is a snapshot, not a
+`useLiveQuery` subscription), `docs/rulings/testing-and-tooling.md` (jsdom has
+no `Worker`; `setPointerCapture` on `pointerdown` retargets the native
+`click`; a required behaviour with no test naming it can ship anyway).
+
+A force-directed rendering of L2's `noteLinks` index — nodes are notes,
+edges are wikilinks, degree drives node size, pan/zoom over an SVG canvas,
+capped at `NODE_CAP = 2000` by best-connected-note truncation above that.
+Shipped as ten build tasks plus this documentation pass.
+
+**Two things worth carrying forward:**
+
+- **The measured settle table**, from `src/features/graph/runLayout.ts`,
+  median of 5 runs at the fixed `LAYOUT_TICKS = 300`, in Node (a floor — the
+  browser's ticks compete with paint): 200 nodes 121 ms, 300 nodes 202 ms,
+  **400 nodes 262 ms**, 500 nodes 339 ms, 800 nodes 581 ms. 400 is the last
+  size that stays inside the ~250-300 ms a user reads as instant rather than
+  stalled, which is why `WORKER_THRESHOLD = 400` moves the simulation off the
+  main thread above that point.
+- **The `React.lazy` boundary around the whole graph feature is structural,
+  not an optimisation to revisit later.** `d3-force` (~5.6 KB gzip) does not
+  fit the remaining main-chunk headroom: converting the import to eager was
+  measured at 346,435 B against the bundle guard's 340,000 B ceiling.
+  Headroom after L3 shipped is 1,884 B (main moved 337,259 → 338,116 B
+  gzipped) — see `CLAUDE.md`'s Toolchain surprises.
+
+**What the build corrected on its own way in:**
+
+- **The spec's determinism claim was wrong, and measured wrong.** It credited
+  `simulation.randomSource(seededLcg)` with making the layout stable enough to
+  screenshot. Deleting the `randomSource` call leaves every test passing, and
+  changing `SEED` leaves every test passing too — `jiggle()`, `d3-force`'s
+  only consumer of randomness, fires only on an exact node coincidence that
+  phyllotaxis initial placement never produces for a `buildGraph` output.
+  Determinism actually comes from phyllotaxis placement plus the fixed
+  `LAYOUT_TICKS`; what protects the shots is the committed golden-fingerprint
+  test in `layoutGraph.test.ts`. `randomSource` is kept as cheap insurance
+  against the coincident-node path, not removed.
+- **Two real product bugs passed the whole unit suite and were caught only by
+  Playwright.** Every node click did nothing in a real browser because
+  `setPointerCapture` taken on `pointerdown` retargets the subsequent native
+  `click` to the capturing element — `fireEvent.click` in the component test
+  bypasses real pointer capture entirely, so it stayed green throughout.
+  `usePanZoom` now defers capture until movement crosses a 3px threshold.
+  Separately, `Escape` closing the graph was in the plan and in a task brief,
+  was never implemented, and passed that task's review, because the shell
+  test only exercised the shortcut that opens the graph and the Back button —
+  never Escape. Both are fixed and both are now named in
+  `docs/rulings/testing-and-tooling.md` as a general caution: a review that
+  verifies what exists, rather than checking each requirement by name, will
+  not catch an omission the tests never asserted.
+
+**Deferred, deliberately, not fixed:**
+
+- Hover dimming re-renders the whole node and edge lists on every hover
+  transition. Revisit only with a real-browser profile at ~2,000 nodes — no
+  evidence yet that it costs anything a user would notice.
+- The accessible summary reads "1 links" for a single edge. Pluralization was
+  judged out of scope for this pass.
+- A topology-hash collision between two different vaults would serve stale
+  cached positions from `useGraphSnapshot`'s module-scope cache. Theoretical
+  only — no plausible collision path was found or attempted.
 
 ### C. Code block language + syntax highlighting — SHIPPED 2026-08-24
 

@@ -64,10 +64,11 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | M9b callout blocks                                                | complete |
 | L1 code copy button, image quota meter                            | complete |
 | L2 backlinks: `[[wikilink]]`, index, pill, panel, autocomplete    | complete |
+| L3 relationship graph: force layout, pan/zoom, worker offload     | complete |
 
-2247 unit tests (plus 130 server tests, 79 of which are integration tests that
+2299 unit tests (plus 130 server tests, 79 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 23 renderer tests behind
-`npm run test:pdf`), 190 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 197 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**
@@ -122,9 +123,10 @@ count, because they assert nothing.** Both drive the fixed corpus in
   state, a folded heading-dense note, the open note-list options menu, a
   three-language code note (one unregistered language, to keep the plain-
   render fallback visible), the right-click context menu open on a table cell
-  (its tallest form) and the exported document, **in every theme in the
-  roster** (15 shots × 16 themes = 240 files, up from 224 when M9b added
-  its callout frame). The theme list is derived from `themes.ts` by a regex requiring `id`, `labelKey` and
+  (its tallest form), the exported document, and the relationship graph opened
+  via its keyboard shortcut, **in every theme in the roster** (16 shots × 16
+  themes = 256 files, up from 240 when L3 added the graph shot). The theme
+  list is derived from `themes.ts` by a regex requiring `id`, `labelKey` and
   `group` on ONE line in that order — a Prettier reflow would make it match
   nothing, and an empty list renders the default theme sixteen times with no
   error. Count the files, do not trust the exit code.
@@ -189,7 +191,7 @@ All six must pass before any commit.
   therefore only means anything on the machine that generated the file.
   `scripts/ciCoverage.test.ts` now asserts it is absent from `ci.yml`, so
   re-adding it fails loudly with the reason attached.
-- **`npm run shots` stays on demand.** 240 screenshots have no meaningful
+- **`npm run shots` stays on demand.** 256 screenshots have no meaningful
   pass/fail and nothing can diff them but a person. Run it when you change
   something visual; count the files, do not trust the exit code.
 
@@ -702,6 +704,25 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
   `toHaveCSS` check on the real rule) — and to demonstrate the test failing
   against a sabotaged implementation before trusting it.
 
+- **Vite's build-log gzip estimate is not the number the bundle guard
+  checks, and it reads worse than reality.** For the same main-chunk asset,
+  the printed log line reads ~341.39 kB gzip while `zlib.gzipSync` and
+  `scripts/bundleSize.test.ts` both measure it at 338,116 B — the log line
+  reads as already over a 340,000 B ceiling that the real file is under.
+  Ruled out: a compression-level mismatch (levels 6 and 9 measure 338,116 and
+  337,516, not 341,390). Best explanation is that Rolldown's native reporter
+  estimates during chunk emission rather than gzipping the final written
+  file. Never use the Vite log line as a manual proxy for the guard; run
+  `scripts/bundleSize.test.ts` (part of `npm test`) or gzip the built file
+  yourself.
+- **L3's `React.lazy` boundary around the relationship graph is load-bearing,
+  not an optimisation to revisit.** `d3-force` costs ~5.6 KB gzip and does
+  not fit the remaining headroom: converting the import to eager was
+  measured at 346,435 B against the 340,000 B ceiling. Headroom after L3
+  shipped is **1,884 B** (main moved 337,259 → 338,116 B gzipped). Any future
+  change that adds to the main chunk should check this number first —
+  there is very little room left.
+
 ## Architecture boundaries
 
 - **These boundaries are enforced by `scripts/sourceLint.test.ts`, not merely
@@ -776,7 +797,7 @@ at the top; the rows here are abridged.
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/data/tags/` — `parseTags`, `findTagRanges`, `normalizeTag`, `MASK`, the fence and mask helpers; `TAG_INDEX_VERSION`; any prose introducing the mask character's escape sequence                                                                                                                                                                                                    | [tag-grammar.md](docs/rulings/tag-grammar.md)                                                                                          |
 | `src/data/migrations.ts`, `sweep.ts`, `persist.ts`, `backup.ts`, `db.ts`'s `stores({…})`; the `noteTags` writes in `repositories/notes.ts`; the boot sequence in `main.tsx`; a new `db.version(n).upgrade()`                                                                                                                                                                            | [tag-index-and-startup.md](docs/rulings/tag-index-and-startup.md)                                                                      |
-| `NoteEditor.tsx`, `useAutosave.ts`, `useNotes.ts`, `derive.ts`, `useFlushTriggers.ts`; `AppShell`'s `key={…}` / `seed`; any `useLiveQuery` whose deps are not `[]`, and any write GATED on one (`useTagTree.reveal`); `notes.purge` / `notes.save` call sites                                                                                                                           | [notes-lifecycle.md](docs/rulings/notes-lifecycle.md)                                                                                  |
+| `NoteEditor.tsx`, `useAutosave.ts`, `useNotes.ts`, `derive.ts`, `useFlushTriggers.ts`; `AppShell`'s `key={…}` / `seed`; any `useLiveQuery` whose deps are not `[]`, and any write GATED on one (`useTagTree.reveal`); `notes.purge` / `notes.save` call sites; `src/features/graph/useGraphSnapshot.ts`                                                                                 | [notes-lifecycle.md](docs/rulings/notes-lifecycle.md)                                                                                  |
 | `scope.ts` (`NoteScope`, `SMART_LIST_IDS`, `scopeKey`, `ScopeQuery`, the capability functions), `src/data/order.ts`, `ScopeMenu.tsx`, `useSetting.ts`, `smartLists.ts`, `useSmartListCounts.ts`, `search.ts`, `HighlightedText.tsx`, `ConfirmDialog.tsx`, `AppShell`'s scope/query state                                                                                                | [scopes-and-search.md](docs/rulings/scopes-and-search.md)                                                                              |
 | `src/features/editor/markdown.ts`, `extensions.ts`, `RawBlock.ts`, `toolbarSelection.ts`, `taskItemPromotion.ts`, `callouts.ts`, `Callout.ts`; the `CANONICAL` / `NON_CANONICAL` fixtures; a new import of `@tiptap/markdown`; a new extension, input rule, **or keyboard binding** (`useScopeShortcuts.ts` included)                                                                   | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md)                                                                          |
 | `tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` entries in `extensions.ts`, `RawTable`, `table.test.ts`, any table fixture                                                                                                                                                                                                                 | [tables.md](docs/rulings/tables.md)                                                                                                    |

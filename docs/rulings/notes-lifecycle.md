@@ -16,8 +16,8 @@ symbols `autoFocus`, `seedText`,
 `useLiveQuery(` call site whose dependency array is not `[]`; `folds.get` /
 `folds.set` call sites; the Backspace/Delete guard in
 `src/features/editor/HeadingFold.ts`'s `handleKeyDown`; `notes.purge` /
-`notes.save` call sites; and `src/data/reindex.ts`'s `reindexNote` and its
-call sites.
+`notes.save` call sites; `src/data/reindex.ts`'s `reindexNote` and its call
+sites; and `src/features/graph/useGraphSnapshot.ts`.
 
 - **A SECOND derived index, `noteLinks`, now rides `reindexNote` alongside
   `noteTags` (L2)** — `reindexNote(db, noteId, text, parseTags, parseLinks,
@@ -282,3 +282,18 @@ call sites.
   hardcoded to `autoFocus`; verified by injection. It has to wait for focus and
   require that it never arrives (`await expect(waitFor(...)).rejects.toThrow()`),
   which is the only reason that test is written the slow way.
+
+## The graph is a snapshot, not a subscription
+
+- **L3's relationship graph reads the vault once, in `useGraphSnapshot.ts`,
+  and deliberately does NOT use `useLiveQuery`.** Relayout is not incremental
+  — every node's position is recomputed from scratch — so a live graph would
+  rearrange itself under the reader's cursor, for up to `LAYOUT_TICKS`' worth
+  of settle time (measured up to ~2s at 2,000 nodes), because of an autosave
+  firing on a note the reader cannot even see while the graph is open. No note
+  is editable while the graph surface is open, so the only thing that can
+  change the vault underneath a snapshot is a sync pull; reopening the graph
+  re-snapshots and picks up whatever changed. Positions are cached in module
+  scope by a topology hash so reopening after editing nothing is instant.
+  Without this ruling, the next session "fixes" the graph by wiring it back
+  to `useLiveQuery` and reintroduces the rearrange-under-the-cursor bug.

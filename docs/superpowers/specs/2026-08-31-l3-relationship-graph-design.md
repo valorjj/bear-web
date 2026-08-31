@@ -71,12 +71,19 @@ All settle figures were taken in Node, which measures the simulation alone. In
 the browser the same ticks compete with paint, so treat these as a floor and
 re-check the threshold once `GraphCanvas` exists.
 
-**Determinism is real and was verified, not hoped for.** `d3-force`'s initial
-placement is phyllotaxis (already deterministic), and its only randomness is
-`jiggle()` — `(random() - 0.5) * 1e-6`, used by `forceLink` and `forceCollide`
-when two nodes coincide exactly. `simulation.randomSource(seededLcg)` replaces
-that source for every force the simulation owns. Two runs of the same input
-produced byte-identical coordinates.
+**Determinism is real, and was measured to come from somewhere other than
+where it was first credited.** `d3-force`'s initial placement is phyllotaxis
+(already deterministic), and `LAYOUT_TICKS` is a fixed 300 — that pair is what
+actually makes two runs of the same input produce byte-identical coordinates.
+`simulation.randomSource(seededLcg)` is retained as cheap insurance against
+`jiggle()` — `(random() - 0.5) * 1e-6`, `forceLink` and `forceCollide`'s only
+use of randomness, fired when two nodes coincide exactly — but a graph built
+by `buildGraph` never produces an exact coincidence, so `jiggle()` is never
+actually called on realistic input. Measured, not assumed: deleting the
+`randomSource` call leaves every test passing, and changing `SEED` leaves
+every test passing too. What actually protects the screenshots is the
+committed golden-fingerprint test in `layoutGraph.test.ts`, which fails on a
+tick-count, force-parameter, or node-order change.
 
 ## Decisions already taken
 
