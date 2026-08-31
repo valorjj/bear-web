@@ -814,6 +814,30 @@ check at every safe point, so exactly one of them releases each successful
 acquisition — never both, never neither. Cost: 22 B of the 2,630 B total
 above.
 
+**And the first version of that fix reintroduced the bug one window later,
+which is the part worth carrying forward.** The `if (destroyed)` block AFTER
+`await files.get(id)` released without consulting `heldUrl` — unlike
+`destroy()`, and unlike the check before it — so a view destroyed DURING that
+await still released twice for one reference. It shipped with ZERO unit
+coverage, on the reasoning that only the e2e race could see it, and that
+reasoning is exactly what left the window open: the whole-branch review found
+it, proved it with a test, and the fix is now `if (heldUrl !== null)` plus the
+unit test that should have existed the first time.
+
+**A sibling defect in `src/lib/objectUrls.ts` is KNOWN, DELIBERATELY UNFIXED,
+and more reachable than it looks.** Its in-flight join (`objectUrls.ts:38`)
+returns the pending URL without incrementing `count`, so two acquirers in the
+same tick share one count and the first release revokes for both. The L5
+review measured it: two node views for one id, one destroyed mid-flight,
+revokes the URL **before the second view mounts**, leaving a live
+`<img src="blob:…">` pointing at a revoked URL — and it is reachable from a
+SINGLE mount, not only from two views. It is byte-identical before and after
+L5 and predates the branch by three sub-projects, so it was ruled out of scope
+rather than fixed under a merge gate — fixing unrelated pre-existing code to
+get a gate green is precisely how the `StoredImage` excursion above went wrong
+the first time. Fix it deliberately, with its own tests, not as a rider on
+something else.
+
 ### C. Code block language + syntax highlighting — SHIPPED 2026-08-24
 
 Language autocomplete on the fence (typing ` ```java ` suggests `java`,
