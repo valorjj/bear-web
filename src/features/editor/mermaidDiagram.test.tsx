@@ -10,7 +10,7 @@ import { DiagramError } from '@/features/diagrams';
 import { buildEditorExtensions, editorExtensions } from './extensions';
 import { parseMarkdown, serializeMarkdown } from './markdown';
 import { DIAGRAM_LANGUAGE_ID } from './codeLanguages';
-import { MermaidDiagram, type MermaidDiagramOptions } from './MermaidDiagram';
+import { diagramName, MermaidDiagram, type MermaidDiagramOptions } from './MermaidDiagram';
 
 // jsdom has no layout engine, so ProseMirror's caret and scroll math
 // (`coordsAtPos`, `posAtCoords`) reaches DOM APIs jsdom never implements.
@@ -159,6 +159,70 @@ describe('MermaidDiagram', () => {
   it('honours accTitle when the source declares one', async () => {
     const { container } = renderEditor({
       text: '```mermaid\nflowchart TD\n  accTitle: Login flow\n  A --> B\n```',
+      ensureDiagram: async () => '<svg/>',
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe(
+        'Diagram: Login flow',
+      ),
+    );
+  });
+
+  describe('diagramName', () => {
+    it('skips a leading directive line', () => {
+      // A real diagram often opens with `%%{init: …}%%`. Without the skip,
+      // that JSON blob became the announced name.
+      expect(diagramName('%%{init: {"theme":"base"}}%%\nflowchart TD\n  A --> B')).toBe(
+        'flowchart TD',
+      );
+    });
+
+    it('skips a %% comment line, but not a malformed directive', () => {
+      expect(diagramName('%% just a note\nflowchart TD\n  A --> B')).toBe('flowchart TD');
+    });
+
+    it('uses a frontmatter title when the source opens with one', () => {
+      expect(diagramName('---\ntitle: Login flow\n---\nflowchart TD\n  A --> B')).toBe(
+        'Login flow',
+      );
+    });
+
+    it('falls through to the declaration when frontmatter carries no title', () => {
+      expect(diagramName('---\nconfig:\n  theme: base\n---\nflowchart TD\n  A --> B')).toBe(
+        'flowchart TD',
+      );
+    });
+
+    it('lets accTitle win over a frontmatter title', () => {
+      expect(
+        diagramName('---\ntitle: Ignored\n---\nflowchart TD\n  accTitle: Login flow\n  A --> B'),
+      ).toBe('Login flow');
+    });
+
+    it('lets accTitle win over a directive', () => {
+      expect(diagramName('%%{init: {}}%%\nflowchart TD\n  accTitle: Login flow\n  A --> B')).toBe(
+        'Login flow',
+      );
+    });
+  });
+
+  it('gives the diagram an accessible name that skips a leading directive line', async () => {
+    const { container } = renderEditor({
+      text: '```mermaid\n%%{init: {"theme":"base"}}%%\nflowchart TD\n  A --> B\n```',
+      ensureDiagram: async () => '<svg/>',
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe(
+        'Diagram: flowchart TD',
+      ),
+    );
+  });
+
+  it('gives the diagram an accessible name from a frontmatter title', async () => {
+    const { container } = renderEditor({
+      text: '```mermaid\n---\ntitle: Login flow\n---\nflowchart TD\n  A --> B\n```',
       ensureDiagram: async () => '<svg/>',
     });
 

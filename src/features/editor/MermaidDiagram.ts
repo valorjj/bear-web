@@ -84,23 +84,58 @@ function isMermaidBlock(node: ProseMirrorNode | null | undefined): boolean {
   return typeof language === 'string' && language.trim().toLowerCase() === DIAGRAM_LANGUAGE_ID;
 }
 
+/** A whole line consisting of a Mermaid directive, e.g. `%%{init: {"theme":"base"}}%%`. */
+const DIRECTIVE_LINE = /^\s*%%\{.*\}%%\s*$/;
+/** A `%%` comment line — but NOT a directive open, which also starts `%%`. */
+const COMMENT_LINE = /^\s*%%(?!\{).*$/;
+/** A frontmatter `title:` key, e.g. `title: My Diagram` inside a `---` block. */
+const FRONTMATTER_TITLE = /^\s*title\s*:\s*(.*\S)\s*$/;
+
 /**
  * The name a screen reader hears for the diagram.
  *
- * Mermaid's own `accTitle:` directive wins when the source declares one —
- * that is precisely what the author wrote the diagram's name to be. Failing
- * that, the first non-empty line, which for every Mermaid grammar is the
- * declaration (`flowchart TD`, `sequenceDiagram`) and so at least names the
- * KIND of picture rather than leaving `role="img"` unnamed.
+ * Mermaid's own `accTitle:` directive wins over everything when the source
+ * declares one — that is precisely what the author wrote the diagram's name
+ * to be. Failing that, a `---` frontmatter block's `title:` (if the source
+ * opens with one) is a better name than the diagram type. Failing THAT, the
+ * first line that is not blank, not a directive (`%%{…}%%`) and not a `%%`
+ * comment — for every Mermaid grammar that is the declaration
+ * (`flowchart TD`, `sequenceDiagram`) and so at least names the KIND of
+ * picture rather than leaving `role="img"` unnamed. Without the directive/
+ * frontmatter skip, a real diagram opening with
+ * `%%{init: {"theme":"base"}}%%` announced that JSON blob as the diagram's
+ * name.
  */
 export function diagramName(source: string): string {
   const lines = source.split('\n');
+
   for (const line of lines) {
     const declared = /^\s*accTitle\s*:\s*(.*\S)\s*$/.exec(line);
     if (declared) return declared[1]!;
   }
-  for (const line of lines) {
-    if (line.trim() !== '') return line.trim();
+
+  let start = 0;
+  if (lines[0]?.trim() === '---') {
+    let title: string | undefined;
+    let i = 1;
+    for (; i < lines.length; i++) {
+      if (lines[i]!.trim() === '---') {
+        i += 1;
+        break;
+      }
+      const declared = FRONTMATTER_TITLE.exec(lines[i]!);
+      if (declared) title = declared[1];
+    }
+    if (title !== undefined) return title;
+    start = i;
+  }
+
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line.trim() === '') continue;
+    if (DIRECTIVE_LINE.test(line)) continue;
+    if (COMMENT_LINE.test(line)) continue;
+    return line.trim();
   }
   return '';
 }

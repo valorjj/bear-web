@@ -8,7 +8,7 @@
  * there is deliberately nothing else that can invalidate this cache, because
  * a second mechanism would be a second thing to get wrong.
  */
-export const DIAGRAM_RENDER_VERSION = 1;
+export const DIAGRAM_RENDER_VERSION = 2;
 
 /**
  * The cache key for one diagram source.

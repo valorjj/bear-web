@@ -313,4 +313,79 @@ describe.skipIf(!available)('renderMermaid', () => {
       expect(findUnsafeSvgConstructs(svg), source).toEqual([]);
     }
   }, 120_000);
+
+  /**
+   * Task 7b, Finding 1: every render used to call `api.render('d', diagram)`
+   * with a HARDCODED id, so two diagrams inlined into the same page shared
+   * DOM id `"d"` — invalid HTML, and `#d …` then matches elements under
+   * BOTH SVGs, since CSS does not enforce id uniqueness. Fixed by deriving
+   * the id from the source itself.
+   */
+  it('gives two different diagrams different ids, and the same diagram the same id', async () => {
+    const a1 = await renderMermaid('flowchart TD\n  A --> B', { browser });
+    const a2 = await renderMermaid('flowchart TD\n  A --> B', { browser });
+    const b = await renderMermaid('flowchart TD\n  A --> C', { browser });
+
+    const idOf = (svg: string): string => /<svg[^>]*\bid="([^"]+)"/.exec(svg)![1]!;
+
+    expect(idOf(a1)).toBe(idOf(a2));
+    expect(idOf(a1)).not.toBe(idOf(b));
+    // Valid CSS/HTML id: starts with a letter, and neither 'd' (the old
+    // hardcoded value, which two diagrams could still collide on by chance
+    // otherwise) nor empty.
+    expect(idOf(a1)).toMatch(/^[a-zA-Z][\w-]*$/);
+  }, 30_000);
+
+  it('scopes every non-keyframe selector to the diagram id, across flowchart, sequence and class', async () => {
+    // Measured, not assumed: Mermaid prefixes every selector it emits
+    // (including our own appended `themeCSS`) with `#<id>` on its own — the
+    // only real defect was the DUPLICATE id two diagrams shared. This
+    // regresses that measurement so a future Mermaid upgrade that stops
+    // scoping its own output is caught here rather than as a leak onto the
+    // editor's prose.
+    const sources = [
+      'flowchart TD\n  A --> B',
+      'sequenceDiagram\n  A->>B: hi',
+      'classDiagram\n  class A { +go() }',
+    ];
+
+    for (const source of sources) {
+      const svg = await renderMermaid(source, { browser });
+      const id = /<svg[^>]*\bid="([^"]+)"/.exec(svg)![1]!;
+      const styleMatch = /<style[^>]*>([\s\S]*?)<\/style>/.exec(svg);
+      expect(styleMatch, source).not.toBeNull();
+      const css = styleMatch![1]!;
+
+      const unscoped: string[] = [];
+      for (const rule of css.matchAll(/([^{}]+)\{[^{}]*\}/g)) {
+        const selector = rule[1]!.trim();
+        if (selector.startsWith('@keyframes') || selector === 'from' || selector === 'to') {
+          continue;
+        }
+        for (const part of selector.split(',').map((s) => s.trim())) {
+          if (!part.startsWith(`#${id}`)) unscoped.push(part);
+        }
+      }
+      expect(unscoped, source).toEqual([]);
+    }
+  }, 60_000);
+
+  /**
+   * Task 7b, Finding 2: Mermaid's root `<svg>` used to carry `width="100%"`
+   * plus an inline `style="max-width: Npx"`. Rewritten in `sanitizeInPage`
+   * to concrete `width`/`height` (from `viewBox`) with no inline style at
+   * all, so the client's own `max-width: 100%; height: auto` rule is the
+   * only thing left governing responsive sizing.
+   */
+  it('gives the root svg concrete width/height from its viewBox, and no inline style', async () => {
+    const svg = await renderMermaid('flowchart TD\n  A[Start] --> B[End]', { browser });
+    const rootTag = /<svg[^>]*>/.exec(svg)![0]!;
+
+    expect(rootTag).not.toMatch(/\bstyle=/);
+    expect(rootTag).not.toMatch(/\bwidth="100%"/);
+
+    const viewBox = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(rootTag)!;
+    expect(rootTag).toContain(`width="${viewBox[1]}"`);
+    expect(rootTag).toContain(`height="${viewBox[2]}"`);
+  }, 30_000);
 });

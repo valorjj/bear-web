@@ -30,6 +30,8 @@ interface MinimalElement {
   readonly tagName: string;
   readonly attributes: ArrayLike<MinimalAttr>;
   readonly children: ArrayLike<MinimalElement>;
+  getAttribute(name: string): string | null;
+  setAttribute(name: string, value: string): void;
   removeAttribute(name: string): void;
   remove(): void;
 }
@@ -87,6 +89,41 @@ export function sanitizeInPage(markup: string): string {
   if (rootWithQuery.querySelector('parsererror') !== null) {
     throw new Error('sanitizeInPage: markup contains a parser error');
   }
+
+  // Mermaid emits `width="100%"` on the root `<svg>` PLUS an inline
+  // `style="max-width: Npx"` — the pixel value of the diagram's true,
+  // unscaled size. An inline declaration always wins over any external
+  // stylesheet rule regardless of specificity, so pairing that inline
+  // `max-width` with a percentage `width` and no CSS `width` of its own
+  // leaves the rendered size to a replaced-element auto-sizing algorithm
+  // that resolves differently depending on the ancestor chain — measured
+  // directly: a small diagram (`max-width: 111px`) dropped into a WIDE flex
+  // ancestor with only its own `max-width` set and no `width` (exactly the
+  // shape of `.ProseMirror` in `editor.css`, which has `max-width` but no
+  // fixed `width` on ITS OWN ancestor) rendered at 1500px instead of its
+  // natural 111px once the inline `max-width` was removed outright — a
+  // massive stretch, not a shrink. Simply deleting the inline style is
+  // therefore wrong.
+  //
+  // Rewritten to the standard responsive-SVG pattern instead: concrete
+  // `width`/`height` attributes taken from `viewBox` (which already carries
+  // the diagram's true intrinsic size and aspect ratio) replace the
+  // percentage `width`, and the inline `style` is dropped entirely. With a
+  // concrete intrinsic size, the client's own
+  // `.bear-mermaid__figure svg { max-width: 100%; height: auto }` is the
+  // ONLY thing left governing how the SVG scales — a small diagram keeps
+  // its natural size (nothing forces it to fill 100% of anything), and a
+  // wide one is capped at the column's width exactly as intended. No
+  // reliance on the ambiguous auto-sizing algorithm at all.
+  const viewBox = root.getAttribute('viewBox');
+  if (viewBox !== null) {
+    const parts = viewBox.trim().split(/\s+/);
+    if (parts.length === 4) {
+      root.setAttribute('width', parts[2]!);
+      root.setAttribute('height', parts[3]!);
+    }
+  }
+  root.removeAttribute('style');
 
   const visit = (element: MinimalElement): void => {
     // Snapshot first: removing while iterating a live collection skips nodes.

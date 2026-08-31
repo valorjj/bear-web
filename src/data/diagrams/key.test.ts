@@ -24,12 +24,12 @@ describe('diagramKey', () => {
     // themeCSS change invalidate every cached SVG with no migration. Asserted
     // against a hardcoded digest so bumping the constant fails HERE, with
     // this comment attached, rather than silently serving stale renders.
-    expect(DIAGRAM_RENDER_VERSION).toBe(1);
+    expect(DIAGRAM_RENDER_VERSION).toBe(2);
     expect(await diagramKey('flowchart TD\n  A --> B')).toBe(
       // Regenerate with: node -e "crypto.subtle.digest('SHA-256', new
-      // TextEncoder().encode('1\nflowchart TD\n  A --> B')).then(d =>
+      // TextEncoder().encode('2\nflowchart TD\n  A --> B')).then(d =>
       // console.log(Buffer.from(d).toString('hex')))"
-      '31e049cd8c72bad7c9d194113a599a5114c2a3fae8160f86b6415dc735eca223',
+      '9ddee7cbb9849673ecacd0deafce1cb062429cfcc6bd354767f5558592546349',
     );
   });
 });

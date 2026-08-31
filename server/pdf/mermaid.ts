@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 
 import type { Browser } from 'playwright';
@@ -79,6 +80,33 @@ interface MermaidApi {
 }
 
 /**
+ * A stable, unique DOM id for one diagram's source.
+ *
+ * `api.render('d', diagram)` used to hardcode `'d'` for every diagram — fine
+ * for one diagram per page, wrong the moment a note holds two. Mermaid
+ * prefixes EVERY selector it emits (including the appended `themeCSS`) with
+ * `#<id>`, and generates every internal reference (`url(#d-gradient)`,
+ * `[id$="-arrowhead"]`) from the same id — verified against real 11.17.2
+ * output for flowchart, sequence, class and a wide flowchart: zero
+ * unprefixed selectors. So the scoping was never broken; the id was. Two
+ * diagrams sharing DOM id `"d"` collide on the id itself (invalid HTML, and
+ * `#d …` then matches elements under BOTH inlined SVGs, since CSS does not
+ * enforce id uniqueness), which is what let one diagram's rules reach the
+ * other's markup, and — because Mermaid's own boilerplate is unprefixed
+ * `<style>` in NO scope at all until IT applies the `#id` prefix — an id
+ * collision was the whole leak.
+ *
+ * Content-derived (not random) so the SAME diagram gets the SAME id across
+ * repeated renders — nothing downstream depends on that today, but a random
+ * id would make an otherwise-identical render's markup vary for no reason,
+ * which is a needless source of future cache-diffing pain. Prefixed with a
+ * letter because a CSS id may not start with a digit and a hex digest can.
+ */
+function diagramId(source: string): string {
+  return `mmd-${createHash('sha256').update(source).digest('hex').slice(0, 16)}`;
+}
+
+/**
  * The in-page evaluation's result, tagged so the caller can tell an
  * infrastructure failure (bundle missing, `initialize()` throwing) apart from
  * a genuine Mermaid parse error. Collapsing these into one shape is what
@@ -124,7 +152,7 @@ export async function renderMermaid(source: string, deps: MermaidRenderDeps = {}
       await page.addScriptTag({ path: mermaidBundlePath() });
 
       const result: MermaidEvalResult = await page.evaluate(
-        async ({ diagram, themeCss }) => {
+        async ({ diagram, themeCss, id }) => {
           const api = (globalThis as { mermaid?: MermaidApi }).mermaid;
           if (api === undefined) return { kind: 'infra' as const, message: 'mermaid did not load' };
 
@@ -153,7 +181,7 @@ export async function renderMermaid(source: string, deps: MermaidRenderDeps = {}
           }
 
           try {
-            const { svg } = await api.render('d', diagram);
+            const { svg } = await api.render(id, diagram);
             return { kind: 'ok' as const, svg };
           } catch (error) {
             // The one case that IS the user's fault: `render()` rejected on
@@ -164,7 +192,7 @@ export async function renderMermaid(source: string, deps: MermaidRenderDeps = {}
             };
           }
         },
-        { diagram: source, themeCss: MERMAID_THEME_CSS },
+        { diagram: source, themeCss: MERMAID_THEME_CSS, id: diagramId(source) },
       );
 
       if (result.kind === 'infra') {
