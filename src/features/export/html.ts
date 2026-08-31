@@ -397,8 +397,16 @@ export function renderNoteBody(
 
   const host = document.createElement('div');
   host.append(fragment);
-  // Before highlighting: a replaced diagram must never also be
-  // re-highlighted as plain text.
+  // Ordering is deliberate but currently UNOBSERVABLE: lowlight has no
+  // 'mermaid' grammar registered, so highlightCodeBlocks already skips a
+  // language-mermaid block regardless of which of these two runs first (see
+  // the LANGUAGE_CLASS_PREFIX check inside it). The test
+  // "lowlight has no mermaid grammar, which is what makes this order
+  // currently unobservable" in html.test.ts pins the fact this ordering
+  // depends on -- if that test ever starts failing (someone registers a
+  // Mermaid grammar, or lowlight ships one), THIS call must move ahead of
+  // highlightCodeBlocks for real, and needs its own ordering test at that
+  // point.
   replaceMermaidBlocks(host, document, diagrams);
   highlightCodeBlocks(host, document);
   inlineImages(host, images);

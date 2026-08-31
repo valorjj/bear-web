@@ -2,7 +2,7 @@ import { Editor } from '@tiptap/core';
 import type { Plugin } from '@tiptap/pm/state';
 import { describe, expect, it } from 'vitest';
 
-import { editorExtensions, parseMarkdown } from '@/features/editor';
+import { editorExtensions, lowlight, parseMarkdown } from '@/features/editor';
 // Raw text of the real stylesheet, not a copy: a Vite `?raw` import, so a
 // change to editor.css is what the colour-comparison tests below read.
 import EDITOR_CSS from '@/styles/editor.css?raw';
@@ -651,6 +651,18 @@ describe('callouts in an export', () => {
       expect(document_).toContain(`VALUE---bear-cal-edge-${type}`);
       expect(document_).toContain(`VALUE---bear-cal-icon-${type}`);
     }
+  });
+});
+
+describe('lowlight has no mermaid grammar, which is what makes this order currently unobservable', () => {
+  it('is not registered, so highlightCodeBlocks skips a language-mermaid block regardless of call order', () => {
+    // renderNoteBody's comment above replaceMermaidBlocks relies on this: if
+    // this ever flips to true (someone registers a Mermaid grammar, or
+    // lowlight ships one), highlightCodeBlocks stops ignoring
+    // language-mermaid blocks and the ordering in renderNoteBody becomes
+    // load-bearing for real -- at which point it needs its own ordering
+    // test, because this one will no longer prove the order is irrelevant.
+    expect(lowlight.registered('mermaid')).toBe(false);
   });
 });
 

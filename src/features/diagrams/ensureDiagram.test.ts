@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { db, diagramKey, diagrams } from '@/data';
+import { db, diagramKey, diagrams, type DiagramsRepository } from '@/data';
 
 import { DiagramError } from './requestDiagram';
 import { __resetInFlightForTests, ensureDiagram } from './ensureDiagram';
@@ -107,5 +107,48 @@ describe('ensureDiagram', () => {
     expect(svg).toBe('<svg/>');
     expect(request).toHaveBeenCalledTimes(2);
     expect((await diagrams.get(await diagramKey('A')))?.svg).toBe('<svg/>');
+  });
+});
+
+describe('ensureDiagram — a broken cache degrades rather than fails the caller', () => {
+  // A cache failure (quota, a blocked connection) is a plausible production
+  // event, not a bug -- unlike a `DiagramError` from the network, it says
+  // nothing about whether the diagram itself is renderable. `collectDiagrams`
+  // in export narrowly catches only `DiagramError`, so `ensureDiagram` must
+  // never let a cache failure escape as anything else, or a note with a
+  // healthy diagram and a broken IndexedDB would fail to export at all.
+
+  it('treats a throwing cache read as a miss: still renders and resolves to the SVG', async () => {
+    const request = vi.fn(async () => '<svg id="rendered"/>');
+    const brokenGet: DiagramsRepository = {
+      get: vi.fn(async () => {
+        throw new Error('IDB blocked');
+      }),
+      put: vi.fn(async () => undefined),
+      touch: vi.fn(async () => undefined),
+    };
+
+    const svg = await ensureDiagram('A', { request, diagrams: brokenGet });
+
+    expect(svg).toBe('<svg id="rendered"/>');
+    // Falls through to the network -- a read failure must not be mistaken
+    // for "already cached, nothing to do".
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a throwing cache write and still resolves to the freshly rendered SVG', async () => {
+    const request = vi.fn(async () => '<svg id="rendered"/>');
+    const brokenPut: DiagramsRepository = {
+      get: vi.fn(async () => undefined),
+      put: vi.fn(async () => {
+        throw new Error('IDB quota exceeded');
+      }),
+      touch: vi.fn(async () => undefined),
+    };
+
+    const svg = await ensureDiagram('A', { request, diagrams: brokenPut });
+
+    // Failing to remember the render is not a reason to fail to show it.
+    expect(svg).toBe('<svg id="rendered"/>');
   });
 });

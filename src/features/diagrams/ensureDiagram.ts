@@ -49,12 +49,25 @@ export function __resetInFlightForTests(): void {
  * `lastUsed`); a miss renders through `requestDiagram`, stores the result,
  * and returns it.
  *
- * A failure — including a syntax error — propagates and caches NOTHING.
- * Caching an error is tempting (the answer cannot change until the source
- * does, and the source is the key) and is refused deliberately: it would put
- * a second kind of record in a store whose whole contract is "a hash names
- * one SVG", and the cost of a wrong refusal is one extra request, not a
- * silently stuck cache entry.
+ * A render failure — including a syntax error — propagates and caches
+ * NOTHING. Caching an error is tempting (the answer cannot change until the
+ * source does, and the source is the key) and is refused deliberately: it
+ * would put a second kind of record in a store whose whole contract is
+ * "a hash names one SVG", and the cost of a wrong refusal is one extra
+ * request, not a silently stuck cache entry.
+ *
+ * `DiagramError` from `requestDiagram` is the ONLY thing this function
+ * throws. The IndexedDB cache itself can fail too — quota, a blocked
+ * connection — and that is a plausible production failure, not a bug; a
+ * caller (export's `collectDiagrams` narrowly catches `DiagramError` and
+ * would otherwise let a cache failure crash the whole export over a diagram
+ * the network could still render fine. So:
+ *
+ * - a cache READ (`repo.get`) that throws is treated as a MISS: falls
+ *   through to the network render rather than failing outright.
+ * - a cache WRITE (`repo.touch`, `repo.put`) that throws is IGNORED: the SVG
+ *   that was already found or just rendered is still returned. Failing to
+ *   remember it is not a reason to fail to show it.
  */
 export async function ensureDiagram(source: string, deps: EnsureDiagramDeps = {}): Promise<string> {
   const request = deps.request ?? requestDiagram;
@@ -63,9 +76,10 @@ export async function ensureDiagram(source: string, deps: EnsureDiagramDeps = {}
 
   const hash = await diagramKey(source);
 
-  const cached = await repo.get(hash);
+  const cached = await readCache(repo, hash);
   if (cached) {
-    await repo.touch(hash);
+    // A refresh failure does not cost the caller the hit it already has.
+    await repo.touch(hash).catch(() => undefined);
     return cached.svg;
   }
 
@@ -75,7 +89,8 @@ export async function ensureDiagram(source: string, deps: EnsureDiagramDeps = {}
   const promise = (async () => {
     try {
       const svg = await request(source);
-      await repo.put(hash, svg);
+      // A write failure does not cost the caller the render it just paid for.
+      await repo.put(hash, svg).catch(() => undefined);
       return svg;
     } finally {
       inFlight.delete(hash);
@@ -84,4 +99,19 @@ export async function ensureDiagram(source: string, deps: EnsureDiagramDeps = {}
 
   inFlight.set(hash, promise);
   return promise;
+}
+
+/**
+ * `repo.get`, with a thrown read failure treated as a plain miss rather than
+ * propagated — see the "cache READ" bullet on `ensureDiagram` above.
+ */
+async function readCache(
+  repo: DiagramsRepository,
+  hash: string,
+): Promise<Awaited<ReturnType<DiagramsRepository['get']>>> {
+  try {
+    return await repo.get(hash);
+  } catch {
+    return undefined;
+  }
 }
