@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { SMART_LIST_IDS, smartScope } from '@/features/notes';
 import { en } from '@/i18n';
 
 import { buildCommands, type CommandDeps } from './commands';
@@ -47,13 +48,35 @@ describe('buildCommands — navigation', () => {
     expect(list).toContain('go.search');
   });
 
-  it('routes a smart-list command through onScope', () => {
+  it.each(SMART_LIST_IDS)("routes go.%s to that list's own scope", (list) => {
     const onScope = vi.fn();
     buildCommands(deps({ onScope }))
-      .find((c) => c.id === 'go.trash')!
+      .find((c) => c.id === `go.${list}`)!
       .run();
 
-    expect(onScope).toHaveBeenCalledTimes(1);
+    expect(onScope).toHaveBeenCalledWith(smartScope(list));
+  });
+
+  it('routes go.graph to onOpenGraph, and not onFocusSearch', () => {
+    const onOpenGraph = vi.fn();
+    const onFocusSearch = vi.fn();
+    buildCommands(deps({ onOpenGraph, onFocusSearch }))
+      .find((c) => c.id === 'go.graph')!
+      .run();
+
+    expect(onOpenGraph).toHaveBeenCalledTimes(1);
+    expect(onFocusSearch).not.toHaveBeenCalled();
+  });
+
+  it('routes go.search to onFocusSearch, and not onOpenGraph', () => {
+    const onOpenGraph = vi.fn();
+    const onFocusSearch = vi.fn();
+    buildCommands(deps({ onOpenGraph, onFocusSearch }))
+      .find((c) => c.id === 'go.search')!
+      .run();
+
+    expect(onFocusSearch).toHaveBeenCalledTimes(1);
+    expect(onOpenGraph).not.toHaveBeenCalled();
   });
 });
 
