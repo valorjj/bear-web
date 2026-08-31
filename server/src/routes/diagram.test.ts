@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../app.ts';
+import { cookieName, SESSION_COOKIE } from '../auth/cookies.ts';
 import { MAX_DIAGRAM_BYTES } from './diagram.ts';
-import { signedInDeps, withOrigin, withSessionCookie } from './testSupport.ts';
+import { APP_ORIGIN, signedInDeps, withOrigin, withSessionCookie } from './testSupport.ts';
 
 const SOURCE = 'flowchart TD\n A --> B';
 
@@ -193,5 +194,43 @@ describe('POST /diagram', () => {
     const body = await res.text();
     expect(body).not.toContain('script');
     expect(body.length).toBe(0);
+  });
+
+  it("enforces its own rate limit, between /sync's 120 and /export/*'s 10, keyed per session", async () => {
+    // 60/min sits deliberately between the two: a diagram render is cheap
+    // (~100ms) and the editor legitimately issues a burst of them while
+    // someone iterates on one, so it must not throttle at /export/*'s rate
+    // — but it still has to bound abuse, which /sync's session-keyed bucket
+    // (not the earlier /export/* precedent's bare status assertion) is
+    // exactly what proves: exhausting one session's bucket must not affect
+    // a different session's.
+    const deps = await signedInDeps({ rendererFetch: rendererFetch() });
+    const app = createApp(deps);
+    const name = cookieName(SESSION_COOKIE, false);
+    const cookieA = `${name}=session-a`;
+    const cookieB = `${name}=session-b`;
+
+    let lastStatus = 200;
+    for (let i = 0; i < 61; i += 1) {
+      const res = await app.request('/diagram', {
+        method: 'POST',
+        headers: { origin: APP_ORIGIN, 'content-type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ source: SOURCE }),
+      });
+      lastStatus = res.status;
+    }
+    // The limit is 60/min; the 61st request in the same window (same
+    // session) must be throttled.
+    expect(lastStatus).toBe(429);
+
+    // A different session's bucket is untouched by session A's exhaustion —
+    // this is what proves the limiter is keyed per session rather than
+    // shared globally or per process.
+    const otherSession = await app.request('/diagram', {
+      method: 'POST',
+      headers: { origin: APP_ORIGIN, 'content-type': 'application/json', cookie: cookieB },
+      body: JSON.stringify({ source: SOURCE }),
+    });
+    expect(otherSession.status).toBe(200);
   });
 });

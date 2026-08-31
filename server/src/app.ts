@@ -108,6 +108,24 @@ export function createApp(deps: AppDeps): Hono {
       key: (c) => readCookie(c.req.header('cookie'), sessionCookieName) ?? clientIp(c),
     }),
   );
+  // Deliberately between /sync's 120 and /export/*'s 10, not equal to
+  // either. /export/* is 10/min because a PDF render takes seconds and a
+  // user exports occasionally; a diagram render is ~100ms, and the editor
+  // issues one per edit-then-leave-the-block, so someone iterating on a
+  // diagram — or opening a diagram-heavy note for the first time — legitimately
+  // produces a burst of them. At 10/min, normal editing would present as
+  // diagrams mysteriously failing to render while the user works. 60 still
+  // bounds abuse hard: the renderer's own queue (Task 3) admits only 2
+  // concurrent renders and sheds past a depth of 8, so the container is
+  // protected by that as well as by this.
+  app.use(
+    '/diagram',
+    rateLimit({
+      limit: 60,
+      windowMs: 60_000,
+      key: (c) => readCookie(c.req.header('cookie'), sessionCookieName) ?? clientIp(c),
+    }),
+  );
   app.use('*', rateLimit({ limit: 300, windowMs: 60_000, key: clientIp }));
 
   app.get('/health', (c) => c.json({ ok: true }));
