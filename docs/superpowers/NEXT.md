@@ -18,16 +18,67 @@ believe the table and fix this file.
 ## Where things stand
 
 - `main` carries everything in `CLAUDE.md`'s status table marked complete —
-  through **B2 (drag-to-reorder headings), 2026-08-29**. Live on Pages.
-- 2143 unit tests, 181 end-to-end. All six gates green.
+  through **L2 (backlinks), 2026-08-31**. Live on Pages.
+- 2247 unit tests, 190 end-to-end. All six gates green.
 - Every sub-project branch named in this file is merged and deleted.
 
-**What is actually left, as of 2026-08-29:**
+**What is actually left, as of 2026-08-31:**
 
 | Open | State |
 | --- | --- |
+| **L3 relationship graph** | next — a rendering of L2's `noteLinks` index |
+| **L4 command palette** | queued, unspecced |
+| **L5 Mermaid, server-rendered** | queued, unspecced — see the measurement below |
 | **J4 platform chrome** | not started — the last of the four |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
+
+### The L-series, and why in this order
+
+Decided 2026-08-31 from a triage of nine candidate features the user proposed.
+The full write-up is an artifact:
+<https://claude.ai/code/artifact/840b86c9-3303-4415-91a6-bd4f9ed28992>
+
+The organising principle, which predicted cost better than anything else: a
+feature that is a **projection of data the app already holds** is cheap and
+compounds; a feature that adds a **new runtime or a second authoring surface**
+is a whole product. Backlinks (L2) was the first kind, which is why it was
+first. So is L3.
+
+- **L3, the graph** — a rendering of `noteLinks`, not a new system. Do it while
+  the model is fresh. It also delivers most of what a "mind map" would, without
+  a second editor to sync, export and round-trip.
+- **L4, the command palette** — not on the user's list, added because it is the
+  strongest "built for developers" signal and it makes everything else
+  discoverable. It is assembly, not invention: `useScopeShortcuts.ts` owns
+  app-level keys, `Dialog.tsx` traps focus, `filterByQuery` matches.
+- **L5, Mermaid — server-rendered, and this is measured, not assumed.** Spiked
+  on a throwaway branch on 2026-08-31 and fully reverted. Lazy-loading works
+  cleanly: the main bundle does not move. But **one simple flowchart costs
+  208 KB gzipped across 27 requests**, against a whole-app bundle of ~334 KB —
+  62% of the application for one diagram. All diagram types together are
+  947 KB across 94 chunks, so eager is disqualified outright, and 111 packages
+  / 84 MB land in `node_modules`. The way out exists only because G and K2 were
+  built: render to SVG in the **containerised Chromium already used for PDF
+  export**, cache it content-hashed like an image, and the reader pays a few KB.
+
+**Cut, with reasons, so they are not re-proposed:**
+
+- **A terminal for running code.** The Mac Mini is reachable through a
+  Cloudflare tunnel and the rate limiter trusts `cf-connecting-ip` verbatim
+  because the tunnel is assumed to be the only door. Code execution turns a
+  notes backend into a remote-execution service on a personal machine beside
+  real files. Not "later" — no.
+- **A spreadsheet with a Python kernel.** Two products, neither of them
+  note-taking, and it inherits the row above. M8c already ships real tables.
+- **YouTube/Google embeds.** Low value in a developer's notes and each is a
+  third-party iframe. The only narrow version worth considering is unfurling a
+  GitHub issue or PR title server-side, cached.
+- **A standalone mind-map editor** — superseded by L3, per the reasoning above.
+
+**The image asks were already shipped.** K1-K3 downscale to 2048px WebP q80
+before upload, the server caps one image at 5 MB and an account at 2 GB, so a
+pasted screenshot lands at a few hundred KB and a 3 MB cap would never bind.
+What was missing was visibility, and L1 added it.
 
 **Mobile is nearly done.** J1 turned "unusable" into "usable", J2a fixed the
 phone header's proportions, J2 made every affordance reachable by a finger, and
@@ -36,7 +87,8 @@ scroll. Only J4 is left, and it is the smallest of the four: safe-area insets
 throughout, `100dvh` on the shell, installability, pull-to-refresh, and whether
 an installed PWA changes J1's answer on routing.
 
-**Nothing blocks anything.** K4 is small enough to slot in anywhere.
+**Nothing blocks anything except L3, which wants L2's index and therefore has
+it.** K4 is small enough to slot in anywhere.
 
 **J4 inherits two things by name.** J1 carved out one safe-area exception and
 only one — the note list's FAB — so every other bottom-anchored surface still
