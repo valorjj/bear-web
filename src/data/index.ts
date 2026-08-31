@@ -58,6 +58,7 @@ export { buildTitleIndex, findLinkRanges, normalizeTitle, parseLinks } from './l
 export type { LinkRange, TitledNote } from './links';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
 export {
+  createDiagramsRepository,
   DIAGRAM_CACHE_MAX_BYTES,
   diagrams,
   files,
@@ -68,6 +69,7 @@ export {
 } from './repositories';
 export type {
   DiagramsRepository,
+  DiagramsRepositoryDeps,
   FilesRepository,
   FoldsRepository,
   LinkParser,

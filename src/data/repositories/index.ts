@@ -15,8 +15,8 @@ export const settings = createSettingsRepository(db);
 export const folds = createFoldsRepository(db);
 export const diagrams = createDiagramsRepository({ db });
 
-export { DIAGRAM_CACHE_MAX_BYTES } from './diagrams';
-export type { DiagramsRepository } from './diagrams';
+export { createDiagramsRepository, DIAGRAM_CACHE_MAX_BYTES } from './diagrams';
+export type { DiagramsRepository, DiagramsRepositoryDeps } from './diagrams';
 export type { FilesRepository } from './files';
 export type { FoldsRepository } from './folds';
 export type { LinkParser, NotesRepository, TagParser } from './notes';
