@@ -237,7 +237,12 @@ test.describe('graph', () => {
     await expect(page.getByRole('region', { name: 'Note list' })).toBeVisible();
 
     await openGraph(page);
-    await expect(canvas(page)).toBeVisible();
+    // Explicit headroom, matching the precedent two tests above (the
+    // 450-node worker path's own `{ timeout: 30_000 }`): this assertion runs
+    // immediately after that heaviest test in the file and inherits its
+    // contention on a shared runner, so the file's default 5000ms is not
+    // reliable headroom here even though nothing about THIS test is heavy.
+    await expect(canvas(page)).toBeVisible({ timeout: 15_000 });
 
     // A settled signal alone is not enough under contention: the canvas's
     // accessible name can match before every node has actually painted (seen
