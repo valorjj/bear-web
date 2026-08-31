@@ -20,6 +20,20 @@ function fixture() {
 const fingerprint = (positions: Map<string, { x: number; y: number }>) =>
   [...positions].map(([id, p]) => `${id}:${p.x.toFixed(6)},${p.y.toFixed(6)}`).join('|');
 
+/** A small, fixed graph for the golden-fingerprint test: 7 notes, one ghost. */
+function goldenFixture() {
+  const index = Array.from({ length: 7 }, (_, i) => note(`n${i}`, `N${i}`));
+  const rows = [
+    { noteId: 'n0', toTitle: 'N1' },
+    { noteId: 'n1', toTitle: 'N2' },
+    { noteId: 'n2', toTitle: 'N0' },
+    { noteId: 'n3', toTitle: 'N4' },
+    { noteId: 'n4', toTitle: 'N5' },
+    { noteId: 'n5', toTitle: 'Nowhere' },
+  ];
+  return buildGraph(index, rows);
+}
+
 describe('layoutGraph', () => {
   it('lays the same graph out identically every time', () => {
     // This is what makes the graph screenshottable by `npm run shots`, which
@@ -61,5 +75,19 @@ describe('layoutGraph', () => {
 
     expect(() => layoutGraph(graph)).not.toThrow();
     expect(layoutGraph(graph).size).toBe(2);
+  });
+
+  it('lays out a fixed small graph to an exact, committed fingerprint', () => {
+    // This is the test that actually protects the screenshot story: it fails
+    // on a tick-count change, a force-parameter change, or a node-ordering
+    // change — the things that genuinely reshuffle every user's graph. The
+    // "same graph twice" test above cannot see any of those, since both runs
+    // share the same build.
+    const golden =
+      'ghost:nowhere:97.737916,153.910363|n0:-114.821358,-1.878340|n1:-88.621399,-45.192160|' +
+      'n2:-65.726398,-1.646604|n3:133.217057,14.559828|n4:113.595565,57.905068|' +
+      'n5:92.319448,107.162299|n6:-167.704036,-284.820148';
+
+    expect(fingerprint(layoutGraph(goldenFixture()))).toBe(golden);
   });
 });

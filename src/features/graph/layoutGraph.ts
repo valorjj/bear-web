@@ -19,8 +19,9 @@ export interface Point {
 export const LAYOUT_TICKS = 300;
 
 /**
- * Fixed, arbitrary, and the reason two runs agree. Changing it reshuffles
- * every user's graph, so treat it as a constant with a user-visible effect.
+ * Fixed and arbitrary. Not the reason two runs agree — see `seededRandom`'s
+ * docblock — but kept fixed anyway so behaviour cannot change silently if it
+ * ever does start mattering.
  */
 const SEED = 0x5eed;
 
@@ -33,10 +34,14 @@ interface SimNode extends SimulationNodeDatum {
  * A linear congruential generator, standing in for `Math.random`.
  *
  * `d3-force`'s only randomness is `jiggle()` — `(random() - 0.5) * 1e-6`,
- * applied by `forceLink` and `forceCollide` when two nodes coincide exactly.
- * `simulation.randomSource()` replaces the source for every force the
- * simulation owns, and initial placement is phyllotaxis, already
- * deterministic. Those two facts together are what make the output stable.
+ * applied by `forceLink` and `forceCollide` only when two nodes coincide
+ * exactly. `simulation.randomSource()` replaces the source for every force
+ * the simulation owns. This is kept as cheap insurance in case that path is
+ * ever reached, but it is NOT what makes `layoutGraph`'s output stable: for
+ * a graph built by `buildGraph`, phyllotaxis initial placement never
+ * produces an exact coincidence, so `jiggle()` is never actually called.
+ * Determinism instead comes from phyllotaxis placement (itself
+ * deterministic) plus the fixed `LAYOUT_TICKS` tick count.
  */
 function seededRandom(seed: number): () => number {
   let state = seed >>> 0;
@@ -53,6 +58,11 @@ function seededRandom(seed: number): () => number {
  * jsdom has no `Worker` at all, so a worker-only design would push the only
  * part of L3 with real math in it into Playwright. `runLayout` decides where
  * this runs; this function only knows how.
+ *
+ * Deterministic because d3-force's initial placement (phyllotaxis) is itself
+ * deterministic and `LAYOUT_TICKS` is fixed — not because of `randomSource`,
+ * which only covers the exactly-coincident-node path a `buildGraph` output
+ * never reaches. See `seededRandom`'s docblock.
  */
 export function layoutGraph(graph: Graph): Map<string, Point> {
   const nodes: SimNode[] = graph.nodes.map((node) => ({
