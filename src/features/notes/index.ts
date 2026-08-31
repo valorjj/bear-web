@@ -25,7 +25,7 @@ export { DEFAULT_PREVIEW_SIZE, isPreviewSize, PREVIEW_SIZES, snippetLines } from
 export type { PreviewSize } from './preview';
 export { SCOPE_SHORTCUT_DIGITS, ScopeMenu } from './ScopeMenu';
 export type { ScopeMenuProps } from './ScopeMenu';
-export { filterByQuery, hasQuery } from './search';
+export { filterByQuery, hasQuery, normalizeForSearch } from './search';
 export type { MatchRange } from './search';
 export { useNotes } from './useNotes';
 export type { NotesState } from './useNotes';
