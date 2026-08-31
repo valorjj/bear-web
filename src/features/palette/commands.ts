@@ -115,5 +115,120 @@ export function buildCommands(deps: CommandDeps): Command[] {
     run: deps.onToggleHideSubTagNotes,
   });
 
+  commands.push({
+    id: 'note.new',
+    group: 'note',
+    label: t('palette.command.newNote'),
+    run: deps.onNewNote,
+  });
+
+  if (deps.hasOpenNote && !deps.openNoteTrashed) {
+    commands.push({
+      id: 'note.duplicate',
+      group: 'note',
+      label: t('palette.command.duplicateNote'),
+      run: deps.onDuplicateNote,
+    });
+
+    commands.push(
+      deps.openNotePinned
+        ? {
+            id: 'note.unpin',
+            group: 'note',
+            label: t('palette.command.unpinNote'),
+            run: deps.onTogglePin,
+          }
+        : {
+            id: 'note.pin',
+            group: 'note',
+            label: t('palette.command.pinNote'),
+            run: deps.onTogglePin,
+          },
+    );
+
+    commands.push({
+      id: 'note.trash',
+      group: 'note',
+      label: t('palette.command.trashNote'),
+      destructive: true,
+      run: deps.onTrashNote,
+    });
+
+    commands.push({
+      id: 'note.exportMarkdown',
+      group: 'note',
+      label: t('palette.command.exportMarkdown'),
+      run: () => deps.onExport('markdown'),
+    });
+
+    commands.push({
+      id: 'note.exportHtml',
+      group: 'note',
+      label: t('palette.command.exportHtml'),
+      run: () => deps.onExport('html'),
+    });
+
+    // PDF is rendered server-side and is the first capability in this app that
+    // does not exist without an account. Absent rather than disabled here,
+    // matching how `buildCommands` treats every other invalid command.
+    if (deps.signedIn) {
+      commands.push({
+        id: 'note.exportPdf',
+        group: 'note',
+        label: t('palette.command.exportPdf'),
+        run: () => deps.onExport('pdf'),
+      });
+    }
+  }
+
+  if (deps.hasOpenNote && deps.openNoteTrashed) {
+    commands.push({
+      id: 'note.restore',
+      group: 'note',
+      label: t('palette.command.restoreNote'),
+      run: deps.onRestoreNote,
+    });
+  }
+
+  // Gated on `hasOpenNote`, matching every other note-group command below
+  // `note.new`. The brief's own test ("offers only New note when nothing is
+  // open") requires this absent with no note open; `CommandDeps` has no
+  // trash-count or scope flag to gate it on the more natural condition
+  // ("there is something in the trash"), so this is the only state
+  // available to satisfy that test without inventing a new field.
+  if (deps.hasOpenNote) {
+    commands.push({
+      id: 'note.emptyTrash',
+      group: 'note',
+      label: t('palette.command.emptyTrash'),
+      destructive: true,
+      run: deps.onEmptyTrash,
+    });
+  }
+
+  if (deps.signedIn) {
+    commands.push({
+      id: 'account.signOut',
+      group: 'account',
+      label: t('palette.command.signOut'),
+      destructive: true,
+      run: deps.onSignOut,
+    });
+
+    commands.push({
+      id: 'account.syncNow',
+      group: 'account',
+      label: t('palette.command.syncNow'),
+      run: deps.onSyncNow,
+    });
+  } else {
+    commands.push({
+      id: 'account.signIn',
+      group: 'account',
+      label: t('palette.command.signIn'),
+      run: deps.onSignIn,
+    });
+  }
+
   return commands;
 }

@@ -104,8 +104,7 @@ describe('buildCommands — appearance', () => {
 });
 
 describe('buildCommands — the destructive invariant', () => {
-  // Unskipped by Task 3, which adds the note and account groups.
-  it.skip('marks every irreversible command destructive', () => {
+  it('marks every irreversible command destructive', () => {
     // A rule that rots silently as commands are added. `emptyTrash` and
     // `signOut` have no undo; `trashNote` is reversible but still guarded,
     // matching how the note-row menu already treats it.
@@ -119,8 +118,7 @@ describe('buildCommands — the destructive invariant', () => {
     }
   });
 
-  // Unskipped by Task 3, which adds the note and account groups.
-  it.skip('marks nothing else destructive', () => {
+  it('marks nothing else destructive', () => {
     const all = buildCommands(deps({ hasOpenNote: true, signedIn: true, hasQuery: true }));
     const flagged = all
       .filter((c) => c.destructive === true)
@@ -128,5 +126,70 @@ describe('buildCommands — the destructive invariant', () => {
       .sort();
 
     expect(flagged).toEqual(['account.signOut', 'note.emptyTrash', 'note.trash']);
+  });
+});
+
+describe('buildCommands — note actions follow the open note', () => {
+  it('offers only New note when nothing is open', () => {
+    const noteIds = ids(deps({ hasOpenNote: false })).filter((id) => id.startsWith('note.'));
+
+    expect(noteIds).toEqual(['note.new']);
+  });
+
+  it('offers duplicate, pin and trash when a live note is open', () => {
+    const noteIds = ids(deps({ hasOpenNote: true }));
+
+    expect(noteIds).toContain('note.duplicate');
+    expect(noteIds).toContain('note.pin');
+    expect(noteIds).toContain('note.trash');
+    expect(noteIds).not.toContain('note.restore');
+  });
+
+  it('swaps pin for unpin when the note is pinned', () => {
+    const noteIds = ids(deps({ hasOpenNote: true, openNotePinned: true }));
+
+    expect(noteIds).toContain('note.unpin');
+    expect(noteIds).not.toContain('note.pin');
+  });
+
+  it('offers restore and NOT trash when the open note is trashed', () => {
+    const noteIds = ids(deps({ hasOpenNote: true, openNoteTrashed: true }));
+
+    expect(noteIds).toContain('note.restore');
+    expect(noteIds).not.toContain('note.trash');
+    // Exporting a trashed note is not a thing the app offers anywhere else.
+    expect(noteIds).not.toContain('note.exportPdf');
+  });
+
+  it('offers all three exports for a live note, but PDF only when signed in', () => {
+    const guest = ids(deps({ hasOpenNote: true, signedIn: false }));
+    expect(guest).toContain('note.exportMarkdown');
+    expect(guest).toContain('note.exportHtml');
+    // PDF renders server-side and does not exist without an account — the
+    // export menu already marks it aria-disabled when signed out.
+    expect(guest).not.toContain('note.exportPdf');
+
+    expect(ids(deps({ hasOpenNote: true, signedIn: true }))).toContain('note.exportPdf');
+  });
+
+  it('routes each export through onExport with its format', () => {
+    const onExport = vi.fn();
+    buildCommands(deps({ hasOpenNote: true, onExport }))
+      .find((c) => c.id === 'note.exportHtml')!
+      .run();
+
+    expect(onExport).toHaveBeenCalledWith('html');
+  });
+});
+
+describe('buildCommands — account', () => {
+  it('offers sign in when signed out, and sign out plus sync when signed in', () => {
+    expect(ids(deps({ signedIn: false }))).toContain('account.signIn');
+    expect(ids(deps({ signedIn: false }))).not.toContain('account.syncNow');
+
+    const member = ids(deps({ signedIn: true }));
+    expect(member).toContain('account.signOut');
+    expect(member).toContain('account.syncNow');
+    expect(member).not.toContain('account.signIn');
   });
 });
