@@ -77,7 +77,7 @@ function isTimeout(error: unknown): boolean {
  */
 const CLOSE_TIMEOUT_MS = 5_000;
 
-async function closeContext(context: BrowserContext, owned: boolean): Promise<void> {
+export async function closeContext(context: BrowserContext, owned: boolean): Promise<void> {
   const closed = await Promise.race([
     context.close().then(
       () => true,

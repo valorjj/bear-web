@@ -83,6 +83,14 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
+      # Mermaid is intentionally NOT a host dependency (never enters
+      # package.json / package-lock.json — see server/docker/pdf/Dockerfile),
+      # so mermaid.test.ts resolves it at call time and needs it installed
+      # here, exactly like the Playwright browser above. --no-save for the
+      # same reason: nothing here should write a lockfile entry.
+      - name: Install Mermaid for renderer tests
+        run: npm install --no-save mermaid@11.17.2
+
       # AFTER the browser install, and deliberately NOT folded into `npm test`.
       # These tests drive a real Chromium; keeping them out of the default
       # `vitest run` is what lets `npm test` stay one of six cheap local gates

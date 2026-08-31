@@ -32,7 +32,6 @@ interface MinimalElement {
   readonly children: ArrayLike<MinimalElement>;
   removeAttribute(name: string): void;
   remove(): void;
-  getAttribute(name: string): string | null;
 }
 
 /**
@@ -40,11 +39,54 @@ interface MinimalElement {
  * markup. Takes and returns strings so it can cross the realm boundary.
  */
 export function sanitizeInPage(markup: string): string {
-  const FORBIDDEN_TAGS = new Set(['script', 'foreignobject', 'use', 'a', 'image', 'animate']);
+  // `set`, `animateTransform` and `animateMotion` are as capable as `animate`
+  // of driving `href`/`xlink:href` to an attacker-chosen value over time —
+  // proven with `<set attributeName="href" to="javascript:alert(1)"/>`, which
+  // survives both this pass and `svgGuard.ts`'s regex if left off this list.
+  // Not currently reachable (it needs an `<a>` parent, which is itself
+  // stripped below) and Mermaid emits none of the four, but the cost of
+  // listing all four is one line against a proven two-layer bypass.
+  const FORBIDDEN_TAGS = new Set([
+    'script',
+    'foreignobject',
+    'use',
+    'a',
+    'image',
+    'animate',
+    'set',
+    'animatetransform',
+    'animatemotion',
+  ]);
 
   const parser = new DOMParser();
   const parsed = parser.parseFromString(markup, 'image/svg+xml');
   const root = parsed.documentElement as unknown as MinimalElement;
+
+  // A parse failure does not throw: `DOMParser` recovers instead, and it
+  // recovers TWO different ways depending on how broken the markup is —
+  // both proven, neither raises an exception on its own, and neither is
+  // anything `findUnsafeSvgConstructs` has a rule against, so either would
+  // sail through as "sanitized" markup.
+  //
+  // 1. Badly-broken input (empty string, non-XML text) replaces the root
+  //    entirely — with `<html>`, not `<svg>` — caught by the tagName check
+  //    below.
+  // 2. Input that is malformed but still SVG-shaped, e.g. `<svg><g></svg>`
+  //    (a real Mermaid bug would look like this, not like an XSS attempt),
+  //    recovers with the root STILL named `svg` but a `<parsererror>`
+  //    element spliced in as a CHILD — the tagName check alone misses this,
+  //    so it is checked for explicitly too.
+  //
+  // Since Mermaid itself only ever hands this function markup it just
+  // produced, either shape means something went wrong upstream, and this is
+  // the one place positioned to catch it before the guard even runs.
+  if (root.tagName.toLowerCase() !== 'svg') {
+    throw new Error(`sanitizeInPage: expected an <svg> root, got <${root.tagName}>`);
+  }
+  const rootWithQuery = root as unknown as { querySelector(selector: string): unknown };
+  if (rootWithQuery.querySelector('parsererror') !== null) {
+    throw new Error('sanitizeInPage: markup contains a parser error');
+  }
 
   const visit = (element: MinimalElement): void => {
     // Snapshot first: removing while iterating a live collection skips nodes.

@@ -3,15 +3,16 @@ import { createRequire } from 'node:module';
 import type { Browser } from 'playwright';
 
 import { MERMAID_THEME_CSS } from './mermaidTheme.ts';
-import { RenderTimeoutError, sharedBrowser } from './render.ts';
+import { closeContext, RenderTimeoutError, sharedBrowser } from './render.ts';
 import { sanitizeInPage } from './sanitizeInPage.ts';
 import { findUnsafeSvgConstructs } from './svgGuard.ts';
 
 /**
  * Pinned exactly, matching the Dockerfile install. Imported by no one but
- * asserted by the Dockerfile check (`verify-fonts.mjs`-style build-time
- * assertion belongs to a later task; this constant is the single source the
- * Dockerfile line and any such check must agree with).
+ * asserted by `mermaid.test.ts`'s Dockerfile-reading test, which fails if
+ * this constant and `server/docker/pdf/Dockerfile`'s pinned version ever
+ * drift apart — exactly the class of drift that produced the selector
+ * corrections in `mermaidTheme.ts`.
  */
 export const MERMAID_VERSION = '11.17.2';
 
@@ -34,7 +35,10 @@ const DEFAULT_TIMEOUT_MS = 5_000;
 
 /** A Mermaid parse failure. Not a service failure: it is the single most likely
  * outcome of a user typing a diagram, it is not retryable, and its message is
- * information the user needs. Mapped to 422 by `server.ts`. */
+ * information the user needs. Mapped to 422 by `server.ts`. Thrown ONLY for a
+ * rejection out of `mermaid.render()` itself — never for a missing bundle or
+ * an `initialize()` failure, which are infrastructure failures and must not
+ * read as the user's fault. See the read of `result` below. */
 export class MermaidSyntaxError extends Error {
   readonly detail: string;
 
@@ -75,6 +79,18 @@ interface MermaidApi {
 }
 
 /**
+ * The in-page evaluation's result, tagged so the caller can tell an
+ * infrastructure failure (bundle missing, `initialize()` throwing) apart from
+ * a genuine Mermaid parse error. Collapsing these into one shape is what
+ * used to make `renderMermaid` report "mermaid did not load" as a
+ * `MermaidSyntaxError` — a 422 blaming the user's diagram for an outage.
+ */
+type MermaidEvalResult =
+  | { kind: 'ok'; svg: string }
+  | { kind: 'syntax'; message: string }
+  | { kind: 'infra'; message: string };
+
+/**
  * Renders one Mermaid source to sanitized SVG.
  *
  * Differences from `renderPdf`, both deliberate:
@@ -107,36 +123,54 @@ export async function renderMermaid(source: string, deps: MermaidRenderDeps = {}
       });
       await page.addScriptTag({ path: mermaidBundlePath() });
 
-      const result = await page.evaluate(
+      const result: MermaidEvalResult = await page.evaluate(
         async ({ diagram, themeCss }) => {
           const api = (globalThis as { mermaid?: MermaidApi }).mermaid;
-          if (api === undefined) return { error: 'mermaid did not load' };
+          if (api === undefined) return { kind: 'infra' as const, message: 'mermaid did not load' };
 
-          api.initialize({
-            startOnLoad: false,
-            // Encodes HTML in labels rather than trusting it. Belt to the
-            // sanitizer's braces.
-            securityLevel: 'strict',
-            // The reason the foreignObject rule costs nothing: labels become
-            // real <text>, which also survives being inlined in the app.
-            htmlLabels: false,
-            flowchart: { htmlLabels: false },
-            theme: 'base',
-            themeCSS: themeCss,
-            fontFamily: 'Pretendard, system-ui, sans-serif',
-          });
+          try {
+            api.initialize({
+              startOnLoad: false,
+              // Encodes HTML in labels rather than trusting it. Belt to the
+              // sanitizer's braces.
+              securityLevel: 'strict',
+              // The reason the foreignObject rule costs nothing: labels
+              // become real <text>, which also survives being inlined in
+              // the app.
+              htmlLabels: false,
+              flowchart: { htmlLabels: false },
+              theme: 'base',
+              themeCSS: themeCss,
+              fontFamily: 'Pretendard, system-ui, sans-serif',
+            });
+          } catch (error) {
+            // A misconfiguration or a broken bundle, never the user's
+            // diagram — `initialize()` has not looked at `diagram` yet.
+            return {
+              kind: 'infra' as const,
+              message: error instanceof Error ? error.message : String(error),
+            };
+          }
 
           try {
             const { svg } = await api.render('d', diagram);
-            return { svg };
+            return { kind: 'ok' as const, svg };
           } catch (error) {
-            return { error: error instanceof Error ? error.message : String(error) };
+            // The one case that IS the user's fault: `render()` rejected on
+            // the diagram source itself.
+            return {
+              kind: 'syntax' as const,
+              message: error instanceof Error ? error.message : String(error),
+            };
           }
         },
         { diagram: source, themeCss: MERMAID_THEME_CSS },
       );
 
-      if (result.error !== undefined) throw new MermaidSyntaxError(result.error);
+      if (result.kind === 'infra') {
+        throw new Error(`mermaid render infrastructure failure: ${result.message}`);
+      }
+      if (result.kind === 'syntax') throw new MermaidSyntaxError(result.message);
 
       // Sanitized in the page, where a real DOM exists.
       return await page.evaluate(sanitizeInPage, result.svg);
@@ -165,11 +199,10 @@ export async function renderMermaid(source: string, deps: MermaidRenderDeps = {}
     throw error;
   } finally {
     clearTimeout(deadlineTimer);
-    await context.close().catch(() => {});
-    if (owned) {
-      // Nothing to do: the shared browser is reused, exactly as renderPdf
-      // leaves it. Kept as an explicit no-op branch so a future change does
-      // not mistake the absence for an oversight.
-    }
+    // Bounded and shared-browser-aware, exactly as `renderPdf` uses it: an
+    // INJECTED browser (tests) is never torn down here, and a close that
+    // hangs tears down the shared browser rather than pinning the worker the
+    // deadline above exists to reclaim.
+    await closeContext(context, owned);
   }
 }

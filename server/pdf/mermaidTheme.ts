@@ -27,9 +27,10 @@
  * `src/data/diagrams/key.ts` so every cached SVG re-renders, and add a shot.
  *
  * Every selector below was checked against Mermaid 11.17.2's REAL output
- * (dumped SVGs for all six themed types), not written from memory. Three
- * things the obvious selector list gets wrong at this version, in case a
- * future bump reopens the question:
+ * (dumped SVGs for all six themed types, and — for the text rule below —
+ * `getComputedStyle` on real label elements, not just a `class` read), not
+ * written from memory. Several things the obvious selector list gets wrong
+ * at this version, in case a future bump reopens the question:
  *
  * - `.actor` is on BOTH the participant's box (`rect.actor.actor-top` /
  *   `.actor-bottom`) and its name label (`text.actor.actor-box`). A bare
@@ -50,6 +51,22 @@
  *   claims what was verified. State/class/ER nodes and their labels are
  *   still covered: they render through the SAME `.node` / `.cluster` /
  *   generic-`text` machinery flowchart uses under the hood.
+ * - A bare `text` selector in the text rule is NOT enough. Mermaid's own
+ *   stylesheet carries `#d .label text, #d span { fill:#333 }` at
+ *   specificity (1,1,1) against this file's un-prefixed `text` at (1,0,1) —
+ *   Mermaid's rule wins regardless of source order, because specificity is
+ *   compared before order ever matters. Measured with `getComputedStyle`
+ *   before this was added: flowchart node labels ("Start"/"End") and the
+ *   edge label, plus class/state/ER label text, all computed to `#333`
+ *   instead of the theme's text colour, and the sequence actor name
+ *   computed to `#fff4dd` — Mermaid's own box fill, not a text colour at
+ *   all. `.label text`, `.label span` and `text.actor` bring this file's
+ *   specificity up to par (or above, for `text.actor`'s compound form), and
+ *   — because this stylesheet is appended AFTER Mermaid's own — a tied
+ *   specificity then resolves by source order, in this file's favour.
+ *   Re-verified by `getComputedStyle` after adding them: every element that
+ *   was `#333` (or `#fff4dd` for the actor) now resolves to the theme's
+ *   `--bear-text`, across all six types.
  */
 export const MERMAID_THEME_CSS = `
   .node rect, .node circle, .node ellipse, .node polygon, .node path,
@@ -66,7 +83,8 @@ export const MERMAID_THEME_CSS = `
     stroke: var(--bear-muted);
   }
   text, .nodeLabel, .edgeLabel, .messageText, .loopText, .noteText,
-  .titleText, .pieTitleText, .slice, .legend text, tspan {
+  .titleText, .pieTitleText, .slice, .legend text, tspan,
+  .label text, .label span, text.actor {
     fill: var(--bear-text);
     color: var(--bear-text);
   }
