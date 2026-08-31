@@ -216,10 +216,14 @@ being one save stale.
    verify in a real browser rather than assuming. Chrome and Safari are free.
 3. **`aria-activedescendant` is the easiest thing here to ship subtly broken**,
    and a test asserting merely that options have ids would not catch it.
-4. **~25 new translation keys.** `ko.ts`'s `Record<TranslationKey, string>`
-   makes a missing key a compile error, so the risk is not absence but
-   translations that are technically present and unidiomatic. Worth a human
-   skim before merge.
+4. **~25 new translation keys — and the Korean wording is explicitly NOT a
+   gate for L4.** The user decided on 2026-08-31 to swap the Korean labels by
+   hand afterwards. So implementation supplies a correct, compiling Korean
+   string for every key (the `Record<TranslationKey, string>` annotation makes
+   a missing one a compile error, and that annotation must never be weakened
+   to work around it) and no reviewer should block on the phrasing. English
+   labels ARE in scope and must read well, because they are what the matcher
+   ranks against and what the tests assert.
 
 ## Out of scope
 
