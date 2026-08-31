@@ -31,7 +31,25 @@ RUN fc-cache -f > /dev/null
 # No tsx: node 24 strips types natively, and `erasableSyntaxOnly` in the
 # tsconfig is what guarantees these files contain nothing it cannot strip.
 # One fewer dependency, and one fewer thing to keep in step with the host.
-RUN npm install --no-save --omit=dev playwright@1.62.1 > /dev/null
+#
+# Mermaid, installed INSIDE the image and nowhere else, in the SAME `npm
+# install` invocation as playwright rather than a second one. 111 packages /
+# 84 MB, and a client-side render of one flowchart measures 208 KB gzipped
+# across 27 requests against a whole-app eager payload of ~343 KB — which is
+# why this feature is server-rendered at all. `--no-save` for the same
+# reason the original playwright-only line used it: nothing here writes a
+# lockfile the host shares. Pinned exactly: a minor bump can change Mermaid's
+# DOM class names, which is what `mermaidTheme.ts` selects on.
+#
+# One invocation, not two: there is no `package.json` in this image (WORKDIR
+# is empty going in), so npm has no manifest to reconcile "installed" against
+# and treats every PRIOR --no-save install as extraneous the next time it
+# runs. Verified by reproduction: a second, separate `npm install --no-save
+# mermaid@…` after the playwright line silently DELETED node_modules/playwright
+# — the build then failed three steps later at `verify-fonts.mjs` with
+# `Cannot find package 'playwright'`, which reads like an unrelated fonts
+# problem rather than what it actually was.
+RUN npm install --no-save --omit=dev playwright@1.62.1 mermaid@11.17.2 > /dev/null
 
 COPY server/pdf ./server/pdf
 COPY server/docker/pdf/verify-fonts.mjs ./
