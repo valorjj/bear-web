@@ -1,6 +1,6 @@
 import type { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
-import { normalizeTitle } from '../links';
+import { normalizeTitle, type TitledNote } from '../links';
 import { compareNotes, DEFAULT_NOTE_ORDER, type NoteOrder } from '../order';
 import { newId } from '../ids';
 import { reindexNote } from '../reindex';
@@ -56,6 +56,13 @@ export interface NotesRepository {
   allLinkRows(): Promise<NoteLink[]>;
   /** Titles of every non-trashed note. What `[[` autocomplete and link-pill resolution match against. */
   allNoteTitles(): Promise<string[]>;
+  /**
+   * `{ id, title, updatedAt }` for every non-trashed note — what L3's graph
+   * needs to place a node and what `buildTitleIndex` needs to resolve a link
+   * target. Projects away `text` deliberately: the graph reads every note at
+   * once, and the markdown is the only large field.
+   */
+  allNoteIndex(): Promise<TitledNote[]>;
 }
 
 export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepository {
@@ -338,6 +345,13 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     async allNoteTitles() {
       const all = await db.notes.toArray();
       return all.filter((n) => n.trashedAt === null).map((n) => n.title);
+    },
+
+    async allNoteIndex() {
+      const all = await db.notes.toArray();
+      return all
+        .filter((n) => n.trashedAt === null)
+        .map((n) => ({ id: n.id, title: n.title, updatedAt: n.updatedAt }));
     },
   };
 }

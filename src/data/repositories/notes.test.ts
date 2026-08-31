@@ -583,4 +583,25 @@ describe('notesRepository', () => {
       expect(titles).not.toContain(tossed.title);
     });
   });
+
+  describe('allNoteIndex', () => {
+    it('returns id, title and updatedAt for active notes, and no text', async () => {
+      const note = await notes.create('# Alpha\n\nbody text here');
+
+      const index = await notes.allNoteIndex();
+
+      expect(index).toEqual([{ id: note.id, title: note.title, updatedAt: note.updatedAt }]);
+      // The projection is the point: a 2000-note vault must not pull every
+      // note's markdown into memory to draw dots.
+      expect(index[0]).not.toHaveProperty('text');
+    });
+
+    it('omits trashed notes', async () => {
+      const kept = await notes.create('# Kept');
+      const gone = await notes.create('# Gone');
+      await notes.trash(gone.id);
+
+      expect((await notes.allNoteIndex()).map((n) => n.id)).toEqual([kept.id]);
+    });
+  });
 });
