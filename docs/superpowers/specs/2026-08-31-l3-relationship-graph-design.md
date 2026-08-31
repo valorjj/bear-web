@@ -143,6 +143,28 @@ change that makes the two paths share one rule rather than two copies.
 vault does not pull megabytes of markdown to draw dots. It sits beside
 `allTagRows` / `allLinkRows` / `allNoteTitles` and follows their naming.
 
+### The whole surface is lazy-loaded, and that is structural
+
+Measured on 2026-08-31: `main` is **337,259 B** gzipped against
+`scripts/bundleSize.test.ts`'s ceiling of **340,000** — **2,741 B of
+headroom**. `d3-force` is 5.6 KB gzipped on its own, so loading the graph
+eagerly would breach the ceiling before any first-party code was written.
+
+`GraphView` is therefore reached through a dynamic `import()` behind
+`React.lazy`, and `d3-force` is imported only from inside that boundary. Two
+consequences worth stating, because both are load-bearing:
+
+- **The bundle guard keeps working unchanged.** It measures the *largest* JS
+  asset, so a separate graph chunk is simply not the thing it measures. The
+  ceiling should NOT be raised for L3 — if it needs raising, something has
+  leaked across the lazy boundary, and that is the finding.
+- **This is the app's first code split.** The build currently emits two JS
+  assets and Rolldown already warns about the missing split, so the mechanism
+  is new here and needs verifying in a real build rather than assumed.
+
+A `Suspense` fallback renders the same `settling` state the layout already
+needs, so the chunk fetch and the simulation look like one wait to the user.
+
 ### The layout is one pure function with two callers
 
 `layoutGraph(graph) → Map<id, {x, y}>` is pure, synchronous and deterministic.
@@ -262,17 +284,29 @@ of orphans, which is a legitimate finding, not an error state.
 
 ## Risks, in the order they are worth worrying about
 
-1. **The worker under Vite with a GitHub Pages base path.** `?worker` emits a
-   separate chunk and this app deploys to a sub-path. It will not show up in
-   `npm run dev`. Verify against `npm run build && npm run preview` — and per
-   the existing trap, `lsof -ti:4173 | xargs -r kill -9` first, or the preview
-   silently serves a stale build.
-2. **4 500 SVG elements and hover dimming.** Per-node React state would thrash.
+1. **The worker chunk in a production build.** `?worker` emits a separate
+   chunk that `npm run dev` serves differently from `npm run build`, so a
+   broken worker URL will not appear in dev. The sub-path hazard that would
+   normally make this severe does **not** apply here — `vite.config.ts` sets
+   `base: '/'` and `public/CNAME` is `markflowing.com`, so the app is served
+   from a domain root, and the conditional base that once varied under
+   `GITHUB_ACTIONS` is gone. It still has to be verified against
+   `npm run build && npm run preview`, and per the existing trap
+   `lsof -ti:4173 | xargs -r kill -9` first, or the preview silently serves a
+   stale build.
+2. **A leak across the lazy boundary.** A single eager `import` of `d3-force`,
+   or of `GraphView` from a module the shell already loads, silently pulls the
+   whole feature back into `main` — where there are 2 741 bytes of room and it
+   needs more. The symptom is a bundle-guard failure with no obvious culprit,
+   so measure `main` on both sides of the branch as that file's convention
+   requires, and treat a needed ceiling raise as evidence of the leak rather
+   than as the fix.
+3. **4 500 SVG elements and hover dimming.** Per-node React state would thrash.
    The mitigation is one data attribute on the container plus CSS. Measure it;
    do not assume it.
-3. **The snapshot deviation** from `useLiveQuery` needs a ruling in
+4. **The snapshot deviation** from `useLiveQuery` needs a ruling in
    `docs/rulings/notes-lifecycle.md`, or it reads as an oversight.
-4. **Scale beyond the cap** must degrade by saying so, never by hanging.
+5. **Scale beyond the cap** must degrade by saying so, never by hanging.
 
 ## Out of scope
 
