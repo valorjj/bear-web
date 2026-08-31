@@ -463,6 +463,16 @@ connection holding version 0.1`. `e2e/fixtures/seed.ts` opens at 10 and closes
   are worth reading rather than dismissing — but **check `uptime` before
   concluding a diff broke the suite**, and re-run once the machine is quiet.
   Back-to-back full runs are themselves the usual cause.
+  `e2e/graph.spec.ts` is a further instance, and its mechanism is worth
+  naming rather than rediscovering: `playwright.config.ts` sets
+  `fullyParallel: true`, so the file's 450-node worker-path test does not run
+  BEFORE its light siblings — it runs CONCURRENTLY with them, competing for
+  CPU on a fanless Mac Mini that also hosts the API service. Three distinct
+  tests in that file have flaked under full-suite contention, on a different
+  assertion each time, not the same one repeatedly. Two assertions already
+  carry explicit timeouts for exactly this reason (`:226` and `:245`) — this
+  is not redundant and should not be "cleaned up." Measured, not assumed: the
+  file passes reliably run alone, so these are contention, not regressions.
 
 - **A backtick inside a CSS comment in `src/features/export/html.ts`
   terminates the template literal holding the export stylesheet.** The whole
