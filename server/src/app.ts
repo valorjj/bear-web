@@ -6,6 +6,7 @@ import type { Env } from './env.ts';
 import { originGuard } from './middleware/origin.ts';
 import { clientIp, rateLimit } from './middleware/rateLimit.ts';
 import { accountRoutes } from './routes/account.ts';
+import { diagramRoutes } from './routes/diagram.ts';
 import { exportRoutes } from './routes/export.ts';
 import { fileRoutes } from './routes/files.ts';
 import { syncRoutes } from './routes/sync.ts';
@@ -114,6 +115,7 @@ export function createApp(deps: AppDeps): Hono {
   app.route('/', accountRoutes(deps));
   app.route('/', syncRoutes(deps));
   app.route('/', exportRoutes(deps));
+  app.route('/', diagramRoutes(deps));
   app.route('/', fileRoutes(deps));
 
   return app;
