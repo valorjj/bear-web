@@ -1,7 +1,13 @@
 import type { ThemeChoice } from '@/app/theme';
-import type { NoteOrder } from '@/data';
+import { NOTE_ORDER_FIELDS, type NoteOrder } from '@/data';
 import type { ExportFormat } from '@/features/export';
-import { SMART_LIST_IDS, smartScope, type NoteScope, type PreviewSize } from '@/features/notes';
+import {
+  PREVIEW_SIZES,
+  SMART_LIST_IDS,
+  smartScope,
+  type NoteScope,
+  type PreviewSize,
+} from '@/features/notes';
 import type { TranslationKey } from '@/i18n';
 import { THEMES } from '@/styles/themes';
 
@@ -113,7 +119,11 @@ export function buildCommands(deps: CommandDeps): Command[] {
   });
 
   // Sixteen theme rows would swamp the empty state, whose job is to answer
-  // "what can this app do?". Typing anything at all brings them back.
+  // "what can this app do?". Typing anything at all brings them back. The
+  // preview-size and sort-order rows below are gated the same way and for the
+  // same reason: six more rows (3 + 3) dumped alongside the always-present
+  // appearance commands would double the empty-state list for no benefit —
+  // nobody browses "what can this app do?" looking for a preview size.
   if (deps.hasQuery) {
     for (const theme of THEMES) {
       commands.push({
@@ -121,6 +131,30 @@ export function buildCommands(deps: CommandDeps): Command[] {
         group: 'appearance',
         label: `${t('palette.command.theme')}: ${t(theme.labelKey)}`,
         run: () => deps.onSetTheme(theme.id),
+      });
+    }
+
+    for (const size of PREVIEW_SIZES) {
+      commands.push({
+        id: `previewSize.${size}`,
+        group: 'appearance',
+        label: `${t('palette.command.previewSize')}: ${t(`noteList.preview.${size}` as TranslationKey)}`,
+        run: () => deps.onSetPreviewSize(size),
+      });
+    }
+
+    for (const field of NOTE_ORDER_FIELDS) {
+      commands.push({
+        id: `sortBy.${field}`,
+        group: 'appearance',
+        label: `${t('palette.command.sortBy')}: ${t(`noteList.sort.${field}` as TranslationKey)}`,
+        // The palette has no view of the CURRENT order — `CommandDeps` only
+        // exposes the setter — so this cannot preserve an existing
+        // newestFirst direction. It sets the field with the same default
+        // direction `DEFAULT_NOTE_ORDER` uses; a user who wants the reverse
+        // still has the note-list header's own sort menu, which does have
+        // that state.
+        run: (): void => deps.onSetOrder({ field, newestFirst: true }),
       });
     }
   }

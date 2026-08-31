@@ -13,7 +13,7 @@ export {
 } from './images';
 export { hasSignedInBefore, SESSION_HINT_KEY } from './sync/config';
 export { newId } from './ids';
-export { compareNotes, DEFAULT_NOTE_ORDER, isNoteOrder } from './order';
+export { compareNotes, DEFAULT_NOTE_ORDER, isNoteOrder, NOTE_ORDER_FIELDS } from './order';
 export type { NoteOrder, NoteOrderField } from './order';
 export {
   LINK_INDEX_VERSION,

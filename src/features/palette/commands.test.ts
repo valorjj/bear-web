@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { SMART_LIST_IDS, smartScope } from '@/features/notes';
+import { NOTE_ORDER_FIELDS } from '@/data';
+import { PREVIEW_SIZES, SMART_LIST_IDS, smartScope } from '@/features/notes';
 import { en } from '@/i18n';
 
 import { buildCommands, type CommandDeps } from './commands';
@@ -100,6 +101,39 @@ describe('buildCommands — appearance', () => {
     command.run();
 
     expect(onSetTheme).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits preview-size and sort-order commands with no query', () => {
+    const list = ids(deps({ hasQuery: false }));
+
+    expect(list.filter((id) => id.startsWith('previewSize.'))).toEqual([]);
+    expect(list.filter((id) => id.startsWith('sortBy.'))).toEqual([]);
+  });
+
+  it.each(PREVIEW_SIZES)('offers previewSize.%s once something is typed', (size) => {
+    expect(ids(deps({ hasQuery: true }))).toContain(`previewSize.${size}`);
+  });
+
+  it.each(PREVIEW_SIZES)('routes previewSize.%s to onSetPreviewSize with that value', (size) => {
+    const onSetPreviewSize = vi.fn();
+    buildCommands(deps({ hasQuery: true, onSetPreviewSize }))
+      .find((c) => c.id === `previewSize.${size}`)!
+      .run();
+
+    expect(onSetPreviewSize).toHaveBeenCalledWith(size);
+  });
+
+  it.each(NOTE_ORDER_FIELDS)('offers sortBy.%s once something is typed', (field) => {
+    expect(ids(deps({ hasQuery: true }))).toContain(`sortBy.${field}`);
+  });
+
+  it.each(NOTE_ORDER_FIELDS)('routes sortBy.%s to onSetOrder with that field', (field) => {
+    const onSetOrder = vi.fn();
+    buildCommands(deps({ hasQuery: true, onSetOrder }))
+      .find((c) => c.id === `sortBy.${field}`)!
+      .run();
+
+    expect(onSetOrder).toHaveBeenCalledWith({ field, newestFirst: true });
   });
 });
 

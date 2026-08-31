@@ -19,7 +19,10 @@ export interface NoteOrder {
 
 export const DEFAULT_NOTE_ORDER: NoteOrder = { field: 'updated', newestFirst: true };
 
-const FIELDS: readonly NoteOrderField[] = ['updated', 'created', 'title'];
+/** Every value `NoteOrderField` can take, in menu/palette display order. */
+export const NOTE_ORDER_FIELDS: readonly NoteOrderField[] = ['updated', 'created', 'title'];
+
+const FIELDS = NOTE_ORDER_FIELDS;
 
 /**
  * A total order, so `Array.prototype.sort` is deterministic across engines: a
