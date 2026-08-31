@@ -31,7 +31,7 @@ export type UnsafeConstruct =
  * relative path — is refused.
  */
 const EXTERNAL_HREF = /\b(?:xlink:href|href)\s*=\s*(?:["'](?!#)[^"']*["']|(?!#)(?!["'])[^\s/>]*)/i;
-const EXTERNAL_URL_FN = /url\(\s*(?!["']?\s*#)/i;
+const EXTERNAL_URL_FN = /url\(\s*(?!\s*["']*\s*#)/i;
 
 export function findUnsafeSvgConstructs(markup: string): UnsafeConstruct[] {
   const found: UnsafeConstruct[] = [];

@@ -68,4 +68,20 @@ describe('findUnsafeSvgConstructs', () => {
       'externalReference',
     );
   });
+
+  it('allows whitespace between url( and quoted fragment', () => {
+    expect(findUnsafeSvgConstructs('<svg><rect style="fill:url( \"#arrow\")"/></svg>')).toEqual([]);
+  });
+
+  it('allows whitespace in both positions around quoted fragment', () => {
+    expect(findUnsafeSvgConstructs('<svg><rect style="fill:url(  \'#arrow\'  )"/></svg>')).toEqual(
+      [],
+    );
+  });
+
+  it('rejects external URL with whitespace before quote', () => {
+    expect(
+      findUnsafeSvgConstructs('<svg><rect style="fill:url( \"https://example.com/x\")"/></svg>'),
+    ).toContain('cssUrl');
+  });
 });
