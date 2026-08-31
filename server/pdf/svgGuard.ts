@@ -30,16 +30,17 @@ export type UnsafeConstruct =
  * Anything else — absolute, protocol-relative, `javascript:`, or a bare
  * relative path — is refused.
  */
-const EXTERNAL_HREF = /\b(?:xlink:href|href)\s*=\s*["'](?!#)[^"']*["']/i;
-const EXTERNAL_URL_FN = /url\(\s*["']?(?!#)/i;
+const EXTERNAL_HREF = /\b(?:xlink:href|href)\s*=\s*(?:["'](?!#)[^"']*["']|(?!#)(?!["'])[^\s/>]*)/i;
+const EXTERNAL_URL_FN = /url\(\s*(?!["']?\s*#)/i;
 
 export function findUnsafeSvgConstructs(markup: string): UnsafeConstruct[] {
   const found: UnsafeConstruct[] = [];
 
   if (/<\s*script\b/i.test(markup)) found.push('script');
-  // Any attribute whose name starts with `on`, however quoted. `\son` rather
-  // than `on` so `font-family="...on..."` is not a hit.
-  if (/\son[a-z]+\s*=/i.test(markup)) found.push('eventHandler');
+  // Any attribute whose name starts with `on`, however quoted. `[\s/]on` rather
+  // than `on` so `font-family="...on..."` is not a hit; includes `/` separator
+  // which lenient parsers treat as whitespace.
+  if (/[\s/]on[a-z]+\s*=/i.test(markup)) found.push('eventHandler');
   if (/<\s*foreignObject\b/i.test(markup)) found.push('foreignObject');
   if (EXTERNAL_HREF.test(markup)) found.push('externalReference');
   if (/@import\b/i.test(markup)) found.push('cssImport');

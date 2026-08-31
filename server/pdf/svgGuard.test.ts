@@ -36,4 +36,36 @@ describe('findUnsafeSvgConstructs', () => {
     const found = findUnsafeSvgConstructs('<svg><script/><rect onload="x"/></svg>');
     expect(found).toEqual(expect.arrayContaining(['script', 'eventHandler']));
   });
+
+  it('allows quoted fragments in url()', () => {
+    expect(findUnsafeSvgConstructs('<svg><rect style="fill:url(\"#arrow\")"/></svg>')).toEqual([]);
+  });
+
+  it('allows single-quoted fragments in url()', () => {
+    expect(findUnsafeSvgConstructs('<svg><rect style="fill:url(\'#arrow\')"/></svg>')).toEqual([]);
+  });
+
+  it('rejects quoted external URLs in url()', () => {
+    expect(
+      findUnsafeSvgConstructs('<svg><rect style="fill:url(\"https://example.com/x\")"/></svg>'),
+    ).toContain('cssUrl');
+  });
+
+  it('rejects protocol-relative URLs in quoted url()', () => {
+    expect(
+      findUnsafeSvgConstructs('<svg><rect style="fill:url(\'//example.com/x\')"/></svg>'),
+    ).toContain('cssUrl');
+  });
+
+  it('rejects event handlers separated by slash', () => {
+    expect(findUnsafeSvgConstructs('<svg><rect/onload="alert(1)"/></svg>')).toContain(
+      'eventHandler',
+    );
+  });
+
+  it('rejects unquoted href attribute values', () => {
+    expect(findUnsafeSvgConstructs('<svg><image href=https://example.com/x.png/></svg>')).toContain(
+      'externalReference',
+    );
+  });
 });
