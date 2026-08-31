@@ -297,6 +297,28 @@ export const en = {
   'sync.adopt.tagsOnly.body':
     'This device has tag settings — their order, icons, and which ones are collapsed — that your account has never seen. Adding them puts a copy in your account and on your other devices.',
   'sync.adopt.tagsOnly.discard': 'Keep them here only',
+
+  'graph.title': 'Graph',
+  'graph.back': 'Back to notes',
+  'graph.summary': 'Summary',
+  'graph.zoomIn': 'Zoom in',
+  'graph.zoomOut': 'Zoom out',
+  'graph.zoomReset': 'Reset zoom',
+  'graph.settling': 'Working out the shape…',
+  'graph.empty.title': 'No notes to graph',
+  'graph.empty.body':
+    'Write a note, link two together with [[double brackets]], and the shape shows up here.',
+  'graph.hubs': 'Most linked',
+  'graph.ghosts': 'Linked but never written',
+  // Assembled by `GraphView`'s `canvasLabel`, which joins the parts it needs
+  // with commas. Split rather than templated so Korean can reorder and add
+  // counter words.
+  'graph.summary.notes': ' notes',
+  'graph.summary.links': ' links',
+  'graph.summary.unlinked': ' unlinked',
+  'graph.summary.ghosts': " links to notes that don't exist",
+  'graph.summary.ghostsOne': " link to a note that doesn't exist",
+  'graph.capped': ' notes not shown',
 } as const;
 
 export type TranslationKey = keyof typeof en;

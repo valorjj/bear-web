@@ -258,4 +258,23 @@ export const ko: Record<TranslationKey, string> = {
   'sync.adopt.tagsOnly.body':
     '이 기기에는 계정이 아직 모르는 태그 설정(순서, 아이콘, 접힘 상태)이 있습니다. 추가하면 계정과 다른 기기에도 복사됩니다.',
   'sync.adopt.tagsOnly.discard': '이 기기에만 두기',
+
+  'graph.title': '그래프',
+  'graph.back': '노트로 돌아가기',
+  'graph.summary': '요약',
+  'graph.zoomIn': '확대',
+  'graph.zoomOut': '축소',
+  'graph.zoomReset': '배율 초기화',
+  'graph.settling': '모양을 계산하는 중…',
+  'graph.empty.title': '그릴 노트가 없습니다',
+  'graph.empty.body':
+    '노트를 쓰고 [[대괄호 두 개]]로 두 노트를 이어 보세요. 여기에 모양이 나타납니다.',
+  'graph.hubs': '가장 많이 연결됨',
+  'graph.ghosts': '연결됐지만 아직 쓰지 않음',
+  'graph.summary.notes': '개 노트',
+  'graph.summary.links': '개 연결',
+  'graph.summary.unlinked': '개 미연결',
+  'graph.summary.ghosts': '개의 없는 노트 연결',
+  'graph.summary.ghostsOne': '개의 없는 노트 연결',
+  'graph.capped': '개 노트는 표시되지 않음',
 };

@@ -307,4 +307,6 @@ export {
   ArrowDown,
   Check,
   CircleAlert,
+  Minus,
+  Maximize2,
 } from 'lucide-react';
