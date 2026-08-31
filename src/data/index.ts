@@ -2,7 +2,7 @@ export { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, exportDatabase, importDatabase } 
 export type { ImportDeps, ImportResult } from './backup';
 export { BearDatabase, DATABASE_NAME, db } from './db';
 export { deriveTitle } from './derive';
-export { DIAGRAM_RENDER_VERSION, diagramKey, mermaidSources } from './diagrams';
+export { DIAGRAM_RENDER_VERSION, diagramKey } from './diagrams';
 export {
   formatImageAlt,
   loadImageBlob,

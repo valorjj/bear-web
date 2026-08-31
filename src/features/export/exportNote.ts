@@ -1,9 +1,10 @@
 import { files, storedImagePath, storedImageIds } from '@/data';
+import { DiagramError, ensureDiagram } from '@/features/diagrams';
 import { downloadBlob } from '@/lib/download';
 import { createZip, type ZipEntry } from '@/lib/zip';
 
 import { exportFilename, type NamedNote } from './filename';
-import { readExportTokens, renderNoteHtml } from './html';
+import { collectDiagramSources, readExportTokens, renderNoteHtml } from './html';
 import { requestPdf } from './requestPdf';
 
 /**
@@ -26,6 +27,8 @@ export interface ExportNoteDeps {
   download?: typeof downloadBlob;
   /** Injected in tests, and passed through to `requestPdf`. */
   fetch?: typeof globalThis.fetch;
+  /** Injected in tests; defaults to the real cache-first render. */
+  ensureDiagram?: typeof ensureDiagram;
 }
 
 const MIME: Record<'md' | 'html', string> = {
@@ -85,6 +88,35 @@ async function collectBundleFiles(text: string): Promise<ZipEntry[]> {
   return entries;
 }
 
+/**
+ * Every diagram a note's parsed document contains, rendered and keyed by
+ * source (see `collectDiagramSources` for why the source comes from the
+ * parse rather than a text scan).
+ *
+ * A diagram that cannot be rendered -- offline, signed out, a syntax error,
+ * anything `ensureDiagram` throws -- is simply ABSENT from the map, never a
+ * reason to fail the whole export. `renderNoteBody` then leaves that fence
+ * in place: one code block in an otherwise-finished document is a far better
+ * outcome than an export that refuses to run.
+ */
+async function collectDiagrams(
+  text: string,
+  ensure: typeof ensureDiagram,
+): Promise<Map<string, string>> {
+  const entries = new Map<string, string>();
+
+  for (const source of collectDiagramSources(text)) {
+    try {
+      entries.set(source, await ensure(source));
+    } catch (error) {
+      if (error instanceof DiagramError) continue;
+      throw error;
+    }
+  }
+
+  return entries;
+}
+
 /** `FileReader` rather than `btoa`: the latter needs a binary string and mangles bytes above 0x7f. */
 function blobToDataUri(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -130,10 +162,19 @@ export async function exportNote(
   // Resolved HERE, not inside `renderNoteHtml`: that file must not import from
   // `src/data/`, so the caller reads the blobs and hands them over.
   const images = await collectImages(note.text);
+  // Only on the html/pdf path -- Markdown export is the note's text verbatim
+  // and must not ask a diagram to render at all.
+  const diagrams = await collectDiagrams(note.text, deps.ensureDiagram ?? ensureDiagram);
 
   // Read from the live root, so an export carries the theme the user is looking
   // at rather than a hardcoded palette.
-  const html = renderNoteHtml(note, readExportTokens(doc.documentElement), locale, images);
+  const html = renderNoteHtml(
+    note,
+    readExportTokens(doc.documentElement),
+    locale,
+    images,
+    diagrams,
+  );
 
   if (format === 'html') {
     download(exportFilename(note, 'html'), new Blob([html], { type: MIME.html }), doc);
