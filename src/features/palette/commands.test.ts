@@ -15,6 +15,7 @@ function deps(overrides: Partial<CommandDeps> = {}): CommandDeps {
     openNotePinned: false,
     signedIn: false,
     hasQuery: false,
+    order: { field: 'updated', newestFirst: true },
     onScope: vi.fn(),
     onOpenGraph: vi.fn(),
     onFocusSearch: vi.fn(),
@@ -134,6 +135,37 @@ describe('buildCommands — appearance', () => {
       .run();
 
     expect(onSetOrder).toHaveBeenCalledWith({ field, newestFirst: true });
+  });
+
+  it('preserves the current sort direction when changing the field', () => {
+    const onSetOrder = vi.fn();
+    const commands = buildCommands({
+      ...deps(),
+      hasQuery: true,
+      order: { field: 'title', newestFirst: false },
+      onSetOrder,
+    });
+
+    const byTitle = commands.find((command) => command.id === 'sortBy.title');
+    expect(byTitle, 'sortBy.title command should exist').toBeDefined();
+    byTitle!.run();
+
+    // The bug shipped as `newestFirst: true` unconditionally, which under
+    // `title` means Z→A: the command silently changed a second setting.
+    expect(onSetOrder).toHaveBeenCalledWith({ field: 'title', newestFirst: false });
+  });
+
+  it('preserves a descending direction too', () => {
+    const onSetOrder = vi.fn();
+    const commands = buildCommands({
+      ...deps(),
+      hasQuery: true,
+      order: { field: 'title', newestFirst: true },
+      onSetOrder,
+    });
+
+    commands.find((command) => command.id === 'sortBy.updated')!.run();
+    expect(onSetOrder).toHaveBeenCalledWith({ field: 'updated', newestFirst: true });
   });
 });
 
