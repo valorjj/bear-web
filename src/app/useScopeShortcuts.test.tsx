@@ -10,7 +10,13 @@ function press(init: KeyboardEventInit): void {
 }
 
 function mount(overrides: Partial<Parameters<typeof useScopeShortcuts>[0]> = {}) {
-  const handlers = { onScope: vi.fn(), onSearch: vi.fn(), enabled: true, ...overrides };
+  const handlers = {
+    onScope: vi.fn(),
+    onSearch: vi.fn(),
+    onGraph: vi.fn(),
+    enabled: true,
+    ...overrides,
+  };
   const view = renderHook(() => useScopeShortcuts(handlers));
   return { ...handlers, ...view };
 }
@@ -102,6 +108,24 @@ describe('useScopeShortcuts', () => {
 
     expect(onScope).not.toHaveBeenCalled();
     expect(onSearch).not.toHaveBeenCalled();
+  });
+
+  it('opens the graph on Mod+Shift+G', () => {
+    const { onGraph } = mount();
+
+    press({ code: 'KeyG', key: 'g', metaKey: true, shiftKey: true });
+
+    expect(onGraph).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves Mod+Alt+Shift+G alone, so it cannot fire alongside a heading toggle', () => {
+    // Alt is rejected rather than merely unmatched, for the same reason the
+    // digits reject it: one keystroke must not fire two unrelated effects.
+    const { onGraph } = mount();
+
+    press({ code: 'KeyG', key: 'g', metaKey: true, shiftKey: true, altKey: true });
+
+    expect(onGraph).not.toHaveBeenCalled();
   });
 
   it('detaches its listener on unmount', () => {

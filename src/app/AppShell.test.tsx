@@ -185,6 +185,22 @@ describe('AppShell', () => {
     expect(screen.getByRole('region', { name: en['pane.editor'] })).toBeInTheDocument();
   });
 
+  it('swaps the panes for the graph and back', async () => {
+    await notes.create('# Alpha');
+    renderShell();
+
+    fireEvent.keyDown(window, { code: 'KeyG', metaKey: true, shiftKey: true });
+
+    // The panes are GONE, not merely covered — the assertion that
+    // distinguishes a takeover from an overlay.
+    await waitFor(() => expect(screen.queryByRole('img')).toBeInTheDocument());
+    expect(screen.queryByRole('region', { name: en['pane.noteList'] })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to notes' }));
+
+    expect(await screen.findByRole('region', { name: en['pane.noteList'] })).toBeInTheDocument();
+  });
+
   it('shows the scope rows in the sidebar and empty states elsewhere', async () => {
     renderShell();
 

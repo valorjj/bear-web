@@ -15,6 +15,8 @@ const BY_CODE = new Map<string, NoteScope>(
 export interface ScopeShortcutHandlers {
   onScope: (scope: NoteScope) => void;
   onSearch: () => void;
+  /** Toggles L3's graph surface. */
+  onGraph: () => void;
   /**
    * `false` while a modal is open. `ConfirmDialog` traps focus for a
    * destructive action, and both of these would escape it — the search
@@ -42,6 +44,10 @@ export interface ScopeShortcutHandlers {
  * blockquote own them — and therefore why a future Archive list cannot take
  * `⇧⌘9`, which is the digit Bear gives it.
  *
+ * `⇧⌘G` (L3's graph toggle) was verified unbound the same way:
+ *
+ *   grep -rEn "Mod-Shift-G|Mod-Alt-G|Mod-Alt-\$\{" node_modules/@tiptap
+ *
  * Matching is on `event.code`, never `event.key`: with Shift held, `key` for
  * the 1 key is `'!'` on a US layout and shifts again under 두벌식. `code` is
  * the physical key regardless of layout or modifier.
@@ -49,6 +55,7 @@ export interface ScopeShortcutHandlers {
 export function useScopeShortcuts({
   onScope,
   onSearch,
+  onGraph,
   enabled = true,
 }: ScopeShortcutHandlers): void {
   useEffect(() => {
@@ -68,6 +75,12 @@ export function useScopeShortcuts({
       // choice of modifier avoids.
       if (!event.shiftKey || event.altKey) return;
 
+      if (event.code === 'KeyG') {
+        event.preventDefault();
+        onGraph();
+        return;
+      }
+
       const scope = BY_CODE.get(event.code);
       if (scope === undefined) return;
 
@@ -77,5 +90,5 @@ export function useScopeShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onScope, onSearch, enabled]);
+  }, [onScope, onSearch, onGraph, enabled]);
 }
