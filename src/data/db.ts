@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable, type Table } from 'dexie';
 
 import type {
+  DiagramRecord,
   FileRecord,
   Note,
   NoteFolds,
@@ -37,6 +38,7 @@ export class BearDatabase extends Dexie {
    * links to a title) are single-index queries.
    */
   noteLinks!: Table<NoteLink, [string, string]>;
+  diagrams!: EntityTable<DiagramRecord, 'hash'>;
 
   constructor(name: string) {
     super(name);
@@ -100,6 +102,20 @@ export class BearDatabase extends Dexie {
     // 50, and `e2e/fixtures/seed.ts` MUST move with it in the same commit.
     this.version(5).stores({
       noteLinks: '[noteId+toTitle], noteId, toTitle',
+    });
+
+    // Version 6 adds L5's rendered-diagram cache. No `.upgrade()` hook: an
+    // absent row means "not rendered yet", which is exactly right, and the
+    // whole store is derived data that rebuilds from note text.
+    //
+    // `lastUsed` is indexed for the LRU sweep. Dexie multiplies declared
+    // versions by ten, so this is IndexedDB version 60, and
+    // `e2e/fixtures/seed.ts` MUST move with it in the same commit — a seeding
+    // connection open at 50 blocks the upgrade forever, `openDatabase()` never
+    // settles, and the page renders as a bare `<div id="root">` with no error
+    // at all.
+    this.version(6).stores({
+      diagrams: 'hash, lastUsed',
     });
   }
 }

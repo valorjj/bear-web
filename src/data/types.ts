@@ -66,6 +66,22 @@ export interface FileRecord {
   createdAt: number;
 }
 
+/**
+ * One rendered diagram, cached.
+ *
+ * DERIVED DATA. It is never synced, never in `BackupBundle`, and safe to
+ * delete at any moment: the source is in the note's own text, which does
+ * sync, so a missing entry costs one render. `hash` is
+ * `diagramKey(source)` — content plus render version.
+ */
+export interface DiagramRecord {
+  hash: string;
+  svg: string;
+  /** Derived from `svg`, never supplied: one source of truth for one fact. */
+  bytes: number;
+  lastUsed: number;
+}
+
 export interface SettingRecord {
   key: string;
   value: unknown;

@@ -2,6 +2,7 @@ export { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, exportDatabase, importDatabase } 
 export type { ImportDeps, ImportResult } from './backup';
 export { BearDatabase, DATABASE_NAME, db } from './db';
 export { deriveTitle } from './derive';
+export { DIAGRAM_RENDER_VERSION, diagramKey, mermaidSources } from './diagrams';
 export {
   formatImageAlt,
   loadImageBlob,
@@ -56,8 +57,17 @@ export type { TagRange } from './tags';
 export { buildTitleIndex, findLinkRanges, normalizeTitle, parseLinks } from './links';
 export type { LinkRange, TitledNote } from './links';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
-export { files, folds, notes, settings, tags } from './repositories';
+export {
+  DIAGRAM_CACHE_MAX_BYTES,
+  diagrams,
+  files,
+  folds,
+  notes,
+  settings,
+  tags,
+} from './repositories';
 export type {
+  DiagramsRepository,
   FilesRepository,
   FoldsRepository,
   LinkParser,
@@ -68,6 +78,7 @@ export type {
 } from './repositories';
 export type {
   BackupBundle,
+  DiagramRecord,
   FileRecord,
   Note,
   NoteFolds,
