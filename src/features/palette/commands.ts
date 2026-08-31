@@ -190,21 +190,13 @@ export function buildCommands(deps: CommandDeps): Command[] {
     });
   }
 
-  // Gated on `hasOpenNote`, matching every other note-group command below
-  // `note.new`. The brief's own test ("offers only New note when nothing is
-  // open") requires this absent with no note open; `CommandDeps` has no
-  // trash-count or scope flag to gate it on the more natural condition
-  // ("there is something in the trash"), so this is the only state
-  // available to satisfy that test without inventing a new field.
-  if (deps.hasOpenNote) {
-    commands.push({
-      id: 'note.emptyTrash',
-      group: 'note',
-      label: t('palette.command.emptyTrash'),
-      destructive: true,
-      run: deps.onEmptyTrash,
-    });
-  }
+  commands.push({
+    id: 'note.emptyTrash',
+    group: 'note',
+    label: t('palette.command.emptyTrash'),
+    destructive: true,
+    run: deps.onEmptyTrash,
+  });
 
   if (deps.signedIn) {
     commands.push({

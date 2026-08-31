@@ -130,10 +130,13 @@ describe('buildCommands — the destructive invariant', () => {
 });
 
 describe('buildCommands — note actions follow the open note', () => {
-  it('offers only New note when nothing is open', () => {
+  it('offers only the vault-level note commands when nothing is open', () => {
     const noteIds = ids(deps({ hasOpenNote: false })).filter((id) => id.startsWith('note.'));
 
-    expect(noteIds).toEqual(['note.new']);
+    // Both are vault-level, not open-note actions: you can always make a note,
+    // and you can always empty the trash. Everything else in this group needs
+    // an open note.
+    expect(noteIds).toEqual(['note.new', 'note.emptyTrash']);
   });
 
   it('offers duplicate, pin and trash when a live note is open', () => {
