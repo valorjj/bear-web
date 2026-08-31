@@ -649,9 +649,11 @@ inline.
   existing capability should look for this before adding a single key.
 - **The bundle ceiling has now shaped two consecutive sub-projects (L2, then
   L4), and the guard itself was found broken and rewritten this pass** — see
-  `CLAUDE.md`'s Toolchain surprises. Both signals point the same way: a
-  deliberate, measured page-weight budget chosen once is worth settling
-  before L5 lands a third.
+  `CLAUDE.md`'s Toolchain surprises. Both signals pointed the same way, and
+  **the budget was settled on 2026-08-31, before L5 started**: the ceiling is
+  FROZEN at 346,500 B rather than ratcheting, a change that would exceed it
+  goes lazy / to the server / gets cut, and raising it is now the user's
+  explicit decision. See `docs/rulings/testing-and-tooling.md`.
 
 **What the build corrected on its own way in:** the bundle guard's own method.
 It measured "the largest single JS asset", valid only while the eager code was

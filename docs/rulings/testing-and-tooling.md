@@ -16,7 +16,39 @@ after any local merge; any test whose expectation you are about to edit
 because a restyle made it fail; and a `PointerEvent`/`setPointerCapture` call
 in `src/features/editor/HeadingFold.ts`'s badge handlers or
 `headingFold.test.ts`'s drag tests; `e2e/graph.spec.ts`; `src/lib/usePanZoom.ts`;
-`src/features/graph/runLayout.ts` and `layoutGraph.ts`.
+`src/features/graph/runLayout.ts` and `layoutGraph.ts`; `scripts/bundleSize.test.ts`
+and its `CEILING_BYTES`; `build.manifest` in `vite.config.ts`; any new
+`React.lazy` boundary, and any new runtime dependency reachable from
+`main.tsx`.
+
+- **The eager-JS ceiling is a FROZEN budget at 346,500 B gzipped, not a
+  ratchet. Ruled 2026-08-31, before L5.** From K1 onward the ceiling was raised
+  once per sub-project by that feature's own measured cost plus ~2.5-3 KB of
+  headroom — 324,000 → 328,000 → 333,000 → 336,000 → 341,350 → 346,500 — so it
+  recorded growth honestly and refused nothing. Two consecutive sub-projects
+  (L2, then L4) were shaped by it regardless, which is the point at which a
+  limit is worth choosing once instead of re-negotiating per feature. The
+  number stays where L4 left it: the measured eager closure is **343,411 B**
+  against **346,500**, leaving **3,089 B**. That room is for wiring, not for a
+  feature.
+  **A change that would exceed it does not raise it.** The three ways out, in
+  order of preference: move the code behind a `React.lazy` boundary (the guard
+  walks static `imports` only and excludes `dynamicImports` by construction);
+  move the work to the server, which already renders PDFs and stores images —
+  L5's server-rendered Mermaid is exactly this shape; or cut the feature.
+  Raising `CEILING_BYTES` is an explicit decision the user makes, with the
+  reason recorded in the guard's docblock — not a step in a sub-project's
+  normal course. Both-sides measurement is still required of any change that
+  touches the eager closure, because "we did not raise it" is only credible
+  with a number on both sides.
+
+- **The budget governs the eager JS closure ONLY, and that is a stated gap
+  rather than an exemption.** The stylesheet (~30 KB gzipped) and the font
+  subsets are downloaded on first load too, and nothing in this repo measures
+  either against a limit. Do not read "the bundle guard passed" as "the page
+  did not get heavier": a change that adds a font face or a large stylesheet is
+  invisible to every gate we have.
+
 
 - **A Playwright `name` is a case-insensitive SUBSTRING by default, and the
   failure reads as "element not found".** `getByRole('button', { name: 'Pin' })`

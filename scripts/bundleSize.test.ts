@@ -168,9 +168,27 @@ import { describe, expect, it } from 'vitest';
  * genuinely lazy and costs only 2,223 B, excluded from this closure exactly
  * as `dynamicImports` is meant to exclude it.
  *
- * This is the second consecutive sub-project shaped by this ceiling (L2
- * before it). A deliberate page-weight budget, chosen once rather than
- * re-litigated per feature, is worth settling before L5.
+ * ## FROZEN, as of 2026-08-31 — this ceiling no longer ratchets
+ *
+ * L2 and L4 were both shaped by this ceiling, and it had still never refused
+ * anything: every sub-project since K1 raised it by its own measured cost.
+ * Ruled before L5: **346,500 stays.** The measured eager closure is 343,411 B,
+ * so 3,089 B remain, and that room is for wiring rather than for a feature.
+ *
+ * A change that would exceed it does NOT raise it. In order of preference:
+ * move the code behind a `React.lazy` boundary (excluded from this closure by
+ * construction, since `dynamicImports` is never followed); move the work to
+ * the server, which already renders PDFs and stores images; or cut it.
+ * Raising `CEILING_BYTES` is now an explicit decision the user makes, with the
+ * reason recorded here — not a routine step in a sub-project. Both-sides
+ * measurement is still required of anything touching the eager closure:
+ * "we did not raise it" is only credible with a number on both sides.
+ *
+ * Scope, stated so it is not mistaken for coverage it does not have: this
+ * guard sees eager JS only. The stylesheet (~30 KB gzipped) and the font
+ * subsets are first-load bytes that nothing here measures.
+ *
+ * See `docs/rulings/testing-and-tooling.md` for the ruling itself.
  */
 const CEILING_BYTES = 346_500;
 
