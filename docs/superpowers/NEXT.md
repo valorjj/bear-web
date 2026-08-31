@@ -661,6 +661,26 @@ wrong one. Rewritten to walk the build manifest's static-import closure from
 the entry chunk — see `scripts/bundleSize.test.ts`'s own docblock for the
 before/after numbers.
 
+**One known bug shipped deliberately, with its fix already worked out.** The
+`sortBy.*` palette commands construct `{ field, newestFirst: true }`
+unconditionally (`src/features/palette/commands.ts`), because `CommandDeps`
+carries no read of the current `NoteOrder` — `onSetOrder` is a bare `setOrder`
+in `AppShell`. `NoteOrder`'s own comment records that the flag inverts EVERY
+field, so under `title` it means Z to A. Consequence: a user who has A-to-Z set
+and picks "Sort by: Title" from the palette silently gets Z-to-A. **The command
+changes two settings while naming one.**
+
+It was found by L4's whole-branch review, confirmed in the code, and parked
+rather than fixed because the sub-project's one allowed fix wave had already
+run — not because it is acceptable. The fix is three lines: add
+`order: NoteOrder` to `CommandDeps`, pass `order` in `AppShell`'s deps object
+(it is already in scope there), and read `deps.order.newestFirst` in the
+command body instead of the literal `true`. The preview-size commands are NOT
+affected: `onSetPreviewSize` takes a bare value with no flag to preserve.
+
+Do this before adding any further palette command that writes a compound
+setting, because the same shape will recur.
+
 ### C. Code block language + syntax highlighting — SHIPPED 2026-08-24
 
 Language autocomplete on the fence (typing ` ```java ` suggests `java`,
