@@ -108,6 +108,14 @@ function wrapper(container: HTMLElement): HTMLElement | null {
   return container.querySelector('.bear-mermaid');
 }
 
+/** The failure sentence as the user actually reads it. */
+function message(container: HTMLElement): string | null {
+  return container.querySelector('.bear-mermaid__message')?.textContent ?? null;
+}
+
+/** `ko.ts`'s own `editor.diagram.failed.invalidSyntax`, copied verbatim. */
+const KO_INVALID_SYNTAX = 'Mermaid가 이 다이어그램을 해석할 수 없습니다: {detail}';
+
 describe('MermaidDiagram', () => {
   it('adds nothing to the schema, because it is an Extension', () => {
     // The same guard `codeLanguageControls.test.ts` carries: a `Node` would
@@ -181,14 +189,71 @@ describe('MermaidDiagram', () => {
   });
 
   it('names the parser message on a syntax error', async () => {
-    const { getByText } = renderEditor({
+    const { container } = renderEditor({
       text: '```mermaid\nflowchart TD\n  A -->\n```',
       ensureDiagram: async () => {
         throw new DiagramError('invalidSyntax', 'Parse error on line 2');
       },
     });
 
-    await waitFor(() => expect(getByText(/Parse error on line 2/)).toBeInTheDocument());
+    // The whole rendered sentence, by VALUE: a `/Parse error/` match cannot
+    // tell a folded-in detail from a template that still carries `{detail}`
+    // beside it.
+    await waitFor(() =>
+      expect(message(container)).toBe('Mermaid could not read this diagram: Parse error on line 2'),
+    );
+  });
+
+  it('drops the detail clause when the parser message is missing', async () => {
+    // NOT a defensive case: `requestDiagram.ts` throws exactly
+    // `DiagramError('invalidSyntax', undefined)` when a 422's body cannot be
+    // read, and its own comment documents that path. Without the strip the
+    // user reads a literal `{detail}`.
+    const { container } = renderEditor({
+      text: '```mermaid\nflowchart TD\n  A -->\n```',
+      ensureDiagram: async () => {
+        throw new DiagramError('invalidSyntax');
+      },
+    });
+
+    await waitFor(() => expect(message(container)).toBe('Mermaid could not read this diagram.'));
+    expect(container.textContent).not.toContain('{detail}');
+  });
+
+  it('drops the detail clause in Korean too, where the clause is phrased differently', async () => {
+    // The strip is anchored on `: {detail}` at the end of the template, and
+    // both locales phrase it that way. Asserted rather than assumed: a
+    // translation that moved the placeholder would leak it, which is exactly
+    // what the `includes` backstop in `failureMessage` exists for.
+    const { container } = renderEditor({
+      text: '```mermaid\nflowchart TD\n  A -->\n```',
+      diagramLabels: {
+        ...LABELS,
+        failed: { ...LABELS.failed, invalidSyntax: KO_INVALID_SYNTAX },
+      },
+      ensureDiagram: async () => {
+        throw new DiagramError('invalidSyntax');
+      },
+    });
+
+    await waitFor(() =>
+      expect(message(container)).toBe('Mermaid가 이 다이어그램을 해석할 수 없습니다.'),
+    );
+  });
+
+  it('falls back to the generic sentence if a translation hides the placeholder mid-string', async () => {
+    const { container } = renderEditor({
+      text: '```mermaid\nflowchart TD\n  A -->\n```',
+      diagramLabels: {
+        ...LABELS,
+        failed: { ...LABELS.failed, invalidSyntax: 'Parser said {detail} about this diagram.' },
+      },
+      ensureDiagram: async () => {
+        throw new DiagramError('invalidSyntax');
+      },
+    });
+
+    await waitFor(() => expect(message(container)).toBe('This diagram could not be rendered.'));
   });
 
   it('offers a retry that asks again, and succeeds the second time', async () => {
@@ -223,6 +288,34 @@ describe('MermaidDiagram', () => {
       expect(getByText('This diagram could not be rendered.')).toBeInTheDocument(),
     );
     expect(container.querySelector('script')).toBeNull();
+  });
+
+  it('shows the source and asks for nothing while the fence is still empty', async () => {
+    const ensure = vi.fn(async () => '<svg/>');
+    const { container } = renderEditor({ text: '```mermaid\n\n```', ensureDiagram: ensure });
+
+    // The VALUE, not merely "no crash": an empty block that rendered as an
+    // empty figure would be both invisible and impossible to click back into,
+    // and the CSS keys the source's visibility on exactly this state.
+    expect(wrapper(container)?.dataset.state).toBe('empty');
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it('reports the pending state while the render is in flight', async () => {
+    let release: ((svg: string) => void) | null = null;
+    const { container, getByText } = renderEditor({
+      text: '```mermaid\nflowchart TD\n  A --> B\n```',
+      ensureDiagram: () =>
+        new Promise<string>((resolve) => {
+          release = resolve;
+        }),
+    });
+
+    expect(wrapper(container)?.dataset.state).toBe('pending');
+    expect(getByText('Rendering diagram\u2026')).toBeInTheDocument();
+
+    release!('<svg id="drawn"/>');
+    await waitFor(() => expect(wrapper(container)?.dataset.state).toBe('ready'));
   });
 
   it('leaves a non-mermaid code block alone', async () => {

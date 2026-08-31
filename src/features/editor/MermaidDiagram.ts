@@ -62,12 +62,18 @@ export interface MermaidDiagramOptions {
 export const mermaidDiagramKey = new PluginKey('mermaidDiagram');
 
 /**
- * The last check before rendered markup reaches the DOM.
+ * A TRIPWIRE, not sanitization, and the distinction matters.
  *
- * `ensureDiagram` already refuses this, and so do the container and the API
- * before it. Do not delete this one as redundant: every other check in the
- * chain runs in a process this module does not control, and this is the only
- * one an attacker cannot reach.
+ * The real sanitizing DOM walk lives in the container, which is where it
+ * belongs; the API re-checks its own boundary, and `requestDiagram` re-checks
+ * again. This is the fourth and last check before the markup reaches the DOM,
+ * and the only one an attacker cannot reach — so do not delete it as
+ * redundant. But it catches ONE shape: a literal `<script`. `innerHTML` below
+ * would still run an `onload=`/`onerror=` attribute that somehow survived all
+ * three server-side layers, and no regex here should pretend otherwise.
+ * Duplicating the container's DOM walk in the browser is deliberately NOT
+ * done: it costs bundle for a case three layers already cover, and
+ * `requestDiagram.ts` makes the same call for the same reason.
  */
 const SCRIPT_TAG_PATTERN = /<\s*script\b/i;
 
@@ -101,12 +107,38 @@ export function diagramName(source: string): string {
 
 type Labels = NonNullable<MermaidDiagramOptions['diagramLabels']>;
 
-/** The sentence for a thrown render failure, with its detail folded in. */
+/**
+ * The sentence for a thrown render failure, with its detail folded in.
+ *
+ * A detail-LESS `invalidSyntax` is a real path, not a defensive one:
+ * `requestDiagram.ts` throws exactly `DiagramError('invalidSyntax', undefined)`
+ * when a 422's body cannot be read, and its own comment documents that case.
+ * Without the strip below the user reads a literal `{detail}` — the same shape
+ * of defect as an unmapped `.hljs-*` class: nothing crashes, nothing logs, and
+ * the only symptom is on screen.
+ *
+ * The clause is REMOVED rather than replaced by the generic sentence, because
+ * "Mermaid could not read this diagram." routes the user at their own syntax,
+ * while "This diagram could not be rendered." points them at the service. Both
+ * locales phrase the template as `<sentence>: {detail}` and both end their
+ * other sentences with `.`, so stripping to a period reads correctly in each —
+ * checked against `en.ts` and `ko.ts`, not assumed.
+ *
+ * The `includes` guard is the backstop for a FUTURE translation that puts the
+ * placeholder somewhere the strip cannot see: the generic sentence is a poor
+ * answer, but a visible `{detail}` is a worse one.
+ */
+const TRAILING_DETAIL = /\s*:\s*\{detail\}\s*$/;
+
 function failureMessage(error: unknown, labels: Labels): string {
   const reason: DiagramFailure = error instanceof DiagramError ? error.reason : 'failed';
   const template = labels.failed[reason];
   const detail = error instanceof DiagramError ? error.detail : undefined;
-  return detail === undefined ? template : template.replace('{detail}', detail);
+
+  if (detail !== undefined) return template.replace('{detail}', detail);
+
+  const stripped = template.replace(TRAILING_DETAIL, '.');
+  return stripped.includes('{detail}') ? labels.failed.failed : stripped;
 }
 
 /**
