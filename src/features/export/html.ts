@@ -270,7 +270,19 @@ function replaceMermaidBlocks(host: Element, doc: Document, diagrams: Map<string
     const languageClass = [...code.classList].find((name) =>
       name.startsWith(LANGUAGE_CLASS_PREFIX),
     );
-    if (languageClass?.slice(LANGUAGE_CLASS_PREFIX.length) !== DIAGRAM_LANGUAGE_ID) continue;
+    // Lowercased before comparing, matching `collectDiagramSources` above and
+    // `MermaidDiagram.ts`'s `isMermaidBlock` in the editor -- both accept
+    // `language-MERMAID` fences and every other-cased variant as diagrams.
+    // An exact-case compare here disagreed with both: a mixed-case fence
+    // rendered as a diagram in the editor, was collected and PAID FOR a real
+    // server render by `collectDiagramSources`/`collectDiagrams`, and then
+    // this exact-case check never matched the emitted `language-MERMAID`
+    // class, so the fence shipped verbatim in the export anyway -- silently
+    // wasting the render rather than corrupting anything, but a defect either
+    // way.
+    if (languageClass?.slice(LANGUAGE_CLASS_PREFIX.length).toLowerCase() !== DIAGRAM_LANGUAGE_ID) {
+      continue;
+    }
 
     const pre = code.parentElement;
     if (!pre) continue;

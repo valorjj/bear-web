@@ -702,6 +702,24 @@ describe('mermaid diagrams in an export', () => {
     expect(html).not.toContain('<script');
     expect(html).toContain('<pre');
   });
+
+  it('replaces a MIXED-CASE fence too, agreeing with the editor and collectDiagramSources', () => {
+    // `MermaidDiagram.ts`'s `isMermaidBlock` lowercases before comparing, and
+    // so does `collectDiagramSources` above -- so a ````MERMAID` fence
+    // renders as a diagram on screen and gets collected and rendered for
+    // export. This function's own class check used to compare exact case
+    // against the emitted `language-MERMAID` class and never matched, so the
+    // export shipped the fence verbatim after paying for the render anyway --
+    // silent waste, not corruption, but a real three-way disagreement.
+    const html = renderNoteBody(
+      '```MERMAID\nflowchart TD\n  A --> B\n```',
+      new Map(),
+      new Map([['flowchart TD\n  A --> B', '<svg id="mixed-case"/>']]),
+    );
+
+    expect(html).toContain('<svg id="mixed-case"');
+    expect(html).not.toContain('<pre');
+  });
 });
 
 describe('collectDiagramSources', () => {

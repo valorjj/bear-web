@@ -295,10 +295,24 @@ export const StoredImage = Node.create<StoredImageOptions>({
         const record = await files.get(id);
 
         // Re-checked: `files.get` is a SECOND await, and the view can be
-        // destroyed during it exactly as it can during `acquireObjectUrl`'s.
+        // destroyed during it exactly as it can during `acquireObjectUrl`'s
+        // — but `destroy()` may ALREADY have run and released this hold by
+        // the time we get here (it checks `heldUrl` unconditionally, the
+        // instant `destroyed` flips true). Gating the release on
+        // `heldUrl !== null`, not just `destroyed`, is load-bearing: without
+        // it, a `destroy()` that fires during this await releases once from
+        // `destroy()` itself and a SECOND time here, over-releasing the
+        // shared count by one and revoking a `blob:` URL a second,
+        // independent holder (the note-list thumbnail) still needs — the
+        // exact bug this whole rewrite exists to fix, reintroduced one
+        // window later. Caught by review, not found independently; see
+        // `storedImage.test.tsx`'s destroy-during-`files.get` case,
+        // fault-injected against the unguarded version.
         if (destroyed) {
-          releaseObjectUrl(id);
-          heldUrl = null;
+          if (heldUrl !== null) {
+            releaseObjectUrl(id);
+            heldUrl = null;
+          }
           return;
         }
 

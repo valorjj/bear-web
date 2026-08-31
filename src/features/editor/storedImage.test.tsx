@@ -2,8 +2,9 @@ import { act, screen, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { db, files, MAX_DISPLAY_WIDTH, storedImagePath } from '@/data';
+import { db, files, loadImageBlob, MAX_DISPLAY_WIDTH, storedImagePath } from '@/data';
 import { renderWithI18n } from '@/i18n/testing';
+import { acquireObjectUrl, releaseObjectUrl } from '@/lib/objectUrls';
 
 import { RichEditor, type RichEditorHandle } from './RichEditor';
 
@@ -164,6 +165,70 @@ describe('StoredImage', () => {
     // The ONLY thing that can see a leak. Nothing else in the app, the suite
     // or the browser reports an object URL that is never revoked.
     await waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:gone'));
+  });
+
+  it('does not double-release when destroyed mid-flight while a second holder is still live', async () => {
+    // Fault-injection target: the second `if (destroyed)` check in the node
+    // view's async load (after `await files.get(id)`) used to call
+    // `releaseObjectUrl` unconditionally, exactly like `destroy()` itself —
+    // so a view destroyed WHILE `files.get` is in flight released twice for
+    // one acquisition. With a second, independent holder of the same image
+    // (the note-list thumbnail, simulated here directly via
+    // `acquireObjectUrl`) still alive, an over-release drives the shared
+    // count to 0 and revokes a `blob:` URL that holder still needs — with no
+    // error anywhere. Reverting the `heldUrl !== null` guard on that second
+    // check reproduces this: `revoke` below goes from never-called to
+    // called-once.
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:shared');
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const record = await files.add('n1', new Blob(['x'], { type: 'image/webp' }), {
+      mime: 'image/webp',
+      width: 10,
+      height: 10,
+    });
+
+    // The second, independent holder — acquired and settled BEFORE the
+    // editor mounts, so the editor's own acquire hits the CACHED branch
+    // (count 1 → 2) rather than re-reading the blob.
+    const thumbnailUrl = await acquireObjectUrl(record.id, loadImageBlob);
+    expect(thumbnailUrl).toBe('blob:shared');
+
+    // Stalls the node view's OWN `files.get(id)` call (for width/height),
+    // not `loadImageBlob`'s internal one — that already ran, above, before
+    // this spy was installed.
+    let resolveGet: (value: Awaited<ReturnType<typeof files.get>>) => void = () => {};
+    const stalled = new Promise<Awaited<ReturnType<typeof files.get>>>((resolve) => {
+      resolveGet = resolve;
+    });
+    const getSpy = vi.spyOn(files, 'get').mockReturnValue(stalled);
+
+    const { unmount } = renderEditor(`![](${storedImagePath(record.id)})`);
+
+    // Wait until the node view's load has reached the stalled `files.get`
+    // call — i.e. past its FIRST `if (destroyed)` check, holding one
+    // reference, and now paused exactly in the window the second check
+    // guards.
+    await vi.waitFor(() => expect(getSpy).toHaveBeenCalled());
+
+    unmount();
+
+    // Let the stalled `files.get` resolve now that the view is destroyed,
+    // so its continuation runs the SECOND `if (destroyed)` check.
+    resolveGet(undefined);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Correct: exactly one release happened (from whichever of `destroy()`
+    // or the continuation noticed the view was gone), taking the shared
+    // count from 2 to 1 — the thumbnail's own reference. Never revoked.
+    expect(revoke).not.toHaveBeenCalled();
+
+    // Clean up the thumbnail's own hold; THIS is what should finally revoke.
+    releaseObjectUrl(record.id);
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(revoke).toHaveBeenCalledWith('blob:shared');
   });
 });
 
