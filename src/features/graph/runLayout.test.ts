@@ -29,7 +29,14 @@ class FakeWorker implements WorkerLike {
   }
 
   postMessage(): void {
-    this.onPostMessage(this);
+    // Real `Worker` delivery is asynchronous — `message`/`error` fire after
+    // the caller's call stack (including the `new Promise(...)` executor)
+    // has returned. `queueMicrotask` reproduces that, which matters: a
+    // synchronous delivery would let a throw inside the listener be caught
+    // by the Promise constructor's own implicit try/catch instead of by
+    // `layoutInWorker`'s handler, making a broken handler indistinguishable
+    // from a fixed one.
+    queueMicrotask(() => this.onPostMessage(this));
   }
 
   terminate(): void {
