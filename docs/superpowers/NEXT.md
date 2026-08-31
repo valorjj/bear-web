@@ -1,7 +1,7 @@
 # Next up
 
 Written 2026-08-20 after M8 + M9a shipped; last reconciled against
-`CLAUDE.md` on **2026-08-31**, when L3 (relationship graph) shipped.
+`CLAUDE.md` on **2026-08-31**, when L4 (command palette) shipped.
 
 This file exists so a fresh session can resume without re-deriving decisions
 already made. Delete a section once its sub-project has a real spec in
@@ -18,16 +18,15 @@ believe the table and fix this file.
 ## Where things stand
 
 - `main` carries everything in `CLAUDE.md`'s status table marked complete —
-  through **L3 (relationship graph), 2026-08-31**. Live on Pages.
-- 2299 unit tests, 197 end-to-end. All six gates green.
+  through **L4 (command palette), 2026-08-31**. Live on Pages.
+- 2350 unit tests, 205 end-to-end. All six gates green.
 - Every sub-project branch named in this file is merged and deleted.
 
 **What is actually left, as of 2026-08-31:**
 
 | Open | State |
 | --- | --- |
-| **L4 command palette** | next — queued, unspecced |
-| **L5 Mermaid, server-rendered** | queued, unspecced — see the measurement below |
+| **L5 Mermaid, server-rendered** | next — queued, unspecced — see the measurement below |
 | **J4 platform chrome** | not started — the last of the four |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
 
@@ -47,10 +46,11 @@ first. So is L3.
   system; see its own section below for what shipped and what the build
   corrected. It delivers most of what a "mind map" would, without a second
   editor to sync, export and round-trip.
-- **L4, the command palette** — not on the user's list, added because it is the
-  strongest "built for developers" signal and it makes everything else
-  discoverable. It is assembly, not invention: `useScopeShortcuts.ts` owns
-  app-level keys, `Dialog.tsx` traps focus, `filterByQuery` matches.
+- **L4, the command palette — SHIPPED 2026-08-31.** Not on the user's list,
+  added because it is the strongest "built for developers" signal and it
+  makes everything else discoverable. It was assembly, not invention:
+  `useScopeShortcuts.ts` owns the app-level `⌘K` key, `Dialog.tsx` traps
+  focus, `matchCommands.ts` ranks. See its own section below.
 - **L5, Mermaid — server-rendered, and this is measured, not assumed.** Spiked
   on a throwaway branch on 2026-08-31 and fully reverted. Lazy-loading works
   cleanly: the main bundle does not move. But **one simple flowchart costs
@@ -620,6 +620,46 @@ Shipped as ten build tasks plus this documentation pass.
 - A topology-hash collision between two different vaults would serve stale
   cached positions from `useGraphSnapshot`'s module-scope cache. Theoretical
   only — no plausible collision path was found or attempted.
+
+### L4. Command palette — **SHIPPED 2026-08-31**
+
+Spec: `docs/superpowers/specs/2026-08-31-l4-command-palette-design.md` (corrected
+during Task 1 — the ranking section originally specified six rules; `allBoundary`
+was deleted as provably redundant with `boundaryCount`, five remain).
+Ledger: `.superpowers/sdd/2026-08-31-l4-command-palette/progress.md`.
+Rulings: `docs/rulings/accessibility.md` (the combobox contract — a dedicated
+input, focus that never moves into the list, `aria-activedescendant` asserted
+by VALUE not presence, and `role="presentation"` group headers ruled over
+`role="group"` to keep the option array a single flat index space).
+
+`⌘K` opens a modal combobox over commands (four groups: navigation, note,
+appearance, account) and, once something is typed, note titles. Subsequence
+matching with a five-rule tie-break (`matchCommands.ts`), `buildCommands`
+emitting only what is valid for the current state, and every destructive
+command routed through `AppShell`'s existing `ConfirmDialog` rather than run
+inline.
+
+**Two things worth carrying forward:**
+
+- **Navigation and theme commands needed NO new i18n keys.** The seven smart
+  lists already had `smartList.*` translations from M6, and all sixteen
+  `THEMES[].labelKey`s already existed from F — the palette's own new keys are
+  only its own chrome and command labels (~28 strings across `en.ts`/`ko.ts`),
+  not one per destination it links to. A feature that mostly routes to
+  existing capability should look for this before adding a single key.
+- **The bundle ceiling has now shaped two consecutive sub-projects (L2, then
+  L4), and the guard itself was found broken and rewritten this pass** — see
+  `CLAUDE.md`'s Toolchain surprises. Both signals point the same way: a
+  deliberate, measured page-weight budget chosen once is worth settling
+  before L5 lands a third.
+
+**What the build corrected on its own way in:** the bundle guard's own method.
+It measured "the largest single JS asset", valid only while the eager code was
+one chunk; L4's second `React.lazy` boundary made Rolldown split the eager
+code across three files, and the guard kept passing while looking at the
+wrong one. Rewritten to walk the build manifest's static-import closure from
+the entry chunk — see `scripts/bundleSize.test.ts`'s own docblock for the
+before/after numbers.
 
 ### C. Code block language + syntax highlighting — SHIPPED 2026-08-24
 

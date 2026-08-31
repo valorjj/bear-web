@@ -28,7 +28,10 @@ Cancel button; `src/features/editor/HeadingFold.ts`'s `decorations` return
 `editor.section.group`); `src/features/editor/TableHandles.ts`'s handle buttons
 (`aria-haspopup`, `aria-expanded`) and `src/features/editor/
 TableHandleMenu.tsx`; and the hover/name tests in `e2e/appearance.spec.ts`,
-`src/ui/ui.test.tsx` and `src/features/notes/NoteListItem.test.tsx`.
+`src/ui/ui.test.tsx` and `src/features/notes/NoteListItem.test.tsx`;
+`src/features/palette/CommandPalette.tsx`'s `combobox`/`listbox` pair, its
+`aria-activedescendant` wiring, and the `data-palette-header` rows; and
+`e2e/palette.spec.ts`.
 
 - **Never rely on a CSS `gap` to separate text for assistive tech.**
   Accessible-name computation concatenates text content and ignores gaps. M5.5
@@ -531,3 +534,40 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   capture-and-restore rather than assuming a baseline. `aria-activedescendant`
   is removed rather than set when nothing is active, because pointing at an
   option id that no longer exists is worse than pointing at nothing.
+
+## The command palette's combobox contract
+
+- **A DEDICATED `<input role="combobox">` drives a real `<ul role="listbox">`
+  of `<li role="option">` rows, and focus never leaves the input.** Unlike
+  `LinkAutocomplete`'s in-editor combobox above, `CommandPalette.tsx` has a
+  real text field to hang the pattern on, so it uses the plain form: the input
+  carries `aria-expanded="true"`, `aria-controls="palette-list"` and
+  `aria-activedescendant`; the list is a sibling element the input never
+  receives focus inside of. Arrow keys move `aria-activedescendant` and a
+  `position === index` highlight while the input stays focused throughout —
+  **moving DOM focus into the list breaks typing outright**, because a
+  focused `<li>` cannot also be the element receiving keystrokes. This is the
+  same failure shape `Icon.test.tsx` guards against for a different reason:
+  the obvious-looking alternative (focus the option, not the input) looks more
+  standard and is simply wrong for a type-as-you-go control.
+- **`e2e/palette.spec.ts`'s ArrowDown test asserts the attribute's VALUE
+  changes (`before` vs. `after`, both read from the live DOM), not merely that
+  it is present.** An implementation that sets `aria-activedescendant` once on
+  mount and never updates it would pass a test asserting only "some option
+  carries an id" or "the attribute exists" — both are true of a palette that
+  never moves. Injected during Task 6: hardcoding the attribute to a constant
+  string reddened exactly this test and no other, which is the point of a
+  value-shaped assertion over an existence-shaped one.
+- **Group headers (`data-palette-header`) are `role="presentation"` `<li>`
+  elements, never `role="group"`.** The spec sketched `role="group"` wrapping
+  each section; the controller ruled against it. `CommandPalette`'s `rows`
+  array is a single FLAT list — every entry becomes exactly one `option`, and
+  both `aria-activedescendant` and the Arrow-key index arithmetic run over
+  that one array with no notion of grouping. A real `role="group"` would
+  require either nesting the DOM (breaking the flat option list ARIA expects
+  under a combobox) or teaching the option array its own group boundaries so
+  the index math could skip non-option rows — exactly the coupling the
+  flat-array design exists to avoid. `role="presentation"` headers cost
+  nothing in the arrow arithmetic: they render between options but are never
+  IN `rows`, so they are invisible to both the keyboard handler and
+  `aria-activedescendant`.

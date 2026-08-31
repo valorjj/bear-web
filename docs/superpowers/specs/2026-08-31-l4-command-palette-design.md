@@ -129,16 +129,24 @@ order rather than a vibe. A candidate matches if the query's characters appear
 in the label in order (subsequence). Rank by, in this priority:
 
 1. the label STARTS WITH the query (highest);
-2. every query character landed on a word boundary — a label's first character,
-   or one following a space, `/` or `-`;
-3. the number of matched characters that landed on a word boundary, descending;
-4. the span from first to last matched character, ascending — a tighter match
+2. the number of matched characters that landed on a word boundary — a label's
+   first character, or one following a space, `/`, `-` or `:` — descending;
+3. the span from first to last matched character, ascending — a tighter match
    beats a scattered one;
-5. label length, ascending — the shorter of two equally good matches;
-6. `id`, ascending, so ties are stable and screenshots reproducible.
+4. label length, ascending — the shorter of two equally good matches;
+5. `id`, ascending, so ties are stable and screenshots reproducible.
 
-Rule 6 exists for the same reason `buildGraph` sorts: an unstable order is an
+Rule 5 exists for the same reason `buildGraph` sorts: an unstable order is an
 unstable UI and an untestable one.
+
+**Corrected from six rules to five during Task 1.** This section originally
+specified a sixth rule, `allBoundary` (every query character landed on a
+boundary), ranked between `startsWith` and the boundary count. It was deleted
+as provably redundant: `allBoundary` is true exactly when
+`boundaryCount === query.length`, a condition `boundaryCount` alone already
+expresses, so it could never be the deciding factor between two candidates —
+whichever comparison rule 2 already settled would have settled it first.
+`src/features/palette/matchCommands.ts` implements the five that remain.
 
 ### No matches offers creation
 
