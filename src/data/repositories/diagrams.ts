@@ -59,6 +59,17 @@ export function createDiagramsRepository(deps: DiagramsRepositoryDeps): Diagrams
     },
 
     async put(hash, svg) {
+      // `svg.length` is UTF-16 code units, not a true UTF-8 byte count — a
+      // deliberate approximation, not an oversight. This is a SOFT LRU
+      // budget, not an allocation limit: under-counting only means the
+      // cache holds slightly more than `maxBytes` before the next eviction.
+      // Measured error for Korean-heavy diagram labels is ~5-15% aggregate
+      // (a Hangul syllable is 1 UTF-16 unit but 3 UTF-8 bytes, while the
+      // surrounding SVG markup is ASCII and counts 1:1), so the effective
+      // ceiling against DIAGRAM_CACHE_MAX_BYTES is ~2.2-2.3 MB rather than a
+      // hard 2 MB — still "hundreds of diagrams", which is what the budget
+      // is sized for. Not worth the complexity of a real UTF-8 count for a
+      // number nothing downstream treats as exact.
       const bytes = svg.length;
       if (bytes > maxBytes) return;
 

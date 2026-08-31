@@ -9,6 +9,26 @@
  *
  * Deduplicated, because the cache is content-addressed: two identical
  * diagrams in one note are one render.
+ *
+ * A trailing `\r` (CRLF input — pasted from, or synced from, a
+ * Windows-authored note) is stripped from every line before it is matched as
+ * a fence or stored as content. Without this, a CRLF fence line like
+ * ```` ```mermaid\r ```` fails the fence regex outright — a false negative,
+ * not a false positive — and the whole block is silently swallowed as plain
+ * text with nothing to indicate why. Stripping it from body lines too matters
+ * for a second reason: a stray `\r` left in the extracted source would change
+ * `diagramKey`'s hash, so the same diagram could hash differently on a device
+ * whose editor normalises line endings differently, forcing a spurious
+ * re-render.
+ *
+ * KNOWN LIMITATION, left as is: a fence inside a blockquote (`` > ```mermaid
+ * ``) is not detected, because the scanner requires the marker at line start
+ * after at most three leading spaces — the same rule CommonMark itself uses
+ * for a top-level fence, which a `>`-prefixed line does not satisfy. This is
+ * a text-scan limitation only: the EDITOR's node view keys on the code
+ * block's language wherever the block sits in the document, so a diagram
+ * inside a callout still renders on screen. Only consumers that scan raw
+ * Markdown text (this function, and anything built on it) miss it.
  */
 export function mermaidSources(text: string): string[] {
   const found: string[] = [];
@@ -17,7 +37,8 @@ export function mermaidSources(text: string): string[] {
   const lines = text.split('\n');
   let open: { marker: string; length: number; isMermaid: boolean; body: string[] } | null = null;
 
-  for (const line of lines) {
+  for (const rawLine of lines) {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
     const fence = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*(\S*)[ \t]*$/.exec(line);
 
     if (open === null) {

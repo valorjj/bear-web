@@ -48,3 +48,17 @@ describe('mermaidSources', () => {
     expect(mermaidSources('```mermaid\nA\n```\n```mermaid\nA\n```')).toEqual(['A']);
   });
 });
+
+describe('mermaidSources — CRLF input', () => {
+  it('finds a fence whose opener and closer are CRLF-terminated', () => {
+    expect(mermaidSources('```mermaid\r\nflowchart TD\r\n  A --> B\r\n```\r\n')).toEqual([
+      'flowchart TD\n  A --> B',
+    ]);
+  });
+
+  it('extracts a source with no stray carriage returns, so the cache key is stable', () => {
+    const [source] = mermaidSources('```mermaid\r\nA\r\n```\r\n');
+    expect(source).toBe('A');
+    expect(source).not.toContain('\r');
+  });
+});
