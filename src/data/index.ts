@@ -53,8 +53,8 @@ export type {
 } from './sync/transport';
 export { findTagRanges, parseTags } from './tags';
 export type { TagRange } from './tags';
-export { findLinkRanges, normalizeTitle, parseLinks } from './links';
-export type { LinkRange } from './links';
+export { buildTitleIndex, findLinkRanges, normalizeTitle, parseLinks } from './links';
+export type { LinkRange, TitledNote } from './links';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
 export { files, folds, notes, settings, tags } from './repositories';
 export type {
