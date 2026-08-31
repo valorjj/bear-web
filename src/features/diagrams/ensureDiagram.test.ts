@@ -88,4 +88,24 @@ describe('ensureDiagram', () => {
     });
     expect(await diagrams.get(await diagramKey('A'))).toBeUndefined();
   });
+
+  it('retries after a failure instead of staying pinned to the rejection', async () => {
+    // The in-flight entry must be deleted on the FAILURE path too, not only
+    // on success. Without that, a diagram that failed once because the user
+    // was briefly offline would return the same stale rejection forever —
+    // every later ask for the same source would never reach the network
+    // again for the life of the page.
+    const request = vi
+      .fn<(source: string) => Promise<string>>()
+      .mockRejectedValueOnce(new DiagramError('offline'))
+      .mockResolvedValueOnce('<svg/>');
+
+    await expect(ensureDiagram('A', { request })).rejects.toMatchObject({ reason: 'offline' });
+
+    const svg = await ensureDiagram('A', { request });
+
+    expect(svg).toBe('<svg/>');
+    expect(request).toHaveBeenCalledTimes(2);
+    expect((await diagrams.get(await diagramKey('A')))?.svg).toBe('<svg/>');
+  });
 });

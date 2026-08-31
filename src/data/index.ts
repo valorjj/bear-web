@@ -57,6 +57,18 @@ export type { TagRange } from './tags';
 export { buildTitleIndex, findLinkRanges, normalizeTitle, parseLinks } from './links';
 export type { LinkRange, TitledNote } from './links';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
+/**
+ * `createDiagramsRepository` is the only repository FACTORY exported from
+ * this barrel — every sibling here (`notes`, `tags`, `files`, `settings`,
+ * `folds`) exposes only its singleton instance and its interface type. It is
+ * exported for exactly one reason: `ensureDiagram`'s `now` override needs a
+ * repository whose CLOCK differs from the shared singleton's, and `put`/
+ * `touch` fix their clock at construction, not per call — so a test-only
+ * clock override means building a second repository over the same `db`
+ * rather than duplicating the LRU/eviction logic here. This precedent is
+ * deliberate, not a template: a new repository should still follow the
+ * singleton-plus-interface pattern unless it has this same need.
+ */
 export {
   createDiagramsRepository,
   DIAGRAM_CACHE_MAX_BYTES,
