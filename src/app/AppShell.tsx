@@ -466,6 +466,7 @@ export function AppShell(): ReactElement {
                   onScopeChange={setScope}
                   mode={mode}
                   onOpenDrawer={() => setDrawerOpen(true)}
+                  onOpenGraph={toggleGraph}
                   query={query}
                   onQueryChange={setQuery}
                   searchInputRef={searchRef}

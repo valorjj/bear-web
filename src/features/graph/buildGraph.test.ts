@@ -37,6 +37,28 @@ describe('buildGraph', () => {
     });
   });
 
+  it('labels a ghost with the first-seen raw link text, not the normalized id', () => {
+    // The spec's rule: the label is the unresolved link TEXT, which may carry
+    // case and spacing a normalized key discards. The id must still be the
+    // normalized key, so dedup against a differently-cased mention of the
+    // same title is unaffected.
+    const graph = buildGraph(
+      [note('a', 'Alpha')],
+      [
+        { noteId: 'a', toTitle: 'Project Alpha' },
+        { noteId: 'a', toTitle: 'PROJECT ALPHA' },
+      ],
+    );
+
+    const ghost = graph.nodes.find((n) => n.kind === 'ghost');
+    expect(ghost).toEqual({
+      id: `${GHOST_PREFIX}project alpha`,
+      title: 'Project Alpha',
+      kind: 'ghost',
+      degree: 1,
+    });
+  });
+
   it('collapses repeated links between the same pair into one edge', () => {
     // Two [[Beta]] mentions in one note, plus Beta linking back: one edge,
     // degree 1 each. Counting mentions would make the hub sizing a lie.

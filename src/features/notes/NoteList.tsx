@@ -7,7 +7,7 @@ import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
-import { ChevronDown, Icon, Menu, Plus, SquarePen } from '@/ui/Icon';
+import { ChevronDown, Icon, Menu, Plus, SquarePen, Waypoints } from '@/ui/Icon';
 import { Popover } from '@/ui/Popover';
 
 import { deriveTitle } from '@/data';
@@ -114,6 +114,12 @@ export interface NoteListProps {
   mode: LayoutMode;
   /** Opens the tag drawer. Only reachable below desktop, where no sidebar pane exists. */
   onOpenDrawer: () => void;
+  /**
+   * Opens L3's relationship graph. This header is the graph's only UI entry
+   * point — present in all three layout modes, including the phone's list
+   * screen — because `⇧⌘G` alone left the surface unreachable by touch.
+   */
+  onOpenGraph: () => void;
 }
 
 export function NoteList({
@@ -142,6 +148,7 @@ export function NoteList({
   onScopeChange,
   mode,
   onOpenDrawer,
+  onOpenGraph,
 }: NoteListProps): ReactElement {
   const t = useT();
   const compact = mode !== 'desktop';
@@ -241,13 +248,27 @@ export function NoteList({
         }
       >
         {/*
-          Below desktop there is no sidebar pane, so this is the only route to
-          the tag tree. Bear's own phone header puts it in exactly this corner.
+          Below desktop there is no sidebar pane, so the drawer button is the
+          only route to the tag tree. Bear's own phone header puts it in
+          exactly this corner.
+
+          The invisible spacer beside it is what keeps the title centred on
+          the BAR rather than merely centred in its own grid track: the right
+          group below now holds two 44px controls (search, graph — FIX 2
+          added the second), so without a matching reservation on the left
+          the grid's leftover `1fr` track would sit off-centre by exactly
+          half that difference, and the title (which centres itself WITHIN
+          that track) would drift with it. `aria-hidden` and no interactive
+          element, so it is invisible to assistive tech and the tab order
+          both, not merely to the eye.
         */}
         {compact && (
-          <Button variant="soft" size="touch" onClick={onOpenDrawer} label={t('sidebar.open')}>
-            <Icon glyph={Menu} />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="soft" size="touch" onClick={onOpenDrawer} label={t('sidebar.open')}>
+              <Icon glyph={Menu} />
+            </Button>
+            <div aria-hidden="true" className="h-11 w-11" />
+          </div>
         )}
         {/*
           The first thing in the app that names the active scope on screen.
@@ -301,13 +322,24 @@ export function NoteList({
           </Popover>
         </div>
 
+        {/*
+          Search and the graph entry point share this group so their combined
+          width is what the left spacer above balances against. `⇧⌘G` alone
+          made the graph unreachable on phone and tablet; `soft`/`touch`
+          matches the drawer button beside it.
+        */}
         {compact && (
-          <SearchField
-            query={query}
-            onQueryChange={onQueryChange}
-            inputRef={searchInputRef}
-            collapsible
-          />
+          <div className="flex items-center gap-1">
+            <SearchField
+              query={query}
+              onQueryChange={onQueryChange}
+              inputRef={searchInputRef}
+              collapsible
+            />
+            <Button variant="soft" size="touch" onClick={onOpenGraph} label={t('graph.open')}>
+              <Icon glyph={Waypoints} />
+            </Button>
+          </div>
         )}
 
         {/*
@@ -328,6 +360,17 @@ export function NoteList({
             label={t('noteList.create')}
           >
             <Icon glyph={SquarePen} />
+          </Button>
+        )}
+
+        {/*
+          L3's graph has no other entry point on desktop either: `⇧⌘G` is
+          undiscoverable without a visible control naming it. `ghost`/`md`
+          matches "New note" beside it.
+        */}
+        {!compact && (
+          <Button variant="ghost" onClick={onOpenGraph} label={t('graph.open')}>
+            <Icon glyph={Waypoints} />
           </Button>
         )}
 

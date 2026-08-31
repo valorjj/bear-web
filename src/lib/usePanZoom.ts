@@ -1,4 +1,11 @@
-import { useCallback, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type WheelEvent,
+} from 'react';
 
 import { panBy, passedDragThreshold, type Viewport, zoomAt } from './panZoom';
 
@@ -8,7 +15,14 @@ export interface PanZoom {
   onPointerMove: (event: PointerEvent<Element>) => void;
   onPointerUp: (event: PointerEvent<Element>) => void;
   onWheel: (event: WheelEvent<Element>) => void;
-  zoomBy: (factor: number) => void;
+  /**
+   * Zooms about `center` (screen-space, relative to the container). Defaults
+   * to the container's own top-left corner `(0, 0)` when omitted, which is
+   * almost never what a caller with a real surface wants — pass the
+   * container's own centre point explicitly, the way `GraphView`'s zoom
+   * buttons do.
+   */
+  zoomBy: (factor: number, center?: { x: number; y: number }) => void;
   reset: () => void;
 }
 
@@ -31,10 +45,25 @@ interface Drag {
  * knowledge — it is behaviour, like `useFlushTriggers` and `useAnchoredMenu`.
  * That directory may import nothing from `src/app/`, `src/data/`,
  * `src/features/` or `src/i18n/`, and this does not.
+ *
+ * `frame` is both the viewport a fresh mount starts at and what `reset`
+ * returns to. It is expected to change at most once shortly after mount —
+ * the caller typically cannot compute a real framing until it has measured
+ * its own container, so it renders a placeholder first and corrects `frame`
+ * once real measurements are in. `usePanZoom` re-seeds `viewport` from
+ * `frame` (via `useLayoutEffect`, so the correction lands before paint)
+ * every time `frame`'s reference changes, which is what makes that one-time
+ * correction work without a second, hand-rolled sync path in every caller.
  */
-export function usePanZoom(initial: Viewport): PanZoom {
-  const [viewport, setViewport] = useState<Viewport>(initial);
+export function usePanZoom(frame: Viewport): PanZoom {
+  const [viewport, setViewport] = useState<Viewport>(frame);
+  const frameRef = useRef(frame);
   const dragging = useRef<Drag | null>(null);
+
+  useLayoutEffect(() => {
+    frameRef.current = frame;
+    setViewport(frame);
+  }, [frame]);
 
   /**
    * Deliberately does NOT call `setPointerCapture` here. Capturing on every
@@ -45,8 +74,9 @@ export function usePanZoom(initial: Viewport): PanZoom {
    * because the `click` the node's own listener was waiting for arrived at
    * the SVG instead. Confirmed by removing the capture entirely and
    * observing that clicks then reach their real target — see
-   * `.superpowers/sdd/2026-08-31-l3-relationship-graph/task-10-report.md`.
-   * Capture is deferred to `onPointerMove`, once real movement crosses
+   * `e2e/graph.spec.ts`'s click-to-open-a-note test, which exercises the
+   * real pointer path jsdom cannot. Capture is deferred to `onPointerMove`,
+   * once real movement crosses
    * `passedDragThreshold`, so a click with no movement is never captured
    * and its `click` event is never retargeted.
    */
@@ -102,11 +132,11 @@ export function usePanZoom(initial: Viewport): PanZoom {
     );
   }, []);
 
-  const zoomBy = useCallback((factor: number) => {
-    setViewport((current) => zoomAt(current, factor, 0, 0));
+  const zoomBy = useCallback((factor: number, center?: { x: number; y: number }) => {
+    setViewport((current) => zoomAt(current, factor, center?.x ?? 0, center?.y ?? 0));
   }, []);
 
-  const reset = useCallback(() => setViewport(initial), [initial]);
+  const reset = useCallback(() => setViewport(frameRef.current), []);
 
   return { viewport, onPointerDown, onPointerMove, onPointerUp, onWheel, zoomBy, reset };
 }

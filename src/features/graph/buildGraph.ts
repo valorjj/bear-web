@@ -65,7 +65,12 @@ export function buildGraph(index: readonly TitledNote[], rows: readonly NoteLink
     if (resolved === undefined) {
       targetId = `${GHOST_PREFIX}${key}`;
       if (!nodes.has(targetId)) {
-        nodes.set(targetId, { id: targetId, title: key, kind: 'ghost', degree: 0 });
+        // The FIRST-SEEN raw `toTitle`, not the normalized `key`: the spec's
+        // label is the unresolved link TEXT, and `key` is lowercased for
+        // dedup only. Using `key` here made `[[Project Alpha]]` display (and
+        // create a note titled) as "project alpha" — the id stays `key` so
+        // dedup is unaffected; only the label changes.
+        nodes.set(targetId, { id: targetId, title: row.toTitle, kind: 'ghost', degree: 0 });
       }
     } else {
       targetId = resolved.id;

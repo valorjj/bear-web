@@ -259,6 +259,7 @@ export const ko: Record<TranslationKey, string> = {
     '이 기기에는 계정이 아직 모르는 태그 설정(순서, 아이콘, 접힘 상태)이 있습니다. 추가하면 계정과 다른 기기에도 복사됩니다.',
   'sync.adopt.tagsOnly.discard': '이 기기에만 두기',
 
+  'graph.open': '관계 그래프',
   'graph.title': '그래프',
   'graph.back': '노트로 돌아가기',
   'graph.summary': '요약',

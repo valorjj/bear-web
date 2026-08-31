@@ -309,4 +309,5 @@ export {
   CircleAlert,
   Minus,
   Maximize2,
+  Waypoints,
 } from 'lucide-react';

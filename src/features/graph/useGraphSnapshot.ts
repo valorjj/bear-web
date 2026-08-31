@@ -25,6 +25,46 @@ function topologyHash(graph: Graph): string {
 }
 
 /**
+ * Keep the `cap` best-connected nodes of `full` (by pre-cap degree, an
+ * arbitrary slice would hide exactly the hubs this surface exists to show),
+ * and every edge between two surviving nodes.
+ *
+ * Degree on the RETURNED nodes is recomputed from the surviving edges, not
+ * carried over from `full`. A kept node whose neighbours were dropped
+ * otherwise keeps its pre-cap degree: it renders oversized (`nodeRadius`
+ * scales with degree), ranks wrongly in the hubs list, and a genuinely
+ * now-unlinked node escapes the `unlinked` count in the canvas's accessible
+ * name.
+ *
+ * Pure, so the recomputation can be tested directly rather than only through
+ * a 2,000+-note snapshot fixture.
+ */
+export function capGraph(full: Graph, cap: number): Graph {
+  if (full.nodes.length <= cap) return full;
+
+  const keep = new Set(
+    [...full.nodes]
+      .sort((a, b) => b.degree - a.degree || (a.id < b.id ? -1 : 1))
+      .slice(0, cap)
+      .map((n) => n.id),
+  );
+  const edges = full.edges.filter((e) => keep.has(e.source) && keep.has(e.target));
+
+  const degree = new Map<string, number>();
+  for (const e of edges) {
+    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+  }
+
+  return {
+    nodes: full.nodes
+      .filter((n) => keep.has(n.id))
+      .map((n) => ({ ...n, degree: degree.get(n.id) ?? 0 })),
+    edges,
+  };
+}
+
+/**
  * Read the vault once, project it, and settle it.
  *
  * A SNAPSHOT, not a `useLiveQuery` subscription, and that is deliberate — see
@@ -53,25 +93,9 @@ export function useGraphSnapshot(): GraphSnapshot {
         return;
       }
 
-      // Cap by taking the best-connected notes: an arbitrary slice would hide
-      // exactly the hubs the surface exists to show.
       const full = buildGraph(index, rows);
       const capped = Math.max(0, full.nodes.length - NODE_CAP);
-      const graph =
-        capped === 0
-          ? full
-          : (() => {
-              const keep = new Set(
-                [...full.nodes]
-                  .sort((a, b) => b.degree - a.degree || (a.id < b.id ? -1 : 1))
-                  .slice(0, NODE_CAP)
-                  .map((n) => n.id),
-              );
-              return {
-                nodes: full.nodes.filter((n) => keep.has(n.id)),
-                edges: full.edges.filter((e) => keep.has(e.source) && keep.has(e.target)),
-              };
-            })();
+      const graph = capGraph(full, NODE_CAP);
 
       setSnapshot({ status: 'settling', graph });
 

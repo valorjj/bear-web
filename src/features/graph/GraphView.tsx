@@ -1,7 +1,8 @@
-import { type ReactElement, useCallback, useMemo, useState } from 'react';
+import { type ReactElement, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { notes } from '@/data';
 import { useT } from '@/i18n';
+import { boundsOf, frameBounds, type Viewport } from '@/lib/panZoom';
 import { usePanZoom } from '@/lib/usePanZoom';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
@@ -54,6 +55,7 @@ export function GraphView({ activeId, onClose, onOpenNote }: GraphViewProps): Re
 
   const graph =
     snapshot.status === 'settling' || snapshot.status === 'ready' ? snapshot.graph : null;
+  const capped = snapshot.status === 'ready' ? snapshot.capped : 0;
 
   const summary = useMemo(() => {
     if (graph === null) return null;
@@ -78,6 +80,11 @@ export function GraphView({ activeId, onClose, onOpenNote }: GraphViewProps): Re
           `${summary.ghosts.length}${
             summary.ghosts.length === 1 ? t('graph.summary.ghostsOne') : t('graph.summary.ghosts')
           }`,
+          // Only when the vault actually exceeded NODE_CAP: a vault under the
+          // cap must not announce "0 notes not shown" on every open. Without
+          // this fragment a 3,000-note vault's accessible name silently
+          // reported "2000 notes" with no qualification at all.
+          ...(capped > 0 ? [`${capped}${t('graph.capped')}`] : []),
         ].join(', ');
 
   return (
@@ -173,6 +180,14 @@ export function GraphView({ activeId, onClose, onOpenNote }: GraphViewProps): Re
  * so this frame owns the hook and passes `viewport` plus the four pointer/
  * wheel handlers down, and wires the three zoom buttons to the hook's own
  * `zoomBy`/`reset` rather than leaving them inert.
+ *
+ * It also owns FRAMING: `layoutGraph` centres the layout on graph-space
+ * `(0, 0)`, which means nothing about where that lands on screen until this
+ * component measures its own container and computes a `Viewport` that
+ * centres the layout's actual bounding box inside it (`frameBounds`, in
+ * `src/lib/panZoom.ts`). Before this existed, every session opened with
+ * graph-space origin pinned to the container's top-left corner, so roughly
+ * half of any real layout rendered off-screen until panned by hand.
  */
 function GraphCanvasFrame({
   label,
@@ -190,10 +205,33 @@ function GraphCanvasFrame({
   onSelect: (node: GraphNode) => void;
 }): ReactElement {
   const t = useT();
-  const panZoom = usePanZoom({ x: 0, y: 0, scale: 1 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Stable across re-renders while `positions` itself is (it only changes
+  // once, when `useGraphSnapshot` moves from `settling` to `ready`), so this
+  // does not fight a reader's own pan/zoom on every unrelated re-render.
+  const bounds = useMemo(() => boundsOf([...positions.values()]), [positions]);
+
+  const [frame, setFrame] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    // An unmeasured (zero-size) container — true under jsdom, which lays
+    // nothing out — leaves `frame` at the placeholder rather than computing
+    // a nonsense scale from a division by a near-zero size.
+    if (el === null || el.clientWidth === 0 || el.clientHeight === 0) return;
+    setFrame(frameBounds(bounds, el.clientWidth, el.clientHeight));
+  }, [bounds]);
+
+  const panZoom = usePanZoom(frame);
+
+  const zoomCenter = useCallback(() => {
+    const el = containerRef.current;
+    return el === null ? { x: 0, y: 0 } : { x: el.clientWidth / 2, y: el.clientHeight / 2 };
+  }, []);
 
   return (
-    <div className="relative h-full w-full">
+    <div ref={containerRef} className="relative h-full w-full">
       <GraphCanvas
         graph={graph}
         positions={positions}
@@ -214,7 +252,7 @@ function GraphCanvasFrame({
       )}
       <div className="absolute right-2 bottom-2 flex gap-1">
         <Button
-          onClick={() => panZoom.zoomBy(0.8)}
+          onClick={() => panZoom.zoomBy(0.8, zoomCenter())}
           label={t('graph.zoomOut')}
           variant="ghost"
           size="sm"
@@ -222,7 +260,7 @@ function GraphCanvasFrame({
           <Icon glyph={Minus} />
         </Button>
         <Button
-          onClick={() => panZoom.zoomBy(1.25)}
+          onClick={() => panZoom.zoomBy(1.25, zoomCenter())}
           label={t('graph.zoomIn')}
           variant="ghost"
           size="sm"

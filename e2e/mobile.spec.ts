@@ -138,6 +138,20 @@ test.describe('on a phone', () => {
     await expect(page.getByRole('button', { name: 'Back to notes' })).toBeVisible();
   });
 
+  test('tapping the graph button opens the relationship graph', async ({ page }) => {
+    // FIX 2's own guard: before this button existed, `⇧⌘G` was the graph's
+    // ONLY entry point, and a phone has no keyboard to press it with — the
+    // surface was genuinely unreachable by touch. A `tap()`, not `click()`,
+    // since this `describe` block is `hasTouch: true` and the point is to
+    // exercise the touch path a real phone user has.
+    await seedNote(page);
+
+    await page.getByRole('button', { name: 'Relationship graph' }).tap();
+
+    await expect(page.getByRole('heading', { name: 'Graph' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Groceries/ })).toHaveCount(0);
+  });
+
   test('the search input is 16px, which is what stops iOS zooming on focus', async ({ page }) => {
     await seedNote(page);
 

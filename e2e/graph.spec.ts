@@ -34,30 +34,25 @@ async function openGraph(page: Page): Promise<void> {
 }
 
 /**
- * The layout is centred on graph-space (0,0) (`forceCenter(0, 0)` in
- * `layoutGraph.ts`), but the canvas applies no base translate of its own —
- * the initial viewport is `{ x: 0, y: 0, scale: 1 }` (`GraphCanvasFrame`) and
- * `<svg>` has no `viewBox`, so graph-space (0,0) renders at the SVG's own
- * top-left corner, not its centre. Roughly half of any real layout therefore
- * has negative coordinates and lands outside the visible pane until panned —
- * a real drag, exercised here through the same pointer events
- * `usePanZoom.onPointerMove` reads, not a synthetic scroll.
+ * Reads a node's screen-space position from its graph-space `(cx, cy)`
+ * (its circle's own attributes) and the canvas's live `<g transform="…">`
+ * (`translate(x y) scale(s)`, written by `usePanZoom` / `GraphCanvasFrame`),
+ * the same math `zoomAt`/`panBy` use. This is what proves a node is framed
+ * on open WITHOUT panning — the bug FIX 1 closes is that this used to be
+ * false for roughly half of any real layout, because the canvas centred
+ * nothing: graph-space `(0, 0)` landed at the SVG's own top-left corner.
  */
-async function panNodeIntoView(page: Page, nodeId: string): Promise<void> {
-  const svgBox = (await page.getByRole('img').boundingBox())!;
+async function nodeScreenPosition(page: Page, nodeId: string): Promise<{ x: number; y: number }> {
   const circle = page.locator(`[data-node="${nodeId}"] circle`);
   const cx = Number(await circle.getAttribute('cx'));
   const cy = Number(await circle.getAttribute('cy'));
 
-  const startX = svgBox.x + svgBox.width / 2;
-  const startY = svgBox.y + svgBox.height / 2;
-  const targetX = startX + (svgBox.width / 2 - cx);
-  const targetY = startY + (svgBox.height / 2 - cy);
+  const transform = await page.locator('svg > g').first().getAttribute('transform');
+  const match = /translate\(([-\d.]+) ([-\d.]+)\) scale\(([\d.]+)\)/.exec(transform ?? '');
+  if (match === null) throw new Error(`unparseable transform: ${String(transform)}`);
+  const [, tx, ty, scale] = match.map(Number);
 
-  await page.mouse.move(startX, startY);
-  await page.mouse.down();
-  await page.mouse.move(targetX, targetY, { steps: 10 });
-  await page.mouse.up();
+  return { x: tx! + cx * scale!, y: ty! + cy * scale! };
 }
 
 test.describe('graph', () => {
@@ -76,6 +71,37 @@ test.describe('graph', () => {
     await expect(page.getByRole('region', { name: 'Sidebar' })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Note list' })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Editor' })).toHaveCount(0);
+  });
+
+  test('opens FRAMED: a known node is already inside the viewport with no panning', async ({
+    page,
+  }) => {
+    // This is the real guard for FIX 1. `layoutGraph` centres the settled
+    // layout on graph-space (0,0), but the canvas used to apply no framing
+    // of its own and started every session at `{ x: 0, y: 0, scale: 1 }` —
+    // which puts graph-space origin at the SVG's own top-left corner, not
+    // its centre, so roughly half of any real layout rendered off-screen
+    // until panned by hand. Before the fix, this assertion fails: n-todo's
+    // screen position lands well outside the canvas's own bounding box.
+    await seedDatabase(page, CORPUS);
+    await page.goto('/');
+    await expect(page.getByRole('region', { name: 'Note list' })).toBeVisible();
+
+    await openGraph(page);
+    await expect(canvas(page)).toBeVisible();
+    await expect(page.locator('[data-node]')).toHaveCount(11);
+
+    // The svg element itself carries no `viewBox`, so `nodeScreenPosition`'s
+    // coordinates are already pixels measured from the svg's OWN top-left
+    // corner — comparing them straight against its width/height, not against
+    // its page-absolute `boundingBox()`, is the correct check.
+    const svgBox = (await page.getByRole('img').boundingBox())!;
+    const position = await nodeScreenPosition(page, 'n-todo');
+
+    expect(position.x).toBeGreaterThanOrEqual(0);
+    expect(position.x).toBeLessThanOrEqual(svgBox.width);
+    expect(position.y).toBeGreaterThanOrEqual(0);
+    expect(position.y).toBeLessThanOrEqual(svgBox.height);
   });
 
   test("the canvas's accessible name carries the real counts for the seeded corpus", async ({
@@ -135,9 +161,9 @@ test.describe('graph', () => {
     await expect(canvas(page)).toBeVisible();
 
     // n-todo is "Sprint checklist", one of the two real (non-ghost) nodes the
-    // fixed corpus's single edge produces. Pan it into view first — see
-    // `panNodeIntoView`'s docblock.
-    await panNodeIntoView(page, 'n-todo');
+    // fixed corpus's single edge produces. No panning first: the graph opens
+    // FRAMED (FIX 1), so every seeded node is already reachable by a direct
+    // click.
     await page.locator('[data-node="n-todo"]').click();
 
     await expect(page.getByRole('region', { name: 'Note list' })).toBeVisible();

@@ -59,8 +59,10 @@ export interface NotesRepository {
   /**
    * `{ id, title, updatedAt }` for every non-trashed note — what L3's graph
    * needs to place a node and what `buildTitleIndex` needs to resolve a link
-   * target. Projects away `text` deliberately: the graph reads every note at
-   * once, and the markdown is the only large field.
+   * target. Streams via Dexie's `each()` rather than `toArray()` so the
+   * projection happens per row: a 2,000-note vault never holds 2,000 full
+   * `Note` rows (markdown text included) in memory at once, only the
+   * `{id, title, updatedAt}` triples it actually keeps.
    */
   allNoteIndex(): Promise<TitledNote[]>;
 }
@@ -348,10 +350,17 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     },
 
     async allNoteIndex() {
-      const all = await db.notes.toArray();
-      return all
-        .filter((n) => n.trashedAt === null)
-        .map((n) => ({ id: n.id, title: n.title, updatedAt: n.updatedAt }));
+      // `each()`, not `toArray()` + `filter`/`map`: the latter briefly holds
+      // every row of the table — full markdown text included — as one array
+      // before projecting it away. `each()` visits one row at a time, so
+      // only the small projection below is ever retained.
+      const result: TitledNote[] = [];
+      await db.notes.each((n) => {
+        if (n.trashedAt === null) {
+          result.push({ id: n.id, title: n.title, updatedAt: n.updatedAt });
+        }
+      });
+      return result;
     },
   };
 }

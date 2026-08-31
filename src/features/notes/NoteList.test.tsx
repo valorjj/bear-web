@@ -76,6 +76,7 @@ function props(overrides: Partial<NoteListProps> = {}): NoteListProps {
     onDuplicate: vi.fn(),
     mode: 'desktop',
     onOpenDrawer: vi.fn(),
+    onOpenGraph: vi.fn(),
     onEmptyTrash: vi.fn(),
     emptyTrashDisabled: false,
     hasUnfilteredItems: true,
@@ -682,9 +683,15 @@ describe('compact header proportions', () => {
     expect(screen.getByRole('button', { name: 'New note' }).className).toContain('h-7');
   });
 
-  it('centres the scope title against the bar, not against the left group', () => {
-    // A three-column grid, so the title's position does not drift as the scope
-    // name changes length. A flex row with `ml-auto` cannot give this.
+  it('keeps the scope title in its own grid track, not a flex-row position', () => {
+    // Still a three-column grid — drawer|spacer, title, search|graph — so the
+    // title's own track never grows or shrinks as the scope name changes
+    // length. A flex row with `ml-auto` cannot give this. The graph entry
+    // point (FIX 2) added a fourth CONTROL, but it is grouped with search on
+    // the right (balanced by an invisible spacer grouped with the drawer on
+    // the left) rather than becoming a fourth grid column, which is what
+    // keeps the title actually centred on the bar rather than merely
+    // centred within a track whose bounds have shifted.
     const { container } = renderList(<NoteList {...props({ mode: 'phone' })} />);
 
     expect(container.querySelector('.grid-cols-\\[auto_1fr_auto\\]')).not.toBeNull();

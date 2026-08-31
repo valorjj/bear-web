@@ -298,6 +298,12 @@ export const en = {
     'This device has tag settings — their order, icons, and which ones are collapsed — that your account has never seen. Adding them puts a copy in your account and on your other devices.',
   'sync.adopt.tagsOnly.discard': 'Keep them here only',
 
+  /**
+   * The note-list header's entry point into the graph — the only touch- and
+   * keyboard-reachable way to open it. `⇧⌘G` alone left the surface
+   * unreachable on phone and tablet, and undiscoverable on desktop.
+   */
+  'graph.open': 'Relationship graph',
   'graph.title': 'Graph',
   'graph.back': 'Back to notes',
   'graph.summary': 'Summary',

@@ -2414,6 +2414,14 @@ In `docs/rulings/testing-and-tooling.md`:
   determinism the shots depend on comes from `simulation.randomSource()` plus
   phyllotaxis initial placement — changing `SEED` reshuffles every user's
   graph.
+  (Corrected after the fact — this bullet is wrong about where the
+  determinism actually comes from, and is left as the historical record of
+  what was believed at plan time. See "Determinism is real, and was measured
+  to come from somewhere other than where it was first credited" in
+  `docs/superpowers/specs/2026-08-31-l3-relationship-graph-design.md`:
+  phyllotaxis placement plus the fixed `LAYOUT_TICKS` are what actually make
+  two runs agree, and changing `SEED` was measured to leave every test and
+  shot passing.)
 
 - [ ] **Step 3: Update the status table**
 
