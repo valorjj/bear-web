@@ -96,6 +96,29 @@ describe('GraphCanvas', () => {
     expect(container.querySelector('[data-active="true"]')?.getAttribute('data-node')).toBe('hub');
   });
 
+  it('dims non-neighbours on hover, and undims once the hover leaves', async () => {
+    // Asserting a COUNT predicted by the neighbour rule for this fixture, not
+    // mere presence of a dimmed element — the hub's neighbourhood (via the
+    // edges built above) is every node except `lonely`, so exactly one node
+    // should read dimmed once hovered, and zero before.
+    const { container } = renderCanvas();
+
+    expect(container.querySelectorAll('[data-node][opacity="0.2"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-edge][opacity="0.15"]')).toHaveLength(0);
+
+    const hub = container.querySelector('[data-node="hub"]')!;
+    await userEvent.hover(hub);
+
+    const dimmedNodes = container.querySelectorAll('[data-node][opacity="0.2"]');
+    expect(dimmedNodes).toHaveLength(1);
+    expect(dimmedNodes[0]?.getAttribute('data-node')).toBe('lonely');
+    // Every edge here touches the hub, so none should dim.
+    expect(container.querySelectorAll('[data-edge][opacity="0.15"]')).toHaveLength(0);
+
+    await userEvent.unhover(hub);
+    expect(container.querySelectorAll('[data-node][opacity="0.2"]')).toHaveLength(0);
+  });
+
   it('labels more nodes above the zoom threshold than at rest', () => {
     // Asserting a count that CHANGES with the rule, not merely that the
     // zoomed-in render has some labels — the viewport is now injectable, so
