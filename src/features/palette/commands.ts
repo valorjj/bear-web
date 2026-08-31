@@ -7,7 +7,16 @@ import { THEMES } from '@/styles/themes';
 
 import type { Matchable } from './matchCommands';
 
-export type CommandGroup = 'navigation' | 'note' | 'appearance' | 'account';
+/**
+ * The FIXED order sections render in — navigation first, account last.
+ * `CommandGroup` is derived from this array (not the reverse) so the palette's
+ * ordering and the type of a valid `group` can never drift apart: adding a
+ * group name here is the only way to make it assignable to `Command['group']`,
+ * and it is simultaneously where that group falls in the list.
+ */
+export const COMMAND_GROUP_ORDER = ['navigation', 'note', 'appearance', 'account'] as const;
+
+export type CommandGroup = (typeof COMMAND_GROUP_ORDER)[number];
 
 export interface Command extends Matchable {
   id: string;

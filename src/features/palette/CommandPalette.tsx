@@ -5,8 +5,22 @@ import { useT } from '@/i18n';
 import type { TranslationKey } from '@/i18n';
 import { Dialog } from '@/ui/Dialog';
 
-import { buildCommands, type Command, type CommandDeps, type CommandGroup } from './commands';
+import {
+  buildCommands,
+  COMMAND_GROUP_ORDER,
+  type Command,
+  type CommandDeps,
+  type CommandGroup,
+} from './commands';
 import { matchAll } from './matchCommands';
+
+/** Index of each command group in the fixed render order; commands sort into
+ * their group first, and only by match score within it. `Array.prototype.sort`
+ * is stable, so sorting on this alone preserves `matchAll`'s ordering among
+ * rows that share a group. */
+const GROUP_RANK: ReadonlyMap<CommandGroup, number> = new Map(
+  COMMAND_GROUP_ORDER.map((group, index) => [group, index]),
+);
 
 export interface CommandPaletteProps {
   open: boolean;
@@ -79,14 +93,20 @@ export function CommandPalette({
   );
 
   const rows = useMemo<Row[]>(() => {
-    const matchedCommands = matchAll(commands, query).map((command: Command): Row => ({
-      kind: 'command',
-      id: `cmd-${command.id}`,
-      group: command.group,
-      label: command.label,
-      hint: command.hint,
-      run: command.run,
-    }));
+    // `matchAll` ranks purely by match quality with no notion of a group, so
+    // its output interleaves groups. Sections are FIXED (see the spec's "Two
+    // sections in a fixed order"): re-sort by group rank first, letting the
+    // stable sort keep `matchAll`'s score order as the tiebreak within a group.
+    const matchedCommands = matchAll(commands, query)
+      .sort((a, b) => (GROUP_RANK.get(a.group) ?? 0) - (GROUP_RANK.get(b.group) ?? 0))
+      .map((command: Command): Row => ({
+        kind: 'command',
+        id: `cmd-${command.id}`,
+        group: command.group,
+        label: command.label,
+        hint: command.hint,
+        run: command.run,
+      }));
 
     const trimmed = query.trim();
     const matchedNotes =

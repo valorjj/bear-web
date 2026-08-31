@@ -168,17 +168,28 @@ describe('CommandPalette', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  it('renders group headers that are never reachable by arrowing', async () => {
+  it('groups results by a fixed order, each header appearing exactly once, never reachable by arrowing', async () => {
     renderPalette();
     const input = screen.getByRole('combobox');
+
+    // A non-empty query spanning multiple groups: on an empty query `matchAll`
+    // sorts by id alone, which happens to keep groups contiguous by accident
+    // (id prefixes align with group names) and hides exactly this bug.
+    await userEvent.type(input, 'n');
     await waitFor(() => expect(options().length).toBeGreaterThan(1));
 
     const rowCount = options().length;
 
-    // Headers exist in the DOM (there is more than one group with no query)…
     const listbox = screen.getByRole('listbox');
-    const headerCount = listbox.querySelectorAll('[data-palette-header]').length;
-    expect(headerCount).toBeGreaterThan(0);
+    const headers = Array.from(listbox.querySelectorAll('[data-palette-header]'));
+    const headerTexts = headers.map((header) => header.textContent);
+
+    // Sections are fixed: the header count must equal the number of DISTINCT
+    // groups present, and each of those headers must appear exactly once. A
+    // repeated header text (e.g. "Note" appearing twice) is exactly what
+    // interleaved groups look like in the DOM.
+    expect(headerTexts.length).toBeGreaterThan(1);
+    expect(new Set(headerTexts).size).toBe(headerTexts.length);
 
     // …but arrowing through every single row, one per row plus a full extra
     // lap, never lands `aria-activedescendant` on a header element, and the
