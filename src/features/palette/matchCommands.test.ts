@@ -25,13 +25,6 @@ describe('matchOne', () => {
   it('folds case and normalizes', () => {
     expect(matchOne('Export as PDF', 'EXPORT')).not.toBeNull();
   });
-
-  it('reports whether every matched character landed on a word boundary', () => {
-    // "eap" -> E(xport) a(s) P(DF): three boundaries, nothing mid-word.
-    expect(matchOne('Export as PDF', 'eap')?.allBoundary).toBe(true);
-    // "xp" lands mid-word in "Export".
-    expect(matchOne('Export as PDF', 'xp')?.allBoundary).toBe(false);
-  });
 });
 
 describe('matchAll ranking', () => {
@@ -51,10 +44,21 @@ describe('matchAll ranking', () => {
     expect(matchAll(items, 'exp')[0]!.id).toBe('bound');
   });
 
-  it('prefers a tighter span when boundary quality ties', () => {
-    const items = [item('loose', 'New note from template'), item('tight', 'New note')];
+  it('prefers higher boundary count when other rules tie', () => {
+    const items = [item('a', 'xb cxx'), item('b', 'xbcxxx')];
 
-    expect(matchAll(items, 'nn')[0]!.id).toBe('tight');
+    // query 'bc': in 'a', b at 1 (not boundary), c at 3 (boundary) → boundaryCount 1, span 3
+    // in 'b', b at 1 (not boundary), c at 2 (not boundary) → boundaryCount 0, span 2
+    // Both startsWith false, length 6. Rule 3 (boundaryCount) decides.
+    expect(matchAll(items, 'bc')[0]!.id).toBe('a');
+  });
+
+  it('prefers a tighter span when other rules tie', () => {
+    const items = [item('b', 'abdxxx'), item('a', 'abxdxx')];
+
+    // query 'bd': in 'b', d at 2 → span 2; in 'a', d at 3 → span 3
+    // Both startsWith false, boundaryCount 0, length 6. Span decides, so 'b' first.
+    expect(matchAll(items, 'bd')[0]!.id).toBe('b');
   });
 
   it('prefers the shorter label when everything else ties', () => {

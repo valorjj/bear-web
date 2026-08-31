@@ -9,8 +9,6 @@ export interface Matchable {
 export interface MatchQuality {
   /** The label begins with the query. The strongest signal. */
   startsWith: boolean;
-  /** Every matched character landed on a word boundary. */
-  allBoundary: boolean;
   /** How many matched characters landed on a word boundary. */
   boundaryCount: number;
   /** First to last matched character, inclusive. Tighter is better. */
@@ -34,27 +32,29 @@ const BOUNDARIES = new Set([' ', '/', '-', ':']);
  * character rather than searching for the tightest possible arrangement.
  * Greedy is not always span-optimal, but it is O(n), deterministic, and the
  * difference cannot be seen on labels this short.
+ *
+ * Five ranking rules apply (see `compare`): startsWith, boundaryCount desc,
+ * span asc, length asc, id asc. (allBoundary removed as redundant: it is
+ * exactly boundaryCount === query.length, so boundaryCount alone decides.)
  */
 export function matchOne(label: string, query: string): MatchQuality | null {
   const haystack = normalizeForSearch(label);
   const needle = normalizeForSearch(query.trim());
 
   if (needle === '') {
-    return { startsWith: true, allBoundary: true, boundaryCount: 0, span: 0, length: label.length };
+    return { startsWith: true, boundaryCount: 0, span: 0, length: label.length };
   }
 
   let qi = 0;
   let first = -1;
   let last = -1;
   let boundaryCount = 0;
-  let allBoundary = true;
 
   for (let i = 0; i < haystack.length && qi < needle.length; i += 1) {
     if (haystack[i] !== needle[qi]) continue;
 
     const onBoundary = i === 0 || BOUNDARIES.has(haystack[i - 1]!);
     if (onBoundary) boundaryCount += 1;
-    else allBoundary = false;
 
     if (first === -1) first = i;
     last = i;
@@ -65,17 +65,15 @@ export function matchOne(label: string, query: string): MatchQuality | null {
 
   return {
     startsWith: haystack.startsWith(needle),
-    allBoundary,
     boundaryCount,
     span: last - first + 1,
     length: label.length,
   };
 }
 
-/** Negative if `a` should rank before `b`. The spec's six rules, in order. */
+/** Negative if `a` should rank before `b`. Five rules, in order. */
 function compare(a: MatchQuality, b: MatchQuality, aId: string, bId: string): number {
   if (a.startsWith !== b.startsWith) return a.startsWith ? -1 : 1;
-  if (a.allBoundary !== b.allBoundary) return a.allBoundary ? -1 : 1;
   if (a.boundaryCount !== b.boundaryCount) return b.boundaryCount - a.boundaryCount;
   if (a.span !== b.span) return a.span - b.span;
   if (a.length !== b.length) return a.length - b.length;
@@ -85,7 +83,7 @@ function compare(a: MatchQuality, b: MatchQuality, aId: string, bId: string): nu
 /**
  * The matching items, best first.
  *
- * Rule 6 — the `id` tie-break — is not decoration. Without it two equally
+ * Rule 5 — the `id` tie-break — is not decoration. Without it two equally
  * good matches would order by whatever `sort` happened to do, which makes the
  * highlighted row move between renders and makes the tests unassertable.
  */
