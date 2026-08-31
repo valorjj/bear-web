@@ -1,6 +1,7 @@
 import {
   lazy,
   type ReactElement,
+  type RefObject,
   Suspense,
   useCallback,
   useEffect,
@@ -35,8 +36,9 @@ import { Button } from '@/ui/Button';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
 import { ChevronLeft, Icon } from '@/ui/Icon';
-import { SessionProvider } from '@/features/account';
-import { ExportProgressProvider, useExportProgress } from '@/features/export';
+import { SessionProvider, useSessionValue, useSync } from '@/features/account';
+import { ExportProgressProvider, useExportProgress, type ExportFormat } from '@/features/export';
+import type { CommandDeps } from '@/features/palette/commands';
 import { Pane } from '@/ui/Pane';
 import { ProgressBar } from '@/ui/ProgressBar';
 import { Resizer } from '@/ui/Resizer';
@@ -48,6 +50,7 @@ import { SidebarDrawer } from './SidebarDrawer';
 import { usePaneWidths } from './usePaneWidths';
 import { useScopeShortcuts } from './useScopeShortcuts';
 import { useSetting } from './useSetting';
+import { useTheme } from './useTheme';
 
 const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
 
@@ -61,6 +64,17 @@ const isBoolean = (value: unknown): value is boolean => typeof value === 'boolea
  * has leaked across this boundary — find the leak; do not raise the number.
  */
 const GraphView = lazy(() => import('@/features/graph/GraphView'));
+
+/**
+ * Lazy, and structurally so — not an optimisation.
+ *
+ * `scripts/bundleSize.test.ts` caps the main bundle at 340,000 B gzipped and
+ * `main` measured 338,350 B after L3: 1,650 bytes of headroom. The palette,
+ * its registry and its matcher do not fit. If that guard fails on this
+ * branch, something leaked across this boundary — find the leak; do not raise
+ * the number.
+ */
+const CommandPalette = lazy(() => import('@/features/palette/CommandPalette'));
 
 export function AppShell(): ReactElement {
   const t = useT();
@@ -86,6 +100,33 @@ export function AppShell(): ReactElement {
     false,
     isBoolean,
   );
+
+  const themeControl = useTheme();
+
+  // Whether L4's command palette is open. A single flag: unlike `view`, the
+  // palette is an overlay on top of whatever is already on screen, not a
+  // surface that replaces it.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // `handleExport` for the currently open note lives entirely inside
+  // `NoteEditor` — it reads the LIVE editor text, not `note.text`
+  // (`docs/rulings/export.md`), and that text only exists inside the mounted
+  // `RichEditor`. This ref is how the palette's export command reaches it
+  // from up here; `null` whenever no note is open, which is also when
+  // `CommandDeps.hasOpenNote` is false and the palette never offers the
+  // command in the first place.
+  const exportRef = useRef<{ export: (format: ExportFormat) => void } | null>(null);
+
+  // Holds the live `session.signOut`, kept current by `CommandPaletteHost`
+  // on every render. `useSession`'s state lives in `SessionProvider`, an
+  // ancestor of this component's own scope, so `AppShell` cannot call
+  // `useSessionValue()` itself (see `ExportProgressBar` below for the
+  // identical constraint with `useExportProgress`) — but `confirmPending`,
+  // below, still needs to be able to call the real `signOut` once the user
+  // confirms. A ref survives `CommandPaletteHost` unmounting (closing the
+  // palette does not close the confirm dialog it opened) because the
+  // function it holds belongs to `SessionProvider`, not to the host.
+  const signOutRef = useRef<() => Promise<void>>(async () => {});
 
   // Memoised because it feeds `useNotes`' live-query dependency chain. A fresh
   // object identity per render is the same defect `ACTIVE_SCOPE` exists to
@@ -284,25 +325,39 @@ export function AppShell(): ReactElement {
   );
 
   // Which destructive action is awaiting confirmation, if any. A single piece
-  // of state rather than two booleans: the two dialogs are mutually exclusive
-  // and two flags could both be true.
-  const [pending, setPending] = useState<{ kind: 'purge'; id: string } | { kind: 'empty' } | null>(
-    null,
-  );
+  // of state rather than several booleans: the dialogs are mutually exclusive
+  // and separate flags could all be true at once. `trash` and `signOut` are
+  // L4's: the note list trashes a note directly with no confirmation, but a
+  // palette command marked `destructive` (`commands.ts`) always routes
+  // through here instead of running inline.
+  const [pending, setPending] = useState<
+    | { kind: 'purge'; id: string }
+    | { kind: 'empty' }
+    | { kind: 'trash'; id: string }
+    | { kind: 'signOut' }
+    | null
+  >(null);
 
-  // Cmd/Ctrl+F focuses the app's own search. The browser's find would only
-  // search the rows currently in the DOM, which is never what is wanted here.
+  // Shared by the search shortcut and the palette's "Search notes" command —
+  // both mean exactly the same thing: focus the app's own search field. The
+  // browser's find would only search the rows currently in the DOM, which is
+  // never what is wanted here.
+  const focusSearch = useCallback(() => {
+    searchRef.current?.focus();
+    searchRef.current?.select();
+  }, []);
+
   // Guarded on `pending`: `ConfirmDialog` traps focus while a destructive
   // action awaits confirmation, and stealing focus into the search field
   // would escape that trap, leaving Tab free to walk the page behind the
-  // still-open modal.
+  // still-open modal. The palette shortcut needs the identical guard — an
+  // overlay opening on top of a focus-trapped dialog would escape it exactly
+  // the same way.
   useScopeShortcuts({
-    onSearch: useCallback(() => {
-      searchRef.current?.focus();
-      searchRef.current?.select();
-    }, []),
+    onSearch: focusSearch,
     onScope: setScope,
     onGraph: toggleGraph,
+    onPalette: useCallback(() => setPaletteOpen(true), []),
     // Only closes the graph while it is actually open — Escape has other
     // consumers (dialogs, menus, the sidebar drawer) that must keep working
     // when the graph isn't the thing on screen.
@@ -315,6 +370,85 @@ export function AppShell(): ReactElement {
     // dialog that names a note in it.
     enabled: pending === null,
   });
+
+  // `hasOpenNote`/`openNoteTrashed`/`openNotePinned` feed `CommandDeps`: the
+  // exact three flags `buildCommands` gates the note-scoped commands on.
+  // Derived from `selectedNote`, not `selectedNoteId` — the id alone can't
+  // say whether the open note is trashed or pinned.
+  const hasOpenNote = selectedNote != null;
+  const openNoteTrashed = selectedNote?.trashedAt != null;
+  const openNotePinned = selectedNote?.pinned ?? false;
+
+  // Everything `buildCommands` needs except `t`, `hasQuery`, `signedIn` and
+  // the three account handlers — those come from `CommandPaletteHost`, which
+  // alone can reach `useSessionValue`/`useSync` (see `signOutRef`'s comment
+  // above and `ExportProgressBar` below for the identical constraint).
+  // Memoised because it feeds `buildCommands`, which runs on every keystroke
+  // typed into the palette.
+  const paletteBaseDeps = useMemo(
+    () => ({
+      t,
+      hasOpenNote,
+      openNoteTrashed,
+      openNotePinned,
+      onScope: setScope,
+      onOpenGraph: toggleGraph,
+      onFocusSearch: focusSearch,
+      onNewNote: () => void handleCreate(),
+      onDuplicateNote: () => {
+        if (selectedNote != null) void handleDuplicate(selectedNote.id);
+      },
+      onTogglePin: () => {
+        if (selectedNote != null) void handleTogglePin(selectedNote.id, !selectedNote.pinned);
+      },
+      // Sets `pending` rather than trashing directly — every destructive
+      // palette command routes through the confirm dialog, unlike the note
+      // list's own trash button.
+      onTrashNote: () => {
+        if (selectedNoteId !== null) setPending({ kind: 'trash', id: selectedNoteId });
+      },
+      onRestoreNote: () => {
+        if (selectedNote != null) void handleRestore(selectedNote.id);
+      },
+      onEmptyTrash: () => setPending({ kind: 'empty' }),
+      onExport: (format: ExportFormat) => exportRef.current?.export(format),
+      onSetTheme: themeControl.setChoice,
+      onSetPreviewSize: setPreviewSize,
+      onSetOrder: setOrder,
+      onToggleHideSubTagNotes: () => setHideSubTagNotes(!hideSubTagNotes),
+    }),
+    [
+      t,
+      hasOpenNote,
+      openNoteTrashed,
+      openNotePinned,
+      focusSearch,
+      toggleGraph,
+      handleCreate,
+      selectedNote,
+      handleDuplicate,
+      handleTogglePin,
+      selectedNoteId,
+      handleRestore,
+      themeControl.setChoice,
+      setPreviewSize,
+      setOrder,
+      hideSubTagNotes,
+      setHideSubTagNotes,
+    ],
+  );
+
+  // The title becomes an H1 line, matching how a note created from the title
+  // bar of an export or a wikilink starts. The selection follows, same as
+  // every other note-creating action in this file.
+  const createNoteTitled = useCallback(
+    async (title: string) => {
+      const created = await notes.create(`# ${title}\n\n`);
+      select(created.id);
+      setView('notes');
+    },
+    [select],
+  );
 
   const mode = useLayoutMode();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -350,9 +484,15 @@ export function AppShell(): ReactElement {
 
   const confirmPending = useCallback(async () => {
     if (pending === null) return;
+    const current = pending;
     setPending(null);
-    if (pending.kind === 'purge') await notes.purge(pending.id);
-    else await notes.emptyTrash();
+    if (current.kind === 'purge') await notes.purge(current.id);
+    else if (current.kind === 'empty') await notes.emptyTrash();
+    else if (current.kind === 'trash') await notes.trash(current.id);
+    // `signOutRef.current` is `session.signOut`, kept live by
+    // `CommandPaletteHost` — see its declaration above for why a ref, not a
+    // direct call, is what reaches it from here.
+    else await signOutRef.current();
   }, [pending]);
 
   return (
@@ -523,6 +663,7 @@ export function AppShell(): ReactElement {
                     onActivateTag={handleActivateTag}
                     onActivateLink={handleActivateLink}
                     onOpenNote={select}
+                    exportRef={exportRef}
                   />
                 )}
               </Pane>
@@ -541,23 +682,52 @@ export function AppShell(): ReactElement {
               />
             )}
 
+            <CommandPaletteHost
+              open={paletteOpen}
+              onClose={() => setPaletteOpen(false)}
+              onOpenNote={(id) => {
+                select(id);
+                setView('notes');
+              }}
+              onCreateNote={(title) => void createNoteTitled(title)}
+              baseDeps={paletteBaseDeps}
+              onRequestSignOut={() => setPending({ kind: 'signOut' })}
+              signOutRef={signOutRef}
+            />
+
             <ConfirmDialog
               open={pending !== null}
               destructive
               title={
                 pending?.kind === 'empty'
                   ? t('confirm.emptyTrash.title')
-                  : t('confirm.deleteForever.title')
+                  : pending?.kind === 'trash'
+                    ? t('confirm.trashNote.title')
+                    : pending?.kind === 'signOut'
+                      ? t('account.signOut.title')
+                      : t('confirm.deleteForever.title')
               }
               body={
                 pending?.kind === 'empty'
                   ? t('confirm.emptyTrash.body')
-                  : t('confirm.deleteForever.body')
+                  : pending?.kind === 'trash'
+                    ? t('confirm.trashNote.body')
+                    : pending?.kind === 'signOut'
+                      ? t('account.signOut.body')
+                      : t('confirm.deleteForever.body')
               }
               confirmLabel={
-                pending?.kind === 'empty' ? t('noteList.emptyTrash') : t('noteList.deleteForever')
+                pending?.kind === 'empty'
+                  ? t('noteList.emptyTrash')
+                  : pending?.kind === 'trash'
+                    ? t('noteList.trash')
+                    : pending?.kind === 'signOut'
+                      ? t('account.signOut.confirm')
+                      : t('noteList.deleteForever')
               }
-              cancelLabel={t('confirm.cancel')}
+              cancelLabel={
+                pending?.kind === 'signOut' ? t('account.signOut.cancel') : t('confirm.cancel')
+              }
               onConfirm={() => void confirmPending()}
               onCancel={() => setPending(null)}
             />
@@ -577,4 +747,74 @@ function ExportProgressBar(): ReactElement {
   const t = useT();
   const { pending } = useExportProgress();
   return <ProgressBar label={t('export.progress.label')} active={pending} />;
+}
+
+interface CommandPaletteHostProps {
+  open: boolean;
+  onClose: () => void;
+  onOpenNote: (id: string) => void;
+  onCreateNote: (title: string) => void;
+  /** Everything `buildCommands` needs except `signedIn` and the three account handlers. */
+  baseDeps: Omit<CommandDeps, 'hasQuery' | 'signedIn' | 'onSignIn' | 'onSignOut' | 'onSyncNow'>;
+  /** Routes the destructive sign-out command through `AppShell`'s own confirm dialog. */
+  onRequestSignOut: () => void;
+  /** Kept live with `session.signOut`, for `AppShell.confirmPending` to call once confirmed. */
+  signOutRef: RefObject<() => Promise<void>>;
+}
+
+/**
+ * Split out for the identical reason `ExportProgressBar` is: `useSessionValue`
+ * and `useSync` can only be called by a component INSIDE `SessionProvider`'s
+ * own subtree, and `AppShell` is that provider's ancestor, not its
+ * descendant.
+ *
+ * Always mounted, never gated on `open` — unlike `CommandPalette` itself,
+ * which already returns `null` while closed. Keeping this host mounted keeps
+ * `signOutRef` current even while the palette is closed: choosing "Sign out"
+ * closes the palette immediately (`CommandPalette.choose` calls `onClose`)
+ * but leaves the confirm dialog open, and that confirm can be answered long
+ * after this host would otherwise have unmounted.
+ */
+function CommandPaletteHost({
+  open,
+  onClose,
+  onOpenNote,
+  onCreateNote,
+  baseDeps,
+  onRequestSignOut,
+  signOutRef,
+}: CommandPaletteHostProps): ReactElement | null {
+  const session = useSessionValue();
+  const sync = useSync(session.state);
+  const signedIn = session.state.status === 'signedIn';
+
+  // Assigned during render, not in an effect: the ref only needs to hold the
+  // LATEST function by the time it is read (from `confirmPending`, after the
+  // user answers a confirm dialog), never to react to the assignment itself.
+  signOutRef.current = session.signOut;
+
+  const deps = useMemo<Omit<CommandDeps, 'hasQuery'>>(
+    () => ({
+      ...baseDeps,
+      signedIn,
+      onSignIn: session.signIn,
+      onSignOut: onRequestSignOut,
+      onSyncNow: sync.syncNow,
+    }),
+    [baseDeps, signedIn, session.signIn, onRequestSignOut, sync.syncNow],
+  );
+
+  if (!open) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <CommandPalette
+        open
+        onClose={onClose}
+        deps={deps}
+        onOpenNote={onOpenNote}
+        onCreateNote={onCreateNote}
+      />
+    </Suspense>
+  );
 }

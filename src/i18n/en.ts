@@ -83,6 +83,8 @@ export const en = {
   'confirm.emptyTrash.title': 'Empty the trash?',
   'confirm.emptyTrash.body':
     'Every note in the trash will be removed permanently. bear-web keeps no copy anywhere else, so this cannot be undone.',
+  'confirm.trashNote.title': 'Move this note to the trash?',
+  'confirm.trashNote.body': 'You can restore it from the trash later.',
 
   'trash.empty.title': 'Trash is empty',
   'trash.empty.body': 'Notes you delete appear here until you remove them for good.',

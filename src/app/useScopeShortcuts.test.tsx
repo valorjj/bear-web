@@ -14,6 +14,7 @@ function mount(overrides: Partial<Parameters<typeof useScopeShortcuts>[0]> = {})
     onScope: vi.fn(),
     onSearch: vi.fn(),
     onGraph: vi.fn(),
+    onPalette: vi.fn(),
     onEscape: vi.fn(),
     enabled: true,
     ...overrides,
@@ -143,6 +144,23 @@ describe('useScopeShortcuts', () => {
     press({ code: 'Escape', key: 'Escape' });
 
     expect(onEscape).not.toHaveBeenCalled();
+  });
+
+  it('opens the palette on Mod+K', () => {
+    const { onPalette } = mount();
+
+    press({ code: 'KeyK', key: 'k', metaKey: true });
+
+    expect(onPalette).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves Mod+Shift+K and Mod+Alt+K alone', () => {
+    const { onPalette } = mount();
+
+    press({ code: 'KeyK', key: 'k', metaKey: true, shiftKey: true });
+    press({ code: 'KeyK', key: 'k', metaKey: true, altKey: true });
+
+    expect(onPalette).not.toHaveBeenCalled();
   });
 
   it('detaches its listener on unmount', () => {

@@ -17,6 +17,8 @@ export interface ScopeShortcutHandlers {
   onSearch: () => void;
   /** Toggles L3's graph surface. */
   onGraph: () => void;
+  /** Opens L4's command palette. */
+  onPalette: () => void;
   /**
    * Closes whatever this handler's caller considers "the current overlay" —
    * today, only the graph (`AppShell` wires it to `closeGraph`, and only
@@ -64,6 +66,10 @@ export interface ScopeShortcutHandlers {
  *
  *   grep -rEn "Mod-Shift-G|Mod-Alt-G|Mod-Alt-\$\{" node_modules/@tiptap
  *
+ * `⌘K` (L4's command palette) was verified unbound the same way:
+ *
+ *   grep -rEn "Mod-k|Mod-Alt-k|Mod-Alt-\$\{" node_modules/@tiptap
+ *
  * Matching is on `event.code`, never `event.key`: with Shift held, `key` for
  * the 1 key is `'!'` on a US layout and shifts again under 두벌식. `code` is
  * the physical key regardless of layout or modifier.
@@ -72,6 +78,7 @@ export function useScopeShortcuts({
   onScope,
   onSearch,
   onGraph,
+  onPalette,
   onEscape,
   enabled = true,
 }: ScopeShortcutHandlers): void {
@@ -95,6 +102,14 @@ export function useScopeShortcuts({
         return;
       }
 
+      // Same bare-`Mod`-chord shape as `KeyF` above. Firefox binds Cmd/Ctrl+K
+      // to its own search bar; preventDefault stops that before it fires.
+      if (event.code === 'KeyK' && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        onPalette();
+        return;
+      }
+
       // Alt is REJECTED rather than merely unmatched: `⌥⇧⌘1` must not fire
       // this and a heading toggle both, which is the collision the whole
       // choice of modifier avoids.
@@ -115,5 +130,5 @@ export function useScopeShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onScope, onSearch, onGraph, onEscape, enabled]);
+  }, [onScope, onSearch, onGraph, onPalette, onEscape, enabled]);
 }

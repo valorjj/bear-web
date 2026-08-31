@@ -1,5 +1,6 @@
 import type { ThemeChoice } from '@/app/theme';
 import type { NoteOrder } from '@/data';
+import type { ExportFormat } from '@/features/export';
 import { SMART_LIST_IDS, smartScope, type NoteScope, type PreviewSize } from '@/features/notes';
 import type { TranslationKey } from '@/i18n';
 import { THEMES } from '@/styles/themes';
@@ -44,7 +45,14 @@ export interface CommandDeps {
   onTrashNote: () => void;
   onRestoreNote: () => void;
   onEmptyTrash: () => void;
-  onExport: (format: 'markdown' | 'html' | 'pdf') => void;
+  // `'md'`, not `'markdown'`: this must match `ExportFormat`
+  // (`src/features/export/exportNote.ts`) exactly, because Task 5 wires this
+  // straight to `NoteEditor`'s real exporter — no re-mapping in between. A
+  // divergent literal here compiled fine in isolation (nothing before Task 5
+  // called this with the real type) and would have silently exported
+  // nothing at all once wired up: `exportNote`'s `MIME` lookup and its format
+  // switch are both keyed on `ExportFormat`'s exact strings.
+  onExport: (format: ExportFormat) => void;
   onSetTheme: (choice: ThemeChoice) => void;
   onSetPreviewSize: (size: PreviewSize) => void;
   onSetOrder: (order: NoteOrder) => void;
@@ -158,7 +166,7 @@ export function buildCommands(deps: CommandDeps): Command[] {
       id: 'note.exportMarkdown',
       group: 'note',
       label: t('palette.command.exportMarkdown'),
-      run: () => deps.onExport('markdown'),
+      run: () => deps.onExport('md'),
     });
 
     commands.push({

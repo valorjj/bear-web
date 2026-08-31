@@ -1,4 +1,4 @@
-import { Fragment, type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type ReactElement, useEffect, useMemo, useState } from 'react';
 
 import { notes as notesRepo, type TitledNote } from '@/data';
 import { useT } from '@/i18n';
@@ -50,7 +50,6 @@ export function CommandPalette({
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
   const [noteIndex, setNoteIndex] = useState<TitledNote[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // A snapshot taken when the palette opens, not a live subscription: it is
   // open for seconds, and a list reordering under the cursor mid-keystroke is
@@ -142,7 +141,11 @@ export function CommandPalette({
   return (
     <Dialog open onClose={onClose} label={t('palette.label')} className="w-full max-w-xl p-0">
       <input
-        ref={inputRef}
+        // No `ref` needed: `Dialog` already focuses the first focusable
+        // element inside it on open (`panelRef.current?.querySelector(FOCUSABLE)`),
+        // which is this input — `autoFocus` below is what makes THAT visible
+        // to a reader of this file without following it into `Dialog.tsx`,
+        // not a second, competing focus mechanism.
         autoFocus
         role="combobox"
         aria-expanded="true"

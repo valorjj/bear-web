@@ -85,6 +85,8 @@ export const ko: Record<TranslationKey, string> = {
   'confirm.emptyTrash.title': '휴지통을 비울까요?',
   'confirm.emptyTrash.body':
     '휴지통의 모든 메모가 영구적으로 삭제됩니다. bear-web은 다른 어디에도 사본을 두지 않으므로 되돌릴 수 없습니다.',
+  'confirm.trashNote.title': '이 메모를 휴지통으로 옮길까요?',
+  'confirm.trashNote.body': '나중에 휴지통에서 복원할 수 있습니다.',
 
   'trash.empty.title': '휴지통이 비어 있습니다',
   'trash.empty.body': '삭제한 메모는 완전히 지우기 전까지 여기에 있습니다.',

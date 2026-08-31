@@ -68,6 +68,17 @@ export interface NoteEditorProps {
    * a second, parallel ref living only in test code.
    */
   handleRef?: RefObject<RichEditorHandle | null>;
+  /**
+   * Exposes `handleExport` to a caller outside this component, for L4's
+   * command palette: `AppShell` has no other way to reach it. Export reads
+   * the LIVE editor text (`docs/rulings/export.md`), which lives only inside
+   * this component via `handleRef` — there is no export path that does not
+   * go through here. Kept live for as long as this note's `NoteEditor` is
+   * mounted; a caller reading it while no note is open (`hasOpenNote` false
+   * in `CommandDeps`, which gates whether the palette even offers an export
+   * command) would find it `null`.
+   */
+  exportRef?: RefObject<{ export: (format: ExportFormat) => void } | null>;
 }
 
 /**
@@ -96,6 +107,7 @@ export function NoteEditor({
   onActivateLink,
   onOpenNote,
   handleRef: externalHandleRef,
+  exportRef,
 }: NoteEditorProps): ReactElement {
   const t = useT();
 
@@ -407,6 +419,17 @@ export function NoteEditor({
     },
     [runExport, note.text, note.updatedAt],
   );
+
+  // Kept live for exactly as long as this note's editor is mounted, and
+  // cleared on unmount — a stale `export` for a note that is no longer open
+  // must not be callable through a ref that outlives it.
+  useEffect(() => {
+    if (exportRef === undefined) return;
+    exportRef.current = { export: handleExport };
+    return () => {
+      exportRef.current = null;
+    };
+  }, [exportRef, handleExport]);
 
   return (
     <div className="flex h-full flex-col">

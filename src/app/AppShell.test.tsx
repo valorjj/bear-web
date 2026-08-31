@@ -1268,3 +1268,20 @@ describe('phone screens', () => {
     expect(screen.getByRole('button', { name: /Groceries/ })).toBeInTheDocument();
   });
 });
+
+describe('command palette', () => {
+  it('routes a destructive palette command through the confirm dialog and mutates nothing until confirmed', async () => {
+    const note = await notes.create('# Doomed');
+    renderShell();
+    await screen.findByRole('button', { name: /Doomed/ });
+
+    fireEvent.keyDown(window, { code: 'KeyK', metaKey: true });
+    await userEvent.type(await screen.findByRole('combobox'), 'empty trash');
+    await userEvent.keyboard('{Enter}');
+
+    // The dialog is up AND the data is untouched. Asserting only that a dialog
+    // appeared would pass against an implementation that deleted first.
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(await notes.get(note.id)).toBeDefined();
+  });
+});
