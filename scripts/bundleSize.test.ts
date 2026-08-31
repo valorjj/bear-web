@@ -149,8 +149,30 @@ import { describe, expect, it } from 'vitest';
  * node and its view, the reference-counted object-URL cache, the paste plugin
  * and the path contract. No dependency was added; this was all first-party
  * code.
+ *
+ * Raised from 341,350 by L4 (the `⌘K` command palette) on 2026-08-31,
+ * measured on both sides as this file's convention requires: `main`'s eager
+ * closure was **338,350 B** (the guard-fix commit above re-measured it under
+ * the manifest-walk method, unchanged from the largest-single-asset figure
+ * because `main` still has only one eager chunk) and the finished branch
+ * measures **343,411 B** (`themes-*` 230,427 + `index-*` 62,825 +
+ * `EmptyState-*` 49,791 + `rolldown-runtime` 368) — a true eager cost of
+ * **5,061 B**. `CEILING_BYTES` moves to 341,350 + 5,150 = 346,500, leaving
+ * ~3,089 B of headroom, matching the ~2.5-3 KB this file has settled on.
+ * This cost cannot be made lazy: it is ~28 translated strings across both
+ * locales plus the shell wiring (`AppShell`'s `paletteBaseDeps`, `pending`
+ * state and `ConfirmDialog` routing), and the `⌘K` shortcut listener and the
+ * `CommandDeps` object it builds must exist before the palette chunk can be
+ * asked to load at all — there is no boundary earlier than that to move
+ * behind `React.lazy`. The palette's own chunk, `CommandPalette-*.js`, is
+ * genuinely lazy and costs only 2,223 B, excluded from this closure exactly
+ * as `dynamicImports` is meant to exclude it.
+ *
+ * This is the second consecutive sub-project shaped by this ceiling (L2
+ * before it). A deliberate page-weight budget, chosen once rather than
+ * re-litigated per feature, is worth settling before L5.
  */
-const CEILING_BYTES = 341_350;
+const CEILING_BYTES = 346_500;
 
 interface ManifestChunk {
   file: string;
