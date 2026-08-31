@@ -182,6 +182,20 @@ export const en = {
   'editor.code.copy': 'Copy code',
   'editor.code.copied': 'Copied',
   'editor.code.copyFailed': 'Could not copy',
+
+  // `{name}` and `{detail}` are substituted BY THE CALLER — `useT()` takes no
+  // parameters in this project. `MermaidDiagram.ts` does the `.replace`.
+  'editor.diagram.label': 'Diagram: {name}',
+  'editor.diagram.pending': 'Rendering diagram…',
+  'editor.diagram.retry': 'Render diagram',
+  'editor.diagram.failed': 'This diagram could not be rendered.',
+  'editor.diagram.failed.offline': 'Diagrams need a connection.',
+  'editor.diagram.failed.unauthorized': 'Sign in to render diagrams.',
+  'editor.diagram.failed.invalidSyntax': 'Mermaid could not read this diagram: {detail}',
+  'editor.diagram.failed.tooLarge': 'This diagram is too large to render.',
+  'editor.diagram.failed.rateLimited': 'Too many diagrams at once. Try again shortly.',
+  'editor.diagram.failed.unavailable': 'Diagram rendering is unavailable right now.',
+  'editor.diagram.language': 'Diagram (Mermaid)',
   'editor.toolbar.top': 'Top controls',
   'editor.toolbar.bottom': 'Formatting toolbar',
   'editor.info.show': 'Note information',

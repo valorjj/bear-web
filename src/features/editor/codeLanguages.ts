@@ -86,3 +86,18 @@ export function languageLabel(fence: string | null | undefined): string | null {
   if (!fence || fence.trim() === '') return null;
   return resolveLanguage(fence)?.label ?? fence.trim();
 }
+
+/**
+ * A fence the editor RENDERS rather than highlights.
+ *
+ * Deliberately NOT in `CODE_LANGUAGES`: that array is the single list
+ * `lowlight`'s registrations read, and `mermaid` has no highlight.js grammar —
+ * asking for one registers nothing and silently renders plain. A `mermaid`
+ * fence already round-trips today through the unknown-language echo row; this
+ * constant only gives the picker a name for it, and `MermaidDiagram.ts` a
+ * single spelling to key its node view on.
+ *
+ * Its picker label is TRANSLATED (`codeLabels.diagram`), unlike the twelve
+ * `label` fields above: "Diagram" is a common noun, not a proper one.
+ */
+export const DIAGRAM_LANGUAGE_ID = 'mermaid';

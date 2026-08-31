@@ -1557,3 +1557,102 @@
   background-color: var(--bear-cal-edge-danger);
   mask-image: var(--bear-cal-icon-danger);
 }
+
+/*
+ * L5's rendered ```mermaid fences.
+ *
+ * The whole editing/rendered switch is these two rule pairs. `is-editing`
+ * arrives as a ProseMirror NODE DECORATION (see `MermaidDiagram.ts`), which
+ * lands its class on the node view's own wrapper — so the caret moving into
+ * a diagram swaps source for picture with no re-render and no second copy of
+ * "which block is the caret in" in React state.
+ *
+ * Three further states reveal the source alongside (or instead of) the
+ * figure, and each is a real case rather than defensive styling:
+ * `empty` is a half-typed block, which would otherwise be an invisible box
+ * the user cannot click back into; `failed` puts the message beside the text
+ * the user can actually act on; `pending` leaves the source visible so the
+ * block never collapses to a blank space while a render is in flight.
+ *
+ * Expressed by OMITTING the rule, never by an overriding utility: class
+ * order does not decide the cascade here, stylesheet order does.
+ */
+.bear-mermaid > .bear-mermaid__figure {
+  display: block;
+  margin: var(--bear-para-spacing) 0;
+  text-align: center;
+}
+
+.bear-mermaid > pre {
+  display: none;
+}
+
+.bear-mermaid.is-editing > .bear-mermaid__figure,
+.bear-mermaid[data-state='empty'] > .bear-mermaid__figure {
+  display: none;
+}
+
+.bear-mermaid.is-editing > pre,
+.bear-mermaid[data-state='empty'] > pre,
+.bear-mermaid[data-state='pending'] > pre,
+.bear-mermaid[data-state='failed'] > pre {
+  display: block;
+}
+
+/* The SVG carries `var(--bear-*)` references verbatim (see
+ * `server/pdf/mermaidTheme.ts`), so it resolves against THIS page and follows
+ * a live theme switch with no re-render and no second render. */
+.bear-mermaid__figure svg {
+  max-width: 100%;
+  height: auto;
+  /* `margin-inline: auto`, NOT the parent's `text-align` — Tailwind's
+   * preflight sets `svg { display: block }`, and a block box does not centre
+   * with `text-align`. Seen only by looking at the app: it renders
+   * left-aligned in a wide column with nothing wrong anywhere else. */
+  margin-inline: auto;
+}
+
+.bear-mermaid[data-state='pending'] > .bear-mermaid__figure {
+  color: var(--bear-muted);
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-sm);
+}
+
+.bear-mermaid[data-state='failed'] > .bear-mermaid__figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  border: var(--bear-border-width) solid var(--bear-border);
+  border-radius: var(--bear-radius-md);
+  background: var(--bear-surface);
+  text-align: left;
+}
+
+.bear-mermaid__message {
+  margin: 0;
+  color: var(--bear-danger);
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-sm);
+}
+
+.bear-mermaid__retry {
+  /* 44px tall, because J2a's touch-target rule applies to every new control
+   * rather than only the ones a phone sees. The visible chrome is smaller
+   * than the target; the padding carries the difference. */
+  min-height: var(--bear-touch-target);
+  padding: 0 12px;
+  border: var(--bear-border-width) solid var(--bear-border);
+  border-radius: var(--bear-radius-sm);
+  background: var(--bear-bg);
+  color: var(--bear-text);
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-sm);
+  font-weight: var(--bear-weight-ui);
+  cursor: pointer;
+}
+
+.bear-mermaid__retry:hover {
+  background: var(--bear-hover);
+}
