@@ -213,15 +213,33 @@ test.describe('graph', () => {
     await openGraph(page);
     await expect(canvas(page)).toBeVisible();
 
+    // A settled signal alone is not enough under contention: the canvas's
+    // accessible name can match before every node has actually painted (seen
+    // under 5-parallel-worker load, immediately after the 450-node worker
+    // test — flaked once, passed in isolation and on a full-file rerun).
+    // Wait for the real, deterministic node count first — an auto-retrying
+    // assertion, not a fixed sleep — so what follows reads a DOM the layout
+    // has actually finished with.
+    await expect(page.locator('[data-node]')).toHaveCount(11);
+
     // At rest (scale 1): the fixed corpus's highest degree is 1, well under
     // `LABEL_DEGREE_THRESHOLD` (3), and nothing is hovered — so no node is
-    // labelled yet.
-    const atRest = await page.locator('[data-label]').count();
+    // labelled yet. Asserted with `toHaveCount`, which retries, rather than a
+    // one-shot `.count()` read straight after the state change above.
+    await expect(page.locator('[data-label]')).toHaveCount(0);
+    const atRest = 0;
 
     // 'Zoom in' is 1.25x per click, so one click alone crosses 1.2.
     await page.getByRole('button', { name: 'Zoom in' }).click();
 
-    const afterZoom = await page.locator('[data-label]').count();
+    // Same reasoning again, on the other side of the state change: wait for
+    // the deterministic post-zoom count (every node becomes labelled once
+    // scale crosses `LABEL_SCALE_THRESHOLD`) rather than reading a snapshot
+    // the instant the click handler returns, before React has necessarily
+    // re-rendered under load.
+    await expect(page.locator('[data-label]')).toHaveCount(11);
+    const afterZoom = 11;
+
     expect(afterZoom).toBeGreaterThan(atRest);
   });
 });
