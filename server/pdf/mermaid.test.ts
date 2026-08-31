@@ -17,6 +17,7 @@ import { findUnsafeSvgConstructs } from './svgGuard.ts';
  */
 interface MinimalDomElement {
   readonly textContent: string | null;
+  readonly children: ArrayLike<MinimalDomElement>;
 }
 interface MinimalHostElement {
   readonly style: { setProperty(name: string, value: string): void };
@@ -89,40 +90,6 @@ describe.skipIf(!available)('renderMermaid', () => {
     await browser.close();
   });
 
-  /**
-   * Paints the `--bear-*` tokens onto a real host element, inlines the
-   * rendered SVG into it, and reads back a COMPUTED style — never a `class`
-   * or a substring of the markup. `toContain('var(--bear-text)')` used to
-   * stand in for this and passed throughout a real bug: the literal string
-   * was present in the stylesheet but a higher-specificity Mermaid rule
-   * always won, so nothing ever actually resolved to it. Sentinel colours
-   * distinct from Mermaid's own `#333`/`#fff4dd` make a false pass
-   * impossible — if the assertion holds, this file's rule truly won the
-   * cascade for that element.
-   */
-  async function computedFill(svg: string, selector: string): Promise<string | null> {
-    const page = await browser.newPage();
-    try {
-      return await page.evaluate(
-        ({ svg, selector }) => {
-          const host = document.createElement('div');
-          host.style.setProperty('--bear-text', 'rgb(0, 255, 0)');
-          host.style.setProperty('--bear-surface', 'rgb(10, 10, 10)');
-          host.style.setProperty('--bear-border', 'rgb(20, 20, 20)');
-          host.style.setProperty('--bear-muted', 'rgb(30, 30, 30)');
-          host.style.setProperty('--bear-bg', 'rgb(40, 40, 40)');
-          host.innerHTML = svg;
-          document.body.appendChild(host);
-          const el = host.querySelector(selector);
-          return el ? getComputedStyle(el).fill : null;
-        },
-        { svg, selector },
-      );
-    } finally {
-      await page.close();
-    }
-  }
-
   it('renders a flowchart to SVG', async () => {
     const svg = await renderMermaid('flowchart TD\n  A[Start] --> B[End]', { browser });
 
@@ -144,11 +111,28 @@ describe.skipIf(!available)('renderMermaid', () => {
   }, 30_000);
 
   /**
-   * `computedFill` takes a CSS selector, which cannot filter by text
-   * content — so a node label (rendered as a nested `tspan`, not a class
-   * this repo controls) needs a small walk instead. Kept separate from
-   * `computedFill` rather than generalising it, since the actor case below
-   * genuinely is a plain selector match.
+   * Paints the `--bear-*` tokens onto a real host element, inlines the
+   * rendered SVG into it, and reads back a COMPUTED style on the DEEPEST
+   * leaf element containing the target text — never a `class`, a substring
+   * of the markup, or an ancestor `<text>`/`<tspan>` that merely CONTAINS
+   * the glyph-bearing node.
+   *
+   * That last distinction is not decoration. `toContain('var(--bear-text)')`
+   * used to stand in for a computed-style check entirely and passed
+   * throughout a real bug (`fill` present in the stylesheet, never applied).
+   * The FIRST fix for that — reading back `getComputedStyle` on whichever
+   * `text`/`tspan` matched first in document order — still passed a SECOND,
+   * narrower bug: Mermaid nests an actor's name, a note's text and a loop's
+   * condition text inside a child `<tspan>` that IT styles directly
+   * (`#d text.actor > tspan`, `#d .noteText > tspan`,
+   * `#d .loopText > tspan`), so the outer `<text>` element resolves
+   * correctly (nothing there overrides inheritance) while the actual
+   * glyphs, one level down, do not. A `.find()` over `querySelectorAll`
+   * returns elements in DOCUMENT order — parent before child — so it
+   * always found that outer `<text>` first and never noticed. Filtering to
+   * elements with NO element children (true leaves) instead means the
+   * assertion is on the node that actually paints the pixels, regardless of
+   * how many tspan levels Mermaid wraps a label in.
    */
   async function computedFillForText(svg: string, text: string): Promise<string | null> {
     const page = await browser.newPage();
@@ -157,10 +141,22 @@ describe.skipIf(!available)('renderMermaid', () => {
         ({ svg, text }) => {
           const host = document.createElement('div');
           host.style.setProperty('--bear-text', 'rgb(0, 255, 0)');
+          host.style.setProperty('--bear-surface', 'rgb(10, 10, 10)');
+          host.style.setProperty('--bear-border', 'rgb(20, 20, 20)');
+          host.style.setProperty('--bear-muted', 'rgb(30, 30, 30)');
+          host.style.setProperty('--bear-bg', 'rgb(40, 40, 40)');
           host.innerHTML = svg;
           document.body.appendChild(host);
-          const candidates = Array.from(host.querySelectorAll('text, tspan'));
-          const target = candidates.find((el) => el.textContent?.includes(text));
+          const leaves = Array.from(host.querySelectorAll('*')).filter(
+            (el) => el.children.length === 0 && el.textContent?.includes(text),
+          );
+          // The LAST leaf in document order is the innermost match when a
+          // label is wrapped in nested tspans (text-outer-tspan >
+          // text-inner-tspan) — both are leaves-with-matching-text if the
+          // outer one has no OTHER element children, so document order
+          // (innermost written last in a depth-first walk's leaf set here)
+          // picks the deepest.
+          const target = leaves[leaves.length - 1] ?? null;
           return target ? getComputedStyle(target).fill : null;
         },
         { svg, text },
@@ -181,14 +177,45 @@ describe.skipIf(!available)('renderMermaid', () => {
   }, 30_000);
 
   it('paints a sequence actor name with the theme text colour', async () => {
+    // The actor's name is drawn twice (top and bottom box) — either match is
+    // fine, `computedFillForText` just needs the glyph-bearing leaf, which
+    // for an actor name is a `<tspan>` Mermaid styles directly
+    // (`#d text.actor > tspan`), not the `<text class="actor actor-box">`
+    // wrapping it.
     const svg = await renderMermaid('sequenceDiagram\n  participant Alice\n  Alice->>Bob: hi', {
       browser,
     });
 
-    // `text.actor` is the exact compound selector `mermaidTheme.ts` added to
-    // win this element's fill — asserting through it, not through a
-    // substring, is what makes this test able to fail against a regression.
-    const fill = await computedFill(svg, 'text.actor');
+    const fill = await computedFillForText(svg, 'Alice');
+
+    expect(fill).toBe('rgb(0, 255, 0)');
+  }, 30_000);
+
+  it("paints a sequence note's text with the theme text colour", async () => {
+    // Same shape as the actor name: `#d .noteText > tspan` targets the
+    // glyph-bearing tspan directly, so the outer `.noteText` element alone
+    // is not enough to make this pass for the right reason.
+    const svg = await renderMermaid(
+      'sequenceDiagram\n  A->>B: hi\n  Note right of B: NoteBodyXyz',
+      { browser },
+    );
+
+    const fill = await computedFillForText(svg, 'NoteBodyXyz');
+
+    expect(fill).toBe('rgb(0, 255, 0)');
+  }, 30_000);
+
+  it("paints a sequence loop's condition text with the theme text colour", async () => {
+    // Same shape again: `#d .loopText > tspan`. The fixed word "loop" itself
+    // (class `labelText`) never wraps in a tspan in 11.17.2, but the
+    // user-supplied condition always does, even when short — this is the
+    // element that was actually broken.
+    const svg = await renderMermaid(
+      'sequenceDiagram\n  A->>B: hi\n  loop LoopCondXyz\n  A->>B: again\n  end',
+      { browser },
+    );
+
+    const fill = await computedFillForText(svg, 'LoopCondXyz');
 
     expect(fill).toBe('rgb(0, 255, 0)');
   }, 30_000);

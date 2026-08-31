@@ -64,9 +64,23 @@
  *   specificity up to par (or above, for `text.actor`'s compound form), and
  *   — because this stylesheet is appended AFTER Mermaid's own — a tied
  *   specificity then resolves by source order, in this file's favour.
- *   Re-verified by `getComputedStyle` after adding them: every element that
- *   was `#333` (or `#fff4dd` for the actor) now resolves to the theme's
- *   `--bear-text`, across all six types.
+ * - `fill` is an inherited SVG property, so styling a `<text>` element is
+ *   normally enough — its child `<tspan>` glyphs inherit the value. THREE
+ *   elements break that inheritance: Mermaid's own stylesheet carries
+ *   `#d text.actor > tspan`, `#d .noteText > tspan` and
+ *   `#d .loopText > tspan` rules at specificity (1,1,2), which is HIGHER
+ *   than either `text.actor` (1,1,1) or the bare `tspan` (1,0,1) this file
+ *   already had — so the actor name, a sequence note's text and a loop's
+ *   condition text all still computed to `#333` (`#fff4dd` for the actor)
+ *   even after the fix above, because the glyphs live in the tspan, not the
+ *   text element the earlier fix targeted. Checked and NOT needed for
+ *   `.labelText` (the fixed "loop"/"alt"/"opt" word never gets a tspan, even
+ *   when a long condition on the SAME diagram wraps its own text into one —
+ *   verified by rendering both) or `.sectionTitle` (Gantt-only, outside the
+ *   six themed types, verified absent from all of them). Re-verified by
+ *   `getComputedStyle` after adding these three: every element that was
+ *   `#333`/`#fff4dd` now resolves to the theme's `--bear-text`, across all
+ *   six types AND sequence's note/loop constructs specifically.
  */
 export const MERMAID_THEME_CSS = `
   .node rect, .node circle, .node ellipse, .node polygon, .node path,
@@ -84,7 +98,8 @@ export const MERMAID_THEME_CSS = `
   }
   text, .nodeLabel, .edgeLabel, .messageText, .loopText, .noteText,
   .titleText, .pieTitleText, .slice, .legend text, tspan,
-  .label text, .label span, text.actor {
+  .label text, .label span, text.actor,
+  text.actor > tspan, .noteText > tspan, .loopText > tspan {
     fill: var(--bear-text);
     color: var(--bear-text);
   }
