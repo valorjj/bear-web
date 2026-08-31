@@ -71,16 +71,32 @@
  *   `#d .loopText > tspan` rules at specificity (1,1,2), which is HIGHER
  *   than either `text.actor` (1,1,1) or the bare `tspan` (1,0,1) this file
  *   already had — so the actor name, a sequence note's text and a loop's
- *   condition text all still computed to `#333` (`#fff4dd` for the actor)
- *   even after the fix above, because the glyphs live in the tspan, not the
- *   text element the earlier fix targeted. Checked and NOT needed for
- *   `.labelText` (the fixed "loop"/"alt"/"opt" word never gets a tspan, even
- *   when a long condition on the SAME diagram wraps its own text into one —
- *   verified by rendering both) or `.sectionTitle` (Gantt-only, outside the
- *   six themed types, verified absent from all of them). Re-verified by
- *   `getComputedStyle` after adding these three: every element that was
- *   `#333`/`#fff4dd` now resolves to the theme's `--bear-text`, across all
- *   six types AND sequence's note/loop constructs specifically.
+ *   condition text all still computed to `#333` even after the fix above,
+ *   because the glyphs live in the tspan, not the text element the earlier
+ *   fix targeted. `> tspan` checked and NOT needed for `.labelText` (the
+ *   fixed "loop"/"alt"/"opt"/"else"/"par"/"opt" keyword) — it is a childless
+ *   leaf in every construct tried, short and wrapping, so there is no tspan
+ *   for a `> tspan` rule to reach.
+ * - `.labelText` ITSELF, though, was still missing, and this was a second,
+ *   separate bug from the one above — the class wraps the keyword directly
+ *   in a leaf `<text class="labelText">`, so no tspan override is at play at
+ *   all. Mermaid's own stylesheet carries
+ *   `#d .labelText, #d .labelText > tspan { fill:#333 }` — the FIRST half,
+ *   `#d .labelText` at specificity (1,1,0), already beats this file's
+ *   generic `#d text` at (1,0,1) on its own, with no tspan involved. Missed
+ *   in the same pass that added the three `> tspan` rules above, because
+ *   that pass verified `.labelText` was a leaf and stopped there without
+ *   checking whether the class itself needed a rule too. Measured: the
+ *   word "loop" (and "alt"/"else"/"par"/"opt") computed `#333` on a
+ *   `--bear-surface` box in every construct. `.labelText` (no `> tspan`) is
+ *   now in the text rule.
+ * - `.sectionTitle` (Gantt-only, outside the six themed types) is confirmed
+ *   absent from every themed type's actual output — not merely dead syntax
+ *   in Mermaid's boilerplate, but genuinely unreachable from any diagram
+ *   this file themes. Not added.
+ * Re-verified by `getComputedStyle` after all of the above: every element
+ * that was `#333` now resolves to the theme's `--bear-text`, across all six
+ * types and sequence's actor/note/loop constructs, keyword included.
  */
 export const MERMAID_THEME_CSS = `
   .node rect, .node circle, .node ellipse, .node polygon, .node path,
@@ -98,7 +114,7 @@ export const MERMAID_THEME_CSS = `
   }
   text, .nodeLabel, .edgeLabel, .messageText, .loopText, .noteText,
   .titleText, .pieTitleText, .slice, .legend text, tspan,
-  .label text, .label span, text.actor,
+  .label text, .label span, text.actor, .labelText,
   text.actor > tspan, .noteText > tspan, .loopText > tspan {
     fill: var(--bear-text);
     color: var(--bear-text);

@@ -16,6 +16,7 @@ import { findUnsafeSvgConstructs } from './svgGuard.ts';
  * file. Minimal on purpose — just enough shape for what these callbacks use.
  */
 interface MinimalDomElement {
+  readonly tagName: string;
   readonly textContent: string | null;
   readonly children: ArrayLike<MinimalDomElement>;
 }
@@ -112,10 +113,10 @@ describe.skipIf(!available)('renderMermaid', () => {
 
   /**
    * Paints the `--bear-*` tokens onto a real host element, inlines the
-   * rendered SVG into it, and reads back a COMPUTED style on the DEEPEST
-   * leaf element containing the target text — never a `class`, a substring
-   * of the markup, or an ancestor `<text>`/`<tspan>` that merely CONTAINS
-   * the glyph-bearing node.
+   * rendered SVG into it, and reads back a COMPUTED style on the element
+   * that actually renders the target text — never a `class`, a substring of
+   * the markup, or an ancestor `<text>`/`<tspan>` that merely CONTAINS the
+   * glyph-bearing node.
    *
    * That last distinction is not decoration. `toContain('var(--bear-text)')`
    * used to stand in for a computed-style check entirely and passed
@@ -129,10 +130,23 @@ describe.skipIf(!available)('renderMermaid', () => {
    * correctly (nothing there overrides inheritance) while the actual
    * glyphs, one level down, do not. A `.find()` over `querySelectorAll`
    * returns elements in DOCUMENT order — parent before child — so it
-   * always found that outer `<text>` first and never noticed. Filtering to
-   * elements with NO element children (true leaves) instead means the
-   * assertion is on the node that actually paints the pixels, regardless of
-   * how many tspan levels Mermaid wraps a label in.
+   * always found that outer `<text>` first and never noticed.
+   *
+   * The fix is the `children.length === 0` filter, NOT picking the last
+   * match. A true leaf (zero element children) cannot contain another
+   * leaf — nesting is structurally impossible once children are excluded —
+   * so `[last]` bought nothing real; an earlier version of this comment
+   * claimed document order made the last leaf the deepest one, which is
+   * false about its own mechanism. Two non-rendering element types can
+   * still slip into a leaf set and contain the search text without ever
+   * painting a pixel: a `<title>` (SVG's tooltip text, invisible) and a
+   * `<style>` element whose CSS source happens to contain the string
+   * (`--bear-text` styling text a class named after it, say). Both are
+   * excluded from the candidate set outright — `title`/`desc`/`style`/
+   * `metadata` never render — and a genuine ambiguity among what remains
+   * (more than one rendering leaf containing the text) is a fixture
+   * problem to fix in the test source, not something to resolve
+   * positionally, so it throws rather than silently guessing.
    */
   async function computedFillForText(svg: string, text: string): Promise<string | null> {
     const page = await browser.newPage();
@@ -147,16 +161,30 @@ describe.skipIf(!available)('renderMermaid', () => {
           host.style.setProperty('--bear-bg', 'rgb(40, 40, 40)');
           host.innerHTML = svg;
           document.body.appendChild(host);
+          // Non-rendering elements can be leaves too (no element children)
+          // and can contain the search text without painting anything —
+          // excluded outright rather than trusted to lose on some other
+          // tiebreak.
+          const NON_RENDERING = new Set(['title', 'desc', 'style', 'metadata']);
           const leaves = Array.from(host.querySelectorAll('*')).filter(
-            (el) => el.children.length === 0 && el.textContent?.includes(text),
+            (el) =>
+              el.children.length === 0 &&
+              !NON_RENDERING.has(el.tagName.toLowerCase()) &&
+              el.textContent?.includes(text),
           );
-          // The LAST leaf in document order is the innermost match when a
-          // label is wrapped in nested tspans (text-outer-tspan >
-          // text-inner-tspan) — both are leaves-with-matching-text if the
-          // outer one has no OTHER element children, so document order
-          // (innermost written last in a depth-first walk's leaf set here)
-          // picks the deepest.
-          const target = leaves[leaves.length - 1] ?? null;
+          // Leaves cannot nest, so at most one should genuinely be "the"
+          // element painting this text: prefer an exact match, and accept a
+          // substring match only when it is the SOLE candidate. More than
+          // one ambiguous candidate is a test-fixture problem (the search
+          // text is not specific enough), not something to pick between
+          // positionally.
+          const exact = leaves.find((el) => el.textContent === text);
+          const target = exact ?? (leaves.length === 1 ? leaves[0] : null);
+          if (target === null && leaves.length > 1) {
+            throw new Error(
+              `computedFillForText: ambiguous match for ${JSON.stringify(text)} — ${leaves.length} candidate leaves, none an exact match`,
+            );
+          }
           return target ? getComputedStyle(target).fill : null;
         },
         { svg, text },
@@ -216,6 +244,24 @@ describe.skipIf(!available)('renderMermaid', () => {
     );
 
     const fill = await computedFillForText(svg, 'LoopCondXyz');
+
+    expect(fill).toBe('rgb(0, 255, 0)');
+  }, 30_000);
+
+  it('paints the sequence loop keyword itself with the theme text colour', async () => {
+    // A DIFFERENT bug from the one above, on a different element:
+    // `#d .labelText, #d .labelText > tspan { fill:#333 }` — the
+    // `.labelText` half alone, at specificity (1,1,0), beats this file's
+    // generic `text` at (0,0,1), with no tspan involved at all (`labelText`
+    // is a leaf here, never wrapped). The fixed keyword itself ("loop",
+    // "alt", "par", "opt") was still `#333` even after `.loopText > tspan`
+    // fixed the user-supplied condition text next to it.
+    const svg = await renderMermaid(
+      'sequenceDiagram\n  A->>B: hi\n  loop cond\n  A->>B: again\n  end',
+      { browser },
+    );
+
+    const fill = await computedFillForText(svg, 'loop');
 
     expect(fill).toBe('rgb(0, 255, 0)');
   }, 30_000);
