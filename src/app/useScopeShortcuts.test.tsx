@@ -14,6 +14,7 @@ function mount(overrides: Partial<Parameters<typeof useScopeShortcuts>[0]> = {})
     onScope: vi.fn(),
     onSearch: vi.fn(),
     onGraph: vi.fn(),
+    onEscape: vi.fn(),
     enabled: true,
     ...overrides,
   };
@@ -126,6 +127,22 @@ describe('useScopeShortcuts', () => {
     press({ code: 'KeyG', key: 'g', metaKey: true, shiftKey: true, altKey: true });
 
     expect(onGraph).not.toHaveBeenCalled();
+  });
+
+  it('calls onEscape on a bare Escape press, with no modifier at all', () => {
+    const { onEscape } = mount();
+
+    press({ code: 'Escape', key: 'Escape' });
+
+    expect(onEscape).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onEscape while disabled, matching every other handler', () => {
+    const { onEscape } = mount({ enabled: false });
+
+    press({ code: 'Escape', key: 'Escape' });
+
+    expect(onEscape).not.toHaveBeenCalled();
   });
 
   it('detaches its listener on unmount', () => {

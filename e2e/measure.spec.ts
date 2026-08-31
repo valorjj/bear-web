@@ -278,6 +278,19 @@ test.describe('@measure', () => {
       await measure(prose.locator('ul[data-type="taskList"] li').first(), 'editor: task item', ''),
     ];
 
+    // L3's graph REPLACES the three panes rather than sitting beside them, so
+    // this has to be measured last: opening it makes `sidebar`, `list` and
+    // `editor` above disappear for the rest of the test.
+    await page.keyboard.press('ControlOrMeta+Shift+G');
+    await expect(page.getByRole('img')).toBeVisible();
+    measurements.push(
+      await measure(
+        page.locator('header'),
+        'graph: header',
+        'Back, title, and the summary toggle. The graph is the one surface that replaces the three panes rather than sitting beside them.',
+      ),
+    );
+
     writeFileSync('docs/design/measurements.md', toMarkdown(measurements));
     writeFileSync('docs/design/measurements.json', `${JSON.stringify(measurements, null, 2)}\n`);
   });

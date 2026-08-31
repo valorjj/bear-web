@@ -186,6 +186,17 @@ for (const theme of THEMES) {
       await openNote(page, /배포 전 점검/, '되돌릴 수 없습니다');
       await blur(page);
       await shot(editor, `15-editor-callouts-${theme.name}`);
+
+      // L3's own shot: the graph, opened via the keyboard shortcut on the
+      // already-seeded corpus, and awaited until settled — the same
+      // `role="img"` with live counts in its accessible name that
+      // `e2e/graph.spec.ts` asserts against. No new test block, for the same
+      // reason M9b's callout shot has none: reopening from scratch would
+      // cost sixteen more page loads for one frame.
+      await page.keyboard.press('ControlOrMeta+Shift+G');
+      await expect(page.getByRole('img')).toBeVisible();
+      await blur(page);
+      await shot(page, `16-graph-${theme.name}`);
     });
 
     test(`exported document @shots`, async ({ page }) => {

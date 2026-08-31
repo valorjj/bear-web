@@ -446,3 +446,20 @@ A decoration, not a mark.
 | color | `rgb(36, 31, 61)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | gap | `8px` |
+
+## graph: header
+
+Back, title, and the summary toggle. The graph is the one surface that replaces the three panes rather than sitting beside them.
+
+| Property | Value |
+| --- | --- |
+| box | 1440 x 33 |
+| font-family | `"Pretendard Variable", system-ui, sans-serif` |
+| font-size | `16px` |
+| font-weight | `400` |
+| line-height | `24px` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgba(0, 0, 0, 0)` |
+| padding | `4px 8px` |
+| border-bottom-width | `1px` |
+| gap | `4px` |

@@ -18,6 +18,22 @@ export interface ScopeShortcutHandlers {
   /** Toggles L3's graph surface. */
   onGraph: () => void;
   /**
+   * Closes whatever this handler's caller considers "the current overlay" —
+   * today, only the graph (`AppShell` wires it to `closeGraph`, and only
+   * while the graph is actually open; it is a no-op otherwise). Optional so
+   * nothing else that mounts this hook has to invent a no-op.
+   *
+   * Deliberately does NOT call `event.preventDefault()`: `Escape` is also
+   * consumed by `Popover`, `Dialog`, `SearchField`, `ExportMenu`,
+   * `CalloutMenu`, `HeadingFold`, `LinkAutocomplete`, `HighlightPalette`,
+   * `HighlightMenu` and `useAnchoredMenu` — each already stops its own
+   * propagation or checks its own "am I open" state, and a preventDefault
+   * here would not stop bubbling to them anyway (this listener is on
+   * `window`, so it runs LAST, after every one of those). It exists only so
+   * `Escape` has an effect when nothing else already claimed it.
+   */
+  onEscape?: () => void;
+  /**
    * `false` while a modal is open. `ConfirmDialog` traps focus for a
    * destructive action, and both of these would escape it — the search
    * shortcut by stealing focus out of the trap, the scope shortcuts by
@@ -56,12 +72,21 @@ export function useScopeShortcuts({
   onScope,
   onSearch,
   onGraph,
+  onEscape,
   enabled = true,
 }: ScopeShortcutHandlers): void {
   useEffect(() => {
     if (!enabled) return;
 
     function onKeyDown(event: KeyboardEvent): void {
+      // Checked BEFORE the modifier guard below: `Escape` carries no
+      // modifier of its own, so the `metaKey || ctrlKey` early return that
+      // guards every other binding here would otherwise drop it entirely.
+      if (event.code === 'Escape') {
+        onEscape?.();
+        return;
+      }
+
       if (!(event.metaKey || event.ctrlKey)) return;
 
       if (event.code === 'KeyF' && !event.shiftKey && !event.altKey) {
@@ -90,5 +115,5 @@ export function useScopeShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onScope, onSearch, onGraph, enabled]);
+  }, [onScope, onSearch, onGraph, onEscape, enabled]);
 }

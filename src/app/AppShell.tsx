@@ -303,6 +303,12 @@ export function AppShell(): ReactElement {
     }, []),
     onScope: setScope,
     onGraph: toggleGraph,
+    // Only closes the graph while it is actually open — Escape has other
+    // consumers (dialogs, menus, the sidebar drawer) that must keep working
+    // when the graph isn't the thing on screen.
+    onEscape: useCallback(() => {
+      if (view === 'graph') closeGraph();
+    }, [view, closeGraph]),
     // The `pending` guard the inline handler carried, kept and widened: it
     // stopped the search shortcut escaping `ConfirmDialog`'s focus trap, and a
     // scope shortcut would be worse still — it rearranges the list behind a
