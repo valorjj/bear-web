@@ -231,22 +231,45 @@ export const StoredImage = Node.create<StoredImageOptions>({
         grip.addEventListener('pointercancel', onUp);
       });
 
-      let released = false;
+      // Single-ownership token for the ONE reference this view may end up
+      // holding on `objectUrls`' shared, ref-counted cache. Non-null exactly
+      // while a reference is held and not yet given back; `destroy()` and
+      // the async work below both check it at their own safe (synchronous,
+      // between-await) points and release it whichever of them notices the
+      // view is gone LAST — never both, and never neither.
+      //
+      // The previous design used a bare `released` boolean and called
+      // `releaseObjectUrl` from THREE places: unconditionally in `destroy()`,
+      // and again from each of two `if (released)` checks below. That
+      // double-counted whenever `acquireObjectUrl` took its CACHED branch —
+      // which increments the shared count synchronously, before this view's
+      // own `await` has a chance to yield — and `destroy()` ran in that same
+      // synchronous window (three ProseMirror node-view mount/destroy/mount
+      // cycles for the same image, all in one tick, is exactly what a fresh
+      // document parse produces): `destroy()`'s unconditional release
+      // accounted for that increment correctly, and then this view's OWN
+      // continuation, seeing `released`, released AGAIN for the same
+      // increment — driving the shared count below what any surviving
+      // holder (the note-list thumbnail, or the node view that actually
+      // survives the redraw) still needed, and revoking a `blob:` URL out
+      // from under it. That surviving view never saw its own image fail —
+      // `destroyed` was `false` for it the whole time — it simply painted a
+      // URL Chromium now reports `ERR_FILE_NOT_FOUND` for, with no error
+      // anywhere in the app's own code. Found by a genuine, reproducible
+      // race — `e2e/imageSync.spec.ts`'s second device — not by inspection.
+      let destroyed = false;
+      let heldUrl: string | null = null;
+
       void (async () => {
         // `loadImageBlob` reads locally and, on a miss, asks the server once
         // (K2). `acquireObjectUrl` already de-duplicates in-flight loads, so
         // the editor and a list row wanting the same image make ONE request.
         const url = await acquireObjectUrl(id, loadImageBlob);
 
-        // The view can be destroyed while the blob is in flight — a fast
-        // scroll does it. Releasing here would decrement a count this view no
-        // longer holds.
-        if (released) {
-          if (url !== null) releaseObjectUrl(id);
-          return;
-        }
-
         if (url === null) {
+          // A miss is never cached, so no reference was taken — nothing to
+          // release, only DOM to avoid touching on a destroyed view.
+          if (destroyed) return;
           image.remove();
           const missing = document.createElement('span');
           missing.className = 'bear-stored-image-missing';
@@ -258,7 +281,27 @@ export const StoredImage = Node.create<StoredImageOptions>({
           return;
         }
 
+        // From here this view holds exactly one reference. Recording it
+        // before either check below means `destroy()`, whenever it runs, can
+        // always tell whether there is something to give back.
+        heldUrl = url;
+
+        if (destroyed) {
+          releaseObjectUrl(id);
+          heldUrl = null;
+          return;
+        }
+
         const record = await files.get(id);
+
+        // Re-checked: `files.get` is a SECOND await, and the view can be
+        // destroyed during it exactly as it can during `acquireObjectUrl`'s.
+        if (destroyed) {
+          releaseObjectUrl(id);
+          heldUrl = null;
+          return;
+        }
+
         if (record !== undefined && record.width > 0 && record.height > 0) {
           image.width = record.width;
           image.height = record.height;
@@ -269,8 +312,11 @@ export const StoredImage = Node.create<StoredImageOptions>({
       return {
         dom,
         destroy() {
-          released = true;
-          releaseObjectUrl(id);
+          destroyed = true;
+          if (heldUrl !== null) {
+            releaseObjectUrl(id);
+            heldUrl = null;
+          }
         },
       };
     };

@@ -21,6 +21,7 @@
     "shots": "PW_HARNESS=1 playwright test --grep @shots",
     "shots:image": "PW_HARNESS=1 playwright test e2e/shots-image.spec.ts --grep @shots",
     "shots:mobile": "PW_HARNESS=1 playwright test e2e/shots-mobile.spec.ts --grep @shots",
+    "shots:mermaid": "PW_HARNESS=1 playwright test e2e/shots-mermaid.spec.ts",
     "shots:pdf": "PW_HARNESS=1 playwright test e2e/shots-pdf.spec.ts",
     "measure": "PW_HARNESS=1 playwright test --grep @measure",
     "measure:check": "npm run measure && git diff --exit-code docs/design/measurements.md docs/design/measurements.json",

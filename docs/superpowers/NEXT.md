@@ -1,7 +1,8 @@
 # Next up
 
 Written 2026-08-20 after M8 + M9a shipped; last reconciled against
-`CLAUDE.md` on **2026-08-31**, when L4 (command palette) shipped.
+`CLAUDE.md` on **2026-09-01**, when L5 (server-rendered Mermaid diagrams)
+shipped.
 
 This file exists so a fresh session can resume without re-deriving decisions
 already made. Delete a section once its sub-project has a real spec in
@@ -18,15 +19,14 @@ believe the table and fix this file.
 ## Where things stand
 
 - `main` carries everything in `CLAUDE.md`'s status table marked complete —
-  through **L4 (command palette), 2026-08-31**. Live on Pages.
-- 2350 unit tests, 205 end-to-end. All six gates green.
+  through **L5 (server-rendered Mermaid diagrams), 2026-09-01**. Live on Pages.
+- 2444 unit tests, 208 end-to-end. All six gates green.
 - Every sub-project branch named in this file is merged and deleted.
 
-**What is actually left, as of 2026-08-31:**
+**What is actually left, as of 2026-09-01:**
 
 | Open | State |
 | --- | --- |
-| **L5 Mermaid, server-rendered** | next — queued, unspecced — see the measurement below |
 | **J4 platform chrome** | not started — the last of the four |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
 
@@ -51,15 +51,17 @@ first. So is L3.
   makes everything else discoverable. It was assembly, not invention:
   `useScopeShortcuts.ts` owns the app-level `⌘K` key, `Dialog.tsx` traps
   focus, `matchCommands.ts` ranks. See its own section below.
-- **L5, Mermaid — server-rendered, and this is measured, not assumed.** Spiked
-  on a throwaway branch on 2026-08-31 and fully reverted. Lazy-loading works
-  cleanly: the main bundle does not move. But **one simple flowchart costs
-  208 KB gzipped across 27 requests**, against a whole-app bundle of ~334 KB —
-  62% of the application for one diagram. All diagram types together are
-  947 KB across 94 chunks, so eager is disqualified outright, and 111 packages
-  / 84 MB land in `node_modules`. The way out exists only because G and K2 were
-  built: render to SVG in the **containerised Chromium already used for PDF
-  export**, cache it content-hashed like an image, and the reader pays a few KB.
+- **L5, Mermaid — SHIPPED 2026-09-01, server-rendered as planned.** Spiked on
+  a throwaway branch on 2026-08-31 and fully reverted before the real build:
+  lazy-loading a client-side Mermaid worked cleanly, but **one simple
+  flowchart cost 208 KB gzipped across 27 requests**, against a whole-app
+  bundle of ~334 KB — 62% of the application for one diagram. All diagram
+  types together were 947 KB across 94 chunks, so eager was disqualified
+  outright, and 111 packages / 84 MB would have landed in `node_modules`. The
+  way out existed only because G and K2 were already built: render to SVG in
+  the **containerised Chromium already used for PDF export**, cache it
+  content-hashed like an image, and the reader pays a few KB. See its own
+  section below for what shipped and what the build corrected.
 
 **Cut, with reasons, so they are not re-proposed:**
 
@@ -682,6 +684,135 @@ affected: `onSetPreviewSize` takes a bare value with no flag to preserve.
 
 Do this before adding any further palette command that writes a compound
 setting, because the same shape will recur.
+
+### L5. Server-rendered Mermaid diagrams — **SHIPPED 2026-09-01**
+
+Spec: `docs/superpowers/specs/2026-08-31-l5-mermaid-design.md`. Plan:
+`docs/superpowers/plans/2026-08-31-l5-mermaid.md`. Ledger:
+`.superpowers/sdd/2026-08-31-l5-mermaid/progress.md`.
+
+` ```mermaid ` fences render as diagrams. The client never runs Mermaid: the
+containerised Chromium that already renders PDF exports gained a
+`/render/mermaid` endpoint, the API gained an authenticated `POST /diagram`
+(60/min per session, sitting in front of a renderer reachable only from
+`127.0.0.1`), and the client hashes the source, caches the sanitized SVG in
+Dexie (schema version 6), shows it in a `codeBlock` node view that swaps to
+the source while the caret is inside, and carries it into HTML and PDF
+export. One cached render serves all sixteen themes: the SVG's own
+`<style>` carries `var(--bear-*)` references verbatim, resolved against
+whichever page it is inlined into.
+
+**Nine of ten tasks executed as planned. What the tenth (verification) found
+and corrected:**
+
+- **A client-side Mermaid was measured and refused before any of this was
+  built**, not merely assumed too expensive: 208 KB gzipped across 27
+  requests for ONE flowchart, against a whole-app eager payload of ~343 KB.
+  That measurement is what made this server-rendered from the start, not a
+  fallback reached after a slower implementation was tried.
+- **The theme CSS had to win a specificity fight, twice, and both losses were
+  invisible to every gate except a rendered screenshot.** Mermaid emits
+  `#d .label text` at specificity (1,1,1) and `#d text.actor > tspan` at
+  (1,1,2); the first attempt at each selector in `mermaidTheme.ts` lost
+  outright. And the glyphs live in a child `<tspan>`, not the `<text>`
+  element a naive rule targets — on the eight dark themes, this shipped as
+  near-black text on a dark fill, invisible to a passing suite, because
+  `fill` is inherited and a `<tspan>` override upstream simply beat the fix.
+  Three separate rounds of "fixed it" were verification failures rather than
+  code failures: reading a `class` attribute instead of `getComputedStyle`,
+  asserting a `var(--bear-*)` string was PRESENT in the stylesheet rather
+  than that it actually WON the cascade, and measuring the parent `<text>`
+  rather than the `<tspan>` that paints the glyph.
+- **Every render used to hardcode `id='d'`, so two diagrams in one note
+  collided** — Mermaid scopes every selector to that id
+  (`#d .label text`, `url(#d-gradient)`, …), so a second diagram either
+  rendered the first one's `<style>` twice or fought over the same anchors.
+  Mermaid's OWN scoping was never the defect — measured at 0 unscoped
+  selectors across flowchart, sequence and class. Fixed with a source-derived
+  id, and `DIAGRAM_RENDER_VERSION` bumped 1 → 2 to invalidate every
+  previously cached SVG, the first real use of that version-bump mechanism.
+- **Deleting Mermaid's inline `max-width` was the wrong fix for a diagram
+  that looked too small**, and measurement is what caught it: a small
+  diagram (two boxes, one arrow) stretched to 1500px wide, filling the
+  editor. Concrete `width`/`height` pulled from the SVG's own `viewBox` is
+  the right fix — the diagram renders at its natural size and only grows if
+  the note column is narrower than that.
+- **Running the actual app, not just the test suite, found three defects no
+  gate could see:** the rendered diagram's source was unreachable by mouse
+  (clicking the picture did nothing — `figure` is `contenteditable=false`
+  chrome ProseMirror will not place a caret inside, so a `mousedown` handler
+  now redirects the click into the source); the copy button on a Mermaid code
+  block silently copied nothing; and the SVG rendered left-aligned inside its
+  container under Tailwind's preflight reset.
+- **Two `npm install --no-save` calls in the same package.json-less Docker
+  layer prune each other's packages.** The PDF image installs `playwright`
+  and `mermaid` with `--no-save` in one `RUN`, matching the container's
+  existing pattern of not touching a committed lockfile it does not have —
+  but a second `--no-save` install in the same layer silently deleted
+  `node_modules/playwright`, which broke the existing font-verification gate
+  (`verify-fonts.mjs`) with no explanation beyond a missing module. Both
+  packages now install in one `npm install --no-save` call.
+- **A `--no-save` install must be cleaned up with `npm ci`, never a targeted
+  `rm -rf node_modules/<package>`.** A hand-cleanup attempt during
+  verification deleted the legitimate `d3-force` dependency L3's graph needs,
+  because `--no-save` leaves no lockfile record of which packages were
+  ever supposed to be there — `rm -rf` cannot tell "installed for this spike"
+  from "installed for the app". `npm ci` restores exactly what the committed
+  lockfile says belongs, nothing more and nothing less.
+- **A 422 with an unreadable body rendered a literal `{detail}` to the user,
+  in both locales** — the same defect shape M9b's `highlightClasses.ts`
+  guard exists for: nothing crashes, nothing logs, and the only symptom is on
+  screen. `requestDiagram.ts` reads the 422 body inside a `try`, and
+  `MermaidDiagram.ts`'s `failureMessage` strips a trailing `: {detail}` when
+  none was supplied rather than leaving the placeholder literal.
+
+**The themed set is six diagram types, verified by looking, not six because
+that number was assumed correct in advance.** `npm run shots:mermaid`
+rendered flowchart, sequence, state, class, ER and pie through the real
+container in `paper` (light) and `nord` (dark) — 12 files — and all six
+themed correctly and legibly in both: node fills use `--bear-surface`, text
+and edges use `--bear-text`/`--bear-muted`, and pie retains Mermaid's own
+distinct per-slice fill palette — `mermaidTheme.ts`'s selectors theme the
+title, legend and percentage labels, never the wedge fills themselves, which
+is the right call: recolouring data slices to the app's theme would erase the
+one thing a pie chart needs, distinct colours per category.
+Every other Mermaid diagram type still renders, using Mermaid's own base
+palette rather than the app's theme — legible, but outside the themed set;
+growing that set is additive (add selectors to `mermaidTheme.ts`, bump
+`DIAGRAM_RENDER_VERSION`, add a shot).
+
+**Bundle cost, measured both sides rather than estimated, against the frozen
+346,500 B ceiling:** `main` (pre-L5) measured 343,415 B; the finished branch
+measures 346,045 B — a true eager cost of 2,630 B, leaving 455 B of headroom.
+`CEILING_BYTES` did not move. The feature ships this cheaply specifically
+because the render itself never reaches the browser: no Mermaid, no layout
+engine and no theme CSS are in the client bundle at all — only the
+node view, the cache repository, the request/error plumbing and the export
+integration.
+
+**One further defect, outside the ten planned tasks, found by the same
+"run it and look" discipline the ledger above already credits: a
+pre-existing race in `StoredImage.ts`'s object-URL lifecycle.** Verification
+ran the full `test:e2e` suite for the first time on this branch (task
+briefs before Task 9 never had), and `e2e/imageSync.spec.ts`'s second device
+failed deterministically — 5/5 — while `main` passed 3/3 on the identical
+test. The image node view used a single `released` boolean checked from
+three call sites (`destroy()` unconditionally, plus two `if (released)`
+checks in its async load), which double-released a reference whenever
+`acquireObjectUrl`'s CACHED branch (a synchronous increment) and `destroy()`
+both ran inside the same synchronous tick — exactly what three
+mount/destroy/mount/destroy/mount cycles for one image produce on a fresh
+document parse, which is not rare on its own but had never before combined
+with a THIRD node view surviving to read the URL after the first two had
+each driven the shared count down once more than their own share. The extra
+`MermaidDiagram` plugin ahead of `StoredImage` in the extension list was
+enough to tip timing into that window; the race itself predates L5 by three
+sub-projects (K1/K2) and would in principle have been reachable by any
+change that shifted initial-mount timing, this one included. Rewritten to a
+single-ownership token (`heldUrl`) that both `destroy()` and the async load
+check at every safe point, so exactly one of them releases each successful
+acquisition — never both, never neither. Cost: 22 B of the 2,630 B total
+above.
 
 ### C. Code block language + syntax highlighting — SHIPPED 2026-08-24
 

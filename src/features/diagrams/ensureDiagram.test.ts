@@ -151,4 +151,29 @@ describe('ensureDiagram — a broken cache degrades rather than fails the caller
     // Failing to remember the render is not a reason to fail to show it.
     expect(svg).toBe('<svg id="rendered"/>');
   });
+
+  it('ignores a throwing cache touch on a HIT and still resolves to the cached SVG', async () => {
+    // The third leg of the triad: `get` above, `put` above, `touch` here — a
+    // refresh failure on an already-successful hit must not cost the caller
+    // the hit it already has.
+    const request = vi.fn(async () => '<svg id="should-not-be-requested"/>');
+    const brokenTouch: DiagramsRepository = {
+      get: vi.fn(async () => ({
+        hash: await diagramKey('A'),
+        svg: '<svg id="cached"/>',
+        bytes: 20,
+        lastUsed: 1,
+      })),
+      put: vi.fn(async () => undefined),
+      touch: vi.fn(async () => {
+        throw new Error('IDB blocked');
+      }),
+    };
+
+    const svg = await ensureDiagram('A', { request, diagrams: brokenTouch });
+
+    expect(svg).toBe('<svg id="cached"/>');
+    // A hit never asks the network, broken touch or not.
+    expect(request).not.toHaveBeenCalled();
+  });
 });

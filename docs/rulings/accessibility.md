@@ -18,6 +18,8 @@ buttons; `src/ui/Button.tsx`'s `VARIANTS` map (`default` / `ghost` / `danger`);
 `role`/`aria-expanded`/`aria-controls`/`aria-activedescendant` mirror,
 `optionId` and `listboxId`);
 `src/features/notes/preview.ts`'s `snippetLines`;
+`src/features/editor/MermaidDiagram.ts`'s `diagramName`, `figure`'s `role="img"`
+and `aria-label`, and `editor.diagram.*` i18n keys;
 `src/features/notes/NoteRowMenu.tsx`'s roles, its `Shift+F10` route in
 `NoteListItem.tsx` and its `aria-disabled` PDF item; the thumbnail's `alt` in
 `NoteListItem.tsx`; `src/ui/ConfirmDialog.tsx`'s
@@ -571,3 +573,23 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   nothing in the arrow arithmetic: they render between options but are never
   IN `rows`, so they are invisible to both the keyboard handler and
   `aria-activedescendant`.
+
+## The rendered diagram's accessible name
+
+- **A rendered Mermaid diagram is `role="img"` with `aria-label` set to
+  `Diagram: {name}`, asserted BY VALUE, never by presence.** `diagramName`
+  prefers an explicit `accTitle:` directive, then a frontmatter `title:`, then
+  falls back to the first real content line (skipping directives and `%%`
+  comments) — so `flowchart TD` is a real, reachable name for an untitled
+  diagram, not a placeholder. `e2e/diagram.spec.ts` asserts
+  `getByRole('img', { name: 'Diagram: flowchart TD' })`, the exact string, for
+  the same reason `palette.spec.ts`'s `aria-activedescendant` test asserts a
+  value rather than mere presence: an implementation that set a constant or
+  empty label would pass an existence-shaped assertion and fail this one.
+
+- **A FAILED diagram is deliberately NOT `role="img"`.** An `img` role makes
+  its children presentational, which would make the failure message and the
+  retry button inside one unreachable to assistive tech. `MermaidDiagram.ts`'s
+  `showFailure` removes `role` and `aria-label` entirely and renders a `<p>`
+  plus a real `<button>` instead — a failed diagram is text and a control, not
+  a picture.

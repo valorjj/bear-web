@@ -2,7 +2,7 @@
 
 Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline renders it, what the exported document is allowed to change, and how it gets its colours and its print behaviour.
 
-**Trigger:** any change under `src/features/export/` — `html.ts` (`renderNoteBody`, `renderNoteHtml`, `readExportTokens`, `EXPORT_TOKEN_NAMES`, `FALLBACKS`, the inline `<style>` block), `exportNote.ts` (`exportNote`, `MIME`), `requestPdf.ts` (`requestPdf`, `PdfFailure`, `BY_STATUS`), `filename.ts`, `ExportMenu.tsx`, `useExportRunner.ts`; `NoteEditor.handleExport` in `src/features/notes/NoteEditor.tsx` and the export group in `src/features/notes/NoteRowMenu.tsx`; `server/src/routes/export.ts`, `server/pdf/` (`render.ts`'s `emulateMedia`/`preferCSSPageSize`, `inspectPdf.ts`, `fidelity.test.ts`); the `export.*` keys in `src/i18n/en.ts` / `ko.ts` and the `ALLOWED_IDENTICAL` list in `i18n.test.tsx`; the export blocks in `e2e/notes.spec.ts` and `e2e/pdfExport.spec.ts`; and any new import of `marked` or `@tiptap/markdown` outside `src/features/editor/markdown.ts`.
+**Trigger:** any change under `src/features/export/` — `html.ts` (`renderNoteBody`, `renderNoteHtml`, `readExportTokens`, `EXPORT_TOKEN_NAMES`, `FALLBACKS`, the inline `<style>` block, `collectDiagramSources`, `replaceMermaidBlocks`), `exportNote.ts` (`exportNote`, `MIME`, `collectDiagrams`), `requestPdf.ts` (`requestPdf`, `PdfFailure`, `BY_STATUS`), `filename.ts`, `ExportMenu.tsx`, `useExportRunner.ts`; `NoteEditor.handleExport` in `src/features/notes/NoteEditor.tsx` and the export group in `src/features/notes/NoteRowMenu.tsx`; `server/src/routes/export.ts`, `server/pdf/` (`render.ts`'s `emulateMedia`/`preferCSSPageSize`, `inspectPdf.ts`, `fidelity.test.ts`, `mermaid.ts`, `mermaidTheme.ts`); the `export.*` keys in `src/i18n/en.ts` / `ko.ts` and the `ALLOWED_IDENTICAL` list in `i18n.test.tsx`; the export blocks in `e2e/notes.spec.ts` and `e2e/pdfExport.spec.ts`; and any new import of `marked` or `@tiptap/markdown` outside `src/features/editor/markdown.ts`.
 
 - **Export renders through the EDITOR'S OWN SCHEMA, never a second Markdown
   pipeline.** `renderNoteBody` parses with `parseMarkdown` — the single importer
@@ -265,3 +265,18 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   words are present either way. `server/pdf/fidelity.test.ts` asserts an
   embedded image XObject with a real `/Width`, which exists only when Chromium
   decoded the inlined bytes.
+
+- **A diagram that cannot render exports as its own fence, verbatim — never a
+  blank space and never a build failure.** `collectDiagramSources` walks the
+  same parsed document `renderNoteBody` is about to serialize (never a raw-text
+  scan, which would miss a fence indented under a blockquote); `html.ts`'s
+  `replaceMermaidBlocks` swaps in a rendered SVG only when one was actually
+  supplied for that exact source, and leaves the ` ```mermaid ` block as an
+  ordinary code block otherwise — never asked for, still in flight, or failed
+  are all the same case here. An export that refuses to run over one bad
+  diagram is worse than one carrying a code block.
+
+- **Markdown export never renders a diagram.** It is the note's text
+  VERBATIM (see the rule above this section) — a Mermaid fence stays a fence,
+  exactly as typed. Only HTML and PDF export call `collectDiagramSources` and
+  `ensureDiagram` at all.
