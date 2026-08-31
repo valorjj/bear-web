@@ -10,6 +10,8 @@
   --color-sidebar: var(--bear-sidebar);
   --color-text: var(--bear-text);
   --color-muted: var(--bear-muted);
+  --color-graph-node: var(--bear-graph-node);
+  --color-graph-edge: var(--bear-graph-edge);
   --color-faint: var(--bear-faint);
   --color-accent: var(--bear-accent);
   --color-danger: var(--bear-danger);

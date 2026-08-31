@@ -499,6 +499,15 @@
     var(--bear-code-type-l) calc((1 - var(--bear-dark)) * 100%),
     var(--bear-code-type-d)
   );
+
+  /*
+   * L3's relationship graph. Derived from existing tokens rather than given
+   * their own palette entries, so all sixteen themes inherit a correct graph
+   * with no per-theme work — and `sourceLint`'s "every theme defines every
+   * non-base token" check stays satisfied without a seventeen-theme fanout.
+   */
+  --bear-graph-node: var(--bear-muted);
+  --bear-graph-edge: var(--bear-border);
 }
 
 /*
