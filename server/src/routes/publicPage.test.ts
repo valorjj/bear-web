@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -130,6 +130,37 @@ describe.skipIf(!url)('GET /p/:id', () => {
 
   it('404s a bad id shape without touching the filesystem', async () => {
     expect((await app.request('/p/..', { headers: PUBLISH_HOST })).status).toBe(404);
+  });
+
+  it('404s a row whose id has an unsafe shape, never a 500 that would leak why', async () => {
+    // A row can never legitimately carry an unsafe-shaped id — ids are
+    // randomBytes(16).toString('base64url') — but the guard exists for the
+    // case where one somehow does anyway: `readPage`'s own `assertSafe`
+    // throws on a shape like this, and an uncaught throw here would surface
+    // as a 500, which is exactly the leak the guard exists to prevent (a
+    // public reader learning "malformed" instead of "missing"). Hono's own
+    // router already blocks `..`/`.` path segments before any handler runs
+    // (verified independently against this exact route), so `/p/..` above
+    // can never reach this guard at all — this input can, since it is a
+    // single path segment Hono passes straight through as `c.req.param('id')`.
+    const unsafeId = 'a.b';
+    await mkdir(join(root, alice), { recursive: true });
+    // Bypasses `writePage`'s own `assertSafe` deliberately, to put a file on
+    // disk at the path an unsafe id would resolve to — so a guard-free
+    // `readPage` would find bytes rather than 404ing on a missing file, and
+    // the only thing left to fail is `assertSafe` itself.
+    await writeFile(join(root, alice, `${unsafeId}.html`), '<!doctype html><p>hi</p>', 'utf8');
+    nextNoteId += 1;
+    await upsertPage(pool.query, alice, {
+      id: unsafeId,
+      noteId: `note-${nextNoteId}`,
+      title: 'T',
+      bytes: 10,
+      publishedAt: Date.now(),
+    });
+
+    const response = await app.request(`/p/${unsafeId}`, { headers: PUBLISH_HOST });
+    expect(response.status).toBe(404);
   });
 
   it('sets an ETag that changes when the page is republished', async () => {
