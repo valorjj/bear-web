@@ -32,6 +32,30 @@ const ID = /^[A-Za-z0-9_-]+$/;
  */
 const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:";
 
+/**
+ * RFC 7232 `If-None-Match` comparison — never a bare `===`.
+ *
+ * Cloudflare rewrites a strong ETag to weak (`W/"…"`) when it compresses a
+ * response, and every published page goes through the tunnel: a reader is
+ * therefore handed `W/"<etag>"`, echoes it back, and an identity comparison
+ * against the strong tag this route sent would never match — the 304 path
+ * this header exists for would silently never fire, with nothing failing
+ * anywhere. The header can also carry a comma-separated list (a client
+ * juggling multiple cached representations) or a bare `*` (an unconditional
+ * match), so this splits on `,`, trims each entry, strips a leading `W/`
+ * before comparing, and honours `*`.
+ */
+function matchesEtag(header: string | undefined, etag: string): boolean {
+  if (header === undefined) return false;
+  if (header.trim() === '*') return true;
+
+  return header.split(',').some((candidate) => {
+    const trimmed = candidate.trim();
+    const unweakened = trimmed.startsWith('W/') ? trimmed.slice(2) : trimmed;
+    return unweakened === etag;
+  });
+}
+
 /** The one route an anonymous reader can reach. No session, no cookie, no CORS. */
 export function publicPageRoutes(deps: AppDeps): Hono {
   const app = new Hono();
@@ -58,7 +82,7 @@ export function publicPageRoutes(deps: AppDeps): Hono {
     c.header('referrer-policy', 'no-referrer');
     c.header('etag', etag);
 
-    if (c.req.header('if-none-match') === etag) {
+    if (matchesEtag(c.req.header('if-none-match'), etag)) {
       return c.body(null, 304);
     }
 

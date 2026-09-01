@@ -181,6 +181,37 @@ describe.skipIf(!url)('GET /p/:id', () => {
     expect(response.status).toBe(304);
   });
 
+  it('answers a WEAK If-None-Match echo with 304', async () => {
+    // Cloudflare rewrites a strong ETag to weak when it compresses a
+    // response, and every published page goes through the tunnel — so a
+    // real reader's echo is `W/"<etag>"`, not the strong tag this route
+    // sent. RFC 7232's weak comparison (used for If-None-Match) means the
+    // prefix is stripped before comparing, not treated as a mismatch.
+    const etag = (await app.request('/p/abc', { headers: PUBLISH_HOST })).headers.get('etag')!;
+    const response = await app.request('/p/abc', {
+      headers: { ...PUBLISH_HOST, 'if-none-match': `W/${etag}` },
+    });
+
+    expect(response.status).toBe(304);
+  });
+
+  it('answers If-None-Match: * with 304 unconditionally', async () => {
+    const response = await app.request('/p/abc', {
+      headers: { ...PUBLISH_HOST, 'if-none-match': '*' },
+    });
+
+    expect(response.status).toBe(304);
+  });
+
+  it('answers a comma-separated If-None-Match list containing the tag with 304', async () => {
+    const etag = (await app.request('/p/abc', { headers: PUBLISH_HOST })).headers.get('etag')!;
+    const response = await app.request('/p/abc', {
+      headers: { ...PUBLISH_HOST, 'if-none-match': `"other", ${etag}` },
+    });
+
+    expect(response.status).toBe(304);
+  });
+
   it('sets no CORS or cookie headers', async () => {
     const response = await app.request('/p/abc', { headers: PUBLISH_HOST });
 

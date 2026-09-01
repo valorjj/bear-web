@@ -68,4 +68,31 @@ describe('publishHostOnly', () => {
     });
     expect(response.status).toBe(200);
   });
+
+  // /p/* is a read. A non-GET/HEAD request must not fall through to the
+  // app's own middleware (originGuard) on the anonymous host, which would
+  // answer with the app's CSRF posture instead of a plain 404.
+  it.each([
+    ['POST', '/p/abc'],
+    ['PUT', '/p/abc'],
+    ['DELETE', '/p/abc'],
+    ['OPTIONS', '/p/abc'],
+  ])('404s %s %s on the publish host', async (method, path) => {
+    const app = appWith();
+    // A route for the method must exist behind the middleware, or a 404
+    // would prove nothing about THIS guard — it could just as easily be
+    // Hono's own "no matching route" answer.
+    app.on(method, path, (c) => c.text('should never be reached'));
+
+    const response = await app.request(path, { method, ...asPublish });
+    expect(response.status).toBe(404);
+  });
+
+  it('serves a HEAD request for a published page on the publish host', async () => {
+    const app = appWith();
+    app.on('HEAD', '/p/abc', (c) => c.body(null, 200));
+
+    const response = await app.request('/p/abc', { method: 'HEAD', ...asPublish });
+    expect(response.status).not.toBe(404);
+  });
 });

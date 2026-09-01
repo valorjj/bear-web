@@ -21,7 +21,14 @@ export function publishHostOnly(publishOrigin: string): MiddlewareHandler {
     // reaches the same process on one.
     const requestHost = (c.req.header('host') ?? '').split(':')[0]!.toLowerCase();
     const isPublishHost = requestHost === publishHost;
-    const isPublicPath = c.req.path === '/health' || c.req.path.startsWith('/p/');
+    // /p/* is a read: GET or HEAD only. Anything else (POST, PUT, DELETE,
+    // OPTIONS) is not the public surface, even at this exact path — without
+    // this, a non-GET request to /p/* falls through to originGuard and
+    // answers with the app's CSRF posture ("origin not allowed") on a host
+    // that has no origin policy to reveal.
+    const isPublicPage =
+      c.req.path.startsWith('/p/') && (c.req.method === 'GET' || c.req.method === 'HEAD');
+    const isPublicPath = c.req.path === '/health' || isPublicPage;
 
     if (isPublishHost && !isPublicPath) {
       // On the publish host, nothing but the public surface exists.
