@@ -101,7 +101,8 @@ describe.skipIf(!url)('GET /p/:id', () => {
     const response = await app.request('/p/abc', { headers: PUBLISH_HOST });
 
     expect(response.headers.get('content-security-policy')).toBe(
-      "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:",
+      "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; " +
+        "form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
     );
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
     expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow');

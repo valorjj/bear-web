@@ -275,8 +275,23 @@ export function PublishDialog({
   const handleUnpublish = async (): Promise<void> => {
     setConfirming(false);
     if (current === null || onUnpublish === undefined) return;
-    await onUnpublish(current.id);
-    setCurrent(null);
+    setError(null);
+    try {
+      await onUnpublish(current.id);
+      setCurrent(null);
+    } catch (thrown) {
+      // `setCurrent` is deliberately never reached here: the dialog stays on
+      // the published view with Unpublish still offered, so a failed
+      // revocation never LOOKS like a successful one. Unpublish is the only
+      // revocation this capability-URL design has, so silence on failure
+      // would leave a user unsure whether the link is dead — mirrors
+      // `handlePublish`'s error handling immediately above.
+      setError(
+        thrown instanceof PublishError
+          ? { reason: thrown.reason, limit: thrown.limit }
+          : { reason: 'failed' },
+      );
+    }
   };
 
   return (

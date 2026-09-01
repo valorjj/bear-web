@@ -73,6 +73,26 @@ describe('PublishDialog', () => {
     expect(screen.getByRole('button', { name: 'Publish to web' })).toBeInTheDocument();
   });
 
+  it('names the reason when unpublish fails, and leaves the published view intact', async () => {
+    const onUnpublish = vi.fn(async () => {
+      throw new PublishError('offline');
+    });
+    renderDialog(<PublishDialog page={PAGE} onUnpublish={onUnpublish} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Unpublish' }));
+    const confirmDialog = screen.getByRole('alertdialog');
+    await userEvent.click(within(confirmDialog).getByRole('button', { name: 'Unpublish' }));
+
+    expect(onUnpublish).toHaveBeenCalledWith('abc');
+    // A failed revocation must never look like a successful one: the url
+    // field and the Unpublish control are both still on screen, not the
+    // not-yet-published view a silent failure would fall through to.
+    expect(await screen.findByText('Publishing needs a connection.')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Published to the web' })).toHaveValue(
+      'https://pub.test/p/abc',
+    );
+    expect(screen.getByRole('button', { name: 'Unpublish' })).toBeInTheDocument();
+  });
+
   it('shows the new url after a successful publish', async () => {
     const onPublish = vi.fn(async () => ({
       id: 'new',

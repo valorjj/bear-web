@@ -29,21 +29,40 @@ const ID = /^[A-Za-z0-9_-]+$/;
  * `img-src data:` and `font-src data:` allow the inlined assets K3 and export
  * already produce, and `style-src 'unsafe-inline'` allows the inline
  * styling the export pipeline emits without allowing script execution.
+ *
+ * `form-action`, `base-uri` and `frame-ancestors` are listed explicitly
+ * rather than left to `default-src` to cover: CSP3 defines all three as
+ * NOT falling back to `default-src` when omitted, so leaving them out does
+ * not inherit `'none'` the way every fetch directive above does — it leaves
+ * them unrestricted. Without `form-action 'none'`, an author's
+ * `<form action="https://…">` could still submit off this origin;
+ * without `base-uri 'none'`, a `<base>` tag could rewrite every relative
+ * URL on the page; without `frame-ancestors 'none'`, the page could be
+ * framed by another site (clickjacking a supposedly read-only document).
  */
-const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:";
+const CSP =
+  "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; " +
+  "form-action 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 /**
  * RFC 7232 `If-None-Match` comparison — never a bare `===`.
  *
- * Cloudflare rewrites a strong ETag to weak (`W/"…"`) when it compresses a
- * response, and every published page goes through the tunnel: a reader is
- * therefore handed `W/"<etag>"`, echoes it back, and an identity comparison
- * against the strong tag this route sent would never match — the 304 path
- * this header exists for would silently never fire, with nothing failing
- * anywhere. The header can also carry a comma-separated list (a client
- * juggling multiple cached representations) or a bare `*` (an unconditional
- * match), so this splits on `,`, trims each entry, strips a leading `W/`
- * before comparing, and honours `*`.
+ * Written on the assumption that Cloudflare rewrites a strong ETag to weak
+ * (`W/"…"`) when it compresses a response, so an identity comparison against
+ * the strong tag this route sends would never match. Verified against the
+ * real tunnel on 2026-09-01, and the actual behaviour is more surprising:
+ * Cloudflare does not weaken the header, it REMOVES it entirely — a reader
+ * going through `pub.markflowing.com` receives no `ETag` at all, weak or
+ * strong, so there is currently nothing for a real browser to echo back as
+ * `If-None-Match`. This comparison is still correct — a client that already
+ * holds a value, from any source, gets a real 304 through the tunnel for
+ * either form, strong or weak — but making the 304 path actually reachable
+ * for an ordinary visitor is a separate, currently-open follow-up (most
+ * likely a `Cache-Control` header Cloudflare will treat as worth
+ * validating; see `server/README.md`). The header can also carry a
+ * comma-separated list (a client juggling multiple cached representations)
+ * or a bare `*` (an unconditional match), so this splits on `,`, trims each
+ * entry, strips a leading `W/` before comparing, and honours `*`.
  */
 function matchesEtag(header: string | undefined, etag: string): boolean {
   if (header === undefined) return false;

@@ -247,13 +247,28 @@ import { describe, expect, it } from 'vitest';
  *   config-*:       11,506 B   (the re-hoisted chunk — see above)
  *   total:         346,728 B
  *
- * `CEILING_BYTES` moves to **347,000**, leaving **272 B** of headroom. The
- * ceiling remains FROZEN under the same rule as before: this raise does not
- * reopen it to routine ratcheting. The next feature that exceeds 347,000
- * goes lazier, moves to the server, gets cut, or is put to the user — it
- * does not raise the number itself. This raise was decided BY THE USER,
- * on the record above, not by sub-project M or by whoever executed its
- * tasks.
+ * `CEILING_BYTES` moves to **347,000**, leaving **272 B** of headroom at the
+ * moment of this raise. The ceiling remains FROZEN under the same rule as
+ * before: this raise does not reopen it to routine ratcheting. The next
+ * feature that exceeds 347,000 goes lazier, moves to the server, gets cut,
+ * or is put to the user — it does not raise the number itself. This raise
+ * was decided BY THE USER, on the record above, not by sub-project M or by
+ * whoever executed its tasks.
+ *
+ * **That 272 B is already stale, and this line records why rather than
+ * silently re-editing the number above it.** Task 8's whole-branch review
+ * found two small correctness fixes still needed after this raise shipped —
+ * `handleUnpublish`'s missing `try`/`catch` and the CSP's missing
+ * `form-action`/`base-uri`/`frame-ancestors` directives, both in this same
+ * lazy chunk — which added roughly 40 B. The shipped closure, measured after
+ * those fixes, is **346,767 B**, i.e. **233 B** of headroom under the same
+ * frozen 347,000 ceiling. This branch was already bitten once by a stale
+ * byte figure (a `+1,741 B` docblock estimate for `PublishDialog`'s focus
+ * trap that measured 773 B in reality) — the number that matters to the
+ * next person is what `npm run build` actually produces, not the number
+ * recorded at whichever commit last touched this file. Re-run
+ * `npx vitest run scripts/bundleSize.test.ts` after a build to get the
+ * current figure; do not reason from either number above without doing so.
  */
 const CEILING_BYTES = 347_000;
 
