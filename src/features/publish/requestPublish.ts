@@ -1,0 +1,168 @@
+/**
+ * Why a publish can fail, and only these seven ways.
+ *
+ * Seven, not one: a user with no connectivity, one who is signed out, one who
+ * is over quota, and one whose request was rate limited each need different
+ * sentences, and a single "publish failed" tells none of them anything they can
+ * act on.
+ */
+export type PublishFailure =
+  | 'offline'
+  | 'unauthorized'
+  | 'tooLarge'
+  | 'quotaExceeded'
+  | 'rateLimited'
+  | 'unavailable'
+  | 'failed';
+
+export class PublishError extends Error {
+  readonly reason: PublishFailure;
+  readonly limit?: number;
+
+  constructor(reason: PublishFailure, limit?: number) {
+    super(`publish failed: ${reason}`);
+    this.name = 'PublishError';
+    this.reason = reason;
+    this.limit = limit;
+  }
+}
+
+/**
+ * A published page record as returned by the server.
+ */
+export interface PublishedPage {
+  id: string;
+  noteId: string;
+  title: string;
+  bytes: number;
+  publishedAt: number;
+}
+
+/**
+ * The server distinguishes "unreachable or shedding load" (503) from "timed
+ * out" (504) for its own operators, but hands the USER the same sentence
+ * either way — there is no separate `PublishFailure` for a timeout, so both
+ * collapse to `unavailable`.
+ *
+ * 402 is deliberately ABSENT from this map (there is no 402 test). 403 is
+ * handled specially to extract the limit from the response body.
+ */
+const BY_STATUS: Record<number, PublishFailure> = {
+  401: 'unauthorized',
+  413: 'tooLarge',
+  429: 'rateLimited',
+  503: 'unavailable',
+  504: 'unavailable',
+};
+
+/**
+ * Publishes a note by sending its rendered HTML to the server.
+ *
+ * The title must be URL-encoded via URLSearchParams, not concatenated — titles
+ * are frequently Korean and may contain `&`, `#` or `%`, which would corrupt
+ * the query string if not properly encoded.
+ *
+ * A thrown fetch is mapped to `offline` rather than to a generic failure: a
+ * user with no connectivity and a user whose server is down need different
+ * sentences, and collapsing them tells neither of them anything.
+ *
+ * A 403 response is always mapped to `quotaExceeded`, and the server's `limit`
+ * field is carried out so the message can name it. An unreadable response body
+ * must not become an unhandled exception — `quotaExceeded` with no limit is
+ * still correct.
+ */
+export async function publishNote(
+  html: string,
+  noteId: string,
+  title: string,
+  deps: { fetch?: typeof globalThis.fetch } = {},
+): Promise<{ id: string; url: string; publishedAt: number }> {
+  const { fetch: doFetch = globalThis.fetch } = deps;
+
+  const params = new URLSearchParams();
+  params.set('noteId', noteId);
+  params.set('title', title);
+
+  // Import inside the function to avoid circular dependencies
+  const { API_ORIGIN: apiOrigin } = await import('@/data/sync/config');
+
+  let response: Response;
+  try {
+    response = await doFetch(`${apiOrigin}/publish?${params}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'text/html' },
+      body: html,
+    });
+  } catch {
+    throw new PublishError('offline');
+  }
+
+  if (response.status === 403) {
+    let limit: number | undefined;
+    try {
+      const body = await response.json();
+      limit = body.limit;
+    } catch {
+      // Unreadable body is fine; quotaExceeded is correct either way
+    }
+    throw new PublishError('quotaExceeded', limit);
+  }
+
+  if (!response.ok) throw new PublishError(BY_STATUS[response.status] ?? 'failed');
+
+  return response.json();
+}
+
+/**
+ * Unpublishes a note by removing its published page.
+ *
+ * A thrown fetch is mapped to `offline`.
+ */
+export async function unpublishNote(
+  id: string,
+  deps: { fetch?: typeof globalThis.fetch } = {},
+): Promise<void> {
+  const { fetch: doFetch = globalThis.fetch } = deps;
+
+  // Import inside the function to avoid circular dependencies
+  const { API_ORIGIN: apiOrigin } = await import('@/data/sync/config');
+
+  let response: Response;
+  try {
+    response = await doFetch(`${apiOrigin}/publish/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+  } catch {
+    throw new PublishError('offline');
+  }
+
+  if (!response.ok) throw new PublishError(BY_STATUS[response.status] ?? 'failed');
+}
+
+/**
+ * Lists all published pages for the current user.
+ */
+export async function listPublished(
+  deps: { fetch?: typeof globalThis.fetch } = {},
+): Promise<PublishedPage[]> {
+  const { fetch: doFetch = globalThis.fetch } = deps;
+
+  // Import inside the function to avoid circular dependencies
+  const { API_ORIGIN: apiOrigin } = await import('@/data/sync/config');
+
+  let response: Response;
+  try {
+    response = await doFetch(`${apiOrigin}/publish`, {
+      credentials: 'include',
+    });
+  } catch {
+    throw new PublishError('offline');
+  }
+
+  if (!response.ok) throw new PublishError(BY_STATUS[response.status] ?? 'failed');
+
+  const body = await response.json();
+  return body.pages;
+}
