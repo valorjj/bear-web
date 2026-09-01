@@ -4,6 +4,7 @@ import { cookieName, readCookie, SESSION_COOKIE } from './auth/cookies.ts';
 import { authRoutes } from './auth/routes.ts';
 import type { Env } from './env.ts';
 import { originGuard } from './middleware/origin.ts';
+import { publishHostOnly } from './middleware/publishHost.ts';
 import { clientIp, rateLimit } from './middleware/rateLimit.ts';
 import { accountRoutes } from './routes/account.ts';
 import { diagramRoutes } from './routes/diagram.ts';
@@ -52,6 +53,16 @@ export interface AppDeps {
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
 
+  // The publish host serves only `GET /health` and `GET /p/*`, and never a
+  // credentialed response — so it must never carry the app's CORS headers
+  // below, and no app route (`/auth`, `/sync`, `/files`, `/export`,
+  // `/diagram`, `/publish`) may be reachable there at all. Registered FIRST:
+  // a request that does not belong on this host should not be decorated with
+  // the app's CORS headers on its way to a 404, nor reach originGuard.
+  app.use('*', publishHostOnly(deps.env.publishOrigin));
+
+  const publishHost = new URL(deps.env.publishOrigin).host.split(':')[0]!.toLowerCase();
+
   // Same-site, different origin: the cookie is sent, but the response is only
   // readable with these headers. `credentials` is what makes the cookie count.
   //
@@ -61,8 +72,14 @@ export function createApp(deps: AppDeps): Hono {
   // instead of the 403 the server actually sent. This middleware calls
   // `await next()` first and sets headers on the way back out, so it still
   // decorates the 403 response.
+  //
+  // Skipped on the publish host: a published page is not a credentialed
+  // response, and stamping the app's origin and `allow-credentials` onto it
+  // would leak the app's CORS posture onto the anonymous host.
   app.use('*', async (c, next) => {
     await next();
+    const requestHost = (c.req.header('host') ?? '').split(':')[0]!.toLowerCase();
+    if (requestHost === publishHost) return;
     c.header('access-control-allow-origin', deps.env.appOrigin);
     c.header('access-control-allow-credentials', 'true');
   });

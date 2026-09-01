@@ -44,6 +44,8 @@ describe.skipIf(!url)('/files', () => {
         googleClientSecret: 'secret',
         pdfRendererUrl: 'http://127.0.0.1:8788',
         imageRoot: root,
+        publishOrigin: 'https://pub.example.com',
+        publishRoot: './data/test-published',
       },
       query: pool.query,
       transaction: pool.transaction,
