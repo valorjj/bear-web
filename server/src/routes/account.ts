@@ -4,6 +4,7 @@ import type { AppDeps } from '../app.ts';
 import { authenticator } from '../auth/authenticate.ts';
 import { clearedSessionCookie } from '../auth/cookies.ts';
 import { removeUserImages } from '../images/store.ts';
+import { removeUserPages } from '../publish/store.ts';
 import { deleteUser } from '../repositories/users.ts';
 
 interface EmailRow {
@@ -37,6 +38,10 @@ export function accountRoutes(deps: AppDeps): Hono {
     // the pixels on disk is not a deletion — and this is the spec's day-one
     // requirement rather than a nicety.
     await removeUserImages(deps.env.imageRoot, userId);
+    // Same reasoning, for the second thing the database cascade cannot
+    // reach: a published page still readable after the account is deleted
+    // is not a deletion.
+    await removeUserPages(deps.env.publishRoot, userId);
 
     c.header('set-cookie', clearedSessionCookie(deps.secureCookies));
     return c.body(null, 204);
