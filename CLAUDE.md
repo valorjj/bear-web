@@ -67,10 +67,11 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | L3 relationship graph: force layout, pan/zoom, worker offload     | complete |
 | L4 command palette: `⌘K`, fuzzy match, commands + notes           | complete |
 | L5 server-rendered Mermaid diagrams                               | complete |
+| M publish: a public read-only URL for one note                    | complete |
 
-2444 unit tests (plus 141 server tests, 79 of which are integration tests that
+2473 unit tests (plus 203 server tests, 112 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 71 renderer tests behind
-`npm run test:pdf`), 208 end-to-end tests. `main` is always green and
+`npm run test:pdf`), 212 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**
@@ -93,11 +94,11 @@ test for a new paragraph is "would someone make a mistake without this?", never
 named only once B shipped, queued but unspecced — and its ordering against
 anything else is an open question, not a ruling.
 
-**Two capabilities need the network, and everything else still works offline
-exactly as before:** sync (since D2) and PDF export (since G). PDF export is
-the first capability in this app that does not exist without an account;
-`ExportMenu` marks the item `aria-disabled` when signed out and names the
-reason in its accessible name.
+**Three capabilities need the network, and everything else still works
+offline exactly as before:** sync (since D2), PDF export (since G), and
+publishing a note to a public URL (since M). Each of the latter two needs an
+account; both `ExportMenu` items mark themselves `aria-disabled` when signed
+out and name the reason in their accessible name.
 
 ### Operational traps on this machine
 
@@ -114,6 +115,17 @@ reason in its accessible name.
   the only path in.
 - **`server/` may import nothing from `src/` but `src/data/types.ts`** — see
   Architecture boundaries, where it is enforced rather than merely stated.
+- **`PUBLISH_ORIGIN` is required at boot with no default, and a deploy without
+  it crash-loops the whole API — this already happened in production, on
+  2026-09-01, during sub-project M.** The variable was missing from
+  `server/.env`; the service restarted into `readEnv`'s "missing env:
+  PUBLISH_ORIGIN" throw, over and over, until it was added. It is required
+  rather than defaulted on purpose: `publishHostOnly` (`server/src/middleware/
+publishHost.ts`) uses it to decide which incoming `Host` is the anonymous
+  publish surface, so a wrong value here is not a cosmetic miss — it serves
+  published pages under the wrong hostname, or fails to recognise the real
+  one and 404s every public page silently. A loud crash at boot beats either
+  of those failing quietly at request time.
 
 **Four further Playwright entry points exist and are deliberately not in that
 count, because they assert nothing.** The first three drive the fixed corpus
@@ -834,6 +846,17 @@ user_id FROM identities WHERE email = ?`, which reads `user_id` without
   annotation is matched on the statement's own line or exactly one line
   above — a Prettier reflow that moves it further away turns a legitimate
   statement red, a known nuisance that fails loud rather than silent.
+- **The publish host answers exactly one route family, and nothing else.**
+  One process serves both `api.markflowing.com` and `pub.markflowing.com` —
+  the Cloudflare tunnel routes both hostnames to the same port —
+  `server/src/middleware/publishHost.ts`'s `publishHostOnly` is what keeps
+  `/auth`, `/sync`, `/files` and every other app route from answering on the
+  anonymous hostname that serves author-controlled HTML: on the publish host
+  it 404s everything except `GET`/`HEAD /p/*` and `/health`, and it fails
+  CLOSED both ways, so an unrecognised or absent `Host` header is treated as
+  the app host, which serves no public pages at all. Measured before this
+  guard existed: `pub.markflowing.com/health`, `/auth` and `/sync` all
+  answered 200.
 
 ## Rules that must not be silently reversed
 

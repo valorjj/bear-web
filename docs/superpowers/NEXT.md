@@ -1,8 +1,8 @@
 # Next up
 
 Written 2026-08-20 after M8 + M9a shipped; last reconciled against
-`CLAUDE.md` on **2026-09-01**, when L5 (server-rendered Mermaid diagrams)
-shipped.
+`CLAUDE.md` on **2026-09-01**, when sub-project M (publish, a public
+read-only URL for one note) shipped.
 
 This file exists so a fresh session can resume without re-deriving decisions
 already made. Delete a section once its sub-project has a real spec in
@@ -837,6 +837,99 @@ rather than fixed under a merge gate — fixing unrelated pre-existing code to
 get a gate green is precisely how the `StoredImage` excursion above went wrong
 the first time. Fix it deliberately, with its own tests, not as a rider on
 something else.
+
+### M. Publish: a public read-only URL for one note — **SHIPPED 2026-09-01**
+
+Spec: `docs/superpowers/specs/2026-09-01-m-publish-design.md`. Plan:
+`docs/superpowers/plans/2026-09-01-m-publish.md`. Ledger:
+`.superpowers/sdd/2026-09-01-m-publish/progress.md`.
+
+A note can be published to an unguessable public URL. The client posts the
+same standalone HTML document it already builds for HTML export; the server
+stores it on disk under a 128-bit capability id (`randomBytes(16).toString
+('base64url')`) and serves it back from `pub.markflowing.com` — a second
+hostname the Cloudflare tunnel routes to the same process — behind a CSP that
+neutralises any script the author's raw HTML carried in, plus `noindex`,
+`nosniff` and `no-referrer`. Every app route 404s on that hostname, and
+`/p/*` 404s everywhere else. The dialog behind `ExportMenu`'s "Publish to
+web" item shows the URL, the publish time, and republish/unpublish, behind
+its own `React.lazy` boundary.
+
+Eight tasks, executed largely as planned. What the build corrected:
+
+- **A client-side render was never on the table**, and this was ruled out
+  before implementation rather than discovered during it: `server/` may
+  import nothing from `src/` but `src/data/types.ts`, so a live re-render on
+  the server would need the whole editor pipeline reimplemented there. The
+  snapshot model — publish is a photograph of the note at that moment, not a
+  live view — is what the architecture boundary permits, and the client had
+  already built the document for HTML export anyway.
+- **One process serving two hostnames means the whole API answers on the
+  anonymous one until something stops it, and this was MEASURED, not
+  assumed.** Before `publishHostOnly` existed, `pub.markflowing.com/health`
+  answered 200 — and so would `/auth` and `/sync`, on a hostname that serves
+  author-controlled HTML with no origin policy of its own. The guard fails
+  closed in both directions: an unrecognised or absent `Host` is treated as
+  the app host, which serves no public pages.
+- **`originGuard` needed no exemption for the publish route — the plan's own
+  spec claimed otherwise and was wrong.** `server/src/middleware/origin.ts`
+  returns early for every safe method (`GET`/`HEAD`/`OPTIONS`), so a public
+  `GET /p/:id` already passed it before this sub-project touched anything.
+  Self-review caught this before a task was built around a guard that did not
+  need building.
+- **Hono normalises `.` and `..` in a path before routing, which made two
+  planned fault injections unfalsifiable.** The id-shape guard's test wanted
+  to prove a path-traversal-shaped id gets rejected, but `../x` and similar
+  never reach the handler at all — Hono's router eats them first. The lesson
+  drawn was not "the guard is unnecessary" but "the test picked an input the
+  router already refuses": `a.b` (a dot that survives normalisation) does
+  reach the handler and proves the guard, and removing the guard entirely
+  turns that case into a 500 where a 404 belongs.
+- **Cloudflare's ETag behaviour needed a real tunnel to find, and it is
+  stranger than the plan assumed.** The working theory going in was "Cloudflare
+  weakens a strong ETag to `W/"…"` when it compresses," which is why
+  `publicPage.ts` implements RFC 7232 comparison (accepting either form)
+  rather than a bare `===`. Verification found something more surprising:
+  through the real tunnel, Cloudflare does not weaken the `ETag` header, it
+  **removes it entirely** — a real browser landing on a published page today
+  has no way to learn the value at all, weak or strong. The comparison logic
+  is still correct and still worth having (proven: a client that already
+  holds a valid value, from hitting the origin directly, gets a real 304 back
+  through the tunnel when it sends that value as `If-None-Match`), but the
+  practical payoff — conditional GETs saving bandwidth on a re-visited
+  published page — does not yet exist for an ordinary visitor. Recorded as an
+  open question in `server/README.md` rather than chased further inside this
+  sub-project; the fix, if one is wanted, is almost certainly a
+  `Cache-Control` header Cloudflare will treat as worth validating, not
+  another change to the comparison function.
+- **A hand-rolled modal shipped without a focus trap, on a false trade-off.**
+  `PublishDialog.tsx`'s `Modal` deliberately avoids importing `@/ui/Dialog`
+  (a third crossing consumer of a module already shared by `AppShell` and
+  `CommandPalette` tips Rolldown into extracting a shared chunk that lands in
+  the EAGER bundle regardless of which side of the lazy boundary asked for
+  it — measured at +773 B against the headroom available at the time), and
+  the first version of the reimplementation dropped the Tab-wrap branch,
+  reasoning that a keyboard trap wasn't worth the byte risk this late in the
+  budget. Pasting that branch back in, verbatim from `Dialog`'s own, measured
+  **+6 B**. There was never a real trade-off; the estimate that produced one
+  was never checked against a real build.
+- **`listPublished` had no caller**, so a published note reopened after a
+  reload showed "not yet published" with no route to Unpublish at all — the
+  server remembered the page; the client had simply never asked it.
+  `PublishDialogContainer` now calls it once, on mount, whenever the caller's
+  own `page` prop is still `null`.
+- **A third `React.lazy` boundary re-chunks the eager code, and the cost is
+  bigger than the feature's own weight.** Adding `PublishDialogContainer`
+  alongside L3's `GraphView` and L4's `CommandPalette` boundaries cost ~330 B
+  of pure re-chunking overhead beyond the ~350 B the feature's own strings and
+  wiring account for. That combined cost is what moved `CEILING_BYTES` from
+  346,500 to **347,000**, an explicit decision the user made with the
+  arithmetic in `scripts/bundleSize.test.ts`'s docblock — not something a
+  future change should treat as a precedent for raising it again.
+
+Bundle: **232 B** of headroom against the 347,000 B ceiling, measured off a
+real `npm run build`, not estimated. Test counts after this sub-project: see
+`CLAUDE.md`'s status table.
 
 ### C. Code block language + syntax highlighting — SHIPPED 2026-08-24
 

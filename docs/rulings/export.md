@@ -2,7 +2,7 @@
 
 Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline renders it, what the exported document is allowed to change, and how it gets its colours and its print behaviour.
 
-**Trigger:** any change under `src/features/export/` — `html.ts` (`renderNoteBody`, `renderNoteHtml`, `readExportTokens`, `EXPORT_TOKEN_NAMES`, `FALLBACKS`, the inline `<style>` block, `collectDiagramSources`, `replaceMermaidBlocks`), `exportNote.ts` (`exportNote`, `MIME`, `collectDiagrams`), `requestPdf.ts` (`requestPdf`, `PdfFailure`, `BY_STATUS`), `filename.ts`, `ExportMenu.tsx`, `useExportRunner.ts`; `NoteEditor.handleExport` in `src/features/notes/NoteEditor.tsx` and the export group in `src/features/notes/NoteRowMenu.tsx`; `server/src/routes/export.ts`, `server/pdf/` (`render.ts`'s `emulateMedia`/`preferCSSPageSize`, `inspectPdf.ts`, `fidelity.test.ts`, `mermaid.ts`, `mermaidTheme.ts`); the `export.*` keys in `src/i18n/en.ts` / `ko.ts` and the `ALLOWED_IDENTICAL` list in `i18n.test.tsx`; the export blocks in `e2e/notes.spec.ts` and `e2e/pdfExport.spec.ts`; and any new import of `marked` or `@tiptap/markdown` outside `src/features/editor/markdown.ts`.
+**Trigger:** any change under `src/features/export/` — `html.ts` (`renderNoteBody`, `renderNoteHtml`, `readExportTokens`, `EXPORT_TOKEN_NAMES`, `FALLBACKS`, the inline `<style>` block, `collectDiagramSources`, `replaceMermaidBlocks`), `exportNote.ts` (`exportNote`, `MIME`, `collectDiagrams`), `requestPdf.ts` (`requestPdf`, `PdfFailure`, `BY_STATUS`), `filename.ts`, `ExportMenu.tsx`, `useExportRunner.ts`; `NoteEditor.handleExport` in `src/features/notes/NoteEditor.tsx` and the export group in `src/features/notes/NoteRowMenu.tsx`; `server/src/routes/export.ts`, `server/pdf/` (`render.ts`'s `emulateMedia`/`preferCSSPageSize`, `inspectPdf.ts`, `fidelity.test.ts`, `mermaid.ts`, `mermaidTheme.ts`); the `export.*` keys in `src/i18n/en.ts` / `ko.ts` and the `ALLOWED_IDENTICAL` list in `i18n.test.tsx`; the export blocks in `e2e/notes.spec.ts` and `e2e/pdfExport.spec.ts`; and any new import of `marked` or `@tiptap/markdown` outside `src/features/editor/markdown.ts`; `src/features/publish/` (`PublishDialogContainer.handlePublish`'s `buildHtml`, `requestPublish.ts`), `server/src/routes/publish.ts` and `server/src/routes/publicPage.ts`.
 
 - **Export renders through the EDITOR'S OWN SCHEMA, never a second Markdown
   pipeline.** `renderNoteBody` parses with `parseMarkdown` — the single importer
@@ -280,3 +280,27 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   VERBATIM (see the rule above this section) — a Mermaid fence stays a fence,
   exactly as typed. Only HTML and PDF export call `collectDiagramSources` and
   `ensureDiagram` at all.
+
+- **Publishing (sub-project M) is not a second rendering pipeline — it posts
+  the SAME standalone HTML document HTML export already builds, unchanged.**
+  `PublishDialogContainer.handlePublish` calls the caller's `buildHtml`, which
+  is `renderNoteHtml` — the identical function `NoteEditor.handleExport` calls
+  for the "HTML" menu item, images already inlined as `data:` URIs and all —
+  and sends those bytes verbatim as the POST body. There is no separate
+  "publish renderer." This is also why a client-side re-render was never on
+  the table for making a published page reflect a LIVE note: the server may
+  import nothing from `src/` but `src/data/types.ts` (see CLAUDE.md's
+  Architecture boundaries), so it has no access to the editor pipeline that
+  would be needed to render Markdown into HTML itself.
+
+- **The server never parses Markdown, and publishing does not change that.**
+  `server/src/routes/publish.ts` treats the posted body as an opaque byte
+  string with a size cap (`MAX_PUBLISH_BYTES`, `readCappedBody`) — it writes
+  those bytes to disk (`writePage`) and serves them back unmodified
+  (`server/src/routes/publicPage.ts`). It does not parse, sanitise, or
+  re-render the HTML it is handed; the only transformation the public route
+  applies is wrapping the response in the CSP/`noindex`/`nosniff`/
+  `no-referrer` headers documented in `docs/rulings/accessibility.md` and
+  `server/README.md`'s host-split section. This is the snapshot model: a
+  published page is a photograph of the note at publish time, not a live view
+  of it, and it stays that way until a republish sends a new photograph.

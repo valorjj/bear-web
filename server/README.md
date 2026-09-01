@@ -9,6 +9,14 @@ Note data now does cross the network, encrypted in transit, to an account the
 signed-in user controls — see `docs/rulings/sync.md` for the constraints no
 test enforces.
 
+Sub-project M adds publishing: `POST /publish` stores a note's already-built
+export HTML on disk under a 128-bit capability id, and `GET /p/:id` serves it
+back on a **second** hostname, `pub.markflowing.com`. **One process now
+answers for two hostnames.** The Cloudflare tunnel routes both `api.` and
+`pub.` to the same port, and `server/src/middleware/publishHost.ts`'s
+`publishHostOnly` is the only thing splitting them apart at the application
+layer — see "The host split" below.
+
 ## Run it
 
     cp .env.example .env        # then fill in the Google credentials
@@ -19,7 +27,38 @@ test enforces.
 
 `.env` is gitignored and must stay so. This is the **production** config: it
 carries the live origins that the Cloudflare tunnel points at as
-`api.markflowing.com`'s upstream.
+`api.markflowing.com`'s (and, since M, `pub.markflowing.com`'s) upstream.
+
+### The host split
+
+Both `api.markflowing.com` and `pub.markflowing.com` resolve to the same
+Cloudflare tunnel, the same port, and the same Node process — there is no
+second deployment. What keeps them from being the same _surface_ is
+`publishHostOnly`, applied before every route: on the publish host, nothing
+answers but `GET`/`HEAD /p/*` and `/health` — `/auth`, `/sync`, `/files` and
+every other app route 404 there, and a non-GET request to `/p/*` also 404s
+rather than reaching `originGuard` (which has no origin policy to answer with
+on a host that serves no authenticated surface). On the app host, `/p/*`
+itself 404s, so a published page exists on exactly one hostname, never both.
+
+It **fails closed in both directions**: an unrecognised or absent `Host`
+header is treated as the app host, which serves no public pages — never the
+other way around, which would leak the whole API onto the anonymous surface
+that serves author-controlled HTML. This was measured, not assumed: before
+the guard existed, `pub.markflowing.com/health`, `/auth` and `/sync` all
+answered normally.
+
+`PUBLISH_ORIGIN` is what tells the guard which hostname is which — it names
+the publish origin, e.g. `https://pub.markflowing.com`, and the app host is
+"whatever isn't that." It is **required at boot with no default**
+(`src/env.ts`): a missing or wrong value is not a value that should serve
+pages under the wrong hostname or silently 404 every public page — it should
+crash the process loudly instead, and it does. This is not hypothetical: the
+variable was missing from production `server/.env` on 2026-09-01, during this
+sub-project's own rollout, and the service crash-looped until it was added.
+Set it in all three of `server/.env`, `server/.env.local` (a `pub.localhost`
+value works there — see `.env.local`'s own comment) and `server/.env.example`,
+the same pattern `PDF_RENDERER_URL` already established.
 
 ### Production runs as a launchd service
 
@@ -235,3 +274,18 @@ that want the two steps separate.
   warning; this has already happened once. `docker-compose.yml` creates
   `markflowing_test` automatically for anyone starting from an empty volume;
   an existing volume needs it created once by hand (see the file's comment).
+- **Cloudflare strips the `ETag` header on `/p/*` entirely — not weaken it,
+  remove it.** Verified 2026-09-01 through the real tunnel: the origin sets a
+  strong `ETag` (confirmed hitting the process directly on `127.0.0.1:8787`),
+  and neither a plain request nor one with `Accept-Encoding: identity` shows
+  an `ETag` of any kind once it has passed through Cloudflare — not even a
+  weakened `W/"…"` form, which is what `publicPage.ts`'s RFC 7232 comparison
+  was written to tolerate. The comparison itself is still correct and still
+  worth having: a client that already holds a valid value (strong or weak)
+  and sends it back as `If-None-Match` gets a real 304 through the tunnel,
+  proven the same day. What is unproven is whether a real browser can ever
+  acquire that value in the first place, since the response that would teach
+  it the ETag never carries one past the edge. No `Cache-Control` is set on
+  this route today, which is the most likely reason Cloudflare treats it as
+  nothing worth validating — worth revisiting if conditional GETs on
+  published pages ever matter enough to chase.
