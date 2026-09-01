@@ -27,8 +27,54 @@ believe the table and fix this file.
 
 | Open | State |
 | --- | --- |
+| **N paste Markdown as Markdown** | not started — reported from real use 2026-09-01, see below |
 | **J4 platform chrome** | not started — the last of the four |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
+
+### N. Paste Markdown as Markdown — reported from real use, 2026-09-01
+
+**Pasting raw Markdown into a note inserts it literally.** `**bold**` stays as
+asterisks, a `|---|---|` table becomes one paragraph per row, and a paste from
+a rich web source (the report that surfaced this came from Gemini's UI) leaves
+`&gt;` and `&nbsp;` sitting in the text. Reported with a screenshot of a real
+weekly report the user pasted in and could not use.
+
+**The app IS Markdown-based, which is what makes this surprising rather than
+expected.** `RichEditor.tsx:386` loads every note with
+`content: parseMarkdown(initialMarkdown)` and saves by serializing back, so the
+stored file is Markdown and the round trip works. What does not exist is a
+paste path into that parser: the editor's only paste handler is `ImagePaste`,
+which deliberately returns `false` for a non-image clipboard so text falls
+through to ProseMirror's default — and that default inserts plain text
+verbatim.
+
+`CLAUDE.md` already records "typing Markdown into the editor does not parse it
+as Markdown", but as a TESTING caveat ("seed the note, never type it"). This
+report is the same fact arriving as a user-facing defect, which is the more
+important half and was not written down.
+
+**The shape of the fix, for whoever picks it up:** a paste handler that reads
+`text/plain`, decides whether it is Markdown worth parsing, and inserts
+`parseMarkdown`'s nodes instead of characters. Three things it must get right,
+all already documented traps:
+
+- **`@tiptap/core`'s own paste handler calls `clipboardData.getData` before
+  yours is reached**, so a handler that throws presents as "my plugin does
+  nothing" rather than as an error. See the jsdom `DataTransfer` note in
+  `CLAUDE.md`.
+- **A clipboard carrying `text/html` should probably still win**, since a rich
+  paste from a browser already round-trips through ProseMirror's HTML parser.
+  The literal-`&gt;` symptom above suggests that path needs its own look.
+- **Deciding "is this Markdown?" is the whole design question.** Always parsing
+  is wrong — pasting a line containing an underscore or a hash into prose would
+  silently restructure it. A conservative trigger (fenced blocks, table pipes,
+  heading markers at line start, list markers) plus an explicit "paste as
+  Markdown" command is the likely answer, but it is a decision to take
+  deliberately rather than discover.
+
+**Worth weighing against J4 rather than queued behind it automatically.** J4 is
+polish on a working surface; this one makes the app unusable for the workflow
+that motivated it — moving a document written elsewhere into a note.
 
 ### The L-series, and why in this order
 
