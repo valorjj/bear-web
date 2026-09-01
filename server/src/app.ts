@@ -10,6 +10,7 @@ import { accountRoutes } from './routes/account.ts';
 import { diagramRoutes } from './routes/diagram.ts';
 import { exportRoutes } from './routes/export.ts';
 import { fileRoutes } from './routes/files.ts';
+import { publicPageRoutes } from './routes/publicPage.ts';
 import { publishRoutes } from './routes/publish.ts';
 import { syncRoutes } from './routes/sync.ts';
 
@@ -144,6 +145,10 @@ export function createApp(deps: AppDeps): Hono {
       key: (c) => readCookie(c.req.header('cookie'), sessionCookieName) ?? clientIp(c),
     }),
   );
+  // The public route: no session, so keyed by IP like /auth's. A reader with
+  // no cookie has nothing else to key on, and this is the one route the
+  // publish host actually serves.
+  app.use('/p/*', rateLimit({ limit: 120, windowMs: 60_000, key: clientIp }));
   app.use('*', rateLimit({ limit: 300, windowMs: 60_000, key: clientIp }));
 
   app.get('/health', (c) => c.json({ ok: true }));
@@ -154,6 +159,7 @@ export function createApp(deps: AppDeps): Hono {
   app.route('/', diagramRoutes(deps));
   app.route('/', fileRoutes(deps));
   app.route('/', publishRoutes(deps));
+  app.route('/', publicPageRoutes(deps));
 
   return app;
 }
