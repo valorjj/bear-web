@@ -86,4 +86,48 @@ describe('PublishDialog', () => {
       'https://pub.test/p/new',
     );
   });
+
+  describe('the focus trap', () => {
+    // Both directions, on the published view: three focusable elements
+    // (the url field, Publish, Unpublish). A trap that only wraps one
+    // direction is not a trap — Dialog's own docblock makes the same point.
+    it('wraps Tab from the last control back to the first', async () => {
+      renderDialog(<PublishDialog page={PAGE} />);
+
+      const urlField = screen.getByRole('textbox', { name: 'Published to the web' });
+      const unpublish = screen.getByRole('button', { name: 'Unpublish' });
+      unpublish.focus();
+      expect(unpublish).toHaveFocus();
+
+      await userEvent.tab();
+      expect(urlField).toHaveFocus();
+    });
+
+    it('wraps Shift+Tab from the first control back to the last', async () => {
+      renderDialog(<PublishDialog page={PAGE} />);
+
+      const urlField = screen.getByRole('textbox', { name: 'Published to the web' });
+      const unpublish = screen.getByRole('button', { name: 'Unpublish' });
+      urlField.focus();
+      expect(urlField).toHaveFocus();
+
+      await userEvent.tab({ shift: true });
+      expect(unpublish).toHaveFocus();
+    });
+  });
+
+  it('closes only the confirmation on Escape, not the dialog behind it', async () => {
+    const onClose = vi.fn();
+    const onUnpublish = vi.fn();
+    renderDialog(<PublishDialog page={PAGE} onClose={onClose} onUnpublish={onUnpublish} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Unpublish' }));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+
+    await userEvent.keyboard('{Escape}');
+
+    // The confirmation is gone...
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    // ...but the dialog behind it was never asked to close.
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

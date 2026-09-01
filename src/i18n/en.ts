@@ -163,6 +163,7 @@ export const en = {
   'publish.failed': 'This note could not be published.',
   'publish.failed.offline': 'Publishing needs a connection.',
   'publish.failed.quotaExceeded': 'You have reached the publishing limit ({limit}).',
+  'publish.failed.tooLarge': 'This note is too large to publish.',
 
   // The two edge handles' accessible names, and the label of the menu each
   // one opens — one string covers both, since the button's whole job is

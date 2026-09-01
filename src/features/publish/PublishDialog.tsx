@@ -7,6 +7,20 @@ import { PublishError, type PublishFailure } from './requestPublish';
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/**
+ * Which `Modal` instance owns Escape, while more than one is open at once.
+ *
+ * Both this dialog and its unpublish confirmation are `Modal`s, and each
+ * registers its own document-level `keydown` listener — plain DOM listeners
+ * on the same target fire in registration order regardless of
+ * `stopPropagation` (that only stops bubbling BETWEEN elements, and both
+ * listeners sit on `document` itself), so without this an Escape pressed
+ * while the confirmation is open reaches BOTH listeners and closes both
+ * modals at once. Each open `Modal` pushes its own id here and only acts on
+ * Escape while it is the topmost one; closing pops it back off.
+ */
+const modalStack: symbol[] = [];
+
 interface ModalProps {
   open: boolean;
   onClose: () => void;
@@ -18,18 +32,20 @@ interface ModalProps {
 }
 
 /**
- * A minimal stand-in for `@/ui/Dialog` — backdrop, Escape, initial focus and
- * restore-on-close — deliberately NOT that component. Rendering both this
- * dialog and its unpublish confirmation through the shared `Dialog` (or
+ * A minimal stand-in for `@/ui/Dialog` — backdrop, Escape, Tab-trapped focus
+ * and restore-on-close — deliberately NOT that component. Rendering both
+ * this dialog and its unpublish confirmation through the shared `Dialog` (or
  * `ConfirmDialog`, which itself renders one) adds a THIRD crossing consumer
  * to a module `AppShell` and `CommandPalette` already share, which tips
  * Rolldown's chunk-splitting heuristic into extracting a new shared chunk
  * that lands in the EAGER closure regardless of which side of the
- * `React.lazy` boundary imported it — measured at **+1,741 B** for the split
- * alone, against 455 B of headroom. Duplicating this much markup here costs
- * nothing against that ceiling, because this whole file is behind the
- * boundary. It does not reproduce `Dialog`'s Tab-wrap cycling; that gap is
- * recorded rather than silently accepted.
+ * `React.lazy` boundary imported it — measured at **+773 B** for the split
+ * alone, against 455 B of headroom (a figure corrected from an earlier,
+ * stale ×2.2 overestimate). Duplicating this much markup here costs nothing
+ * against that ceiling, because this whole file is behind the boundary. The
+ * Tab-wrap branch below is copied verbatim from `Dialog`'s own — pasting it
+ * in measured +6 B, so there was never a real trade-off between bytes and a
+ * keyboard user being able to Tab out of an open modal.
  */
 function Modal({
   open,
@@ -42,6 +58,7 @@ function Modal({
 }: ModalProps): ReactElement | null {
   const panelRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<Element | null>(null);
+  const idRef = useRef<symbol>(Symbol());
 
   useEffect(() => {
     if (!open) return;
@@ -55,12 +72,46 @@ function Modal({
 
   useEffect(() => {
     if (!open) return;
+    const id = idRef.current;
+    modalStack.push(id);
+    return () => {
+      const index = modalStack.indexOf(id);
+      if (index !== -1) modalStack.splice(index, 1);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
     const onKeyDown = (event: KeyboardEvent): void => {
+      // Only the topmost modal reacts — see `modalStack`'s own comment.
+      if (modalStack[modalStack.length - 1] !== idRef.current) return;
+
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
+      if (focusable === undefined || focusable.length === 0) return;
+
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement;
+
+      // Wrapping in both directions is what makes this a trap rather than a
+      // suggestion: without it, Tab walks out into the page behind the modal.
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
+
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
@@ -119,20 +170,22 @@ export interface PublishDialogProps {
 }
 
 /**
- * Only `offline` and `quotaExceeded` get their own sentence — the two tested
- * cases, and the two a user can act on differently (reconnect, or stop and
- * wait for quota to free up). `unauthorized` reuses `publish.requiresSignIn`,
- * the same sentence the export menu already shows for a signed-out user.
- * Every other reason (`tooLarge`, `rateLimited`, `unavailable`, `failed`)
- * falls through to the generic `publish.failed` — a byte budget this tight
- * (455 B of headroom before this feature) does not afford a sentence per
- * cause when the user's next move is the same "try again" either way.
+ * `offline`, `quotaExceeded` and `tooLarge` get their own sentence.
+ * `unauthorized` reuses `publish.requiresSignIn`, the same sentence the
+ * export menu already shows for a signed-out user. `rateLimited` and
+ * `unavailable` collapse into the generic `publish.failed`: both genuinely
+ * read as "try again", and a byte budget this tight does not afford a
+ * sentence per cause when the user's next move is identical either way.
+ * `tooLarge` does NOT collapse with them — "this note could not be
+ * published" gives a user with an oversized note no next action, where
+ * "too large" tells them to remove images.
  */
 function failureText(t: ReturnType<typeof useT>, reason: PublishFailure, limit?: number): string {
   if (reason === 'unauthorized') return t('publish.requiresSignIn');
   if (reason === 'quotaExceeded') {
     return t('publish.failed.quotaExceeded').replace('{limit}', String(limit ?? ''));
   }
+  if (reason === 'tooLarge') return t('publish.failed.tooLarge');
   if (reason === 'offline') return t('publish.failed.offline');
   return t('publish.failed');
 }
@@ -142,12 +195,19 @@ function failureText(t: ReturnType<typeof useT>, reason: PublishFailure, limit?:
  * reason `Modal` above stands in for `@/ui/Dialog`: adding this file as a
  * third crossing consumer of an already-shared module tips Rolldown into
  * extracting it into its own chunk, which lands in the eager closure
- * regardless of which side of the `React.lazy` boundary asked for it. The
- * classes below are copied from `Button`'s `default`/`danger` variants so
- * this still looks identical.
+ * regardless of which side of the `React.lazy` boundary asked for it —
+ * measured at +773 B for reusing `Dialog`/`ConfirmDialog`/`Button`. `h-7`,
+ * the base layout utilities and the `default`/`danger` colour classes below
+ * are copied verbatim from `Button`'s own `md` size and variants. The icon
+ * gap `Button` puts between a glyph and its label is deliberately absent —
+ * `Button.tsx` carries no such spacing on this size at all, and these
+ * buttons hold text only, no icon, so there is nothing for a gap to
+ * separate. `touch-target` IS included: J2a's rule that every control gets
+ * a 44px hit area on a coarse pointer, which `NEEDS_TOUCH_TARGET` applies to
+ * this exact size in `Button` and which a hand-copy must apply for itself.
  */
 const BASE_BUTTON =
-  'inline-flex shrink-0 items-center justify-center gap-1.5 h-7 px-2 rounded-sm text-ui transition-colors duration-[var(--bear-duration-fast)] ease-bear disabled:pointer-events-none disabled:opacity-40';
+  'touch-target inline-flex shrink-0 items-center justify-center h-7 px-2 rounded-sm text-ui transition-colors duration-[var(--bear-duration-fast)] ease-bear disabled:pointer-events-none disabled:opacity-40';
 const DEFAULT_BUTTON = `${BASE_BUTTON} border border-border bg-bg text-text hover:bg-hover`;
 const DANGER_BUTTON = `${BASE_BUTTON} bg-danger text-bg hover:opacity-90`;
 
@@ -178,6 +238,18 @@ export function PublishDialog({
   const confirmBodyId = useId();
 
   const [current, setCurrent] = useState<PublishedInfo | null>(page ?? null);
+
+  // Resyncs when the CALLER learns something this component did not already
+  // know — specifically `PublishDialogContainer`'s post-mount
+  // `listPublished` recovery, which updates its own `page` state only after
+  // this component has already mounted with `page` still `null`. A plain
+  // `useState` initializer reads its argument exactly once; without this
+  // effect, a page recovered after a reload would update the CONTAINER's
+  // state and re-render this component with a new `page` prop that this
+  // component's own `current` state would never notice.
+  useEffect(() => {
+    if (page !== null) setCurrent(page);
+  }, [page]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<{ reason: PublishFailure; limit?: number } | null>(null);
   const [confirming, setConfirming] = useState(false);
