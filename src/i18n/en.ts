@@ -149,6 +149,22 @@ export const en = {
   'export.failed.rateLimited': 'Too many exports — try again shortly.',
   'export.failed.unavailable': 'PDF export is unavailable right now.',
 
+  // Sub-project M: a public, unguessable link to one note's rendered HTML.
+  // `publish.requiresSignIn` doubles as both the menu item's disabled reason
+  // AND the `unauthorized` failure sentence — the two situations read the
+  // same to a user. `publish.open` likewise doubles as the republish action:
+  // both send the same snapshot.
+  'publish.open': 'Publish to web',
+  'publish.requiresSignIn': 'Sign in to publish',
+  'publish.title': 'Published to the web',
+  'publish.unpublish': 'Unpublish',
+  'publish.unpublish.confirm': 'Unpublish this note? The link will stop working immediately.',
+  'publish.publishedAt': 'Published {when}',
+  'publish.failed': 'This note could not be published.',
+  'publish.failed.offline': 'Publishing needs a connection.',
+  'publish.failed.quotaExceeded': 'You have reached the publishing limit ({limit}).',
+  'publish.failed.tooLarge': 'This note is too large to publish.',
+
   // The two edge handles' accessible names, and the label of the menu each
   // one opens — one string covers both, since the button's whole job is
   // "open this menu". Used to read "Insert row/column here", back when a

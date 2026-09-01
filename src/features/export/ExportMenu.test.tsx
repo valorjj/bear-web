@@ -41,6 +41,7 @@ function renderMenu(
     session?: SessionState;
     pending?: boolean;
     onChoose?: ExportMenuProps['onChoose'];
+    onPublish?: ExportMenuProps['onPublish'];
   } = {},
 ): { onChoose: ExportMenuProps['onChoose']; onDismiss: () => void } {
   sessionState = overrides.session ?? { status: 'signedOut' };
@@ -50,7 +51,7 @@ function renderMenu(
 
   render(
     <I18nProvider>
-      <ExportMenu onChoose={onChoose} onDismiss={onDismiss} />
+      <ExportMenu onChoose={onChoose} onPublish={overrides.onPublish} onDismiss={onDismiss} />
     </I18nProvider>,
   );
 
@@ -145,6 +146,28 @@ describe('ExportMenu', () => {
     renderMenu({ session: signedIn, pending: true, onChoose });
 
     await userEvent.click(screen.getByRole('menuitem', { name: /PDF/ }));
+    expect(onChoose).not.toHaveBeenCalled();
+  });
+
+  it('has no publish item when onPublish is omitted', () => {
+    renderMenu({ session: signedIn });
+    expect(screen.queryByRole('menuitem', { name: /publish/i })).not.toBeInTheDocument();
+  });
+
+  it('disables publish when signed out, and says why', () => {
+    renderMenu({ session: { status: 'signedOut' }, onPublish: vi.fn() });
+    const publish = screen.getByRole('menuitem', { name: /publish/i });
+    expect(publish).toHaveAttribute('aria-disabled', 'true');
+    expect(publish).toHaveAccessibleName(/sign in/i);
+  });
+
+  it('fires onPublish, not onChoose, when signed in', async () => {
+    const onPublish = vi.fn();
+    const onChoose = vi.fn();
+    renderMenu({ session: signedIn, onPublish, onChoose });
+
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Publish to web' }));
+    expect(onPublish).toHaveBeenCalledTimes(1);
     expect(onChoose).not.toHaveBeenCalled();
   });
 });

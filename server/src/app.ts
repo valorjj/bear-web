@@ -4,11 +4,14 @@ import { cookieName, readCookie, SESSION_COOKIE } from './auth/cookies.ts';
 import { authRoutes } from './auth/routes.ts';
 import type { Env } from './env.ts';
 import { originGuard } from './middleware/origin.ts';
+import { publishHostOnly } from './middleware/publishHost.ts';
 import { clientIp, rateLimit } from './middleware/rateLimit.ts';
 import { accountRoutes } from './routes/account.ts';
 import { diagramRoutes } from './routes/diagram.ts';
 import { exportRoutes } from './routes/export.ts';
 import { fileRoutes } from './routes/files.ts';
+import { publicPageRoutes } from './routes/publicPage.ts';
+import { publishRoutes } from './routes/publish.ts';
 import { syncRoutes } from './routes/sync.ts';
 
 /** A parameterised SQL call. The only shape route code may use. */
@@ -52,6 +55,16 @@ export interface AppDeps {
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
 
+  // The publish host serves only `GET /health` and `GET /p/*`, and never a
+  // credentialed response — so it must never carry the app's CORS headers
+  // below, and no app route (`/auth`, `/sync`, `/files`, `/export`,
+  // `/diagram`, `/publish`) may be reachable there at all. Registered FIRST:
+  // a request that does not belong on this host should not be decorated with
+  // the app's CORS headers on its way to a 404, nor reach originGuard.
+  app.use('*', publishHostOnly(deps.env.publishOrigin));
+
+  const publishHost = new URL(deps.env.publishOrigin).host.split(':')[0]!.toLowerCase();
+
   // Same-site, different origin: the cookie is sent, but the response is only
   // readable with these headers. `credentials` is what makes the cookie count.
   //
@@ -61,8 +74,14 @@ export function createApp(deps: AppDeps): Hono {
   // instead of the 403 the server actually sent. This middleware calls
   // `await next()` first and sets headers on the way back out, so it still
   // decorates the 403 response.
+  //
+  // Skipped on the publish host: a published page is not a credentialed
+  // response, and stamping the app's origin and `allow-credentials` onto it
+  // would leak the app's CORS posture onto the anonymous host.
   app.use('*', async (c, next) => {
     await next();
+    const requestHost = (c.req.header('host') ?? '').split(':')[0]!.toLowerCase();
+    if (requestHost === publishHost) return;
     c.header('access-control-allow-origin', deps.env.appOrigin);
     c.header('access-control-allow-credentials', 'true');
   });
@@ -126,6 +145,10 @@ export function createApp(deps: AppDeps): Hono {
       key: (c) => readCookie(c.req.header('cookie'), sessionCookieName) ?? clientIp(c),
     }),
   );
+  // The public route: no session, so keyed by IP like /auth's. A reader with
+  // no cookie has nothing else to key on, and this is the one route the
+  // publish host actually serves.
+  app.use('/p/*', rateLimit({ limit: 120, windowMs: 60_000, key: clientIp }));
   app.use('*', rateLimit({ limit: 300, windowMs: 60_000, key: clientIp }));
 
   app.get('/health', (c) => c.json({ ok: true }));
@@ -135,6 +158,8 @@ export function createApp(deps: AppDeps): Hono {
   app.route('/', exportRoutes(deps));
   app.route('/', diagramRoutes(deps));
   app.route('/', fileRoutes(deps));
+  app.route('/', publishRoutes(deps));
+  app.route('/', publicPageRoutes(deps));
 
   return app;
 }

@@ -207,8 +207,70 @@ import { describe, expect, it } from 'vitest';
  * `e2e/imageSync.spec.ts` and the fix's own comment.) If a future change to
  * this feature needs more than ~455 B, the answer is the same as always: a
  * `React.lazy` boundary, server-side work, or a cut — not a raised ceiling.
+ *
+ * ### M (server-rendered publish dialog): the ceiling moves to 347,000,
+ * decided by the user on 2026-09-01 — the escape hatch this freeze was
+ * built to have, not the freeze being abandoned
+ *
+ * With the publish dialog wired in — `PublishDialog`, `PublishDialogContainer`
+ * and `requestPublish.ts` all reached only through a THIRD `React.lazy`
+ * boundary (`NoteEditor`'s `PublishDialogContainer`, alongside `GraphView`
+ * and `CommandPalette`), plus the `ExportMenu` item and 9 collapsed i18n keys
+ * that stay eager because the i18n dictionary is never chunked — the eager
+ * closure measured **346,728 B**, against the previous **346,500 B**
+ * ceiling: **228 B over**.
+ *
+ * Of that, only **~350 B is first-party feature code** (`ExportMenu.tsx`,
+ * `RichEditor.tsx`, `NoteEditor.tsx` and the trimmed i18n dictionary,
+ * measured directly off the eager chunks that hold them). The remaining
+ * **~330 B is Rolldown re-chunking**, not a feature cost at all: adding a
+ * THIRD independent `React.lazy` root changes the module graph's
+ * reachability shape enough that Rolldown hoists shared code — React's own
+ * runtime among it — into a new chunk that lands back in the eager closure,
+ * regardless of what the third lazy chunk itself imports. This was proven,
+ * not assumed: a control build that deleted the feature's only external
+ * import (`requestPublish.ts`'s `API_ORIGIN`, replaced with a hardcoded
+ * literal) still measured 346,734 B — the total moved by **under 6 B**.
+ * Three real import strategies for that one dependency were also measured
+ * (the `@/data` barrel: +1,286 B; a per-call dynamic `import()`: +661 B; a
+ * direct static import of the leaf module, what shipped: +228 B) — the
+ * spread across all four numbers (six B to 1,286 B) for the same feature
+ * logic is itself the evidence that the overage is chunking noise, not
+ * first-party weight. Inspecting the newly-extracted chunk's own bytes
+ * confirmed it: its first kilobyte is React's `isMounted`/`enqueueSetState`
+ * runtime, not application code.
+ *
+ * Chunk breakdown at the time of this raise:
+ *   themes-*:      232,910 B
+ *   index-*:        62,761 B
+ *   EmptyState-*:   39,551 B
+ *   config-*:       11,506 B   (the re-hoisted chunk — see above)
+ *   total:         346,728 B
+ *
+ * `CEILING_BYTES` moves to **347,000**, leaving **272 B** of headroom at the
+ * moment of this raise. The ceiling remains FROZEN under the same rule as
+ * before: this raise does not reopen it to routine ratcheting. The next
+ * feature that exceeds 347,000 goes lazier, moves to the server, gets cut,
+ * or is put to the user — it does not raise the number itself. This raise
+ * was decided BY THE USER, on the record above, not by sub-project M or by
+ * whoever executed its tasks.
+ *
+ * **That 272 B is already stale, and this line records why rather than
+ * silently re-editing the number above it.** Task 8's whole-branch review
+ * found two small correctness fixes still needed after this raise shipped —
+ * `handleUnpublish`'s missing `try`/`catch` and the CSP's missing
+ * `form-action`/`base-uri`/`frame-ancestors` directives, both in this same
+ * lazy chunk — which added roughly 40 B. The shipped closure, measured after
+ * those fixes, is **346,767 B**, i.e. **233 B** of headroom under the same
+ * frozen 347,000 ceiling. This branch was already bitten once by a stale
+ * byte figure (a `+1,741 B` docblock estimate for `PublishDialog`'s focus
+ * trap that measured 773 B in reality) — the number that matters to the
+ * next person is what `npm run build` actually produces, not the number
+ * recorded at whichever commit last touched this file. Re-run
+ * `npx vitest run scripts/bundleSize.test.ts` after a build to get the
+ * current figure; do not reason from either number above without doing so.
  */
-const CEILING_BYTES = 346_500;
+const CEILING_BYTES = 347_000;
 
 interface ManifestChunk {
   file: string;

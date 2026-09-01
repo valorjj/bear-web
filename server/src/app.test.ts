@@ -10,6 +10,7 @@ const ENV = {
   GOOGLE_CLIENT_ID: 'test-client-id',
   GOOGLE_CLIENT_SECRET: 'test-client-secret',
   PDF_RENDERER_URL: 'http://127.0.0.1:8788',
+  PUBLISH_ORIGIN: 'https://pub.example.com',
 };
 
 function app() {

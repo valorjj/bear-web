@@ -20,6 +20,8 @@ const env = {
   googleClientSecret: 'secret',
   pdfRendererUrl: 'http://127.0.0.1:8788',
   imageRoot: './data/test-images',
+  publishOrigin: 'https://pub.example.com',
+  publishRoot: './data/test-published',
 };
 
 describe.skipIf(!url)('/sync', () => {

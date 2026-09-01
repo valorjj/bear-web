@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createApp } from '../app.ts';
@@ -5,19 +9,11 @@ import { cookieName, SESSION_COOKIE } from '../auth/cookies.ts';
 import { migrate } from '../db/migrate.ts';
 import { createPool, type Pool } from '../db/pool.ts';
 import { readEnv } from '../env.ts';
+import { readPage } from '../publish/store.ts';
 import { createSession } from '../repositories/sessions.ts';
 import { findOrCreateUserByIdentity } from '../repositories/users.ts';
 
 const url = process.env.TEST_DATABASE_URL;
-
-const ENV = {
-  APP_ORIGIN: 'http://localhost:5173',
-  API_ORIGIN: 'http://localhost:8787',
-  DATABASE_URL: url ?? 'mysql://unused',
-  GOOGLE_CLIENT_ID: 'id',
-  GOOGLE_CLIENT_SECRET: 'secret',
-  PDF_RENDERER_URL: 'http://127.0.0.1:8788',
-};
 
 // secureCookies is false for these tests, so the cookie name is the bare
 // SESSION_COOKIE — never hardcode that assumption in account.ts itself.
@@ -27,10 +23,20 @@ describe.skipIf(!url)('account routes', () => {
   let pool: Pool;
   let userId: string;
   let token: string;
+  let publishRoot: string;
 
   function app() {
     return createApp({
-      env: readEnv(ENV),
+      env: readEnv({
+        APP_ORIGIN: 'http://localhost:5173',
+        API_ORIGIN: 'http://localhost:8787',
+        DATABASE_URL: url ?? 'mysql://unused',
+        GOOGLE_CLIENT_ID: 'id',
+        GOOGLE_CLIENT_SECRET: 'secret',
+        PDF_RENDERER_URL: 'http://127.0.0.1:8788',
+        PUBLISH_ORIGIN: 'https://pub.example.com',
+        PUBLISH_ROOT: publishRoot,
+      }),
       query: pool.query,
       transaction: pool.transaction,
       fetch: globalThis.fetch,
@@ -40,6 +46,7 @@ describe.skipIf(!url)('account routes', () => {
 
   beforeEach(async () => {
     pool ??= createPool(url!);
+    publishRoot = await mkdtemp(join(tmpdir(), 'bear-account-publish-'));
     await migrate(pool.query);
     /* tenancy-ok: test teardown truncates every row by design. */
     await pool.query('DELETE FROM users');
@@ -53,6 +60,7 @@ describe.skipIf(!url)('account routes', () => {
 
   afterAll(async () => {
     await pool.end();
+    await rm(publishRoot, { recursive: true, force: true });
   });
 
   it('reports who is signed in', async () => {
@@ -99,6 +107,37 @@ describe.skipIf(!url)('account routes', () => {
       n: number;
     }>;
     expect(Number(sessions[0]!.n)).toBe(0);
+  });
+
+  it('deleting the account removes a published page from disk, not only its row', async () => {
+    const instance = app();
+    const published = await instance.request(`/publish?noteId=n&title=${encodeURIComponent('T')}`, {
+      method: 'POST',
+      headers: {
+        cookie: `${cookie}=${token}`,
+        origin: 'http://localhost:5173',
+        'content-type': 'text/html',
+      },
+      body: '<p>hi</p>',
+    });
+    expect(published.status).toBe(201);
+    const { id } = (await published.json()) as { id: string };
+    expect(await readPage(publishRoot, userId, id)).not.toBeNull();
+
+    const response = await instance.request('/account', {
+      method: 'DELETE',
+      headers: {
+        cookie: `${cookie}=${token}`,
+        origin: 'http://localhost:5173',
+        'content-type': 'application/json',
+      },
+    });
+
+    expect(response.status).toBe(204);
+    // The database cascade removes the row; only this call removes the
+    // bytes. A cascade that leaves pages readable on the internet is not a
+    // deletion.
+    expect(await readPage(publishRoot, userId, id)).toBeNull();
   });
 
   it('refuses a mutating request from a foreign origin', async () => {

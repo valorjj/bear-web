@@ -2,29 +2,40 @@ import { type ReactElement, useEffect, useRef } from 'react';
 
 import { useSessionValue } from '@/features/account';
 import { useT } from '@/i18n';
-import { Download, FileCode, FileText, Icon, LoaderCircle, type LucideIcon } from '@/ui/Icon';
+import { Download, FileCode, FileText, Icon, Link, LoaderCircle, type LucideIcon } from '@/ui/Icon';
 
 import type { ExportFormat } from './exportNote';
 import { useExportProgress } from './ExportProgressContext';
 
 export interface ExportMenuProps {
   onChoose: (format: ExportFormat) => void;
+  /**
+   * Sub-project M: opens the publish dialog. Omitted entirely (rather than a
+   * no-op) hides the item, matching every other optional affordance here —
+   * `RichEditor` renders this menu even where publishing has nowhere to go.
+   */
+  onPublish?: () => void;
   /** Closes the menu without choosing — Escape, or a click elsewhere. */
   onDismiss: () => void;
 }
 
 interface Choice {
-  format: ExportFormat;
-  label: 'export.markdown' | 'export.html' | 'export.pdf';
+  key: string;
+  format?: ExportFormat;
+  label: 'export.markdown' | 'export.html' | 'export.pdf' | 'publish.open';
   glyph: LucideIcon;
-  /** PDF export renders server-side and needs the signed-in session to reach it. */
+  /**
+   * PDF export and publishing both need the signed-in session to reach the
+   * server — Markdown and HTML never leave the browser.
+   */
   disabledWhenSignedOut?: true;
 }
 
 const CHOICES: readonly Choice[] = [
-  { format: 'md', label: 'export.markdown', glyph: Download },
-  { format: 'html', label: 'export.html', glyph: FileCode },
-  { format: 'pdf', label: 'export.pdf', glyph: FileText, disabledWhenSignedOut: true },
+  { key: 'md', format: 'md', label: 'export.markdown', glyph: Download },
+  { key: 'html', format: 'html', label: 'export.html', glyph: FileCode },
+  { key: 'pdf', format: 'pdf', label: 'export.pdf', glyph: FileText, disabledWhenSignedOut: true },
+  { key: 'publish', label: 'publish.open', glyph: Link, disabledWhenSignedOut: true },
 ];
 
 /**
@@ -37,11 +48,13 @@ const CHOICES: readonly Choice[] = [
  * is not polish: the button that opens this menu is icon-only, so a keyboard user
  * who cannot get into the menu has no route to exporting at all.
  */
-export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactElement {
+export function ExportMenu({ onChoose, onPublish, onDismiss }: ExportMenuProps): ReactElement {
   const t = useT();
   const { state } = useSessionValue();
   const { pending } = useExportProgress();
   const first = useRef<HTMLButtonElement | null>(null);
+
+  const choices = onPublish === undefined ? CHOICES.filter((c) => c.key !== 'publish') : CHOICES;
 
   useEffect(() => {
     first.current?.focus();
@@ -65,7 +78,7 @@ export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactEleme
       aria-label={t('export.label')}
       className="flex min-w-40 flex-col gap-0.5 rounded-lg bg-surface p-1 shadow-popover"
     >
-      {CHOICES.map((choice, index) => {
+      {choices.map((choice, index) => {
         // `busy` is the PDF item specifically: the flag is global (one
         // render can only ever have one PDF in flight from the user's point
         // of view — see `ExportProgressContext`), but Markdown and HTML are
@@ -83,7 +96,7 @@ export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactEleme
 
         return (
           <button
-            key={choice.format}
+            key={choice.key}
             ref={index === 0 ? first : undefined}
             type="button"
             role="menuitem"
@@ -91,7 +104,8 @@ export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactEleme
             aria-busy={busy ? 'true' : undefined}
             onClick={() => {
               if (disabled) return;
-              onChoose(choice.format);
+              if (choice.format !== undefined) onChoose(choice.format);
+              else onPublish?.();
             }}
             className={`flex items-center gap-2 rounded-sm px-2 py-1 text-left text-ui transition-colors duration-[var(--bear-duration-fast)] ease-bear ${disabled ? 'text-faint' : 'text-text hover:bg-hover'}`}
           >
@@ -106,7 +120,11 @@ export function ExportMenu({ onChoose, onDismiss }: ExportMenuProps): ReactEleme
             {disabled && (
               <span className="sr-only">
                 {' '}
-                {busy ? t('export.pdf.pending') : t('export.pdf.requiresSignIn')}
+                {busy
+                  ? t('export.pdf.pending')
+                  : choice.key === 'publish'
+                    ? t('publish.requiresSignIn')
+                    : t('export.pdf.requiresSignIn')}
               </span>
             )}
           </button>

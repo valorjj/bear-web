@@ -46,6 +46,8 @@ export async function signedInDeps(options: SignedInDepsOptions = {}): Promise<A
       googleClientSecret: 'secret',
       pdfRendererUrl: 'http://127.0.0.1:8788',
       imageRoot: './data/test-images',
+      publishOrigin: 'https://pub.example.com',
+      publishRoot: './data/test-published',
     },
     query,
     transaction: async (run) => run(query),

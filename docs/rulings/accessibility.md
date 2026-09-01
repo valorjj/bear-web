@@ -33,7 +33,10 @@ TableHandleMenu.tsx`; and the hover/name tests in `e2e/appearance.spec.ts`,
 `src/ui/ui.test.tsx` and `src/features/notes/NoteListItem.test.tsx`;
 `src/features/palette/CommandPalette.tsx`'s `combobox`/`listbox` pair, its
 `aria-activedescendant` wiring, and the `data-palette-header` rows; and
-`e2e/palette.spec.ts`.
+`e2e/palette.spec.ts`; `src/features/export/ExportMenu.tsx`'s `publish` choice
+and its `disabledWhenSignedOut` reason span; `src/features/publish/
+PublishDialog.tsx`'s local `Modal` (its Tab-wrap and Escape-stack handling);
+and `e2e/publish.spec.ts`.
 
 - **Never rely on a CSS `gap` to separate text for assistive tech.**
   Accessible-name computation concatenates text content and ignores gaps. M5.5
@@ -593,3 +596,42 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   `showFailure` removes `role` and `aria-label` entirely and renders a `<p>`
   plus a real `<button>` instead — a failed diagram is text and a control, not
   a picture.
+
+## Publish (sub-project M)
+
+- **The "Publish to web" menu item's disabled-with-reason contract is
+  asserted BY VALUE, never by presence, exactly like PDF's.** Signed out,
+  `ExportMenu.tsx` marks the item `aria-disabled="true"` (never the `disabled`
+  HTML attribute — that would remove it from the tab order, and a keyboard
+  user could then never reach it to learn why it does nothing) and appends a
+  `sr-only` span carrying `publish.requiresSignIn` ("Sign in to publish")
+  inside the button, so it reaches the accessible name by concatenation, the
+  same mechanism `SidebarRow`'s explicit space text node relies on above.
+  `e2e/publish.spec.ts` asserts `toHaveAccessibleName(/sign in/i)`, not merely
+  that the attribute is `"true"` — an implementation that disabled the item
+  with no reason text at all would pass the weaker assertion and fail this
+  one. The item is reached and activated by KEYBOARD ONLY in that test:
+  `locator.click()` cannot be used on an `aria-disabled` element at all (see
+  the identical note on `e2e/pdfExport.spec.ts`), and `{ force: true }` would
+  synthesise a click event no user — keyboard or mouse — can actually
+  produce.
+
+- **`PublishDialog.tsx`'s hand-rolled `Modal` must reproduce `@/ui/Dialog`'s
+  Tab-wrap focus trap, and it shipped once without it.** The component
+  deliberately does not import the shared `Dialog`/`ConfirmDialog` — doing so
+  makes this file a third crossing consumer of a module `AppShell` and
+  `CommandPalette` already share, which tips Rolldown's chunk-splitting
+  heuristic into extracting a shared chunk that lands in the EAGER bundle
+  regardless of which side of the `React.lazy` boundary asked for it (measured
+  at +773 B against the 455 B of headroom available at the time) — so `Modal`
+  reimplements Escape-stack
+  handling and Tab-wrapping locally instead. The first version omitted the
+  wrap-both-directions branch, on the reasoning that duplicating markup this
+  late in the byte budget wasn't worth the risk of duplicating a bug too; a
+  keyboard user could Tab out of the open dialog into the page behind it.
+  Pasting `Dialog`'s own wrap branch back in, verbatim, measured **+6 B** —
+  there was never a real trade-off between bytes and a keyboard user being
+  able to stay inside an open modal. `publishDialog.test.tsx`'s "the focus
+  trap" tests assert both directions (`Tab` from the last control back to the
+  first, `Shift+Tab` from the first back to the last) for exactly this
+  reason: a trap that only wraps one direction is not a trap.

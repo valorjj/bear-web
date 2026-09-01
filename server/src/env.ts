@@ -21,6 +21,26 @@ export interface Env {
    * Defaulted so local development needs no configuration to boot.
    */
   imageRoot: string;
+  /**
+   * The origin the Cloudflare tunnel routes to this process for published
+   * pages, e.g. `https://pub.markflowing.com`.
+   *
+   * Required, with no default: `publishHostOnly` (`middleware/publishHost.ts`)
+   * uses it to decide which hostname is the anonymous one, and a wrong value
+   * here would serve published pages under the wrong hostname — or worse,
+   * fail to recognise the real one and 404 every public page. That must fail
+   * loudly at boot, not silently at request time.
+   */
+  publishOrigin: string;
+  /**
+   * Where rendered published-page HTML is written on disk.
+   *
+   * Mirrors `imageRoot`: a host filesystem path, not a Docker volume, kept
+   * outside the repo and outside `~/Documents`/`~/Desktop`/`~/Downloads` (see
+   * `imageRoot`'s doc comment for why). Defaulted so local development needs
+   * no configuration to boot.
+   */
+  publishRoot: string;
 }
 
 type Source = Record<string, string | undefined>;
@@ -48,5 +68,7 @@ export function readEnv(source: Source): Env {
     googleClientSecret: require_(source, 'GOOGLE_CLIENT_SECRET'),
     pdfRendererUrl: require_(source, 'PDF_RENDERER_URL'),
     imageRoot: source.IMAGE_ROOT ?? './data/images',
+    publishOrigin: require_(source, 'PUBLISH_ORIGIN'),
+    publishRoot: source.PUBLISH_ROOT ?? './data/published',
   };
 }
