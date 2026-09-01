@@ -1,6 +1,7 @@
 export { RichEditor } from './RichEditor';
 export type { RichEditorHandle, RichEditorProps } from './RichEditor';
 export { EMPTY_DOCUMENT_MARKDOWN, normalizeMarkdown, parseMarkdown } from './markdown';
+export { DIAGRAM_LANGUAGE_ID } from './codeLanguages';
 export { editorExtensions } from './extensions';
 // CAVEAT: this is the GUESSING registry -- its own `highlightAuto` guesses a
 // language rather than declining, which is correct for export

@@ -66,10 +66,11 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | L2 backlinks: `[[wikilink]]`, index, pill, panel, autocomplete    | complete |
 | L3 relationship graph: force layout, pan/zoom, worker offload     | complete |
 | L4 command palette: `⌘K`, fuzzy match, commands + notes           | complete |
+| L5 server-rendered Mermaid diagrams                               | complete |
 
-2350 unit tests (plus 130 server tests, 79 of which are integration tests that
-skip when `TEST_DATABASE_URL` is unset, and 23 renderer tests behind
-`npm run test:pdf`), 205 end-to-end tests. `main` is always green and
+2444 unit tests (plus 141 server tests, 79 of which are integration tests that
+skip when `TEST_DATABASE_URL` is unset, and 71 renderer tests behind
+`npm run test:pdf`), 208 end-to-end tests. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**
@@ -114,10 +115,14 @@ reason in its accessible name.
 - **`server/` may import nothing from `src/` but `src/data/types.ts`** — see
   Architecture boundaries, where it is enforced rather than merely stated.
 
-**Three further Playwright entry points exist and are deliberately not in that
-count, because they assert nothing.** Both drive the fixed corpus in
-`e2e/fixtures/corpus.ts`, and `grepInvert` on `@shots|@measure` in
-`playwright.config.ts` keeps both out of `npm run test:e2e`:
+**Four further Playwright entry points exist and are deliberately not in that
+count, because they assert nothing.** The first three drive the fixed corpus
+in `e2e/fixtures/corpus.ts`; `shots:mermaid` carries its own small local
+fixture instead, deliberately kept out of that shared corpus — a diagram note
+added there would change note-list geometry and drag `measure.spec.ts`'s
+committed `measurements.md` into an unrelated diff. `grepInvert` on
+`@shots|@measure` in `playwright.config.ts` keeps all four out of
+`npm run test:e2e`:
 
 - `npm run shots` → `e2e/shots.spec.ts` writes design reference screenshots to
   `docs/design/shots/` (gitignored) — three panes, search, trash, the empty
@@ -150,6 +155,18 @@ count, because they assert nothing.** Both drive the fixed corpus in
   — **count the files.** It is not folded into `npm run shots`: sixteen A4
   container renders is not a cost that harness should carry, and the existing
   export-HTML shot is a picture of the document, not of the paginated PDF.
+- `npm run shots:mermaid` → `e2e/shots-mermaid.spec.ts` renders the six
+  diagram types `mermaidTheme.ts` themes (flowchart, sequence, state, class,
+  ER, pie) through the **real containerised** renderer in one light theme
+  (`paper`) and one dark (`nord`), and screenshots each rendered diagram to
+  `docs/design/shots/mermaid/` (**12 files**: six types × two themes). It
+  needs `PDF_RENDERER_URL` and `npm run pdf:up`, and it SKIPS silently
+  without them — **count the files, do not trust the exit code**, the same
+  rule every harness on this list carries. Nothing else in the repo looks at
+  a rendered diagram with eyes: `mermaidTheme.ts`'s selector set was checked
+  against Mermaid's real output with `getComputedStyle`, not by reading class
+  names, but a clipped label or a diagram type that silently fell back to
+  Mermaid's base palette is invisible to that check and to every other gate.
 
 They exist because **nothing in the test suite can see "renders wrong"**: the unit
 suite has no layout engine and `e2e/appearance.spec.ts` is deliberately relative.
@@ -306,6 +323,18 @@ These bit us once already. They are not mistakes.
   belong in Playwright.
 - `erasableSyntaxOnly` forbids `enum`, parameter properties, and namespaces.
   `verbatimModuleSyntax` requires `import type` / `export type`.
+- **`tsconfig.server.json` sets `"lib": ["ES2023"]` with no DOM**, on purpose:
+  `server/` runs in Node, and letting browser globals leak in would make code
+  typecheck against APIs that do not exist at runtime. Consequence for
+  `server/pdf/mermaid.ts`: `page.evaluate`'s callback genuinely runs inside a
+  real Chromium page (Mermaid's own bundle, `window.mermaid`), but the
+  `server` project cannot see `Window`, `SVGElement` or any other DOM type to
+  describe it. The file declares its own minimal shape instead —
+  `interface MermaidApi { initialize(...); render(...) }`, commented "the
+  shape `page.evaluate` needs; the real types live only in the image" — the
+  same move `vitest.setup.ts`'s `matchMedia` stub makes for the opposite
+  reason (there, keeping Node and browser globals apart on purpose; here,
+  describing a browser API from a project that cannot import DOM lib at all).
 - **A click cannot place a caret in jsdom, and a test that assumes where the
   caret ended up will fail rarely and confusingly.** `document.elementFromPoint`
   is stubbed to null and every Range rect is zero, so ProseMirror's

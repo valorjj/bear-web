@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, exportDatabase, importDatabase } from './backup';
 import type { BearDatabase } from './db';
 import { parseLinks } from './links';
+import { createDiagramsRepository } from './repositories/diagrams';
 import { createNotesRepository } from './repositories/notes';
 import { parseTags } from './tags';
 import { LAST_PULLED_REV_KEY, SYNCED_ACCOUNT_KEY } from './sync/engine';
@@ -105,6 +106,16 @@ describe('exportDatabase', () => {
     expect(keys).not.toContain(LAST_PULLED_REV_KEY);
     expect(keys).not.toContain(SYNCED_ACCOUNT_KEY);
     expect(keys).toContain('theme');
+  });
+
+  it('never carries the diagram cache', async () => {
+    const diagrams = createDiagramsRepository({ db });
+    await diagrams.put('abc', '<svg/>');
+    const bundle = await exportDatabase(db);
+
+    // Derived data. A bundle carrying it would be larger for nothing, and an
+    // import would restore renders whose version may no longer match.
+    expect(Object.keys(bundle)).not.toContain('diagrams');
   });
 });
 

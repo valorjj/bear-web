@@ -327,8 +327,14 @@ test('arrowing to the last code language option scrolls it into view', async ({ 
   // measured in a real browser, the active option went invisible starting
   // around the 8th of thirteen rows, with `list.scrollTop` still `0` after
   // `End`. Only a jump to the LAST row proves scrolling actually happens.
+  //
+  // `Diagram (Mermaid)` is the true last row since L5: `CodeLanguageControls`
+  // appends `DIAGRAM_LANGUAGE_ID` after every entry in `CODE_LANGUAGES`
+  // (`src/features/editor/CodeLanguageControls.ts`), so it is not merely
+  // reachable but the row `End` must land on. `YAML` was the last row before
+  // that addition.
   await page.keyboard.press('End');
-  await expect(list.locator('[role="option"].is-active')).toHaveText('YAML');
+  await expect(list.locator('[role="option"].is-active')).toHaveText('Diagram (Mermaid)');
 
   const active = page.locator('[role="option"].is-active');
   const activeBox = await active.boundingBox();

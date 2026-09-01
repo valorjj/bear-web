@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { parseLinks } from '../links';
 import { parseTags } from '../tags';
+import { createDiagramsRepository } from './diagrams';
 import { createFilesRepository } from './files';
 import { createFoldsRepository } from './folds';
 import { createNotesRepository } from './notes';
@@ -12,7 +13,10 @@ export const tags = createTagsRepository(db);
 export const files = createFilesRepository({ db });
 export const settings = createSettingsRepository(db);
 export const folds = createFoldsRepository(db);
+export const diagrams = createDiagramsRepository({ db });
 
+export { createDiagramsRepository, DIAGRAM_CACHE_MAX_BYTES } from './diagrams';
+export type { DiagramsRepository, DiagramsRepositoryDeps } from './diagrams';
 export type { FilesRepository } from './files';
 export type { FoldsRepository } from './folds';
 export type { LinkParser, NotesRepository, TagParser } from './notes';

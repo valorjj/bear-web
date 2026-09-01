@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db, files as filesRepo, storedImagePath } from '@/data';
+import { DiagramError } from '@/features/diagrams';
 
 import { exportNote } from './exportNote';
 
@@ -170,5 +171,50 @@ describe('a note with stored images', () => {
 
     expect(files).toHaveLength(1);
     expect(files[0]!.filename).toMatch(/\.md$/);
+  });
+});
+
+describe('mermaid diagrams in html/pdf export', () => {
+  it('renders uncached diagrams before building the document', async () => {
+    const { files, deps } = harness();
+    const ensure = vi.fn(async () => '<svg id="drawn"/>');
+
+    await exportNote({ ...note, text: '```mermaid\nflowchart TD\n  A --> B\n```' }, 'html', 'en', {
+      ...deps,
+      ensureDiagram: ensure,
+    });
+
+    expect(ensure).toHaveBeenCalledWith('flowchart TD\n  A --> B');
+    expect(await readBlob(files[0]!.blob)).toContain('<svg id="drawn"');
+  });
+
+  it('exports the fence rather than failing when a diagram cannot render', async () => {
+    const { files, deps } = harness();
+
+    await exportNote({ ...note, text: '```mermaid\nA\n```' }, 'html', 'en', {
+      ...deps,
+      ensureDiagram: async () => {
+        throw new DiagramError('offline');
+      },
+    });
+
+    // The export SUCCEEDS. One code block in a document is a far better
+    // outcome than an export that refuses to run because the network is down.
+    expect(files).toHaveLength(1);
+    expect(await readBlob(files[0]!.blob)).toContain('<pre');
+  });
+
+  it('does not ask for diagrams when exporting Markdown', async () => {
+    // Markdown export is the note's text VERBATIM. A render would be work
+    // for an output that must not change by a byte.
+    const { deps } = harness();
+    const ensure = vi.fn(async () => '<svg/>');
+
+    await exportNote({ ...note, text: '```mermaid\nA\n```' }, 'md', 'en', {
+      ...deps,
+      ensureDiagram: ensure,
+    });
+
+    expect(ensure).not.toHaveBeenCalled();
   });
 });

@@ -21,9 +21,11 @@ removed Tiptap extension, input rule or `markdownTokenName`; a new or changed
 `Shift-F10` and `ContextMenu` key included); any `normalizeMarkdown` /
 `parseMarkdown` / `serializeMarkdown` call site; `src/features/editor/lowlight.ts`
 (`lowlight`, `lowlightForEditor`), `src/features/editor/codeLanguages.ts`
-(`resolveLanguage`), `src/features/editor/highlightClasses.ts`
+(`resolveLanguage`, `DIAGRAM_LANGUAGE_ID`), `src/features/editor/highlightClasses.ts`
 (`roleOfFlattenedClasses`, `KNOWN_FLATTENED_COLLISIONS`), and
-`src/features/editor/CodeLanguageControls.ts`. Also `LinkPill.ts`'s
+`src/features/editor/CodeLanguageControls.ts`. Also `MermaidDiagram.ts`
+(`isMermaidBlock`, `diagramName`), `src/features/diagrams/` (`ensureDiagram`,
+`requestDiagram`, `DiagramError`). Also `LinkPill.ts`'s
 `setKnownNoteTitles`, `LinkAutocomplete.ts`'s `move`/`dismiss` dispatches, and
 any other `skipTrailingNodeMeta` call site or meta-only `tr.setMeta(...)`
 dispatch anywhere in `src/features/editor/`.
@@ -698,3 +700,25 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   deliberately in M9b's brainstorm and kept: a callout long enough to want
   folding usually wanted to be a section under a heading. This is why there is
   no `-`/`+` flag in the Markdown and no fold state to persist.
+
+## Mermaid diagrams (L5)
+
+- **A ` ```mermaid ` fence is a `codeBlock`, and stays one.** No new schema
+  node was added: the whole editing/rendered switch (`MermaidDiagram.ts`) is
+  an `Extension` registering a node VIEW and a decoration over the existing
+  `codeBlock` node, never a new node type. The Markdown round-trip is
+  therefore untouched — a diagram note stays portable to GitHub, Obsidian, or
+  anything else that reads a fence — and `computeRecognizedHtmlTags()` and
+  every round-trip suite are correctly blind to whether the rendering plugin
+  runs at all. `mermaidDiagram.test.tsx` is the only thing that can catch a
+  dead plugin, precisely because nothing about the schema or serialization
+  changed.
+
+- **`CODE_LANGUAGES` is not where a non-highlight language goes.**
+  `codeLanguages.ts`'s `CODE_LANGUAGES` is the single list `lowlight` reads to
+  register highlight.js grammars; `mermaid` has none, and asking for one
+  registers nothing and silently renders the fence as plain text. `mermaid`
+  is instead `DIAGRAM_LANGUAGE_ID`, a standalone constant `MermaidDiagram.ts`
+  keys its node view on and the language picker labels via
+  `codeLabels.diagram`. A future non-highlight fence language belongs beside
+  `DIAGRAM_LANGUAGE_ID`, not folded into `CODE_LANGUAGES`.

@@ -119,3 +119,14 @@ export function createQueue(options: QueueOptions = {}): Queue {
 const defaultQueue = createQueue();
 
 export const withSlot: Queue['withSlot'] = (run) => defaultQueue.withSlot(run);
+
+/**
+ * A SECOND queue, for diagram renders, and the separation is the point.
+ *
+ * A Mermaid render is ~100 ms; a PDF is seconds. Sharing one queue means
+ * opening a note with a diagram can sit behind somebody's export and present
+ * as a broken editor. Both queues share ONE Chromium — contexts are cheap —
+ * and therefore share the every-50-renders restart, which is correct: the
+ * memory that restart bounds is the browser's, not the queue's.
+ */
+export const diagramQueue = createQueue({ maxConcurrent: MAX_CONCURRENT });

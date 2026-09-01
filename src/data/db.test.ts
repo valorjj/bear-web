@@ -4,20 +4,21 @@ import { BearDatabase } from './db';
 import { createTestDatabase } from './testing';
 
 describe('BearDatabase', () => {
-  it('opens at schema version 5', async () => {
+  it('opens at schema version 6', async () => {
     const db = createTestDatabase();
     await db.open();
 
-    expect(db.verno).toBe(5);
+    expect(db.verno).toBe(6);
 
     db.close();
   });
 
-  it('declares all eight tables', async () => {
+  it('declares all nine tables', async () => {
     const db = createTestDatabase();
     await db.open();
 
     expect(db.tables.map((t) => t.name).sort()).toEqual([
+      'diagrams',
       'files',
       'noteFolds',
       'noteLinks',
@@ -90,18 +91,17 @@ describe('BearDatabase', () => {
     database.close();
   });
 
-  it('declares version 5, which is IndexedDB version 50', async () => {
+  it('declares version 6, which is IndexedDB version 60', async () => {
     // e2e/fixtures/seed.ts opens at the RAW IndexedDB number and must move with
     // this. Seeding at the wrong number leaves a connection blocking the
     // upgrade forever and the app boots to a bare <div id="root"> with no error.
     //
     // This test failing during a version bump is it doing its job: the bump is
     // the licensed edit, and the seed moving in the SAME commit is the rule it
-    // exists to enforce. L2 raised it from 4 to 5 for the noteLinks backlinks
-    // index.
+    // exists to enforce. L5 raised it from 5 to 6 for the diagrams render cache.
     const database = new BearDatabase(`test-${crypto.randomUUID()}`);
     await database.open();
-    expect(database.verno).toBe(5);
+    expect(database.verno).toBe(6);
     database.close();
   });
 });

@@ -189,6 +189,24 @@ import { describe, expect, it } from 'vitest';
  * subsets are first-load bytes that nothing here measures.
  *
  * See `docs/rulings/testing-and-tooling.md` for the ruling itself.
+ *
+ * ### L5 (server-rendered Mermaid diagrams), measured both sides, 2026-09-01
+ *
+ * `main` (`190ecc7`, pre-L5) measures **343,415 B**. This branch measures
+ * **346,045 B** — a true eager cost of **2,630 B**, leaving **455 B** of
+ * headroom under the frozen 346,500 B ceiling. `CEILING_BYTES` does NOT
+ * move; this is a record, not a request. The whole diagram feature —
+ * `MermaidDiagram.ts`'s node view, `ensureDiagram`/`requestDiagram`, the
+ * diagram cache repository, the export-time `collectDiagrams` pass and both
+ * locales' failure sentences — ships for that cost because the actual
+ * rendering happens server-side: no Mermaid, no layout engine and no theme
+ * CSS reach the browser bundle at all. (22 B of the 2,630 is Task 9's own:
+ * a pre-existing `StoredImage.ts` object-URL double-release race, exposed —
+ * not caused — by this branch's extra editor plugin shifting initial-mount
+ * timing, fixed alongside the verification work that found it; see
+ * `e2e/imageSync.spec.ts` and the fix's own comment.) If a future change to
+ * this feature needs more than ~455 B, the answer is the same as always: a
+ * `React.lazy` boundary, server-side work, or a cut — not a raised ceiling.
  */
 const CEILING_BYTES = 346_500;
 

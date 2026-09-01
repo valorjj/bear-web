@@ -2,7 +2,7 @@ import { getSchema } from '@tiptap/core';
 import { DOMSerializer, Node as ProseMirrorNode } from '@tiptap/pm/model';
 
 import { storedImageId } from '@/data/images';
-import { editorExtensions, lowlight, parseMarkdown } from '@/features/editor';
+import { DIAGRAM_LANGUAGE_ID, editorExtensions, lowlight, parseMarkdown } from '@/features/editor';
 
 /** Just enough of a note to render it. */
 export interface RenderableNote {
@@ -200,6 +200,106 @@ function appendHastChildren(
 const LANGUAGE_CLASS_PREFIX = 'language-';
 
 /**
+ * Every distinct Mermaid diagram source a note's PARSED DOCUMENT contains, in
+ * order.
+ *
+ * Deliberately NOT a line scan over the raw Markdown text (an earlier task
+ * shipped one, `mermaidSources`, since deleted as unused once this replaced
+ * its only real purpose). A scanner keyed on the fence marker sitting at line
+ * start after at most three leading spaces cannot see a fence indented under
+ * a `>` blockquote prefix -- CommonMark's own rule for a top-level fence. The
+ * editor is unaffected -- its node view keys on the code block's language
+ * wherever the block sits in the document, so a diagram inside a callout
+ * renders on screen -- but a text scan feeding export would silently miss
+ * exactly that case and turn the diagram back into a code block. Walking the
+ * same parsed document `renderNoteBody` is about to serialize is inherently
+ * consistent with what actually ends up on the page, and handles nesting for
+ * free.
+ *
+ * Deduplicated, because the cache is content-addressed: two identical
+ * diagrams in one note are one render.
+ */
+export function collectDiagramSources(text: string): string[] {
+  const schema = getSchema(editorExtensions);
+  const document_ = ProseMirrorNode.fromJSON(schema, parseMarkdown(text));
+  const seen = new Set<string>();
+  const sources: string[] = [];
+
+  document_.descendants((node) => {
+    if (node.type.name !== 'codeBlock') return;
+    const language = node.attrs.language as string | null | undefined;
+    if (typeof language !== 'string' || language.trim().toLowerCase() !== DIAGRAM_LANGUAGE_ID) {
+      return;
+    }
+
+    const source = node.textContent;
+    if (source.trim() === '' || seen.has(source)) return;
+    seen.add(source);
+    sources.push(source);
+  });
+
+  return sources;
+}
+
+/**
+ * A `<script` anywhere in a diagram's markup refuses the inline outright.
+ *
+ * This is the last check before rendered SVG reaches an exported file
+ * someone else opens -- everything upstream (the container's sanitizing DOM
+ * walk, its own regex re-check, the API's boundary re-check, and the client
+ * tripwire in `MermaidDiagram.ts`) has already had its turn. Written without
+ * backticks on purpose -- one inside a CSS comment in this file would
+ * terminate `renderNoteHtml`'s own template literal further down.
+ */
+const SCRIPT_TAG_PATTERN = /<\s*script\b/i;
+
+/**
+ * Replaces every `pre > code.language-mermaid` block under `host` with its
+ * rendered SVG, given a source-keyed map of already-rendered diagrams.
+ *
+ * Mirrors `highlightCodeBlocks`'s walk in shape, and MUST run before it: a
+ * diagram that gets replaced here must never also be re-highlighted as plain
+ * text by that function.
+ *
+ * A diagram with no supplied render -- never asked for, still in flight,
+ * or failed -- keeps its fence VERBATIM. An export that refuses to run is
+ * worse than one carrying a code block.
+ */
+function replaceMermaidBlocks(host: Element, doc: Document, diagrams: Map<string, string>): void {
+  for (const code of host.querySelectorAll('pre > code')) {
+    const languageClass = [...code.classList].find((name) =>
+      name.startsWith(LANGUAGE_CLASS_PREFIX),
+    );
+    // Lowercased before comparing, matching `collectDiagramSources` above and
+    // `MermaidDiagram.ts`'s `isMermaidBlock` in the editor -- both accept
+    // `language-MERMAID` fences and every other-cased variant as diagrams.
+    // An exact-case compare here disagreed with both: a mixed-case fence
+    // rendered as a diagram in the editor, was collected and PAID FOR a real
+    // server render by `collectDiagramSources`/`collectDiagrams`, and then
+    // this exact-case check never matched the emitted `language-MERMAID`
+    // class, so the fence shipped verbatim in the export anyway -- silently
+    // wasting the render rather than corrupting anything, but a defect either
+    // way.
+    if (languageClass?.slice(LANGUAGE_CLASS_PREFIX.length).toLowerCase() !== DIAGRAM_LANGUAGE_ID) {
+      continue;
+    }
+
+    const pre = code.parentElement;
+    if (!pre) continue;
+
+    const svg = diagrams.get(code.textContent ?? '');
+    if (svg === undefined || SCRIPT_TAG_PATTERN.test(svg)) continue;
+
+    const template = doc.createElement('template');
+    template.innerHTML = svg;
+    const rendered = template.content.firstElementChild;
+    if (rendered === null) continue;
+
+    pre.replaceWith(rendered);
+  }
+}
+
+/**
  * Re-highlights every fenced code block under `host`, replacing its plain
  * text with the same `.hljs-*` spans the editor shows — see the note on
  * `HastChildNode` above for why this cannot be inherited from the document.
@@ -295,7 +395,12 @@ function inlineImages(host: HTMLElement, images: Map<string, string>): void {
   }
 }
 
-export function renderNoteBody(text: string, images: Map<string, string> = new Map()): string {
+export function renderNoteBody(
+  text: string,
+  images: Map<string, string> = new Map(),
+  /** Diagram source → rendered SVG markup. Absent entries keep their fence. */
+  diagrams: Map<string, string> = new Map(),
+): string {
   const schema = getSchema(editorExtensions);
   const document_ = ProseMirrorNode.fromJSON(schema, parseMarkdown(text));
   const fragment = DOMSerializer.fromSchema(schema).serializeFragment(document_.content, {
@@ -304,6 +409,17 @@ export function renderNoteBody(text: string, images: Map<string, string> = new M
 
   const host = document.createElement('div');
   host.append(fragment);
+  // Ordering is deliberate but currently UNOBSERVABLE: lowlight has no
+  // 'mermaid' grammar registered, so highlightCodeBlocks already skips a
+  // language-mermaid block regardless of which of these two runs first (see
+  // the LANGUAGE_CLASS_PREFIX check inside it). The test
+  // "lowlight has no mermaid grammar, which is what makes this order
+  // currently unobservable" in html.test.ts pins the fact this ordering
+  // depends on -- if that test ever starts failing (someone registers a
+  // Mermaid grammar, or lowlight ships one), THIS call must move ahead of
+  // highlightCodeBlocks for real, and needs its own ordering test at that
+  // point.
+  replaceMermaidBlocks(host, document, diagrams);
   highlightCodeBlocks(host, document);
   inlineImages(host, images);
   return host.innerHTML;
@@ -328,6 +444,8 @@ export function renderNoteHtml(
   locale = 'en',
   /** Stored-image id → `data:` URI. Anything absent is dropped from the output. */
   images: Map<string, string> = new Map(),
+  /** Diagram source → rendered SVG markup. Anything absent keeps its fence. */
+  diagrams: Map<string, string> = new Map(),
 ): string {
   const declarations = EXPORT_TOKEN_NAMES.map(
     (name) => `      ${name}: ${tokens[name] ?? FALLBACKS[name]};`,
@@ -824,7 +942,7 @@ ${declarations}
     </style>
   </head>
   <body>
-${renderNoteBody(note.text, images)}
+${renderNoteBody(note.text, images, diagrams)}
   </body>
 </html>
 `;

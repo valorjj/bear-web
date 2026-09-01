@@ -118,7 +118,13 @@ const MAX_WIDGET_HOPS = 4;
 function codeTextFor(button: HTMLElement): string | null {
   let el = button.closest('[data-code-copy-anchor]')?.nextElementSibling ?? null;
   for (let hop = 0; el !== null && hop < MAX_WIDGET_HOPS; hop += 1) {
-    if (el.tagName === 'PRE') return (el.querySelector('code') ?? el).textContent;
+    // Either the `<pre>` itself, or a WRAPPER holding one. L5's mermaid node
+    // view is the wrapper case: it renders the block as
+    // `div.bear-mermaid > pre > code` plus a sibling figure, so a check for
+    // `tagName === 'PRE'` alone found nothing and the button silently copied
+    // the empty string — for exactly the blocks a reader most wants to copy.
+    const pre = el.tagName === 'PRE' ? el : el.querySelector(':scope > pre');
+    if (pre) return (pre.querySelector('code') ?? pre).textContent;
     el = el.nextElementSibling;
   }
   return null;

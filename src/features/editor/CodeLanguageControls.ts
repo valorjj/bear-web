@@ -2,11 +2,17 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 
-import { CODE_LANGUAGES, languageLabel, resolveLanguage } from './codeLanguages';
+import {
+  CODE_LANGUAGES,
+  DIAGRAM_LANGUAGE_ID,
+  languageLabel,
+  resolveLanguage,
+} from './codeLanguages';
 
 export interface CodeLanguageControlsOptions {
   /**
-   * The control's own chrome, plus `none` for the "no language" choice.
+   * The control's own chrome, plus `none` for the "no language" choice and
+   * `diagram` for L5's Mermaid row.
    * `null` when nobody supplied them — the state of the schema-only
    * `editorExtensions` constant — and in that state NO PLUGIN is registered
    * at all.
@@ -17,7 +23,18 @@ export interface CodeLanguageControlsOptions {
    * language display names are NOT here — they are `label` fields on
    * `CODE_LANGUAGES`, proper nouns identical in every locale.
    */
-  codeLabels: { trigger: string; none: string; filter: string; empty: string } | null;
+  codeLabels: {
+    trigger: string;
+    none: string;
+    filter: string;
+    empty: string;
+    /**
+     * The Mermaid row's name. Translated, unlike the twelve `label` fields
+     * on `CODE_LANGUAGES` — "Diagram" is a common noun, not a proper one —
+     * which is why it rides here beside `none` rather than in that array.
+     */
+    diagram: string;
+  } | null;
 }
 
 export const codeLanguageControlsKey = new PluginKey('codeLanguageControls');
@@ -66,12 +83,48 @@ function choices(fence: string | null): readonly LanguageChoice[] {
   const base: LanguageChoice[] = [
     { id: null, label: '' },
     ...CODE_LANGUAGES.map((l) => ({ id: l.id, label: l.label })),
+    // Last, and on its own: this fence is RENDERED rather than highlighted,
+    // so it is not one of the twelve and its label comes from `codeLabels`
+    // (see `labelOf`) rather than from `CODE_LANGUAGES`.
+    { id: DIAGRAM_LANGUAGE_ID, label: '' },
   ];
   const trimmed = fence?.trim() ?? '';
-  if (trimmed !== '' && resolveLanguage(fence) === null) {
+  // `mermaid` resolves to no highlight grammar, so without this exclusion it
+  // would ALSO get an echo row — two rows carrying the same id, and therefore
+  // the same element id and the same `aria-selected`.
+  if (trimmed !== '' && trimmed !== DIAGRAM_LANGUAGE_ID && resolveLanguage(fence) === null) {
     return [{ id: trimmed, label: trimmed }, ...base];
   }
   return base;
+}
+
+/**
+ * A choice's display name.
+ *
+ * Two ids take their name from `codeLabels` rather than from the choice
+ * itself: `null` ("plain text") and `mermaid` ("Diagram"). Both are common
+ * nouns and must be translated; every other row is a proper noun carried as
+ * data on `CODE_LANGUAGES`.
+ */
+function labelOf(
+  choice: LanguageChoice,
+  labels: NonNullable<CodeLanguageControlsOptions['codeLabels']>,
+): string {
+  if (choice.id === null) return labels.none;
+  if (choice.id === DIAGRAM_LANGUAGE_ID) return labels.diagram;
+  return choice.label;
+}
+
+/**
+ * What the TRIGGER reads for a fence, which is `languageLabel` plus the same
+ * two translated exceptions `labelOf` makes.
+ */
+function triggerLabel(
+  fence: string | null,
+  labels: NonNullable<CodeLanguageControlsOptions['codeLabels']>,
+): string {
+  if (fence !== null && fence.trim().toLowerCase() === DIAGRAM_LANGUAGE_ID) return labels.diagram;
+  return languageLabel(fence) ?? labels.none;
 }
 
 /**
@@ -185,8 +238,7 @@ function renderOptions(
   const query = filterText.trim().toLowerCase();
   const selected = selectedKey(fence);
   const matches = choices(fence).filter((choice) => {
-    const label = choice.id === null ? labels.none : choice.label;
-    return label.toLowerCase().includes(query);
+    return labelOf(choice, labels).toLowerCase().includes(query);
   });
 
   if (matches.length === 0) {
@@ -209,7 +261,7 @@ function renderOptions(
 
   for (const choice of matches) {
     const key = keyOf(choice);
-    const label = choice.id === null ? labels.none : choice.label;
+    const label = labelOf(choice, labels);
     const item = document.createElement('li');
     item.id = optionId(pos, key);
     item.setAttribute('role', 'option');
@@ -249,7 +301,7 @@ function controlElement(
   trigger.setAttribute('aria-haspopup', 'listbox');
   trigger.setAttribute('aria-expanded', 'false');
 
-  const currentLabel = languageLabel(fence) ?? labels.none;
+  const currentLabel = triggerLabel(fence, labels);
   trigger.textContent = currentLabel;
   // The name must convey what the control DOES, not merely the language in
   // effect: a trigger that reads only "TypeScript" tells a screen-reader
@@ -697,7 +749,7 @@ function choose(
 
     const { trigger } = widgetParts(container);
     if (trigger) {
-      const newLabel = languageLabel(choice.id) ?? labels.none;
+      const newLabel = triggerLabel(choice.id, labels);
       trigger.textContent = newLabel;
       trigger.setAttribute('aria-label', `${labels.trigger}: ${newLabel}`);
     }

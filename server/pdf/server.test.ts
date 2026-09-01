@@ -2,6 +2,7 @@ import type { AddressInfo } from 'node:net';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { MermaidSyntaxError, SanitizerFailedError } from './mermaid.ts';
 import { QueueFullError } from './queue.ts';
 import { RenderTimeoutError } from './render.ts';
 import { createRenderServer, type RenderServerDeps } from './server.ts';
@@ -182,5 +183,99 @@ describe('createRenderServer', () => {
     });
 
     expect((await post(base)).status).toBe(503);
+  });
+});
+
+function postMermaid(
+  base: string,
+  body: string,
+  contentType = 'application/json',
+): Promise<Response> {
+  return fetch(`${base}/render/mermaid`, {
+    method: 'POST',
+    headers: { 'content-type': contentType },
+    body,
+  });
+}
+
+describe('POST /render/mermaid', () => {
+  it('returns the SVG', async () => {
+    const base = await start({ renderMermaid: async () => '<svg id="ok"/>' });
+    const response = await postMermaid(base, JSON.stringify({ source: 'flowchart TD\n A --> B' }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/svg+xml');
+    expect(await response.text()).toBe('<svg id="ok"/>');
+  });
+
+  it('refuses text/plain', async () => {
+    // Not tidiness: `text/plain` is a CORS-safelisted content type, so
+    // accepting it would let any page the user is browsing POST straight at
+    // this renderer on 127.0.0.1, bypassing the API's auth and rate limiter.
+    // Exactly the reasoning that makes /render demand text/html.
+    const base = await start({ renderMermaid: async () => '<svg/>' });
+    const response = await postMermaid(
+      base,
+      JSON.stringify({ source: 'flowchart TD\n A --> B' }),
+      'text/plain',
+    );
+
+    expect(response.status).toBe(415);
+  });
+
+  it('refuses a body over the source cap before rendering', async () => {
+    let called = false;
+    const base = await start({
+      maxSourceBytes: 64,
+      renderMermaid: async () => {
+        called = true;
+        return '<svg/>';
+      },
+    });
+
+    const response = await postMermaid(base, JSON.stringify({ source: 'x'.repeat(200) }));
+
+    expect(response.status).toBe(413);
+    // The cap is only a cap if it runs FIRST. This is the assertion, not the
+    // status: a 413 returned after the render happened bounds nothing.
+    expect(called).toBe(false);
+  });
+
+  it('rejects a body that is not JSON with a source string', async () => {
+    const base = await start({ renderMermaid: async () => '<svg/>' });
+    for (const body of ['not json', '{}', '{"source":42}', '[]']) {
+      const response = await postMermaid(base, body);
+      expect(response.status, body).toBe(400);
+    }
+  });
+
+  it('maps a syntax error to 422 and carries the message', async () => {
+    const base = await start({
+      renderMermaid: async () => {
+        throw new MermaidSyntaxError('Parse error on line 2');
+      },
+    });
+
+    const response = await postMermaid(base, JSON.stringify({ source: 'flowchart TD\n A -->' }));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: 'Parse error on line 2' });
+  });
+
+  it.each([
+    [504, () => new RenderTimeoutError()],
+    [503, () => new QueueFullError()],
+    [500, () => new SanitizerFailedError(['script'])],
+    [500, () => new Error('anything else')],
+  ])('maps a thrown %i', async (status, make) => {
+    const base = await start({
+      renderMermaid: async () => {
+        throw make();
+      },
+    });
+
+    const response = await postMermaid(base, JSON.stringify({ source: 'flowchart TD\n A --> B' }));
+
+    expect(response.status).toBe(status);
   });
 });

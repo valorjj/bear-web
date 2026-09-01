@@ -50,6 +50,14 @@ export interface CommandDeps {
   signedIn: boolean;
   /** Whether the user has typed anything. Gates the sixteen theme commands. */
   hasQuery: boolean;
+  /**
+   * The order in force RIGHT NOW, not a default.
+   *
+   * `NoteOrder.newestFirst` inverts every field, so a `sortBy.*` command that
+   * hardcodes it changes the direction as well as the field — naming one
+   * setting while writing two. Under `title` that silently turns A→Z into Z→A.
+   */
+  order: NoteOrder;
 
   onScope: (scope: NoteScope) => void;
   onOpenGraph: () => void;
@@ -148,13 +156,7 @@ export function buildCommands(deps: CommandDeps): Command[] {
         id: `sortBy.${field}`,
         group: 'appearance',
         label: `${t('palette.command.sortBy')}: ${t(`noteList.sort.${field}` as TranslationKey)}`,
-        // The palette has no view of the CURRENT order — `CommandDeps` only
-        // exposes the setter — so this cannot preserve an existing
-        // newestFirst direction. It sets the field with the same default
-        // direction `DEFAULT_NOTE_ORDER` uses; a user who wants the reverse
-        // still has the note-list header's own sort menu, which does have
-        // that state.
-        run: (): void => deps.onSetOrder({ field, newestFirst: true }),
+        run: (): void => deps.onSetOrder({ field, newestFirst: deps.order.newestFirst }),
       });
     }
   }

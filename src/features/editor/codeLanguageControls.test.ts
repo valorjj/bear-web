@@ -21,6 +21,7 @@ const LABELS = {
   none: 'Plain text',
   filter: 'Filter languages',
   empty: 'No matching language',
+  diagram: 'Diagram (Mermaid)',
 };
 
 function editorWith(markdown: string, codeLabels: typeof LABELS | null = LABELS): Editor {
@@ -356,7 +357,7 @@ describe('filtering the list', () => {
     open(editor);
 
     const options = [...editor.view.dom.querySelectorAll('[data-code-language-option]')];
-    expect(options).toHaveLength(13); // 12 languages + "plain text"
+    expect(options).toHaveLength(14); // 12 languages + "plain text" + the Mermaid row
 
     editor.destroy();
   });
@@ -548,14 +549,14 @@ describe('keyboard navigation', () => {
     selectInsideCode(editor);
     open(editor);
 
-    // Starts on "Plain text" (index 0, 13 options total).
+    // Starts on "Plain text" (index 0, 14 options total).
     fireOn(editor, 'keydown', list(editor)!, { key: 'ArrowDown' });
     expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('bash');
 
-    for (let i = 0; i < 12; i += 1) {
+    for (let i = 0; i < 13; i += 1) {
       fireOn(editor, 'keydown', list(editor)!, { key: 'ArrowDown' });
     }
-    // 12 more downs from "bash" (index 1) wraps back around to index 0.
+    // 13 more downs from "bash" (index 1) wraps back around to index 0.
     expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('');
 
     editor.destroy();
@@ -568,8 +569,9 @@ describe('keyboard navigation', () => {
 
     const result = fireOn(editor, 'keydown', list(editor)!, { key: 'ArrowUp' });
     expect(result.handled).toBe(true);
-    // Wrapped from "Plain text" (index 0) to the last entry, YAML.
-    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('yaml');
+    // Wrapped from "Plain text" (index 0) to the last entry — the Mermaid
+    // row, which L5 appended after the twelve highlightable languages.
+    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('mermaid');
 
     editor.destroy();
   });
@@ -580,7 +582,7 @@ describe('keyboard navigation', () => {
     open(editor);
 
     fireOn(editor, 'keydown', list(editor)!, { key: 'End' });
-    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('yaml');
+    expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('mermaid');
 
     fireOn(editor, 'keydown', list(editor)!, { key: 'Home' });
     expect(activeOption(editor)?.getAttribute('data-code-language-option')).toBe('');

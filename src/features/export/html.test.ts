@@ -2,12 +2,18 @@ import { Editor } from '@tiptap/core';
 import type { Plugin } from '@tiptap/pm/state';
 import { describe, expect, it } from 'vitest';
 
-import { editorExtensions, parseMarkdown } from '@/features/editor';
+import { editorExtensions, lowlight, parseMarkdown } from '@/features/editor';
 // Raw text of the real stylesheet, not a copy: a Vite `?raw` import, so a
 // change to editor.css is what the colour-comparison tests below read.
 import EDITOR_CSS from '@/styles/editor.css?raw';
 
-import { EXPORT_TOKEN_NAMES, readExportTokens, renderNoteBody, renderNoteHtml } from './html';
+import {
+  collectDiagramSources,
+  EXPORT_TOKEN_NAMES,
+  readExportTokens,
+  renderNoteBody,
+  renderNoteHtml,
+} from './html';
 
 /**
  * The `.hljs-*` (and unprefixed `function_`/`class_`/`inherited__`) classes
@@ -645,5 +651,93 @@ describe('callouts in an export', () => {
       expect(document_).toContain(`VALUE---bear-cal-edge-${type}`);
       expect(document_).toContain(`VALUE---bear-cal-icon-${type}`);
     }
+  });
+});
+
+describe('lowlight has no mermaid grammar, which is what makes this order currently unobservable', () => {
+  it('is not registered, so highlightCodeBlocks skips a language-mermaid block regardless of call order', () => {
+    // renderNoteBody's comment above replaceMermaidBlocks relies on this: if
+    // this ever flips to true (someone registers a Mermaid grammar, or
+    // lowlight ships one), highlightCodeBlocks stops ignoring
+    // language-mermaid blocks and the ordering in renderNoteBody becomes
+    // load-bearing for real -- at which point it needs its own ordering
+    // test, because this one will no longer prove the order is irrelevant.
+    expect(lowlight.registered('mermaid')).toBe(false);
+  });
+});
+
+describe('mermaid diagrams in an export', () => {
+  it('replaces a mermaid code block with the rendered SVG', () => {
+    const html = renderNoteBody(
+      '```mermaid\nflowchart TD\n  A --> B\n```',
+      new Map(),
+      new Map([['flowchart TD\n  A --> B', '<svg id="drawn"/>']]),
+    );
+
+    expect(html).toContain('<svg id="drawn"');
+    expect(html).not.toContain('<pre');
+  });
+
+  it('leaves the fence in place when no render is supplied', () => {
+    // An export that refuses to run is worse than one carrying a code block.
+    const html = renderNoteBody('```mermaid\nflowchart TD\n  A --> B\n```', new Map(), new Map());
+
+    expect(html).toContain('<pre');
+    expect(html).toContain('flowchart TD');
+  });
+
+  it('leaves other code blocks alone', () => {
+    const html = renderNoteBody('```ts\nconst a = 1;\n```', new Map(), new Map());
+    expect(html).toContain('<pre');
+  });
+
+  it('refuses to inline an SVG containing a script', () => {
+    const html = renderNoteBody(
+      '```mermaid\nA\n```',
+      new Map(),
+      new Map([['A', '<svg><script>alert(1)</script></svg>']]),
+    );
+
+    // Fourth and last check. An exported file is a document someone else opens.
+    expect(html).not.toContain('<script');
+    expect(html).toContain('<pre');
+  });
+
+  it('replaces a MIXED-CASE fence too, agreeing with the editor and collectDiagramSources', () => {
+    // `MermaidDiagram.ts`'s `isMermaidBlock` lowercases before comparing, and
+    // so does `collectDiagramSources` above -- so a ````MERMAID` fence
+    // renders as a diagram on screen and gets collected and rendered for
+    // export. This function's own class check used to compare exact case
+    // against the emitted `language-MERMAID` class and never matched, so the
+    // export shipped the fence verbatim after paying for the render anyway --
+    // silent waste, not corruption, but a real three-way disagreement.
+    const html = renderNoteBody(
+      '```MERMAID\nflowchart TD\n  A --> B\n```',
+      new Map(),
+      new Map([['flowchart TD\n  A --> B', '<svg id="mixed-case"/>']]),
+    );
+
+    expect(html).toContain('<svg id="mixed-case"');
+    expect(html).not.toContain('<pre');
+  });
+});
+
+describe('collectDiagramSources', () => {
+  it('finds a mermaid fence in the parsed document', () => {
+    expect(collectDiagramSources('# T\n\n```mermaid\nflowchart TD\n  A --> B\n```\n')).toEqual([
+      'flowchart TD\n  A --> B',
+    ]);
+  });
+
+  it('finds a fence inside a blockquote, unlike the text-scan limitation', () => {
+    expect(collectDiagramSources('> ```mermaid\n> A\n> ```')).toEqual(['A']);
+  });
+
+  it('ignores other languages', () => {
+    expect(collectDiagramSources('```ts\nconst a = 1;\n```')).toEqual([]);
+  });
+
+  it('deduplicates identical diagrams', () => {
+    expect(collectDiagramSources('```mermaid\nA\n```\n\n```mermaid\nA\n```')).toEqual(['A']);
   });
 });

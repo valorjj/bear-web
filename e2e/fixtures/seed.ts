@@ -20,14 +20,14 @@ import type { Corpus } from './corpus.ts';
  *   schema against the one it finds and throws `SchemaError` on a mismatch, so
  *   a drift fails loudly on the first shot rather than silently.
  * - **The IndexedDB version is Dexie's version times ten.** Dexie's
- *   `version(5)` (L2's `noteLinks` backlinks index, on top of K1's image
- *   metadata and D2's sync bookkeeping) is IndexedDB version 50, not 5.
- *   Seeding at the wrong number leaves Dexie wanting to upgrade further while
- *   this script still holds a connection open, which blocks the upgrade
- *   forever: `openDatabase` never settles, so `main.tsx` never calls
- *   `createRoot` and the page stays a blank `#root` with one console warning
- *   as the only clue. That is also why the connection is closed as soon as
- *   the seed transaction completes.
+ *   `version(6)` (L5's `diagrams` render cache, on top of L2's `noteLinks`
+ *   backlinks index, K1's image metadata and D2's sync bookkeeping) is
+ *   IndexedDB version 60, not 6. Seeding at the wrong number leaves Dexie
+ *   wanting to upgrade further while this script still holds a connection
+ *   open, which blocks the upgrade forever: `openDatabase` never settles, so
+ *   `main.tsx` never calls `createRoot` and the page stays a blank `#root`
+ *   with one console warning as the only clue. That is also why the
+ *   connection is closed as soon as the seed transaction completes.
  * - `noteTags` is created empty and the `tagIndexVersion` marker is never
  *   written, so the app's own startup rebuild fills the tag index from
  *   `notes.text`. The sidebar tree in every screenshot is therefore produced by
@@ -39,9 +39,9 @@ import type { Corpus } from './corpus.ts';
  */
 export async function seedDatabase(page: Page, corpus: Corpus): Promise<void> {
   await page.addInitScript((data: Corpus) => {
-    // Mirrors `src/data/db.ts`'s `version(1)` through `version(5)` stores
-    // together; 50 is how Dexie encodes version 5. See the docblock.
-    const request = indexedDB.open('bear-web', 50);
+    // Mirrors `src/data/db.ts`'s `version(1)` through `version(6)` stores
+    // together; 60 is how Dexie encodes version 6. See the docblock.
+    const request = indexedDB.open('bear-web', 60);
 
     request.onupgradeneeded = () => {
       const database = request.result;
@@ -89,6 +89,14 @@ export async function seedDatabase(page: Page, corpus: Corpus): Promise<void> {
       });
       noteLinks.createIndex('noteId', 'noteId');
       noteLinks.createIndex('toTitle', 'toTitle');
+
+      // Added at version 6 (L5). Created empty here, exactly as Dexie would:
+      // the diagram cache is derived data that rebuilds from note text on
+      // first render, and no fixture note has ever needed a pre-rendered
+      // diagram. Key path and index names must match src/data/db.ts exactly
+      // or Dexie throws SchemaError on the first shot.
+      const diagrams = database.createObjectStore('diagrams', { keyPath: 'hash' });
+      diagrams.createIndex('lastUsed', 'lastUsed');
 
       for (const note of data.notes) notes.put(note);
       for (const setting of data.settings) settings.put(setting);

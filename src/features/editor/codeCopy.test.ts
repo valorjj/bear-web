@@ -172,6 +172,44 @@ describe('living beside the language picker', () => {
    * never rendered — proving nothing. The count is asserted so the test cannot
    * quietly stop exercising the collision.
    */
+  it('still copies when a node view wraps the block, as L5 diagrams do', async () => {
+    const writeText = stubClipboard(() => Promise.resolve());
+    const editor = new Editor({
+      extensions: buildEditorExtensions({
+        codeCopyLabel: 'Copy code',
+        codeCopiedLabel: 'Copied',
+        codeCopyFailedLabel: 'Could not copy',
+        diagramLabels: {
+          diagram: 'Diagram: {name}',
+          pending: 'Rendering diagram',
+          retry: 'Render diagram',
+          failed: {
+            failed: 'f',
+            offline: 'o',
+            unauthorized: 'u',
+            invalidSyntax: 'i',
+            tooLarge: 't',
+            rateLimited: 'r',
+            unavailable: 'v',
+          },
+        },
+        ensureDiagram: async () => '<svg/>',
+      }),
+      content: parseMarkdown('```mermaid\nflowchart TD\n```'),
+    });
+    createdEditors.push(editor);
+
+    expect(
+      editor.view.dom.querySelectorAll('.bear-mermaid'),
+      'the diagram node view did not mount, so this test proves nothing',
+    ).toHaveLength(1);
+
+    (editor.view.dom.querySelector('[data-code-copy]') as HTMLElement).click();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(writeText).toHaveBeenCalledWith('flowchart TD');
+  });
+
   it('still copies when the picker sits between the button and the block', async () => {
     const writeText = stubClipboard(() => Promise.resolve());
     const editor = new Editor({
@@ -179,7 +217,7 @@ describe('living beside the language picker', () => {
         codeCopyLabel: 'Copy code',
         codeCopiedLabel: 'Copied',
         codeCopyFailedLabel: 'Could not copy',
-        codeLabels: { trigger: 'L', none: 'N', filter: 'F', empty: 'E' },
+        codeLabels: { trigger: 'L', none: 'N', filter: 'F', empty: 'E', diagram: 'D' },
       }),
       content: parseMarkdown('Title\n\n```js\nfirst()\n```'),
     });

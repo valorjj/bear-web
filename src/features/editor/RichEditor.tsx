@@ -337,6 +337,31 @@ export function RichEditor({
         none: t('editor.code.none'),
         filter: t('editor.code.filter'),
         empty: t('editor.code.empty'),
+        diagram: t('editor.diagram.language'),
+      },
+      // Read once at mount like every option above it. Supplying them is
+      // also what registers the diagram plugin at all — every schema build
+      // outside this component passes nothing and draws a ```mermaid fence
+      // as ordinary code.
+      //
+      // `diagram` and `failed.invalidSyntax` carry `{name}` and `{detail}`
+      // placeholders that `MermaidDiagram` substitutes itself: `useT()` takes
+      // no parameters in this project, so every placeholder is the caller's
+      // job — and here the "caller" is the extension, which is the only place
+      // that knows the diagram's name or the parser's message.
+      diagramLabels: {
+        diagram: t('editor.diagram.label'),
+        pending: t('editor.diagram.pending'),
+        retry: t('editor.diagram.retry'),
+        failed: {
+          failed: t('editor.diagram.failed'),
+          offline: t('editor.diagram.failed.offline'),
+          unauthorized: t('editor.diagram.failed.unauthorized'),
+          invalidSyntax: t('editor.diagram.failed.invalidSyntax'),
+          tooLarge: t('editor.diagram.failed.tooLarge'),
+          rateLimited: t('editor.diagram.failed.rateLimited'),
+          unavailable: t('editor.diagram.failed.unavailable'),
+        },
       },
       // Read once at mount like every option above it. This is the labels
       // half of the contract only — the actual title LIST rides plugin

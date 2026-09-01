@@ -109,3 +109,31 @@ export async function forwardPdfToRenderer(page: Page, rendererUrl: string): Pro
     });
   });
 }
+
+/**
+ * Forwards `POST /diagram` to the real renderer container's
+ * `/render/mermaid` endpoint, mirroring `forwardPdfToRenderer` above and the
+ * authenticated pass-through `server/src/routes/diagram.ts` implements in
+ * production. The one seam this leaves unexercised is that route's own
+ * auth/cap/regex-guard layer — covered by `server/src/routes/diagram.test.ts`
+ * — everything else (the note, the theme, the container's real Mermaid
+ * render) is genuine.
+ */
+export async function forwardDiagramToRenderer(page: Page, rendererUrl: string): Promise<void> {
+  await page.route(`${API_ORIGIN}/diagram`, async (route) => {
+    const body = route.request().postData() ?? '{}';
+
+    const upstream = await fetch(`${rendererUrl}/render/mermaid`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    });
+
+    await route.fulfill({
+      status: upstream.status,
+      contentType: upstream.headers.get('content-type') ?? 'image/svg+xml',
+      headers: corsHeaders,
+      body: Buffer.from(await upstream.arrayBuffer()),
+    });
+  });
+}

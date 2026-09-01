@@ -14,6 +14,7 @@ import { ContextMenu, type ContextMenuOptions } from './ContextMenu';
 import { TableHandles, type TableHandlesOptions } from './TableHandles';
 import { Highlight } from './Highlight';
 import { lowlightForEditor } from './lowlight';
+import { MermaidDiagram, type MermaidDiagramOptions } from './MermaidDiagram';
 import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
 import { ImagePaste, type ImagePasteOptions } from './ImagePaste';
 import { StoredImage, type StoredImageOptions } from './StoredImage';
@@ -45,7 +46,8 @@ function buildSupportedExtensions(
       ContextMenuOptions &
       CodeLanguageControlsOptions &
       CodeCopyOptions &
-      CalloutOptions
+      CalloutOptions &
+      MermaidDiagramOptions
   >,
 ): Extensions {
   return [
@@ -163,6 +165,14 @@ function buildSupportedExtensions(
     // schema change, and no plugin registered at all without `codeLabels`.
     // See `CodeLanguageControls.ts`.
     CodeLanguageControls.configure(options),
+    // A ```mermaid fence, drawn. Registered beside `CodeBlockLowlight`'s
+    // other companions and, like them, an `Extension`: it adds NO node type,
+    // so a mermaid fence stays a `codeBlock` and the Markdown round-trip is
+    // untouched — which is also what keeps the file portable to GitHub and
+    // Obsidian. Without `diagramLabels` it registers no plugin at all, so
+    // every schema build outside `RichEditor` renders such a fence as
+    // ordinary code. See `MermaidDiagram.ts`.
+    MermaidDiagram.configure(options),
     // One copy button per code block. Separate from the control above, which
     // anchors a single widget to the block under the caret — see `CodeCopy.ts`.
     CodeCopy.configure(options),
@@ -226,7 +236,8 @@ export function buildEditorExtensions(
       CodeCopyOptions &
       CalloutOptions &
       StoredImageOptions &
-      ImagePasteOptions
+      ImagePasteOptions &
+      MermaidDiagramOptions
   > = {},
 ): Extensions {
   return [
