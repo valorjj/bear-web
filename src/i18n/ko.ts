@@ -151,6 +151,16 @@ export const ko: Record<TranslationKey, string> = {
   'export.failed.rateLimited': '내보내기가 너무 많습니다. 잠시 후 다시 시도하세요.',
   'export.failed.unavailable': '지금은 PDF 내보내기를 사용할 수 없습니다.',
 
+  'publish.open': '웹에 게시',
+  'publish.requiresSignIn': '게시하려면 로그인하세요',
+  'publish.title': '웹에 게시됨',
+  'publish.unpublish': '게시 취소',
+  'publish.unpublish.confirm': '이 메모의 게시를 취소할까요? 링크가 즉시 작동하지 않습니다.',
+  'publish.publishedAt': '{when}에 게시됨',
+  'publish.failed': '이 메모를 게시할 수 없습니다.',
+  'publish.failed.offline': '게시하려면 인터넷 연결이 필요합니다.',
+  'publish.failed.quotaExceeded': '게시 한도({limit})에 도달했습니다.',
+
   'editor.table.rowHandle': '행 옵션',
   'editor.table.columnHandle': '열 옵션',
   'editor.table.deleteRow': '행 삭제',

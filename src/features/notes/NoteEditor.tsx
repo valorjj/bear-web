@@ -1,9 +1,18 @@
-import { type ReactElement, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  type ReactElement,
+  type RefObject,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { Editor } from '@tiptap/react';
 
 import { deriveTitle, files, folds, notes, storedImagePath } from '@/data';
 import type { Note } from '@/data';
-import { useExportRunner, type ExportFormat } from '@/features/export';
+import { buildExportHtml, useExportRunner, type ExportFormat } from '@/features/export';
 import { downscaleImage } from './downscale';
 import {
   EMPTY_DOCUMENT_MARKDOWN,
@@ -12,10 +21,23 @@ import {
   RichEditor,
   type RichEditorHandle,
 } from '@/features/editor';
-import { useT } from '@/i18n';
+import type { PublishedInfo } from '@/features/publish';
+import { useLocale, useT } from '@/i18n';
 
 import { BacklinksPanel } from './BacklinksPanel';
 import { useAutosave } from './useAutosave';
+
+/**
+ * Lazy, and structurally so — not an optimisation.
+ *
+ * `scripts/bundleSize.test.ts` caps the eager JS closure and measured 455 B
+ * of headroom before sub-project M. This chunk pulls in `PublishDialog`'s UI
+ * AND `requestPublish.ts`'s network calls — importing either eagerly here
+ * would blow the ceiling before a single byte of the feature's own i18n
+ * strings counted. If that guard ever fails on this branch, something has
+ * leaked across this boundary — find the leak; do not raise the number.
+ */
+const PublishDialogContainer = lazy(() => import('@/features/publish/PublishDialogContainer'));
 
 /** Matches `AUTOSAVE_DELAY_MS`; folds are persisted on the same rhythm. */
 const FOLD_PERSIST_DELAY_MS = 300;
@@ -110,9 +132,17 @@ export function NoteEditor({
   exportRef,
 }: NoteEditorProps): ReactElement {
   const t = useT();
+  const { locale } = useLocale();
 
   const internalHandleRef = useRef<RichEditorHandle | null>(null);
   const handleRef = externalHandleRef ?? internalHandleRef;
+
+  // Sub-project M: whether the publish dialog is open, and this note's
+  // published page, if any. Both reset naturally on a note switch — this
+  // component is remounted per note (`key={note.id}`, see the class doc
+  // above), never reused across notes.
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishedPage, setPublishedPage] = useState<PublishedInfo | null>(null);
 
   // Seeded from the SERIALIZED document, not from `note.text`. Opening a note
   // must never produce a write: a non-canonical note would otherwise differ
@@ -431,6 +461,16 @@ export function NoteEditor({
     };
   }, [exportRef, handleExport]);
 
+  // Reads what is ON SCREEN, exactly like `handleExport` above and for the
+  // same reason — the stored record lags the live editor by the autosave
+  // debounce. Only called once the user clicks "Publish to web" inside the
+  // dialog, never eagerly, so the images/diagrams pass this triggers costs
+  // nothing until then.
+  const handlePublishBuildHtml = useCallback(async (): Promise<string> => {
+    const text = handleRef.current?.getMarkdown() ?? note.text;
+    return buildExportHtml({ title: deriveTitle(text), text, updatedAt: note.updatedAt }, locale);
+  }, [note.text, note.updatedAt, locale]);
+
   return (
     <div className="flex h-full flex-col">
       <RichEditor
@@ -445,9 +485,23 @@ export function NoteEditor({
         onActivateTag={onActivateTag}
         onActivateLink={onActivateLink}
         onExport={handleExport}
+        onPublish={() => setPublishOpen(true)}
         onImage={handleImage}
         onEditorReady={setFoldEditor}
       />
+
+      {publishOpen && (
+        <Suspense fallback={null}>
+          <PublishDialogContainer
+            onClose={() => setPublishOpen(false)}
+            noteId={note.id}
+            title={deriveTitle(handleRef.current?.getMarkdown() ?? note.text)}
+            buildHtml={handlePublishBuildHtml}
+            page={publishedPage}
+            onPage={setPublishedPage}
+          />
+        </Suspense>
+      )}
 
       {onOpenNote !== undefined && <BacklinksPanel title={note.title} onOpenNote={onOpenNote} />}
 

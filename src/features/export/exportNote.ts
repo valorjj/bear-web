@@ -127,6 +127,32 @@ function blobToDataUri(blob: Blob): Promise<string> {
   });
 }
 
+/**
+ * Assembles the same rendered HTML document `exportNote`'s html/pdf branch
+ * builds — images resolved to `data:` URIs, diagrams rendered, tokens read
+ * from the live root — as its own function so a second caller (sub-project
+ * M's publish flow) can reuse it without going through `download`/a file
+ * format at all.
+ */
+export async function buildExportHtml(
+  note: ExportableNote,
+  locale: string,
+  deps: Pick<ExportNoteDeps, 'document' | 'ensureDiagram'> = {},
+): Promise<string> {
+  const doc = deps.document ?? document;
+
+  // Resolved HERE, not inside `renderNoteHtml`: that file must not import from
+  // `src/data/`, so the caller reads the blobs and hands them over.
+  const images = await collectImages(note.text);
+  // Only on the html/pdf path -- Markdown export is the note's text verbatim
+  // and must not ask a diagram to render at all.
+  const diagrams = await collectDiagrams(note.text, deps.ensureDiagram ?? ensureDiagram);
+
+  // Read from the live root, so an export carries the theme the user is looking
+  // at rather than a hardcoded palette.
+  return renderNoteHtml(note, readExportTokens(doc.documentElement), locale, images, diagrams);
+}
+
 export async function exportNote(
   note: ExportableNote,
   format: ExportFormat,
@@ -159,22 +185,7 @@ export async function exportNote(
     return;
   }
 
-  // Resolved HERE, not inside `renderNoteHtml`: that file must not import from
-  // `src/data/`, so the caller reads the blobs and hands them over.
-  const images = await collectImages(note.text);
-  // Only on the html/pdf path -- Markdown export is the note's text verbatim
-  // and must not ask a diagram to render at all.
-  const diagrams = await collectDiagrams(note.text, deps.ensureDiagram ?? ensureDiagram);
-
-  // Read from the live root, so an export carries the theme the user is looking
-  // at rather than a hardcoded palette.
-  const html = renderNoteHtml(
-    note,
-    readExportTokens(doc.documentElement),
-    locale,
-    images,
-    diagrams,
-  );
+  const html = await buildExportHtml(note, locale, deps);
 
   if (format === 'html') {
     download(exportFilename(note, 'html'), new Blob([html], { type: MIME.html }), doc);

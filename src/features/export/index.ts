@@ -1,4 +1,4 @@
-export { exportNote } from './exportNote';
+export { buildExportHtml, exportNote } from './exportNote';
 export type { ExportFormat, ExportableNote, ExportNoteDeps } from './exportNote';
 export { ExportMenu } from './ExportMenu';
 export { ExportProgressProvider, useExportProgress } from './ExportProgressContext';

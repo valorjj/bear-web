@@ -1,4 +1,18 @@
-import { API_ORIGIN } from '@/data';
+// Direct path, not the `@/data` barrel: this file is reached only through
+// `PublishDialogContainer`'s `React.lazy` boundary (see `NoteEditor.tsx`).
+// Importing the barrel pulls its whole Dexie-repository graph into the
+// reachability set of that lazy chunk, tipping Rolldown into extracting a
+// new shared chunk that lands back in the eager closure — measured cost:
+// several hundred bytes of pure split overhead, against 455 B of headroom.
+// A per-call dynamic `import()` was tried first and measured WORSE (+12 KB):
+// it forces Vite's dynamic-import preload helper to grow from a 368 B shim
+// into a full ~12 KB implementation the moment a lazy chunk itself contains
+// a further dynamic import, and that helper is needed synchronously by the
+// entry regardless. The static leaf import below has no such cost:
+// `@/data/sync/config.ts` has no imports of its own, so this also carries no
+// risk of the circular dependency the very first version of this file (a
+// per-call dynamic import, before that measurement) was written to avoid.
+import { API_ORIGIN } from '@/data/sync/config';
 
 /**
  * Why a publish can fail, and only these seven ways.

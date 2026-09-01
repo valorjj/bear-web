@@ -88,6 +88,11 @@ export interface RichEditorProps {
    */
   onExport?: (format: ExportFormat) => void;
   /**
+   * Called when the user picks "Publish to web" from the export menu. Omit
+   * it and the item is absent from the menu, same contract as `onExport`.
+   */
+  onPublish?: () => void;
+  /**
    * Called with each image the user pastes or drops. Returns the Markdown
    * destination to insert, or `null` if it was refused. Omit it and images
    * paste as whatever the browser would have done.
@@ -161,6 +166,7 @@ export function RichEditor({
   onActivateTag,
   onActivateLink,
   onExport,
+  onPublish,
   onImage,
   onEditorReady,
 }: RichEditorProps): ReactElement {
@@ -791,6 +797,14 @@ export function RichEditor({
                 setExportOpen(false);
                 onExport(format);
               }}
+              onPublish={
+                onPublish === undefined
+                  ? undefined
+                  : () => {
+                      setExportOpen(false);
+                      onPublish();
+                    }
+              }
               onDismiss={() => setExportOpen(false)}
             />
           )}
