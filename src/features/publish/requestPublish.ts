@@ -1,3 +1,5 @@
+import { API_ORIGIN } from '@/data';
+
 /**
  * Why a publish can fail, and only these seven ways.
  *
@@ -44,8 +46,8 @@ export interface PublishedPage {
  * either way — there is no separate `PublishFailure` for a timeout, so both
  * collapse to `unavailable`.
  *
- * 402 is deliberately ABSENT from this map (there is no 402 test). 403 is
- * handled specially to extract the limit from the response body.
+ * 403 is handled specially to extract the limit from the response body.
+ * Unmapped status codes fall through to the default 'failed'.
  */
 const BY_STATUS: Record<number, PublishFailure> = {
   401: 'unauthorized',
@@ -83,12 +85,9 @@ export async function publishNote(
   params.set('noteId', noteId);
   params.set('title', title);
 
-  // Import inside the function to avoid circular dependencies
-  const { API_ORIGIN: apiOrigin } = await import('@/data/sync/config');
-
   let response: Response;
   try {
-    response = await doFetch(`${apiOrigin}/publish?${params}`, {
+    response = await doFetch(`${API_ORIGIN}/publish?${params}`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'text/html' },
@@ -125,12 +124,9 @@ export async function unpublishNote(
 ): Promise<void> {
   const { fetch: doFetch = globalThis.fetch } = deps;
 
-  // Import inside the function to avoid circular dependencies
-  const { API_ORIGIN: apiOrigin } = await import('@/data/sync/config');
-
   let response: Response;
   try {
-    response = await doFetch(`${apiOrigin}/publish/${id}`, {
+    response = await doFetch(`${API_ORIGIN}/publish/${id}`, {
       method: 'DELETE',
       credentials: 'include',
     });
@@ -149,12 +145,9 @@ export async function listPublished(
 ): Promise<PublishedPage[]> {
   const { fetch: doFetch = globalThis.fetch } = deps;
 
-  // Import inside the function to avoid circular dependencies
-  const { API_ORIGIN: apiOrigin } = await import('@/data/sync/config');
-
   let response: Response;
   try {
-    response = await doFetch(`${apiOrigin}/publish`, {
+    response = await doFetch(`${API_ORIGIN}/publish`, {
       credentials: 'include',
     });
   } catch {
