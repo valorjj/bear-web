@@ -335,6 +335,16 @@ export function RichEditor({
       // browser's own paste is untouched. A wrapper that swallowed the paste
       // and did nothing would be worse than no affordance.
       onImage: onImage === undefined ? null : (file) => imageRef.current!(file),
+      // The Markdown paste parser, injected rather than imported by
+      // `MarkdownPaste` itself. `markdown.ts` builds its manager and schema
+      // from `editorExtensions` at module top level, so importing
+      // `parseMarkdown` inside the extension closed a cycle
+      // `extensions.ts -> MarkdownPaste.ts -> markdown.ts -> extensions.ts`
+      // that left one side's bindings undefined and stopped the app booting.
+      // Supplying it here is also what registers the paste plugin at all —
+      // every schema build outside this component passes nothing and gets the
+      // browser's own paste, exactly like `onImage` above.
+      parsePastedMarkdown: parseMarkdown,
       // Read once at mount like every option above it — the editor is keyed
       // by note id and rebuilt on a language change, so there is no live
       // locale switch for these to miss.

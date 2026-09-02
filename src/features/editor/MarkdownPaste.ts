@@ -1,11 +1,35 @@
 import { Extension } from '@tiptap/core';
+import type { JSONContent } from '@tiptap/core';
 import { Node as ProseMirrorNode, Slice } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
-import { parseMarkdown } from './markdown';
 import { decodeEntities, looksLikeMarkdown } from './pastedMarkdown';
 
 export const markdownPasteKey = new PluginKey('markdownPaste');
+
+export interface MarkdownPasteOptions {
+  /**
+   * Parses pasted Markdown into a document. Injected rather than imported,
+   * and that is load-bearing: `markdown.ts` builds its manager and schema
+   * from `editorExtensions` at module top level, so importing it here closed
+   * a cycle `extensions.ts -> MarkdownPaste.ts -> markdown.ts ->
+   * extensions.ts`. Whichever module evaluated first re-entered the other
+   * before its bindings existed, and the app failed to boot with
+   * `editorExtensions` undefined. Every gate passed; only running the app
+   * caught it.
+   *
+   * `null` when nobody supplied one — the state of the schema-only
+   * `editorExtensions` constant. The plugin is then not registered at all and
+   * the browser's own paste is untouched, the same rule `ImagePaste.onImage`
+   * and `ContextMenuOptions.onOpen` both follow.
+   *
+   * Named `parsePastedMarkdown` rather than `parseMarkdown`: extension
+   * options are a FLAT merge in `buildEditorExtensions`, so a colliding bare
+   * name silently loses — `TableHandles.onOpenMenu` already collided with
+   * `HeadingFold`'s once.
+   */
+  parsePastedMarkdown: ((markdown: string) => JSONContent) | null;
+}
 
 /**
  * How deeply open the pasted slice is at each end.
@@ -31,10 +55,11 @@ function sliceFor(doc: ProseMirrorNode): Slice {
  * parser, so `**bold**` arrived as five literal characters and a table arrived
  * as one paragraph per row.
  *
- * Registered UNCONDITIONALLY, unlike `ImagePaste`. It has no options and no
- * callback: it depends on nothing but the clipboard and the schema, so there
- * is no "wired up or not" state to express — which is exactly what
- * `ImagePaste.onImage === null` exists for.
+ * Registered only when `parsePastedMarkdown` is supplied, exactly like
+ * `ImagePaste.onImage`: with no parser there is nothing to paste THROUGH, so
+ * the plugin stays out and the browser's own paste is untouched. The parser
+ * is an injected option rather than an import because importing it closed an
+ * initialisation cycle — see `MarkdownPasteOptions` above.
  *
  * `handlePaste`, not `handleDOMEvents.paste`, and that does real work.
  * `ImagePaste` claims image pastes through `handleDOMEvents.paste` and calls
@@ -44,10 +69,17 @@ function sliceFor(doc: ProseMirrorNode): Slice {
  * `buildEditorExtensions`. Verified by injection in `markdownPaste.test.ts`,
  * not inferred from ProseMirror's documentation.
  */
-export const MarkdownPaste = Extension.create({
+export const MarkdownPaste = Extension.create<MarkdownPasteOptions>({
   name: 'markdownPaste',
 
+  addOptions() {
+    return { parsePastedMarkdown: null };
+  },
+
   addProseMirrorPlugins() {
+    const { parsePastedMarkdown } = this.options;
+    if (parsePastedMarkdown === null) return [];
+
     return [
       new Plugin({
         key: markdownPasteKey,
@@ -71,7 +103,7 @@ export const MarkdownPaste = Extension.create({
 
             const doc = ProseMirrorNode.fromJSON(
               view.state.schema,
-              parseMarkdown(decodeEntities(text)),
+              parsePastedMarkdown(decodeEntities(text)),
             );
 
             // Through the view's own state and dispatch, NEVER
