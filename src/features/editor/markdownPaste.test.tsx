@@ -207,6 +207,17 @@ describe('MarkdownPaste', () => {
   // note containing `m` lands. One assertion, every construct — and the only
   // thing here that can catch a slice-depth or sanitisation mistake on a shape
   // nobody thought to pin individually.
+  //
+  // What this catches, measured rather than assumed: replacing the
+  // parse-and-insert-a-slice body with `tr.insertText(text)` — the
+  // pre-N behaviour — fails all ten of these and none of the other
+  // tests in this file.
+  //
+  // What it does NOT catch, also measured: forcing `sliceFor` to always
+  // return open depth 1 leaves all ten passing. These paste into an EMPTY
+  // note, where there is nothing to merge with, so ProseMirror's slice
+  // fitting just repairs the unsatisfiable openness. Slice depth is the
+  // job of the two mid-sentence tests above, not of this one.
   it.each([
     ['a heading', '## Weekly report'],
     ['a list', '- one\n- two'],
