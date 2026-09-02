@@ -269,8 +269,51 @@ import { describe, expect, it } from 'vitest';
  * recorded at whichever commit last touched this file. Re-run
  * `npx vitest run scripts/bundleSize.test.ts` after a build to get the
  * current figure; do not reason from either number above without doing so.
+ *
+ * ### N (paste Markdown as Markdown): the ceiling moves to 348,000, decided
+ * by the user on 2026-09-02
+ *
+ * `main` measured **345,517 B** gzip (temporary worktree, `npm ci && npm run
+ * build`); this branch measured **347,203 B** — a true eager cost of
+ * **1,686 B** against only **1,483 B** of headroom left under the frozen
+ * 347,000 ceiling, i.e. 203 B over.
+ *
+ * No accidental import: verified twice, independently. `MarkdownPaste.ts`
+ * imports only `@tiptap/core` and `@tiptap/pm/{model,state}`, all already
+ * eager elsewhere in `src/features/editor/` (`Callout.ts`, `HeadingFold.ts`,
+ * `TagPill.ts`, `LinkPill.ts`, `TableHandles.ts`, `markdown.ts` among
+ * others) — no new package, no new chunk boundary. Measured standalone,
+ * minified + gzip: `pastedMarkdown.ts` alone is **476 B**, `MarkdownPaste.ts`
+ * alone is **847 B** — about 1,323 B of the 1,686, the remainder being the
+ * `buildEditorExtensions` options union and `RichEditor`'s wiring. The
+ * growth is the feature, not a stray dependency.
+ *
+ * Why raised rather than shrunk or cut: N fixes a defect reported from real
+ * use (pasted Markdown landing as literal characters); clawing back ~200 B
+ * by collapsing the `SIGNALS` regexes or dropping `decodeEntities`'s memo
+ * would trade this repo's readability for bytes and buy no lasting room; and
+ * cutting entity decoding would reverse a deliberate design decision and
+ * bring back the reported literal `&nbsp;`.
+ *
+ * `CEILING_BYTES` moves to **348,000**, decided BY THE USER on 2026-09-02, on
+ * the record above — not by sub-project N or by whoever executed its tasks.
+ * The ceiling remains FROZEN under the same rule as every raise before it:
+ * this does not reopen routine ratcheting. The next feature that exceeds
+ * 348,000 goes lazier, moves to the server, gets cut, or is put to the user
+ * — it does not raise the number itself.
+ *
+ * Standing observation, since this is the third consecutive raise in a row
+ * with the eager closure landing within a few hundred bytes of whatever
+ * ceiling was current: the eager closure is functionally spent. The durable
+ * fix is not another raise but moving something already eager behind a
+ * boundary — `themes-*` alone is 232,910 B at the time of the M entry above
+ * — and that is larger than N and was not attempted here.
+ *
+ * As always: re-run `npx vitest run scripts/bundleSize.test.ts` after a build
+ * to get the figure that actually shipped; do not reason from either number
+ * above without doing so.
  */
-const CEILING_BYTES = 347_000;
+const CEILING_BYTES = 348_000;
 
 interface ManifestChunk {
   file: string;
