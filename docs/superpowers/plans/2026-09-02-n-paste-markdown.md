@@ -221,16 +221,16 @@ Append to `src/features/editor/pastedMarkdown.test.ts` (and add `decodeEntities`
 ```ts
 describe('decodeEntities', () => {
   it.each([
-    ['a non-breaking space', 'a&nbsp;b', 'a b'],
+    ['a non-breaking space', 'a&nbsp;b', 'a\u00A0b'],
     ['an em dash', 'a&mdash;b', 'a—b'],
     ['a right single quote', 'don&rsquo;t', 'don’t'],
     ['an ellipsis', 'wait&hellip;', 'wait…'],
     ['a copyright sign', '&copy; 2026', '© 2026'],
     ['an apostrophe', 'don&apos;t', "don't"],
-    ['a decimal reference', 'a&#160;b', 'a b'],
+    ['a decimal reference', 'a&#160;b', 'a\u00A0b'],
     ['a hex reference', 'a&#x2014;b', 'a—b'],
     ['an uppercase hex reference', 'a&#X2014;b', 'a—b'],
-    ['several in one string', '&copy;&nbsp;&mdash;', '© —'],
+    ['several in one string', '&copy;&nbsp;&mdash;', '©\u00A0—'],
   ])('decodes %s', (_label, input, expected) => {
     expect(decodeEntities(input)).toBe(expected);
   });

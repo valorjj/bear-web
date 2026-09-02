@@ -797,7 +797,7 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
 
 - **A circular import here fails at MODULE INITIALISATION, not at build time,
   and every gate passes.** `src/features/editor/markdown.ts` builds its
-  `MarkdownManager` (line 13) and its `schema` (line 40) from
+  `MarkdownManager` (line 16) and its `schema` (line 40) from
   `editorExtensions` at module top level. So any module that `extensions.ts`
   imports must NOT import `markdown.ts`: whichever evaluates first re-enters
   the other before its bindings exist, `editorExtensions` is `undefined`, and
