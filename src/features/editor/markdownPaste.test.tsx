@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { renderWithI18n } from '@/i18n/testing';
 
+import { normalizeMarkdown } from './markdown';
 import { RichEditor, type RichEditorHandle } from './RichEditor';
 
 // jsdom has no layout engine, so ProseMirror's `coordsAtPos`/`posAtCoords`
@@ -154,6 +155,23 @@ describe('MarkdownPaste', () => {
     expect(handleRef.current!.getMarkdown()).toContain('**bold**');
   });
 
+  it('inserts a pasted heading as a BLOCK, splitting the paragraph around it', async () => {
+    // The counter-case to the test above, and the reason `sliceFor` keys on
+    // the node being a `paragraph` rather than on `isTextblock`. At open
+    // depth 1 this heading's text would merge into the surrounding paragraph
+    // and the heading would be lost; at depth 0 the sentence splits around it
+    // and it survives. Without this test, "simplifying" that check to
+    // `isTextblock` passes the whole suite.
+    const handleRef = await mounted('start end');
+    handleRef.current!.editor!.commands.setTextSelection(6);
+
+    paste({ plain: '## Hi' });
+
+    await waitFor(() => {
+      expect(handleRef.current!.getMarkdown()).toBe('start\n\n## Hi\n\n end');
+    });
+  });
+
   it('claims the paste, so the browser does not also insert the raw text', async () => {
     await mounted();
     expect(paste({ plain: '## heading' })).toBe(true);
@@ -184,4 +202,41 @@ describe('MarkdownPaste', () => {
     });
     expect(handleRef.current!.getMarkdown()).not.toContain('## not a heading');
   });
+
+  // Pasting `m` into an EMPTY note must land the same document that opening a
+  // note containing `m` lands. One assertion, every construct — and the only
+  // thing here that can catch a slice-depth or sanitisation mistake on a shape
+  // nobody thought to pin individually.
+  it.each([
+    ['a heading', '## Weekly report'],
+    ['a list', '- one\n- two'],
+    ['an ordered list', '1. one\n2. two'],
+    ['a table', '| a | b |\n| --- | --- |\n| 1 | 2 |'],
+    ['a fenced code block', '```ts\nconst a = 1;\n```'],
+    ['a blockquote', '> quoted'],
+    ['inline marks', 'some **bold** and *em* text'],
+    ['a link', 'see [the docs](https://example.com)'],
+    ['several blocks', '# Title\n\nA paragraph.\n\n- one\n- two'],
+    ['a task list', '- [ ] todo\n- [x] done'],
+  ])(
+    'pasting %s into an empty note matches opening a note that contains it',
+    async (_label, markdown) => {
+      const handleRef = await mounted();
+
+      paste({ plain: markdown });
+
+      await waitFor(() => {
+        const opened = normalizeMarkdown(markdown);
+        const pasted = handleRef.current!.getMarkdown();
+        // Exactly two legal outcomes, and nothing between them. An inline paste
+        // (a single paragraph, open depth 1) is byte-identical to opening the
+        // note. A block-level paste additionally carries ONE empty paragraph
+        // from StarterKit's `TrailingNode`, so the caret has somewhere to go
+        // below the pasted block. Asserting membership rather than trimming
+        // keeps this non-vacuous: two blank paragraphs fail, lost content
+        // fails, and a table flattened into a paragraph fails.
+        expect([opened, opened + '\n\n']).toContain(pasted);
+      });
+    },
+  );
 });
