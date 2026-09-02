@@ -70,7 +70,7 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | M publish: a public read-only URL for one note                    | complete |
 | N paste Markdown as Markdown                                      | complete |
 
-2545 unit tests (plus 203 server tests, 112 of which are integration tests that
+2548 unit tests (plus 203 server tests, 112 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 71 renderer tests behind
 `npm run test:pdf`), 216 end-to-end tests. `main` is always green and
 auto-deploys.
