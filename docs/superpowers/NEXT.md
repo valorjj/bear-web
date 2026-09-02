@@ -27,54 +27,59 @@ believe the table and fix this file.
 
 | Open | State |
 | --- | --- |
-| **N paste Markdown as Markdown** | not started — reported from real use 2026-09-01, see below |
+| **N paste Markdown as Markdown** | SHIPPED 2026-09-02 — see the spec |
 | **J4 platform chrome** | not started — the last of the four |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
+| **Dropping** Markdown text into a note | not started — N covered pasting only; `ImagePaste` handles `drop` for images, so text dropped in keeps the literal behaviour |
+| `&amp;nbsp;` round-trip corruption in `markdown.ts` | not started — found while specing N. Named and numeric entities survive `parseMarkdown` as literal text and gain an `&amp;` on serialize, so a TYPED or already-stored `&nbsp;` is permanently wrong. N fixed the paste path only. Needs `CANONICAL` + `NON_CANONICAL` entries. |
+| A static import-cycle check over `src/features/editor/` | not started — `importCycle.test.ts` pins the ONE order that broke the app on 2026-09-02; a check in `scripts/sourceLint.test.ts` would catch any cycle in any direction, which is strictly stronger |
+| Lazy construction in `markdown.ts` | not started — its manager and schema are built at module top level, which is what makes any cycle through it fatal at initialisation. Building them lazily removes the hazard rather than pinning one instance of it. |
 
-### N. Paste Markdown as Markdown — reported from real use, 2026-09-01
+### N. Paste Markdown as Markdown — SHIPPED 2026-09-02
 
-**Pasting raw Markdown into a note inserts it literally.** `**bold**` stays as
-asterisks, a `|---|---|` table becomes one paragraph per row, and a paste from
-a rich web source (the report that surfaced this came from Gemini's UI) leaves
-`&gt;` and `&nbsp;` sitting in the text. Reported with a screenshot of a real
-weekly report the user pasted in and could not use.
+Spec: `docs/superpowers/specs/2026-09-02-n-paste-markdown-design.md`. Plan:
+`docs/superpowers/plans/2026-09-02-n-paste-markdown.md`. Ledger:
+`.superpowers/sdd/2026-09-02-n-paste-markdown/progress.md`.
 
-**The app IS Markdown-based, which is what makes this surprising rather than
-expected.** `RichEditor.tsx:386` loads every note with
-`content: parseMarkdown(initialMarkdown)` and saves by serializing back, so the
-stored file is Markdown and the round trip works. What does not exist is a
-paste path into that parser: the editor's only paste handler is `ImagePaste`,
-which deliberately returns `false` for a non-image clipboard so text falls
-through to ProseMirror's default — and that default inserts plain text
-verbatim.
+Reported from real use on 2026-09-01: pasting raw Markdown inserted it
+literally — `**bold**` stayed asterisks, a `|---|---|` table became one
+paragraph per row, and a paste from a rich web source left `&gt;` and `&nbsp;`
+sitting in the text. `MarkdownPaste`, a `handlePaste` extension, closes this:
+`text/plain` runs through the same `parseMarkdown` every note already loads
+through, and its nodes replace the pasted characters.
 
-`CLAUDE.md` already records "typing Markdown into the editor does not parse it
-as Markdown", but as a TESTING caveat ("seed the note, never type it"). This
-report is the same fact arriving as a user-facing defect, which is the more
-important half and was not written down.
+**Four decisions, all recorded with their reasoning in the spec:**
 
-**The shape of the fix, for whoever picks it up:** a paste handler that reads
-`text/plain`, decides whether it is Markdown worth parsing, and inserts
-`parseMarkdown`'s nodes instead of characters. Three things it must get right,
-all already documented traps:
+1. Every `text/plain` paste is parsed as Markdown, with no heuristic gate —
+   the boundary a conservative trigger would draw is invisible to the user,
+   and is worse than being occasionally wrong.
+2. Plain text beats `text/html` only when `looksLikeMarkdown` says so, so a
+   paste off a web page keeps its links; `looksLikeMarkdown` gates that choice
+   and nothing else — it does not decide whether the plain-text path parses.
+3. Entities the parser leaves literal (`&nbsp;`, `&mdash;`, numeric
+   references) are decoded on the paste path only, by `decodeEntities`, which
+   skips exactly the four entities `parseMarkdown` already decodes itself
+   (`&amp;` `&lt;` `&gt;` `&quot;`, case-sensitively) to avoid a double-decode.
+4. No escape hatch ships. `⌘Z` reverses a paste in one step; a "paste as plain
+   text" command was considered and rejected.
 
-- **`@tiptap/core`'s own paste handler calls `clipboardData.getData` before
-  yours is reached**, so a handler that throws presents as "my plugin does
-  nothing" rather than as an error. See the jsdom `DataTransfer` note in
-  `CLAUDE.md`.
-- **A clipboard carrying `text/html` should probably still win**, since a rich
-  paste from a browser already round-trips through ProseMirror's HTML parser.
-  The literal-`&gt;` symptom above suggests that path needs its own look.
-- **Deciding "is this Markdown?" is the whole design question.** Always parsing
-  is wrong — pasting a line containing an underscore or a hash into prose would
-  silently restructure it. A conservative trigger (fenced blocks, table pipes,
-  heading markers at line start, list markers) plus an explicit "paste as
-  Markdown" command is the likely answer, but it is a decision to take
-  deliberately rather than discover.
+**The literal `&gt;`/`&nbsp;` symptom from the original report was the SAME
+defect as the missing parse, not a second one** — both are "the paste path
+never reaches `parseMarkdown`'s decoding," and fixing the one fixes the other.
+No separate entity-handling code was needed on the paste path beyond
+`decodeEntities`'s narrow four-entity skip-list.
 
-**Worth weighing against J4 rather than queued behind it automatically.** J4 is
-polish on a working surface; this one makes the app unusable for the workflow
-that motivated it — moving a document written elsewhere into a note.
+**What the build corrected that the plan did not anticipate:** a circular
+import (`extensions.ts -> MarkdownPaste.ts -> markdown.ts -> extensions.ts`)
+stopped the app booting outright, passed all six gates, and was caught only
+by running the app — see `docs/rulings/markdown-and-schema.md` and
+`CLAUDE.md`'s toolchain-surprises entry on module-initialisation cycles. Four
+residue items came out of specing and building N and are tracked in the table
+above rather than here: dropping Markdown text (not just pasting it),
+`markdown.ts`'s own `&amp;nbsp;` round-trip corruption on typed/stored notes,
+a repo-wide static import-cycle check, and making `markdown.ts`'s module-level
+construction lazy to remove the cycle hazard rather than merely pin one
+instance of it.
 
 ### The L-series, and why in this order
 

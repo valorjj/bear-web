@@ -68,6 +68,7 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | L4 command palette: `⌘K`, fuzzy match, commands + notes           | complete |
 | L5 server-rendered Mermaid diagrams                               | complete |
 | M publish: a public read-only URL for one note                    | complete |
+| N paste Markdown as Markdown                                      | complete |
 
 2473 unit tests (plus 203 server tests, 112 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 71 renderer tests behind
@@ -373,12 +374,17 @@ These bit us once already. They are not mistakes.
   all, which presents as "my plugin does nothing" rather than as an error in
   the harness. It took a stack trace to tell the two apart.
 
-- **Typing Markdown into the editor does not parse it as Markdown.** There are
-  no input rules for images, so typing `![x](url)` puts literal characters in a
-  text node — and serializing a text node ESCAPES them, so the note
-  round-trips to `!\[x\](url)`. Any test about how a construct parses must
-  SEED the note (or reload), never type it; and any code inserting Markdown
-  must insert a node rather than text, which is why `ImagePaste` does.
+- **Typing Markdown into the editor does not parse it as Markdown; PASTING it
+  does.** There are no input rules for images, so typing `![x](url)` puts
+  literal characters in a text node — and serializing a text node ESCAPES
+  them, so the note round-trips to `!\[x\](url)`. Any test about how a
+  construct parses must SEED the note (or reload), never type it; and any code
+  inserting Markdown must insert a node rather than text, which is why
+  `ImagePaste` does. **A paste is different since N**: `MarkdownPaste`'s
+  `handlePaste` runs `text/plain` through `parseMarkdown`, so pasted Markdown
+  becomes real nodes. Do not read "typing does not parse" as "the editor
+  cannot parse" — the asymmetry between the two paths is deliberate and
+  documented in `docs/rulings/markdown-and-schema.md`.
 
 - **jsdom implements NO `matchMedia` — the property is absent, not stubbed.**
   A component calling it throws `TypeError: window.matchMedia is not a
@@ -789,6 +795,34 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
   by design rather than silently defanging it, which this repo treats as the
   worse failure mode of the two.
 
+- **A circular import here fails at MODULE INITIALISATION, not at build time,
+  and every gate passes.** `src/features/editor/markdown.ts` builds its
+  `MarkdownManager` (line 13) and its `schema` (line 40) from
+  `editorExtensions` at module top level. So any module that `extensions.ts`
+  imports must NOT import `markdown.ts`: whichever evaluates first re-enters
+  the other before its bindings exist, `editorExtensions` is `undefined`, and
+  `getSchema` throws `Cannot read properties of undefined (reading 'map')`.
+  **The app renders nothing.** `npm run build` succeeds, `typecheck`, `lint`
+  and `format` pass, and 2473 unit tests pass, because no test file happens to
+  import `./extensions` before `./markdown` — the failure depends on
+  evaluation ORDER, which no gate here varies. Sub-project N shipped this and
+  three reviews read the diff without seeing it; a review reads lines, and this
+  lives in the import graph. Found by running the app, and by an e2e suite
+  where every test timed out waiting for the app to appear —
+  `e2e/notes.spec.ts` failing identically to a brand-new spec is the tell that
+  the fault is not in the new spec. `src/features/editor/importCycle.test.ts`
+  now pins that one order. The underlying hazard remains: making
+  `markdown.ts`'s two module-scope constructions lazy is the real cure.
+
+- **A test fixture asserting on an invisible character cannot be reviewed, and
+  no gate can see it.** `&nbsp;` decodes to U+00A0, not U+0020, so
+  `pastedMarkdown.test.ts` asserts `'a\u00A0b'` as a visible six-character
+  escape. Write the escape; never paste the real character. An editor will
+  silently substitute the raw byte — this happened three times during
+  sub-project N, including once in the very text warning against it, and the
+  diff view shows nothing. Verify by counting bytes, not by looking:
+  `python3 -c "print(open(PATH).read().count(chr(0xA0)))"` must print 0.
+
 ## Architecture boundaries
 
 - **These boundaries are enforced by `scripts/sourceLint.test.ts`, not merely
@@ -876,7 +910,7 @@ at the top; the rows here are abridged.
 | `src/data/migrations.ts`, `sweep.ts`, `persist.ts`, `backup.ts`, `db.ts`'s `stores({…})`; the `noteTags` writes in `repositories/notes.ts`; the boot sequence in `main.tsx`; a new `db.version(n).upgrade()`                                                                                                                                                                                                                                                             | [tag-index-and-startup.md](docs/rulings/tag-index-and-startup.md)                                                                      |
 | `NoteEditor.tsx`, `useAutosave.ts`, `useNotes.ts`, `derive.ts`, `useFlushTriggers.ts`; `AppShell`'s `key={…}` / `seed`; any `useLiveQuery` whose deps are not `[]`, and any write GATED on one (`useTagTree.reveal`); `notes.purge` / `notes.save` call sites; `src/features/graph/useGraphSnapshot.ts`                                                                                                                                                                  | [notes-lifecycle.md](docs/rulings/notes-lifecycle.md)                                                                                  |
 | `scope.ts` (`NoteScope`, `SMART_LIST_IDS`, `scopeKey`, `ScopeQuery`, the capability functions), `src/data/order.ts`, `ScopeMenu.tsx`, `useSetting.ts`, `smartLists.ts`, `useSmartListCounts.ts`, `search.ts`, `HighlightedText.tsx`, `ConfirmDialog.tsx`, `AppShell`'s scope/query state                                                                                                                                                                                 | [scopes-and-search.md](docs/rulings/scopes-and-search.md)                                                                              |
-| `src/features/editor/markdown.ts`, `extensions.ts`, `RawBlock.ts`, `toolbarSelection.ts`, `taskItemPromotion.ts`, `callouts.ts`, `Callout.ts`; the `CANONICAL` / `NON_CANONICAL` fixtures; a new import of `@tiptap/markdown`; a new extension, input rule, **or keyboard binding** (`useScopeShortcuts.ts` included)                                                                                                                                                    | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md)                                                                          |
+| `src/features/editor/markdown.ts`, `extensions.ts`, `RawBlock.ts`, `toolbarSelection.ts`, `taskItemPromotion.ts`, `callouts.ts`, `Callout.ts`; the `CANONICAL` / `NON_CANONICAL` fixtures; a new import of `@tiptap/markdown`; a new extension, input rule, **or keyboard binding** (`useScopeShortcuts.ts` included); `MarkdownPaste.ts`, `pastedMarkdown.ts`, `importCycle.test.ts`                                                                                    | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md)                                                                          |
 | `tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` entries in `extensions.ts`, `RawTable`, `table.test.ts`, any table fixture                                                                                                                                                                                                                                                                                                  | [tables.md](docs/rulings/tables.md)                                                                                                    |
 | `TagPill.ts` (`tagDecorations`, `tagRangeAt`, the `mousedown` handler), `blockText.ts` (`maskedBlockText`), `RichEditor`'s `activateRef` / `data-mod-held`, `AppShell.handleActivateTag`, `--bear-tag-fill*`, `tagAgreement.test.ts`                                                                                                                                                                                                                                     | [tag-pills.md](docs/rulings/tag-pills.md)                                                                                              |
 | `src/features/export/` — `html.ts`, `exportNote.ts`, `requestPdf.ts`, `filename.ts`, `ExportMenu.tsx`; `NoteEditor.handleExport`; `server/src/routes/export.ts`, `server/pdf/`; the `export.*` i18n keys and `ALLOWED_IDENTICAL`                                                                                                                                                                                                                                         | [export.md](docs/rulings/export.md)                                                                                                    |

@@ -179,14 +179,14 @@ export function looksLikeMarkdown(text: string): boolean {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run src/features/editor/pastedMarkdown.test.ts`
-Expected: PASS, 29 tests.
+Expected: PASS, 28 tests.
 
 - [ ] **Step 5: Prove the test can fail**
 
 Temporarily replace the body of `looksLikeMarkdown` with `return true;`.
 
 Run: `npx vitest run src/features/editor/pastedMarkdown.test.ts`
-Expected: FAIL — all 12 negative cases. Then restore the real body and confirm PASS again.
+Expected: FAIL — all 11 negative cases. Then restore the real body and confirm PASS again.
 
 This is not ceremony: a detector that always says yes is exactly the bug that turns decision 2 back into "plain text always wins", and it would pass a suite made only of positive cases.
 

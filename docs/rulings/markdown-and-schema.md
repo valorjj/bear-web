@@ -28,7 +28,10 @@ removed Tiptap extension, input rule or `markdownTokenName`; a new or changed
 `requestDiagram`, `DiagramError`). Also `LinkPill.ts`'s
 `setKnownNoteTitles`, `LinkAutocomplete.ts`'s `move`/`dismiss` dispatches, and
 any other `skipTrailingNodeMeta` call site or meta-only `tr.setMeta(...)`
-dispatch anywhere in `src/features/editor/`.
+dispatch anywhere in `src/features/editor/`. Also `MarkdownPaste.ts`
+(`markdownPasteKey`, `sliceFor`) and `pastedMarkdown.ts` (`looksLikeMarkdown`,
+`decodeEntities`, `PARSER_HANDLED`, `SIGNALS`); any edit to
+`importCycle.test.ts`.
 
 - **`markdown.ts` is the only importer of `@tiptap/markdown`.** The round-trip
   suite drives `MarkdownManager` standalone, with no `Editor` and no DOM, which
@@ -722,3 +725,69 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   keys its node view on and the language picker labels via
   `codeLabels.diagram`. A future non-highlight fence language belongs beside
   `DIAGRAM_LANGUAGE_ID`, not folded into `CODE_LANGUAGES`.
+
+## Pasting Markdown as Markdown (N)
+
+- **Every `text/plain` paste is parsed as Markdown, with no heuristic gate.**
+  The app is Markdown — notes load through `parseMarkdown` and save by
+  serializing back — so a paste of Markdown becomes the structure it
+  describes. A conservative trigger was considered and rejected because the
+  boundary is invisible to the user: they cannot tell why one paste became a
+  table and another stayed literal, and a rule nobody can predict is worse
+  than one that is occasionally wrong. Measured, not assumed: a lone
+  `under_score` does not become emphasis and the serializer escapes it
+  defensively, so the prose-mangling risk that argued for the heuristic is
+  smaller than it reads. `⌘Z` reverses a paste in one step; no
+  "paste as plain text" command ships, deliberately.
+
+- **`looksLikeMarkdown` gates the `text/html`-versus-`text/plain` choice and
+  NOTHING else.** Widening it to gate the plain-text path would reinstate the
+  rejected heuristic above. Where it is used, both branches are structured
+  readings of the same content, so a wrong answer costs formatting fidelity;
+  on the plain-text path it would be choosing between structure and literal
+  characters, where a wrong answer mangles a document. Emphasis (`**bold**`)
+  is deliberately not a signal, and `#tag` must not read as a heading — this
+  app's own tag syntax is a hash with no space.
+
+- **`decodeEntities` skips exactly `&amp;` `&lt;` `&gt;` `&quot;`, and the set
+  is matched case-sensitively.** Those four are what `parseMarkdown` decodes
+  itself; decoding them again is a double-decode, and `&amp;amp;` must reach
+  the parser intact to become the text `&amp;` rather than `&`. Skipping them
+  also preserves `&lt;div&gt;` reaching the parser as an entity pair, which it
+  decodes and then claims as a raw-HTML node. Case-sensitively because `&AMP;`
+  is a legacy alias the parser does NOT decode, so it must fall through.
+  Everything else — `&nbsp;`, `&mdash;`, `&rsquo;`, numeric references —
+  survives the parser as literal text **and gains an `&amp;` on the way back
+  out**, so a note carrying one is permanently wrong. The decode happens on
+  the PASTE path only: a paste is an import, typing is authoring. Fixing it in
+  `markdown.ts` would repair typed notes too but edits the one component whose
+  failure corrupts notes silently.
+
+- **`MarkdownPaste` uses `handlePaste`; `ImagePaste` uses
+  `handleDOMEvents.paste`. That split is load-bearing, not incidental.**
+  ProseMirror consults `handleDOMEvents` before `handlePaste`, so an image
+  paste is claimed and `preventDefault`ed before the Markdown handler is
+  reached — no duplicated file-sniffing, and no ordering dependency between
+  the two entries in `buildEditorExtensions`. Verified by injection
+  (`markdownPaste.test.ts`'s "leaves an image paste to ImagePaste"), not
+  inferred from ProseMirror's documentation. Moving either handler to the
+  other hook reintroduces the contention.
+
+- **`MarkdownPaste` receives its parser through the `parsePastedMarkdown`
+  option and must never import `markdown.ts`.** This is not style. `markdown.ts`
+  builds its `MarkdownManager` and its `schema` from `editorExtensions` at
+  MODULE TOP LEVEL, so importing it from a module that `extensions.ts` reaches
+  closes the cycle `extensions.ts -> MarkdownPaste.ts -> markdown.ts ->
+  extensions.ts`. Whichever of the two evaluates first then re-enters the
+  other before its bindings exist, `editorExtensions` reads `undefined`, and
+  `getSchema` throws `Cannot read properties of undefined (reading 'map')` at
+  `markdown.ts:40`. **The app does not boot, and all six gates pass** — nothing
+  else in the suite happens to import these two in that order, and three code
+  reviews read the diff without seeing it, because the defect is in the shape
+  of the import graph rather than in any line of it. Shipped on
+  2026-09-02 and caught only by running the app.
+  `src/features/editor/importCycle.test.ts` pins that one order; it does not
+  catch a future cycle in another direction. The option is named
+  `parsePastedMarkdown`, not `parseMarkdown`, because `buildEditorExtensions`
+  spreads every extension's options into ONE object and a colliding bare name
+  silently loses.
