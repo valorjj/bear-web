@@ -64,10 +64,19 @@ function sliceFor(doc: ProseMirrorNode): Slice {
  * `handlePaste`, not `handleDOMEvents.paste`, and that does real work.
  * `ImagePaste` claims image pastes through `handleDOMEvents.paste` and calls
  * `preventDefault`, and ProseMirror consults `handleDOMEvents` BEFORE
- * `handlePaste` — so an image paste never reaches this plugin. No duplicated
- * file-sniffing, and no ordering dependency between the two entries in
- * `buildEditorExtensions`. Verified by injection in `markdownPaste.test.ts`,
- * not inferred from ProseMirror's documentation.
+ * `handlePaste` — so an image paste never reaches this plugin, whatever order
+ * the two sit in inside `buildEditorExtensions`. No duplicated file-sniffing,
+ * and no ordering dependency between THOSE two entries. Verified by injection
+ * in `markdownPaste.test.tsx`, not inferred from ProseMirror's documentation.
+ *
+ * But array position does NOT determine plugin order in general, and an
+ * earlier version of this docblock claimed otherwise. `@tiptap/extension-code-
+ * block`'s `codeBlockVSCodeHandler` is also a `handlePaste`, and although
+ * `MarkdownPaste` sits LATER in the extensions array its plugin runs FIRST —
+ * Tiptap's plugin order is its own, not the array's. So this plugin claimed
+ * every VS Code paste and the language-tagged fenced block stopped happening.
+ * That is why the fix is an explicit `vscode-editor-data` guard below rather
+ * than a reordering: there is no array position that would have fixed it.
  */
 export const MarkdownPaste = Extension.create<MarkdownPasteOptions>({
   name: 'markdownPaste',
@@ -91,8 +100,27 @@ export const MarkdownPaste = Extension.create<MarkdownPasteOptions>({
             const clipboard = event.clipboardData ?? null;
             if (clipboard === null) return false;
 
+            // A code block takes clipboard text VERBATIM, and that is the
+            // whole point of a code block. ProseMirror's own
+            // `parseFromClipboard` has an `inCode` branch for this; claiming
+            // the event bypasses it, so pasting a shell or YAML snippet into a
+            // fence consumed its `#` and `-` as Markdown and split the block
+            // in two. `spec.code` rather than a type-name check, so any
+            // code-ish node this schema gains is covered.
+            if (view.state.selection.$from.parent.type.spec.code === true) return false;
+
+            // Copied out of VS Code (or another editor that sets this):
+            // `@tiptap/extension-code-block`'s own paste handler turns it into
+            // a fenced block tagged with the source language, which is
+            // strictly better than parsing it as Markdown. Leave it alone.
+            if (clipboard.getData('vscode-editor-data') !== '') return false;
+
             const text = clipboard.getData('text/plain');
-            if (text === '') return false;
+            // `trim`, not `=== ''`: `'   '` and `'\n'` parse to one empty
+            // paragraph, whose inline slice inserts nothing — so claiming the
+            // event would silently swallow characters that landed before N. A
+            // paste that would insert nothing must not be claimed.
+            if (text.trim() === '') return false;
 
             // A rich source offers both flavours. Plain text wins only when it
             // carries structure — otherwise ProseMirror's own HTML path runs,

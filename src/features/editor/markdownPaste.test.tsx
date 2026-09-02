@@ -1,4 +1,5 @@
 import { waitFor } from '@testing-library/react';
+import { Slice } from '@tiptap/pm/model';
 import { EditorView } from '@tiptap/pm/view';
 import { createRef } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -6,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { renderWithI18n } from '@/i18n/testing';
 
 import { normalizeMarkdown } from './markdown';
+import { markdownPasteKey } from './MarkdownPaste';
 import { RichEditor, type RichEditorHandle } from './RichEditor';
 
 // jsdom has no layout engine, so ProseMirror's `coordsAtPos`/`posAtCoords`
@@ -79,25 +81,77 @@ function renderEditor(
  * is reached, and the throw from a missing `getData` stops our handler running
  * at all, presenting as "my plugin does nothing" rather than as an error. That
  * cost a stack trace to diagnose once already.
+ *
+ * `getData` answers '' for a type this payload does not carry, and that is
+ * load-bearing rather than tidiness. It read
+ * `type === 'text/html' ? html : plain` until the whole-branch review, which
+ * answered EVERY unrecognised type with the Markdown text — so
+ * `@tiptap/extension-code-block`'s handler saw a truthy
+ * `vscode-editor-data`, tried to `JSON.parse` the Markdown, and this double
+ * concealed the regression where `MarkdownPaste` claimed VS Code pastes that
+ * used to become language-tagged fenced blocks. A future handler reading a
+ * third clipboard type now gets a truthful answer.
  */
-function paste(flavours: { plain?: string; html?: string; files?: File[] }): boolean {
-  const { plain = '', html = '', files = [] } = flavours;
+interface Flavours {
+  plain?: string;
+  html?: string;
+  files?: File[];
+  /** Any further clipboard type, e.g. `vscode-editor-data`. */
+  extra?: Record<string, string>;
+}
+
+function clipboardEvent(flavours: Flavours): Event {
+  const { plain = '', html = '', files = [], extra = {} } = flavours;
   const types = [
     ...(plain === '' ? [] : ['text/plain']),
     ...(html === '' ? [] : ['text/html']),
+    ...Object.keys(extra),
     ...(files.length === 0 ? [] : ['Files']),
   ];
+  const data: Record<string, string> = { 'text/plain': plain, 'text/html': html, ...extra };
   const event = new Event('paste', { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'clipboardData', {
     value: {
       files,
       types,
       items: [],
-      getData: (type: string) => (type === 'text/html' ? html : plain),
+      getData: (type: string) => data[type] ?? '',
     },
   });
+  return event;
+}
+
+function paste(flavours: Flavours): boolean {
+  const event = clipboardEvent(flavours);
+  // The FIRST `.ProseMirror` in the document, so a test that mounts two
+  // editors pastes into the wrong one. One editor per test.
   document.querySelector('.ProseMirror')!.dispatchEvent(event);
   return event.defaultPrevented;
+}
+
+/**
+ * Whether `MarkdownPaste`'s OWN handler claims a payload.
+ *
+ * `paste()` returns `event.defaultPrevented`, which cannot answer that
+ * question and it is worth saying why rather than rediscovering it.
+ * ProseMirror's `doPaste` calls every `handlePaste` in turn and then, if they
+ * all declined, inserts the clipboard ITSELF and calls `preventDefault`
+ * anyway — so from outside, a declined paste is indistinguishable from a
+ * claimed one. Measured: a whitespace-only payload, a paste into a code block
+ * and a `vscode-editor-data` paste all report `defaultPrevented === true`
+ * whether this plugin's guards are present or not. Asking the plugin directly
+ * is the only faithful instrument for "this handler stayed out of the way".
+ */
+function claimedByMarkdownPaste(
+  handleRef: React.RefObject<RichEditorHandle | null>,
+  flavours: Flavours,
+): boolean {
+  const view = handleRef.current!.editor!.view;
+  const plugin = markdownPasteKey.get(view.state)!;
+  const handlePaste = plugin.props.handlePaste!;
+  return (
+    handlePaste.call(plugin, view, clipboardEvent(flavours) as ClipboardEvent, Slice.empty) === true
+  );
 }
 
 async function mounted(initialMarkdown = '', onImage?: (file: Blob) => Promise<string | null>) {
@@ -250,4 +304,79 @@ describe('MarkdownPaste', () => {
       });
     },
   );
+  it('leaves a paste inside a code block alone, so a snippet is not eaten as Markdown', async () => {
+    // THE CRITICAL REGRESSION GUARD. A code block takes clipboard text
+    // verbatim — ProseMirror's `parseFromClipboard` has an `inCode` branch for
+    // it — and claiming the event bypassed that branch entirely: the `#` and
+    // `-` below were consumed as Markdown, an H1 and a bullet list appeared
+    // after the fence, and with the caret mid-block the fence was SPLIT IN
+    // TWO. Any shell, Python, YAML or Markdown snippet pasted into a fence was
+    // corrupted.
+    const handleRef = await mounted('```ts\nconst a = 1;\n```');
+    // Mid-block, which is the worse of the two positions: the end-of-block
+    // case merely mangles the text, this one splits the node.
+    handleRef.current!.editor!.commands.setTextSelection(5);
+
+    expect(claimedByMarkdownPaste(handleRef, { plain: '# comment\n- item' })).toBe(false);
+    paste({ plain: '# comment\n- item' });
+
+    await waitFor(() => {
+      // Byte-identical to pre-N: the text lands verbatim, inside the fence.
+      expect(handleRef.current!.getMarkdown()).toBe(
+        '```ts\ncons# comment\n- itemt a = 1;\n```\n\n',
+      );
+    });
+    const kinds: string[] = [];
+    handleRef.current!.editor!.state.doc.descendants((node) => {
+      kinds.push(node.type.name);
+    });
+    // Stated as counts and absences rather than left to the string above, so
+    // the split-in-two symptom fails BY NAME rather than as a diff to read.
+    expect(kinds.filter((kind) => kind === 'codeBlock')).toHaveLength(1);
+    expect(kinds).not.toContain('heading');
+    expect(kinds).not.toContain('bulletList');
+  });
+
+  it('leaves a VS Code paste to the code-block handler, which tags its language', async () => {
+    // `@tiptap/extension-code-block`'s `codeBlockVSCodeHandler` reads
+    // `vscode-editor-data` and builds a fence tagged with the source language,
+    // which beats parsing the same text as Markdown. It is ALSO a
+    // `handlePaste`, and although `MarkdownPaste` sits later in the extensions
+    // array its plugin runs first — Tiptap's plugin order is not the array's —
+    // so this paste became an H1 and a paragraph until the explicit guard went
+    // in. No array position would have fixed it.
+    const handleRef = await mounted();
+
+    expect(
+      claimedByMarkdownPaste(handleRef, {
+        plain: '# comment\nprint(1)',
+        extra: { 'vscode-editor-data': '{"mode":"python"}' },
+      }),
+    ).toBe(false);
+    paste({
+      plain: '# comment\nprint(1)',
+      extra: { 'vscode-editor-data': '{"mode":"python"}' },
+    });
+
+    await waitFor(() => {
+      // A python-tagged fence, with the `#` still a comment rather than an H1.
+      expect(handleRef.current!.getMarkdown()).toBe('```python\n# comment\nprint(1)\n```\n\n');
+    });
+  });
+
+  it('does not claim a whitespace-only paste, which would swallow the characters', async () => {
+    // `'   '` and `'\n'` parse to one empty paragraph, whose inline slice
+    // inserts NOTHING — so claiming the event suppressed the browser and the
+    // characters vanished. They landed before N, and they land again.
+    const handleRef = await mounted('ab');
+    handleRef.current!.editor!.commands.setTextSelection(2);
+
+    expect(claimedByMarkdownPaste(handleRef, { plain: '   ' })).toBe(false);
+    expect(claimedByMarkdownPaste(handleRef, { plain: '\n' })).toBe(false);
+    paste({ plain: '   ' });
+
+    await waitFor(() => {
+      expect(handleRef.current!.getMarkdown()).toBe('a   b');
+    });
+  });
 });
