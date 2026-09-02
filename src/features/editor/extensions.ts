@@ -17,6 +17,7 @@ import { lowlightForEditor } from './lowlight';
 import { MermaidDiagram, type MermaidDiagramOptions } from './MermaidDiagram';
 import { RawDefinition, RawHtmlBlock, RawImage, createRawInlineHtmlNode } from './RawBlock';
 import { ImagePaste, type ImagePasteOptions } from './ImagePaste';
+import { MarkdownPaste } from './MarkdownPaste';
 import { StoredImage, type StoredImageOptions } from './StoredImage';
 import type { TagPillOptions } from './TagPill';
 import { TagPill } from './TagPill';
@@ -249,6 +250,9 @@ export function buildEditorExtensions(
     // be in the schema before anything can emit it.
     StoredImage.configure({ missingLabel: options.missingLabel ?? null }),
     ImagePaste.configure({ onImage: options.onImage ?? null }),
+    // No `.configure`: `MarkdownPaste` takes no options, so it is identical in
+    // `editorExtensions` and in the app's own build.
+    MarkdownPaste,
     RawImage,
     createRawInlineHtmlNode(computeRecognizedHtmlTags()),
   ];
