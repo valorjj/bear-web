@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 
 import { AccountMenu } from '@/features/account';
 import { ThemePicker } from '@/features/appearance';
+import { TypographyButton } from '@/features/typography';
 import type { NoteScope } from '@/features/notes';
 import { SmartListSidebar } from '@/features/notes';
 import type { SmartListCounts } from '@/features/notes';
@@ -64,6 +65,7 @@ export function SidebarContent({
 
       <div className="border-border flex shrink-0 items-center gap-1 border-t p-1">
         <ThemePicker />
+        <TypographyButton />
         <AccountMenu />
       </div>
     </>
