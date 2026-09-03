@@ -333,7 +333,7 @@ The note title line.
 | font-weight | `700` |
 | line-height | `34.56px` |
 | letter-spacing | `-0.55296px` |
-| color | `rgb(36, 31, 61)` |
+| color | `rgb(91, 74, 214)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 
 ## editor: h2
@@ -347,7 +347,7 @@ The note title line.
 | font-size | `23.04px` |
 | font-weight | `600` |
 | line-height | `28.8px` |
-| color | `rgb(36, 31, 61)` |
+| color | `rgb(91, 74, 214)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | margin | `32.256px 0px 0px` |
 
@@ -362,7 +362,7 @@ The note title line.
 | font-size | `19.2px` |
 | font-weight | `600` |
 | line-height | `24px` |
-| color | `rgb(36, 31, 61)` |
+| color | `rgb(91, 74, 214)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | margin | `26.88px 0px 0px` |
 

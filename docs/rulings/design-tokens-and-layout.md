@@ -296,13 +296,60 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   The hit-target test requires the separator's own width to be at least 6px and
   that `elementFromPoint` returns the separator at both of its edges.
 
-- **Headings keep `--bear-text`; the accent marks what the user can act on or
-  has acted on** — links, checkboxes, highlight, selection, focus and tag
-  pills. A page of accent-coloured headings reads as a warning notice, and in
-  Paper and Ink — where `accent` and `danger` are the same value — it would
-  make one colour mean both "heading" and "delete forever". That coincidence no
-  longer holds in the indigo themes, but the ruling stands on its own: a
-  heading is structure, not an affordance.
+- **REVERSED in sub-project P (2026-09-03): headings, list markers and
+  thematic breaks now carry `--bear-accent`.** The struck ruling read
+  "Headings keep `--bear-text`; the accent marks what the user can act on or
+  has acted on — links, checkboxes, highlight, selection, focus and tag
+  pills", on the grounds that a page of accent-coloured headings reads as a
+  warning notice, and that in Paper and Ink — where `accent` and `danger` are
+  the same value — one colour would mean both "heading" and "delete forever".
+  The reversal is the user's, made comparing this editor against Bear side by
+  side: the accent reaching the prose is the single thing that makes Bear's
+  editor read as a designed document rather than a text field, and structure
+  is exactly what a theme's one hue should mark. What survives of the old
+  ruling is its Paper/Ink observation, which is now a known cost rather than a
+  bar — and the accent is on the MARKER, never on the list item's text
+  (`li::marker`), so prose itself is untouched.
+  - All six levels, plus the title line's plain-paragraph form
+    (`> :is(p, h1…h6):first-child` states `color` for the same reason it
+    states `font-size`: a note beginning `# Title` and one beginning with a
+    bare paragraph must present the same title).
+  - No theme was retuned for this and none needed to be:
+    `e2e/contrast.spec.ts` already holds `accent` to 4.5:1 on both `bg` and
+    `surface` in all sixteen themes, and the roster's worst is solarized-dark
+    at 4.55.
+  - `e2e/appearance.spec.ts`'s "the accent reaches headings, list markers and
+    rules" is relative, not pinned: it asserts a heading equals the PAINTED
+    accent token and differs from a paragraph, so M9a stays free to move the
+    palette while a heading that fell back to body colour still fails.
+
+- **Table rows alternate, and both the stripe and the header shade are DERIVED
+  from `--bear-bg` in `srgb`** — `--bear-table-stripe` at 94%/6% and
+  `--bear-table-header` at 88%/12% toward `--bear-text`. Three things here are
+  measured rather than chosen, and each was wrong on the first attempt:
+  - The ground is `bg`, not `surface`. The editor pane is `bg-bg`
+    (`AppShell.tsx`), so a cell with no background of its own paints on
+    `--bear-bg`; a stripe mixed off `surface` is a step away from a colour the
+    row is not sitting on, and in oklab it lands DARKER than the header it is
+    meant to sit under.
+  - The space is `srgb`, against this file's general preference for `oklab` on
+    opaque mixes. oklab's L is perceptually uniform, which is what lets one
+    ratio serve sixteen palettes for a TEXT tier — but these are a step off
+    the BACKGROUND, and a 6% step in L from a pure black falls outside the
+    sRGB gamut and clamps straight back to black. Measured: `color-mix(in
+    oklab, #000000 94%, #ffffff)` resolves to `#000000`, so `high-contrast`'s
+    stripe scored **1.004** against its own background. Do not tidy this back
+    to oklab.
+  - The header was `--bear-surface` before this, which is why `high-contrast`
+    had no header shade at all: that theme's `bg` and `surface` are both
+    `#000000`.
+  `e2e/contrast.spec.ts` holds both halves — `text` at 4.5:1 on each ground
+  (worst in the roster: solarized-dark, 8.16 on the stripe and 7.10 on the
+  header), AND each ground at `border`'s own 1.05 visibility floor against
+  `bg`. The second row is not redundant: a stripe that had collapsed into the
+  page passes the first one perfectly, because it IS the page. Reverting the
+  mixes to oklab fails exactly that floor, on `high-contrast`, with
+  `table-stripe on bg: 1.00 < 1.05`.
 
 - **Both editor toolbars float; they are not bars in the flow, and their
   placement lives in `RichEditor`, not in either toolbar.** From M4 to M7.5 they
@@ -317,14 +364,41 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   fully rounded (radius at least half its height), filled with something that
   is neither transparent nor equal to its ground, and shadowed. Three
   consequences that are load-bearing rather than stylistic:
-  - **The writing surface's `pt-12`/`pb-24` is a reserve, not spacing.** The
-    pills overlay the prose, so without the bottom reserve the last line of
-    every note sits permanently behind the formatting bar with no way to scroll
-    it clear — and the note still round-trips perfectly, so nothing but a
-    computed-style test can see it. `e2e/appearance.spec.ts` asserts the reserve
-    covers each pill's actual reach into the pane, so it stays correct when a
-    toolbar's height or inset changes. It is also the one allowlisted off-scale
-    spacing value in `scripts/sourceLint.test.ts`.
+  - **The writing surface's `pt-12` is a reserve, not spacing; its `pb-24`
+    was a reserve that never reached the content, and the real bottom reserve
+    is now `.ProseMirror::after` driven by `--bear-editor-pad-bottom`.** The
+    pills overlay the prose, so without a bottom reserve the last line of
+    every note sits permanently behind the formatting bar with no way to
+    scroll it clear — and the note still round-trips perfectly, so nothing but
+    a computed-style test can see it. `pb-24` did not prevent that, and the
+    test that was supposed to guard it could not tell:
+    `e2e/appearance.spec.ts`'s "the writing surface reserves room for the
+    floating toolbars" compares a PADDING VALUE (96px) against a pill's reach
+    (48px desktop, 68px coarse) and never asks where the padding ended up.
+    `.ProseMirror` is `min-h-0 flex-1` inside `EditorContent`'s column flex
+    container, so its used height is exactly the scroll container's height
+    however long the note is, and the prose overflows its own box; the padding
+    therefore sits at the bottom of a container-height box, which on a
+    scrolled note is nowhere near the end of the content. Measured 2026-09-03
+    on a 41-line note scrolled to its end: `padding-bottom` 96px,
+    `.ProseMirror`'s own bottom edge at viewport y = **-186** (off the top of
+    the viewport), the last line at 686.7-712.3 and the toolbar pill at
+    664-700 — the last line squarely behind it. The fix is a `::after` block,
+    which is a real box in flow after the last child and so moves with the
+    content and lands inside the scrollable overflow region; a margin on
+    `> :last-child` was rejected because a bottom margin is not reliably part
+    of scrollable overflow, i.e. the same silent failure again.
+    `--bear-editor-pad-bottom` is tier 3 (not themeable) and is 4rem, with
+    5.25rem under `@media (pointer: coarse)` — each the pill's measured strip
+    plus a 16px gap. The query is `pointer: coarse` rather than a width
+    breakpoint because that is the query `coarse:h-14` — the thing being
+    cleared — is itself written against; a width breakpoint would disagree
+    with the toolbar on a touch laptop. `pb-24` is left in place as inert
+    (a note short enough for its padding to be on screen never scrolls at
+    all) and remains the one allowlisted off-scale spacing value in
+    `scripts/sourceLint.test.ts`. The assertion that can actually fail is
+    "the last line of a long note scrolls clear of the toolbar", which
+    compares two bounding boxes with the note scrolled to its end.
   - **The positioning wrappers are `pointer-events-none` with
     `pointer-events-auto` on the pill.** Each wrapper spans the pane's full
     width; without this the top wrapper would swallow every click on the first

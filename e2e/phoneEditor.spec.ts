@@ -113,17 +113,66 @@ test.describe('the editor on a phone', () => {
   test('the toolbar does not cover the prose it reserved space for', async ({ page }) => {
     // The phone sibling of `appearance.spec.ts`'s reserve assertion, which runs
     // at 1280 with no touch and therefore cannot see the grown strip.
+    //
+    // REWRITTEN in sub-project P, because the previous shape could not see the
+    // defect it was named for. It read `.ProseMirror`'s `padding-bottom` (96px,
+    // `RichEditor`'s `pb-24`) and compared it against the pill's reach (68px
+    // here), and passed — while a scrolled note's last line sat squarely behind
+    // the pill. `.ProseMirror` is `min-h-0 flex-1` in a column flex container,
+    // so its box is exactly the scroll container's height however long the note
+    // is; its padding therefore sits at the bottom of that box, which on a
+    // scrolled note is nowhere near the end of the content. The reserve is now
+    // a `::after` BLOCK driven by `--bear-editor-pad-bottom` (`editor.css`),
+    // and this asserts the geometry a user can see.
+    //
+    // This is the ONLY test that can see the coarse-pointer half of that
+    // token. `RichEditor.tsx`'s own comment records that a `coarse:pb-32` was
+    // written and then removed because nothing could be made to fail with it
+    // absent; deleting the `@media (pointer: coarse)` block in `tokens.css`
+    // must fail HERE, and does — 84px drops to 64px, under the 68px reach.
     await openNote(page);
-    const pane = (await page.getByRole('region', { name: 'Editor' }).boundingBox())!;
-    const box = (await toolbar(page).boundingBox())!;
-    const reach = pane.y + pane.height - box.y;
 
     const reserve = await page
       .locator('.ProseMirror')
       .first()
-      .evaluate((el) => Number.parseFloat(getComputedStyle(el).paddingBottom));
+      .evaluate((el) => Number.parseFloat(getComputedStyle(el, '::after').height));
 
-    expect(reserve).toBeGreaterThanOrEqual(reach);
+    const pane = (await page.getByRole('region', { name: 'Editor' }).boundingBox())!;
+    const box = (await toolbar(page).boundingBox())!;
+    const reach = pane.y + pane.height - box.y;
+
+    // The pill is `h-14` under `(pointer: coarse)`, inset `bottom-3`, so the
+    // reach here is 68 against the desktop's 48 — which is the whole reason
+    // this token has a second value at all.
+    expect(reach, 'the toolbar is not the taller coarse-pointer pill').toBeGreaterThan(60);
+    expect(reserve, `reserve ${reserve} vs reach ${reach}`).toBeGreaterThanOrEqual(reach);
+
+    // …and the reserve genuinely lands at the end of the content. Type past the
+    // bottom of the pane, scroll to the end, and compare the two boxes: this is
+    // the assertion the padding-value comparison above it could never make.
+    const editor = page.getByRole('textbox', { name: 'Note text' });
+    await editor.click();
+    for (let index = 0; index < 40; index += 1) {
+      await editor.pressSequentially(`line ${index} of a long note`);
+      await page.keyboard.press('Enter');
+    }
+    await editor.pressSequentially('LAST LINE');
+
+    await page
+      .locator('.ProseMirror')
+      .first()
+      .evaluate((element) => {
+        const scroller = element.parentElement!;
+        scroller.scrollTop = scroller.scrollHeight;
+      });
+
+    const last = page.locator('.ProseMirror > *', { hasText: 'LAST LINE' }).last();
+    const lastBox = (await last.boundingBox())!;
+    const barBox = (await toolbar(page).boundingBox())!;
+    expect(
+      lastBox.y + lastBox.height,
+      `last line bottom ${lastBox.y + lastBox.height} vs toolbar top ${barBox.y}`,
+    ).toBeLessThanOrEqual(barBox.y);
   });
 
   test('a wide table scrolls instead of squeezing', async ({ page }) => {

@@ -90,6 +90,29 @@
    */
   --bear-table-column-min: 8rem;
 
+  /*
+   * The reserve under the prose, so the last line of a note can scroll clear
+   * of the floating formatting toolbar instead of sitting behind it.
+   *
+   * MEASURED, not chosen (2026-09-03, at the e2e suite's 1280x720 and at a
+   * 390x844 phone with `hasTouch`). `BottomToolbar` renders a `h-9` pill —
+   * 36px — inset `bottom-3` from the editor surface, so the strip it claims
+   * is 36 + 12 = 48px. On a coarse pointer J3 grows the pill to `h-14`, so
+   * the strip becomes 56 + 12 = 68px. Each value below is that strip plus a
+   * 16px gap, so the last line clears the toolbar rather than touching it:
+   * 64px and 84px.
+   *
+   * Tier 3, so NOT themeable: this is the geometry of a control, exactly like
+   * `--bear-touch-target` above, and a theme able to move it could hide the
+   * end of every note.
+   *
+   * `@media (pointer: coarse)` rather than a width breakpoint, because that
+   * is the query `coarse:h-14` — the thing being cleared — is itself written
+   * against (`@custom-variant coarse` in `index.css`). A width breakpoint
+   * would disagree with the toolbar on a touch laptop.
+   */
+  --bear-editor-pad-bottom: 4rem;
+
   /* Editor typography, bound to the M8 preference sliders. */
   --bear-font-size: 16px;
   --bear-line-height: 1.6;
@@ -259,6 +282,47 @@
     var(--bear-accent) calc(var(--bear-tint-strong) * 100%),
     transparent
   );
+
+  /*
+   * Table row striping and the header's shade.
+   *
+   * DERIVED from `--bear-bg`, not from `--bear-surface`, and the ground is
+   * why: the editor pane is `bg-bg` (`AppShell.tsx`), so a table cell with no
+   * background of its own paints on `--bear-bg`. A stripe mixed off
+   * `--bear-surface` would be a step away from a colour the row is not
+   * sitting on — in most of the roster `surface` is already a visible step
+   * from `bg`, so the "subtle" stripe would read as a second, louder tint,
+   * and in oklab it lands DARKER than the header it is meant to sit under.
+   *
+   * The header was `--bear-surface` until now, which is why `high-contrast`
+   * had no header shade at all: that theme's `bg` and `surface` are both
+   * `#000000`. Deriving both from `bg` plus a share of `text` gives every
+   * theme, present and future, a header that is a step from the page and a
+   * stripe that is half a step — in the right direction in a light theme and
+   * a dark one alike, because the mix runs toward the theme's own text.
+   *
+   * `srgb`, NOT the `oklab` that `muted`/`faint`/`border` above use, and the
+   * exception is measured rather than a slip. oklab's L is perceptually
+   * uniform, which is what makes one ratio serve sixteen palettes for a TEXT
+   * tier — but these two are a step away from the BACKGROUND, and a 6% step in
+   * L off a pure black falls outside the sRGB gamut and clamps back to black.
+   * Measured 2026-09-03 across the whole roster: `color-mix(in oklab, #000000
+   * 94%, #ffffff)` resolves to `#000000`, so `high-contrast`'s stripe scored
+   * 1.004 against its own background — invisible, which is precisely the
+   * defect this token exists to fix (that theme's `bg` and `surface` are both
+   * `#000000`, so its table header had no shade at all before this). In srgb
+   * the same two percentages give a step of 1.10-1.19 for the stripe and
+   * 1.23-1.44 for the header in EVERY theme, `high-contrast` included, and
+   * `text` still clears 8.1:1 on the stripe and 7.1:1 on the header at worst
+   * (solarized-dark, both). Do not "tidy" this back to oklab.
+   *
+   * `e2e/contrast.spec.ts` holds both halves: `text` on each ground at 4.5,
+   * and the stripe against `bg` at `border`'s own 1.05 visibility floor —
+   * without that second row a stripe that had silently collapsed into the
+   * page would pass the first one perfectly.
+   */
+  --bear-table-stripe: color-mix(in srgb, var(--bear-bg) 94%, var(--bear-text));
+  --bear-table-header: color-mix(in srgb, var(--bear-bg) 88%, var(--bear-text));
 
   /*
    * Default geometry, so a new theme inherits a complete look from its eight
@@ -508,6 +572,25 @@
    */
   --bear-graph-node: var(--bear-muted);
   --bear-graph-edge: var(--bear-border);
+}
+
+/*
+ * The coarse-pointer half of `--bear-editor-pad-bottom` above: J3's toolbar
+ * is `h-14` (56px) rather than `h-9`, so the strip it claims is 68px and the
+ * reserve is 68 + 16 = 84px.
+ *
+ * A separate top-level block rather than an at-rule nested inside `:root`,
+ * because `blockTokens` in `scripts/sourceLint.test.ts` slices a block to its
+ * FIRST `}` — a nested at-rule would truncate everything it parses about
+ * `:root` and make the "defines every non-base token in :root" assertion pass
+ * on half a block.
+ *
+ * It follows `:root` so it wins: a media query adds no specificity.
+ */
+@media (pointer: coarse) {
+  :root {
+    --bear-editor-pad-bottom: 5.25rem;
+  }
 }
 
 /*

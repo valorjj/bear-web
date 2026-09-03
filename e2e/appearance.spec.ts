@@ -1342,3 +1342,274 @@ test('the prose column never collapses to zero at a very narrow pane', async ({ 
   expect(widths.pane).toBeLessThan(240);
   expect(widths.prose).toBeCloseTo(192, 0);
 });
+
+/**
+ * Paints one `var(--bear-*)` onto a throwaway probe and reads the resolved
+ * colour back.
+ *
+ * `getPropertyValue('--bear-accent')` is NOT an alternative: a custom
+ * property's value is substituted lazily, so reading one back hands you the
+ * declaration's text. Every theme in the roster declares `accent` as a
+ * literal, so today that text happens to be a hex — but the moment a theme
+ * derives it (as `muted`, `faint`, `border`, `table-stripe` and
+ * `table-header` already are) the read would return a `color-mix(…)` string
+ * that can never compare equal to a computed `rgb(…)`. Same mechanism, and
+ * the same fix, as `e2e/fixtures/tokens.ts`.
+ */
+async function paintToken(page: import('@playwright/test').Page, name: string): Promise<string> {
+  return page.evaluate((token) => {
+    const probe = document.createElement('div');
+    probe.style.position = 'fixed';
+    probe.style.width = '0';
+    probe.style.height = '0';
+    probe.style.pointerEvents = 'none';
+    document.body.appendChild(probe);
+    try {
+      probe.style.color = `var(${token})`;
+      return getComputedStyle(probe).color;
+    } finally {
+      probe.remove();
+    }
+  }, name);
+}
+
+/*
+ * Sub-project P, item B. The theme's accent reaches the prose.
+ *
+ * This REVERSES M7.5's "headings keep `--bear-text`" ruling, on the user's
+ * own comparison against Bear — see `editor.css`'s rule and
+ * `docs/rulings/design-tokens-and-layout.md`.
+ *
+ * Relative, in this file's idiom: the assertion is not "headings are
+ * `#5b4ad6`" but "a heading is the accent, a paragraph is not". A palette
+ * change is then M9a's to make freely, while a heading that silently fell
+ * back to body colour still fails.
+ */
+test('the accent reaches headings, list markers and rules', async ({ page }) => {
+  await seedDatabase(page, {
+    notes: [
+      {
+        id: 'n-accent-prose',
+        title: 'Title',
+        // Seeded rather than typed: `#` has an input rule but `---` does not
+        // reliably survive `pressSequentially` into a fresh paragraph, and a
+        // heading level below h3 has no toolbar route at all. Seeding parses
+        // the Markdown through the real `parseMarkdown` on open.
+        text: [
+          'Title',
+          '',
+          '# One',
+          '',
+          '## Two',
+          '',
+          '### Three',
+          '',
+          '#### Four',
+          '',
+          '##### Five',
+          '',
+          '###### Six',
+          '',
+          'Body paragraph.',
+          '',
+          '- bullet item',
+          '',
+          '---',
+        ].join('\n'),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pinned: false,
+        trashedAt: null,
+        archivedAt: null,
+      },
+    ],
+    settings: [],
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Title/ }).first().click();
+  await expect(page.locator('.ProseMirror h1', { hasText: 'One' })).toBeVisible();
+
+  const accent = await paintToken(page, '--bear-accent');
+  const paragraph = await page
+    .locator('.ProseMirror p', { hasText: 'Body paragraph.' })
+    .evaluate((element) => getComputedStyle(element).color);
+
+  // Guards the guard. If the accent ever equalled body text every assertion
+  // below would pass without proving anything at all.
+  expect(accent, 'the accent is indistinguishable from body text').not.toBe(paragraph);
+
+  // All six levels, not h1-h3: the consistency is where Bear's look comes
+  // from, and three accented levels beside three text-coloured ones reads as
+  // a bug rather than as a design.
+  for (const level of [1, 2, 3, 4, 5, 6]) {
+    const colour = await page
+      .locator(`.ProseMirror h${level}`)
+      .first()
+      .evaluate((element) => getComputedStyle(element).color);
+    expect(colour, `h${level}`).toBe(accent);
+    expect(colour, `h${level} is still body colour`).not.toBe(paragraph);
+  }
+
+  // `::marker` is read through the pseudo-element, because the accent is
+  // deliberately on the bullet and NOT on the item's text — the accent marks
+  // the structure, not the prose. Asserting the `li`'s own colour would pass
+  // against a rule that had coloured the whole line, which is the defect.
+  const marker = await page
+    .locator('.ProseMirror li')
+    .first()
+    .evaluate((element) => getComputedStyle(element, '::marker').color);
+  expect(marker, 'list marker').toBe(accent);
+  const item = await page
+    .locator('.ProseMirror li')
+    .first()
+    .evaluate((element) => getComputedStyle(element).color);
+  expect(item, 'the item text must stay body colour').toBe(paragraph);
+
+  // A thematic break draws with `border-top`, not `color`.
+  const rule = await page
+    .locator('.ProseMirror hr')
+    .first()
+    .evaluate((element) => getComputedStyle(element).borderTopColor);
+  expect(rule, 'thematic break').toBe(accent);
+});
+
+/*
+ * Sub-project P, item C. Table rows alternate and the header is shaded.
+ *
+ * Relative again, and for a sharper reason than usual here: both grounds are
+ * DERIVED tokens (`color-mix(in srgb, var(--bear-bg) …, var(--bear-text))`),
+ * so there is no literal to pin even if this file wanted to. What must hold
+ * is the relationship — header ≠ stripe ≠ plain row, and each a real step
+ * from the page.
+ */
+test('table rows alternate and the header carries a shade', async ({ page }) => {
+  await seedDatabase(page, {
+    notes: [
+      {
+        id: 'n-table-stripe',
+        title: 'Title',
+        // Three body rows, which the toolbar's own `insertTable` cannot give
+        // us: it inserts `rows: 2` (one header, one body), and one body row
+        // cannot show that ADJACENT rows differ.
+        text: [
+          'Title',
+          '',
+          '| a | b |',
+          '| --- | --- |',
+          '| r1 | x |',
+          '| r2 | y |',
+          '| r3 | z |',
+        ].join('\n'),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pinned: false,
+        trashedAt: null,
+        archivedAt: null,
+      },
+    ],
+    settings: [],
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Title/ }).first().click();
+  await expect(page.locator('.ProseMirror table')).toBeVisible();
+
+  const backgrounds = await page.locator('.ProseMirror table').evaluate((table) => {
+    const cell = (row: number): string => {
+      const tr = table.querySelectorAll('tbody > tr')[row];
+      const first = tr?.querySelector('th, td');
+      return first === null || first === undefined ? '' : getComputedStyle(first).backgroundColor;
+    };
+    const page_ = getComputedStyle(
+      (table.closest('.ProseMirror') ?? table) as HTMLElement,
+    ).backgroundColor;
+    return { header: cell(0), first: cell(1), second: cell(2), third: cell(3), page: page_ };
+  });
+
+  // Guards the guard: a selector that matched nothing would report `''` for
+  // every row and make every inequality below vacuously true.
+  for (const [name, value] of Object.entries(backgrounds)) {
+    expect(value, `${name} resolved to nothing — the selector missed`).not.toBe('');
+  }
+
+  // Adjacent body rows differ: this is the striping itself.
+  expect(backgrounds.first, 'row 1 vs row 2').not.toBe(backgrounds.second);
+  expect(backgrounds.third, 'row 3 vs row 2').not.toBe(backgrounds.second);
+  // …and the stripe repeats rather than being a one-off on the first row.
+  expect(backgrounds.first, 'row 1 vs row 3').toBe(backgrounds.third);
+
+  // The header is a shade of its own, distinct from BOTH body grounds. Before
+  // sub-project P it was `--bear-surface`, which in `high-contrast` is the
+  // same `#000000` as `--bear-bg` — a header with no shade at all.
+  expect(backgrounds.header, 'header vs striped row').not.toBe(backgrounds.first);
+  expect(backgrounds.header, 'header vs plain row').not.toBe(backgrounds.second);
+  expect(backgrounds.header, 'header vs the page').not.toBe(backgrounds.page);
+
+  // The un-striped row genuinely shows the page through, rather than every
+  // row carrying a fill: `e2e/contrast.spec.ts` checks the stripe is a step
+  // from `--bear-bg`, and that only means anything if `bg` is what the other
+  // row shows.
+  expect(backgrounds.second, 'the plain row must show the page').toBe('rgba(0, 0, 0, 0)');
+});
+
+/*
+ * Sub-project P, item A. The last line of a note can scroll clear of the
+ * floating formatting toolbar.
+ *
+ * The reserve already existed as `RichEditor`'s `pb-24` and the test above
+ * ("the writing surface reserves room for the floating toolbars") already
+ * passed — because it compares a PADDING VALUE against a pill's reach and
+ * never asks where that padding ended up. `.ProseMirror` is `min-h-0 flex-1`
+ * in a column flex container, so its box is exactly the scroll container's
+ * height however long the note is and the prose overflows it; the padding
+ * therefore sits at the bottom of a container-height box, which on a scrolled
+ * note is nowhere near the end of the content. Measured before the fix, with
+ * this same note: `padding-bottom` 96px, `.ProseMirror`'s own bottom edge at
+ * viewport y = -186, the last line at 686.7-712.3 and the toolbar at 664-700
+ * — the last line squarely behind the pill with the whole reserve stranded
+ * off the top of the viewport.
+ *
+ * This asserts the thing the user can actually see: two bounding boxes that
+ * do not overlap, with the note scrolled to its end.
+ */
+test('the last line of a long note scrolls clear of the toolbar', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  // Long enough to scroll well past the pane at the suite's own viewport.
+  for (let index = 0; index < 40; index += 1) {
+    await editor.pressSequentially(`line ${index} of a deliberately long note`);
+    await page.keyboard.press('Enter');
+  }
+  await editor.pressSequentially('LAST LINE');
+
+  // Scrolled by the container rather than by a keystroke: `End`/`Ctrl+End`
+  // would move the caret and let ProseMirror decide how much to reveal, which
+  // is the browser's scroll-into-view policy rather than the reserve.
+  await page.locator('.ProseMirror').evaluate((element) => {
+    const scroller = element.parentElement!;
+    scroller.scrollTop = scroller.scrollHeight;
+  });
+
+  const last = page.locator('.ProseMirror > *', { hasText: 'LAST LINE' }).last();
+  const toolbar = page.getByRole('toolbar', { name: 'Formatting toolbar' });
+
+  const lastBox = await last.boundingBox();
+  const barBox = await toolbar.boundingBox();
+  expect(lastBox, 'the last line has no box').not.toBeNull();
+  expect(barBox, 'the toolbar has no box').not.toBeNull();
+  if (lastBox === null || barBox === null) return;
+
+  // The whole assertion: the last line ends ABOVE the pill starts. Reverting
+  // the `.ProseMirror::after` reserve reproduces the overlap measured above.
+  expect(
+    lastBox.y + lastBox.height,
+    `last line bottom ${lastBox.y + lastBox.height} vs toolbar top ${barBox.y}`,
+  ).toBeLessThanOrEqual(barBox.y);
+
+  // And it is actually the end of the note that is on screen, not some
+  // middle line that happens to sit high: a test that scrolled nowhere would
+  // otherwise pass by measuring a line the toolbar was never near.
+  await expect(last).toBeVisible();
+});

@@ -96,6 +96,43 @@
 }
 
 /*
+ * The reserve that lets the last line of a note scroll clear of the floating
+ * formatting toolbar.
+ *
+ * A `::after` BLOCK in flow, not padding — and `RichEditor`'s `pb-24` is the
+ * proof that padding cannot do this job here. `.ProseMirror` is
+ * `min-h-0 flex-1` inside `EditorContent`'s column flex container, so its used
+ * height is exactly the container's height however long the note is; the
+ * prose then OVERFLOWS its own box and the scroll container scrolls that
+ * overflow. Its padding-bottom therefore sits at the bottom of a
+ * container-height box, which on a scrolled note is nowhere near the end of
+ * the content. Measured on 2026-09-03 with a 41-line note scrolled to the
+ * bottom: `padding-bottom` was 96px, `.ProseMirror`'s own bottom edge was at
+ * viewport y = -186 (scrolled off the TOP), the last line's box ran
+ * 686.7-712.3 and the toolbar pill ran 664-700 — so the last line was
+ * genuinely behind the toolbar with the whole 96px reserve stranded above the
+ * viewport.
+ *
+ * A pseudo-element is a real box in the flow AFTER the last child, so it
+ * moves with the content and lands inside the scrollable overflow region.
+ * A margin on `> :last-child` was rejected: a bottom margin is not reliably
+ * part of scrollable overflow, which is the same class of silent failure as
+ * the padding above.
+ *
+ * It is not matched by `> * + *`, since `*` selects elements only, so it adds
+ * exactly its own height and no rhythm.
+ *
+ * `RichEditor`'s `pt-12`/`pb-24` are left alone: the top reserve is real, and
+ * the bottom one is now inert rather than wrong (a note short enough for its
+ * padding to be on screen never scrolls at all).
+ */
+.ProseMirror::after {
+  content: '';
+  display: block;
+  height: var(--bear-editor-pad-bottom);
+}
+
+/*
  * `--bear-para-spacing` is ADDITIONAL space, matching Bear's own semantics: its
  * 단락 간격 slider defaults to `0 em` and adds to whatever base rhythm the app
  * already has, rather than replacing it. So at the shipped `0em` this is exactly
@@ -114,12 +151,31 @@
   text-indent: var(--bear-para-indent);
 }
 
+/*
+ * Headings, list markers and rules carry the theme's ACCENT.
+ *
+ * This REVERSES M7.5's ruling that "headings keep `--bear-text`; the accent
+ * marks what the user can act on or has acted on"
+ * (`docs/rulings/design-tokens-and-layout.md`, updated in step with this).
+ * The reversal is the user's, made against Bear side by side: the accent
+ * reaching the prose is the single thing that makes Bear's editor read as a
+ * designed document rather than a text field, and structure is exactly what
+ * the theme's one hue should be marking.
+ *
+ * All six levels, not h1-h3. The consistency is where the look comes from;
+ * three accented levels and three text-coloured ones reads as a bug.
+ *
+ * Contrast is not at risk and was not retuned for this: `e2e/contrast.spec.ts`
+ * already holds `accent` to 4.5:1 on both `bg` and `surface` in all sixteen
+ * themes, and the worst in the roster is solarized-dark at 4.55.
+ */
 .ProseMirror h1,
 .ProseMirror h2,
 .ProseMirror h3,
 .ProseMirror h4,
 .ProseMirror h5,
 .ProseMirror h6 {
+  color: var(--bear-accent);
   font-weight: 600;
   line-height: 1.25;
   /*
@@ -160,6 +216,10 @@
   font-size: calc(
     var(--bear-heading-ratio) * var(--bear-heading-ratio) * var(--bear-heading-ratio) * 1em
   );
+  /* Stated here for the same reason the size is: a note beginning with a plain
+     paragraph and one beginning with `# Heading` must present the same title,
+     and only the heading half would otherwise pick the accent up. */
+  color: var(--bear-accent);
   font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.02em;
@@ -213,6 +273,15 @@
 
 .ProseMirror ol {
   list-style: decimal;
+}
+
+/*
+ * The marker only — `::marker` colours the bullet or the number and leaves the
+ * item's own text at `--bear-text`, which is the whole point: the accent marks
+ * the structure, not the prose.
+ */
+.ProseMirror li::marker {
+  color: var(--bear-accent);
 }
 
 .ProseMirror li + li {
@@ -627,10 +696,29 @@
   position: relative;
 }
 
+/*
+ * The header's shade and the body's stripes.
+ *
+ * Both tokens are derived from `--bear-bg` — see `tokens.css` for why the
+ * ground is `bg` and not `surface`, and why `high-contrast` had no header
+ * shade at all until this changed.
+ *
+ * On the CELLS, not on the `tr`: `border-collapse: collapse` is in force, and
+ * a row background paints behind the collapsed borders where a cell
+ * background paints inside them. `.selectedCell::after` still overlays both.
+ *
+ * `tbody tr:nth-child(even)` — Tiptap emits `table > tbody > tr` with no
+ * `thead`, so the header is row 1 and the body rows are 2, 3, 4 …; even rows
+ * are therefore every other body row starting with the first.
+ */
 .ProseMirror th {
-  background-color: var(--bear-surface);
+  background-color: var(--bear-table-header);
   font-weight: 600;
   text-align: left;
+}
+
+.ProseMirror tbody tr:nth-child(even) td {
+  background-color: var(--bear-table-stripe);
 }
 
 .ProseMirror th > p,
@@ -657,9 +745,12 @@
   pointer-events: none;
 }
 
+/* Accent, with the headings and the list markers above: a thematic break is
+   structure. The width stays a hairline — an accent rule does not need to be
+   thicker to be seen. */
 .ProseMirror hr {
   border: none;
-  border-top: 1px solid var(--bear-border);
+  border-top: 1px solid var(--bear-accent);
   margin: 1.5em 0;
 }
 

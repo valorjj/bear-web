@@ -56,6 +56,14 @@ const RULES = [
   { fg: 'code-comment', grounds: ['surface'], min: 3.0 },
   { fg: 'code-function', grounds: ['surface'], min: 4.5 },
   { fg: 'code-type', grounds: ['surface'], min: 4.5 },
+  /*
+   * A table cell's prose, on the two grounds a table actually paints: the
+   * striped body row and the shaded header. Both tokens are derived from
+   * `--bear-bg` in `srgb` (see `tokens.css`), so this row is the whole
+   * verification that neither derivation can dim a cell's text below AA in
+   * any theme, present or future.
+   */
+  { fg: 'text', grounds: ['table-stripe', 'table-header'], min: 4.5 },
 ] as const;
 
 /**
@@ -111,6 +119,20 @@ const CALLOUT_FILLS_ARE_VISIBLE = [
 
 const DECORATIVE = [
   { fg: 'border', grounds: ['bg', 'surface', 'sidebar'], min: 1.05 },
+  /*
+   * The stripe and the header must be VISIBLE as a step from the page, and
+   * this row is not redundant with the 4.5 rule above it — it is the half
+   * that catches the opposite failure. A stripe that collapsed into
+   * `--bear-bg` passes a 4.5 check against `text` perfectly (it IS the page),
+   * so striping that had silently stopped rendering would sail through.
+   * `high-contrast` really did: `color-mix(in oklab, #000000 94%, #ffffff)`
+   * clamps back to `#000000` and scored 1.004 here, which is what sent both
+   * tokens to `srgb`. Held to `border`'s own floor for the same reason —
+   * "faint but present" is a design judgement this test has no standing to
+   * make, and an invisible one is the unambiguous defect.
+   */
+  { fg: 'table-stripe', grounds: ['bg'], min: 1.05 },
+  { fg: 'table-header', grounds: ['bg'], min: 1.05 },
   ...CALLOUT_EDGES,
   ...CALLOUT_FILLS_ARE_VISIBLE,
 ] as const;
@@ -176,6 +198,8 @@ const READ = [
   'cal-edge-success',
   'cal-edge-warning',
   'cal-edge-danger',
+  'table-stripe',
+  'table-header',
 ];
 
 test.describe('contrast', () => {
