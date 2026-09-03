@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Test Document</title>
+    <style>
+      :root {
+        --bear-bg: #fff;
+        --bear-surface: #f5f4fa;
+        --bear-text: #241f3d;
+        --bear-muted: #605b78;
+        --bear-faint: #837e99;
+        --bear-border: #e0dcec;
+        --bear-accent: #5b4ad6;
+        --bear-hover: #2822420d;
+        --bear-selected: #5b4ad617;
+        --bear-tag-fill: #5b4ad61f;
+        --bear-hl-blue: #2563eb33;
+        --bear-hl-green: #16a34a38;
+        --bear-hl-pink: #db27772e;
+        --bear-hl-purple: #9333ea2e;
+        --bear-code-keyword: color-mix(in oklab, #a626a4 calc((1 - 0) * 100%), #cc9cec);
+        --bear-code-string: color-mix(in oklab, #1e753b calc((1 - 0) * 100%), #9ece6a);
+        --bear-code-number: color-mix(in oklab, #a84b00 calc((1 - 0) * 100%), #ffb86c);
+        --bear-code-comment: color-mix(in oklab, #6f7480 calc((1 - 0) * 100%), #8b93a7);
+        --bear-code-function: color-mix(in oklab, #2a5db0 calc((1 - 0) * 100%), #87aeff);
+        --bear-code-type: color-mix(in oklab, #00706b calc((1 - 0) * 100%), #7fdbca);
+        --bear-cal-fill-info: color-mix(
+          in oklab,
+          color-mix(in oklab, #2a5db0 calc((1 - 0) * 100%), #87aeff) calc(calc(12 + 7 * 0) * 1%),
+          #fff
+        );
+        --bear-cal-edge-info: color-mix(in oklab, #2a5db0 calc((1 - 0) * 100%), #87aeff);
+        --bear-cal-icon-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E");
+        --bear-cal-fill-tip: color-mix(
+          in oklab,
+          color-mix(in oklab, #00706b calc((1 - 0) * 100%), #7fdbca) calc(calc(12 + 7 * 0) * 1%),
+          #fff
+        );
+        --bear-cal-edge-tip: color-mix(in oklab, #00706b calc((1 - 0) * 100%), #7fdbca);
+        --bear-cal-icon-tip: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5'/%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3C/svg%3E");
+        --bear-cal-fill-success: color-mix(
+          in oklab,
+          color-mix(in oklab, #1e753b calc((1 - 0) * 100%), #9ece6a) calc(calc(12 + 7 * 0) * 1%),
+          #fff
+        );
+        --bear-cal-edge-success: color-mix(in oklab, #1e753b calc((1 - 0) * 100%), #9ece6a);
+        --bear-cal-icon-success: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E");
+        --bear-cal-fill-warning: color-mix(
+          in oklab,
+          color-mix(in oklab, #a84b00 calc((1 - 0) * 100%), #ffb86c) calc(calc(12 + 7 * 0) * 1%),
+          #fff
+        );
+        --bear-cal-edge-warning: color-mix(in oklab, #a84b00 calc((1 - 0) * 100%), #ffb86c);
+        --bear-cal-icon-warning: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+        --bear-cal-fill-danger: color-mix(
+          in oklab,
+          color-mix(in oklab, #b02a1f calc((1 - 0) * 100%), #ff9a92) calc(calc(12 + 7 * 0) * 1%),
+          #fff
+        );
+        --bear-cal-edge-danger: color-mix(in oklab, #b02a1f calc((1 - 0) * 100%), #ff9a92);
+        --bear-cal-icon-danger: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m15 9-6 6'/%3E%3Cpath d='m9 9 6 6'/%3E%3C/svg%3E");
+        --bear-radius-sm: 6px;
+        --bear-radius-md: 8px;
+        --bear-font-sans: 'Pretendard Variable', system-ui, sans-serif;
+        --bear-font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+        --bear-font-size: 16px;
+        --bear-line-height: 1.6;
+        --bear-line-width: 40em;
+        --bear-para-spacing: 0em;
+        --bear-para-indent: 0em;
+      }
+
+      /*
+     * margin: 0 here, not 18mm 16mm. A page-box margin is Chromium's
+     * unpainted band - printBackground never reaches it, so a themed
+     * background stopped short of the paper edge and left a white border
+     * around a dark page. The inset moves onto body's own padding below,
+     * where it is inside the painted box like everything else.
+     */
+      @page {
+        size: A4;
+        margin: 0;
+      }
+
+      /*
+     * A reset, and it is load-bearing rather than tidiness. The app gets one
+     * from Tailwind's preflight; a standalone export gets none, so the browser
+     * default paragraph margin applies INSIDE a flex task item and pushes
+     * the label onto its own line — the checkbox above its text, which reads as
+     * the document force-wrapping every todo. Every rule below assumes it has
+     * the only say over spacing.
+     */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      p,
+      ul,
+      ol,
+      pre,
+      blockquote,
+      figure,
+      dl,
+      dd {
+        margin: 0;
+      }
+
+      input[type='checkbox'] {
+        margin: 0;
+      }
+
+      /*
+     * Backgrounds are part of the document, not decoration the printer may
+     * discard. The PDF pipeline forces backgrounds via printBackground: true
+     * and never applies print media at all (emulateMedia sets media: 'screen'
+     * in server/pdf/render.ts), so this declaration does nothing for that path.
+     * It still matters for a different reader: someone who downloads the HTML
+     * export and prints it from their own browser gets Chrome's default
+     * print-color-adjust: economy, which drops EVERY painted background - a
+     * code block's surface, a highlight mark, a tag pill, a table's header row
+     * - and leaves their text sitting on bare paper. They could tick
+     * "Background graphics" in the print dialog to get it back, but a
+     * checkbox buried in a browser dialog is not where this document's design
+     * lives. The exact keyword is inherited, so declaring it on the root
+     * covers every descendant.
+     *
+     * The page background itself is no longer cleared under @media print: the
+     * theme owns the page, printed or not, so a dark theme prints a dark page
+     * with its own light text rather than near-white text onto white paper.
+     */
+      html {
+        background: var(--bear-bg);
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+
+      body {
+        margin: 0 auto;
+        /*
+       * The inset formerly lived on @page's margin, which Chromium never
+       * paints. It moved here so the theme's background covers the whole
+       * sheet and the text keeps the same distance from the paper edge.
+       */
+        padding: 18mm 16mm;
+        max-width: var(--bear-line-width);
+        background: var(--bear-bg);
+        color: var(--bear-text);
+        font-family: var(--bear-font-sans);
+        font-size: var(--bear-font-size);
+        line-height: var(--bear-line-height);
+        -webkit-text-size-adjust: 100%;
+      }
+
+      /* Mirrors the editor's own block rhythm, including the additive token. */
+      body > * + * {
+        margin-top: calc(0.75em + var(--bear-para-spacing));
+      }
+
+      p {
+        text-indent: var(--bear-para-indent);
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        font-weight: 600;
+        line-height: 1.25;
+        margin-top: calc(1.4em + var(--bear-para-spacing));
+        /* A heading should not be the last thing on a printed page. */
+        break-after: avoid;
+      }
+
+      body > :first-child {
+        margin-top: 0;
+      }
+
+      h1 {
+        font-size: 1.6em;
+      }
+      h2 {
+        font-size: 1.35em;
+      }
+      h3 {
+        font-size: 1.15em;
+      }
+      h4,
+      h5,
+      h6 {
+        font-size: 1em;
+      }
+
+      ul,
+      ol {
+        padding-left: 1.5em;
+      }
+
+      li + li {
+        margin-top: 0.25em;
+      }
+
+      li > p {
+        margin: 0;
+      }
+
+      ul[data-type='taskList'] {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      ul[data-type='taskList'] li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5em;
+      }
+
+      ul[data-type='taskList'] li > label {
+        flex: 0 0 auto;
+        margin-top: 0.25em;
+      }
+
+      ul[data-type='taskList'] input[type='checkbox'] {
+        accent-color: var(--bear-accent);
+      }
+
+      ul[data-type='taskList'] li[data-checked='true'] > div {
+        color: var(--bear-muted);
+        text-decoration: line-through;
+      }
+
+      blockquote {
+        margin-left: 0;
+        border-left: 2px solid var(--bear-border);
+        padding-left: 1em;
+        color: var(--bear-muted);
+      }
+
+      blockquote[data-callout='info'] {
+        --cal-edge: var(--bear-cal-edge-info);
+        --cal-fill: var(--bear-cal-fill-info);
+        --cal-icon: var(--bear-cal-icon-info);
+      }
+
+      blockquote[data-callout='tip'] {
+        --cal-edge: var(--bear-cal-edge-tip);
+        --cal-fill: var(--bear-cal-fill-tip);
+        --cal-icon: var(--bear-cal-icon-tip);
+      }
+
+      blockquote[data-callout='success'] {
+        --cal-edge: var(--bear-cal-edge-success);
+        --cal-fill: var(--bear-cal-fill-success);
+        --cal-icon: var(--bear-cal-icon-success);
+      }
+
+      blockquote[data-callout='warning'] {
+        --cal-edge: var(--bear-cal-edge-warning);
+        --cal-fill: var(--bear-cal-fill-warning);
+        --cal-icon: var(--bear-cal-icon-warning);
+      }
+
+      blockquote[data-callout='danger'] {
+        --cal-edge: var(--bear-cal-edge-danger);
+        --cal-fill: var(--bear-cal-fill-danger);
+        --cal-icon: var(--bear-cal-icon-danger);
+      }
+
+      blockquote[data-callout] {
+        border-left: 6px solid var(--cal-edge);
+        border-radius: var(--bear-radius-md);
+        background: var(--cal-fill);
+        padding: 0.75em 1em;
+        /* The quote rule above dims its body. A callout is the note's own
+         emphasis rather than a quotation, so the text comes back. */
+        color: var(--bear-text);
+      }
+
+      blockquote[data-callout] > [data-callout-title] {
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+        font-weight: 600;
+        min-height: 1.4em;
+      }
+
+      /* The glyph, drawn from the same token the editor uses: readExportTokens
+       copies custom properties verbatim, so there is no second copy of the
+       shape here to drift from the first. Written without backticks on
+       purpose — one inside a CSS comment terminates this whole template
+       literal, and the parse error it raises points at the prose. */
+      blockquote[data-callout] > [data-callout-title]::before {
+        content: '';
+        flex: none;
+        width: 1.15em;
+        height: 1.15em;
+        background: var(--cal-edge);
+        -webkit-mask-image: var(--cal-icon);
+        mask-image: var(--cal-icon);
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+      }
+
+      blockquote[data-callout] > :first-child {
+        margin-top: 0;
+      }
+
+      blockquote[data-callout] > :last-child {
+        margin-bottom: 0;
+      }
+
+      code {
+        font-family: var(--bear-font-mono);
+        font-size: 0.9em;
+        background: var(--bear-hover);
+        border-radius: var(--bear-radius-sm);
+        padding: 0.1em 0.3em;
+      }
+
+      pre {
+        font-family: var(--bear-font-mono);
+        font-size: 0.9em;
+        background: var(--bear-surface);
+        border: 1px solid var(--bear-border);
+        border-radius: var(--bear-radius-md);
+        padding: 0.75em 1em;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        /* A code block split across pages loses its frame; keep it whole. */
+        break-inside: avoid;
+      }
+
+      pre code {
+        background: none;
+        border-radius: 0;
+        padding: 0;
+        font-size: inherit;
+      }
+
+      /*
+     * Syntax highlighting. One selector per role, listing the classes that
+     * role claims -- kept in step with
+     * src/features/editor/highlightClasses.ts's ROLE_CLASSES and with the
+     * .hljs-* rules in src/styles/editor.css. Nothing enforces the three
+     * agree; a class added to one and not the others is a defect, checked by
+     * hand rather than by a test.
+     */
+      .hljs-keyword,
+      .hljs-literal,
+      .hljs-built_in,
+      .hljs-selector-tag {
+        color: var(--bear-code-keyword);
+      }
+
+      .hljs-string,
+      .hljs-regexp,
+      .hljs-char,
+      .hljs-meta-string {
+        color: var(--bear-code-string);
+      }
+
+      .hljs-number,
+      .hljs-symbol {
+        color: var(--bear-code-number);
+      }
+
+      .hljs-comment,
+      .hljs-quote {
+        color: var(--bear-code-comment);
+      }
+
+      .hljs-title,
+      .hljs-section,
+      .hljs-function,
+      .function_ {
+        color: var(--bear-code-function);
+      }
+
+      .hljs-type,
+      .hljs-attr,
+      .hljs-attribute,
+      .hljs-tag,
+      .hljs-name,
+      .hljs-selector-class,
+      .class_,
+      .inherited__ {
+        color: var(--bear-code-type);
+      }
+
+      /*
+     * class_ (a class name) and inherited__ (the parent named in an extends
+     * clause) land on the SAME span as hljs-title in java/javascript/
+     * typescript/kotlin/python's class declarations. Stylesheet order, not
+     * class-attribute order, decides the cascade between equal-specificity
+     * selectors, so a two-class compound selector is needed to make this role
+     * win deterministically rather than by which block sits later. Mirrors
+     * the compound selector in src/styles/editor.css exactly.
+     */
+      .hljs-title.class_,
+      .hljs-title.inherited__ {
+        color: var(--bear-code-type);
+      }
+
+      /*
+     * Two more flattening collisions, found by an empirical sweep of all
+     * twelve grammars and mirrored from src/styles/editor.css -- see that
+     * file's comment above the same two rules for the full reasoning. An
+     * xml/html/svg/xhtml attribute value or a number substituted into a
+     * template-literal string never actually gets BOTH classes on one
+     * exported element (lowlight nests them as separate elements, so this
+     * stylesheet never needs to break the tie on export's own DOM), but the
+     * rule is kept here anyway so the three class lists this file, editor.css
+     * and highlightClasses.ts carry stay identical rather than silently
+     * diverging on an entry that happens not to be load-bearing today.
+     */
+      .hljs-tag.hljs-string {
+        color: var(--bear-code-string);
+      }
+
+      .hljs-string.hljs-number {
+        color: var(--bear-code-number);
+      }
+
+      /*
+     * Three more, found in Kotlin by a mechanical sweep and mirrored from
+     * src/styles/editor.css -- see that file's comment above the same three
+     * rules. Kept here for the same reason as the two above: export's real
+     * nested markup never combines these classes on one element, so none of
+     * the three is load-bearing today, but the three class lists this file,
+     * editor.css and highlightClasses.ts carry must stay identical.
+     */
+      .hljs-function.hljs-keyword {
+        color: var(--bear-code-keyword);
+      }
+
+      .hljs-function.hljs-type {
+        color: var(--bear-code-type);
+      }
+
+      .hljs-function.hljs-number {
+        color: var(--bear-code-number);
+      }
+
+      /*
+     * A fourth, mirrored from src/styles/editor.css: a parameter's string
+     * default value, exactly as inside hljs-function as its numeric
+     * counterpart.
+     */
+      .hljs-function.hljs-string {
+        color: var(--bear-code-string);
+      }
+
+      /*
+     * A fifth, mirrored from src/styles/editor.css: a parameter's boolean
+     * (or null) default value.
+     */
+      .hljs-function.hljs-literal {
+        color: var(--bear-code-keyword);
+      }
+
+      /*
+     * A sixth, mirrored from src/styles/editor.css: Kotlin's reified
+     * modifier inside a generic type parameter list, nested in a function
+     * signature. A three-class compound selector, not two -- see that
+     * file's comment above the same rule for why. (No backticks in this
+     * comment: it lives inside a template literal.)
+     */
+      .hljs-function.hljs-type.hljs-keyword {
+        color: var(--bear-code-keyword);
+      }
+
+      /* Real tables since M8b; before that a table exported as a block of pipes. */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        /* A table split across pages loses its header; keep it whole when it fits. */
+        break-inside: avoid;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--bear-border);
+        padding: 0.35em 0.6em;
+        vertical-align: top;
+        text-align: left;
+      }
+
+      th {
+        background: var(--bear-surface);
+        font-weight: 600;
+      }
+
+      th > p,
+      td > p {
+        text-indent: 0;
+        margin: 0;
+        /*
+       * DOMSerializer emits a bare <p></p> for an empty cell, with none of the
+       * trailing <br> ProseMirror inserts in the editor DOM so a caret has
+       * somewhere to sit. A <p> with no line box is zero height, so an empty
+       * row collapsed to padding alone (~20px) against the editor's ~40px.
+       * 1lh reproduces the missing line box directly from the same
+       * line-height token the editor uses, rather than a magic-number
+       * min-height that would silently drift from --bear-line-height.
+       */
+        min-height: 1lh;
+      }
+
+      hr {
+        border: none;
+        border-top: 1px solid var(--bear-border);
+        margin: 1.5em 0;
+      }
+
+      a {
+        color: var(--bear-accent);
+        text-underline-offset: 0.15em;
+      }
+
+      mark {
+        background: var(--bear-selected);
+        color: inherit;
+        border-radius: var(--bear-radius-sm);
+        padding: 0.05em 0.15em;
+      }
+
+      /*
+     * The class survives export because the document is serialized by
+     * ProseMirror's own DOMSerializer, which renders the mark's own
+     * renderHTML. Without these four rules every colour would silently
+     * export as the default tint. (No backticks in this comment: it lives
+     * inside a template literal.)
+     */
+      mark.hl-blue {
+        background: var(--bear-hl-blue);
+      }
+      mark.hl-green {
+        background: var(--bear-hl-green);
+      }
+      mark.hl-pink {
+        background: var(--bear-hl-pink);
+      }
+      mark.hl-purple {
+        background: var(--bear-hl-purple);
+      }
+
+      /*
+     * A construct with no node in the editor's schema, exported as its own
+     * Markdown source. Styled to read as a quoted block rather than as code,
+     * since it is the user's text and not a program.
+     */
+      pre[data-raw-block] {
+        color: var(--bear-muted);
+        background: none;
+        border: none;
+        border-left: 2px solid var(--bear-border);
+        border-radius: 0;
+        padding: 0 0 0 1em;
+      }
+
+      /*
+     * padding is NOT reset here. It used to be, back when @page carried the
+     * 18mm 16mm margin and body's own padding would have doubled it under a
+     * real browser print. Now @page's margin is 0, so body's padding is the
+     * only inset there is - zeroing it would run text to the paper edge.
+     * max-width still drops: the line-width cap is a screen reading measure,
+     * and a printed page should use its own full printable width.
+     */
+      @media print {
+        body {
+          max-width: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <p>Test Document</p>
+    <p>This is my first, <mark>test</mark> document</p>
+    <table style="min-width: 100px">
+      <colgroup>
+        <col style="min-width: 25px" />
+        <col style="min-width: 25px" />
+        <col style="min-width: 25px" />
+        <col style="min-width: 25px" />
+      </colgroup>
+      <tbody>
+        <tr>
+          <th colspan="1" rowspan="1"><p>a</p></th>
+          <th colspan="1" rowspan="1"><p>b</p></th>
+          <th colspan="1" rowspan="1"><p>c</p></th>
+          <th colspan="1" rowspan="1"><p>d</p></th>
+        </tr>
+        <tr>
+          <td colspan="1" rowspan="1"><p>1</p></td>
+          <td colspan="1" rowspan="1"><p>2</p></td>
+          <td colspan="1" rowspan="1"><p>3</p></td>
+          <td colspan="1" rowspan="1"><p>4</p></td>
+        </tr>
+      </tbody>
+    </table>
+    <p></p>
+    <blockquote data-callout="tip">
+      <p data-callout-title=""></p>
+      <p>This test document</p>
+    </blockquote>
+    <pre><code class="language-python">This <span class="hljs-keyword">is</span> test document</code></pre>
+    <p></p>
+    <p></p>
+    <p></p>
+    <p></p>
+    <p></p>
+  </body>
+</html>

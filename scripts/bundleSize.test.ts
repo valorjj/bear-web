@@ -337,8 +337,53 @@ import { describe, expect, it } from 'vitest';
  * 347,225 B — **+28 B**, which would have made a defect fix grow the eager
  * closure by 12 B over its base. The tag list lives in the docblock instead;
  * see `src/features/editor/pastedMarkdown.ts`.
+ *
+ * ### Q (typography settings): the ceiling moves to 351,000, decided by the
+ * user on 2026-09-03
+ *
+ * `main` (`349c9f6`) measures **347,855 B** — **145 B** under the frozen
+ * 348,000 ceiling. Q does not fit in that under any shape, so the freeze's
+ * exits were each tested rather than argued.
+ *
+ * **Going lazier is NEGATIVE here, measured.** `ThemeDialog` is a static
+ * import gated on `open`, so a typography dialog written the same way is
+ * fully eager. Converting `ThemeDialog` ITSELF to `React.lazy` and
+ * rebuilding took the eager closure from 347,854 B to **348,176 B**: 4 eager
+ * chunks became 6, and the re-hoisted shared runtime cost **322 B more**
+ * than deferring the entire dialog saved. This reproduces, from the other
+ * direction, the effect the M entry above measured. A FOURTH lazy root is a
+ * cost, not an escape hatch.
+ *
+ * **`themes-*` is not the theme code, and the chunk names are arbitrary.**
+ * `NEXT.md` recorded `themes-*` (232,910 B at the M entry, 233,998 B here)
+ * as "the obvious candidate" for a lazy split. That reads a filename. In the
+ * spike build above — one changed import, nothing else — the same ~234 KB
+ * chunk came back named `notes-*`, while a NEW 1,049 B chunk took the name
+ * `themes-*`. The 1,049 B is the theme roster plus its dialog; the 234 KB is
+ * Tiptap, ProseMirror, React and lowlight wearing the name. Splitting
+ * "themes" out reclaims ~1,049 B and pays ~322 B of re-chunking, and the
+ * measurement above shows the re-chunking wins: the split nets about
+ * **-322 B**. It is a regression, not a sub-project.
+ *
+ * **The server is not an option** — this is a per-device reading preference,
+ * and the sync engine deliberately does not carry the `settings` table.
+ * **Cutting it** means not fixing the reported problem.
+ *
+ * So `CEILING_BYTES` moves to **351,000**, decided BY THE USER on
+ * 2026-09-03, leaving Q **3,145 B**. The ceiling remains FROZEN under the
+ * same rule as every raise before it; this does not reopen routine
+ * ratcheting. **If Q's finished closure lands well under 351,000, this
+ * number comes DOWN to the measured figure plus ~3 KB rather than staying at
+ * the ask** — that is the condition the raise was granted on.
+ *
+ * Note that the base above was measured twice on the same tree, minutes
+ * apart, at 347,854 B and 347,855 B with different content hashes. A 1 B
+ * build-to-build wobble is small, but it is the same class of thing as the
+ * 38 B disagreement the N2 entry records: re-run
+ * `npx vitest run scripts/bundleSize.test.ts` after a build rather than
+ * reasoning from any number written above.
  */
-const CEILING_BYTES = 348_000;
+const CEILING_BYTES = 351_000;
 
 interface ManifestChunk {
   file: string;
