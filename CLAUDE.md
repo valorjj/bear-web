@@ -70,7 +70,7 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | M publish: a public read-only URL for one note                    | complete |
 | N paste Markdown as Markdown                                      | complete |
 
-2548 unit tests (plus 203 server tests, 112 of which are integration tests that
+2542 unit tests (plus 203 server tests, 112 of which are integration tests that
 skip when `TEST_DATABASE_URL` is unset, and 71 renderer tests behind
 `npm run test:pdf`), 216 end-to-end tests. `main` is always green and
 auto-deploys.
@@ -381,10 +381,12 @@ These bit us once already. They are not mistakes.
   construct parses must SEED the note (or reload), never type it; and any code
   inserting Markdown must insert a node rather than text, which is why
   `ImagePaste` does. **A paste is different since N**: `MarkdownPaste`'s
-  `handlePaste` runs `text/plain` through `parseMarkdown`, so pasted Markdown
-  becomes real nodes. Do not read "typing does not parse" as "the editor
-  cannot parse" — the asymmetry between the two paths is deliberate and
-  documented in `docs/rulings/markdown-and-schema.md`.
+  `handlePaste` parses pasted Markdown into real nodes, but which clipboard
+  flavour it parses depends on what the clipboard carries — `text/plain`
+  only when there is no `text/html`, or the HTML is wrappers-only; otherwise
+  the HTML flavour wins. Do not read "typing does not parse" as "the editor
+  cannot parse" — the asymmetry between the two paths is deliberate. The
+  flavour rule itself is documented in `docs/rulings/markdown-and-schema.md`.
 
 - **jsdom implements NO `matchMedia` — the property is absent, not stubbed.**
   A component calling it throws `TypeError: window.matchMedia is not a

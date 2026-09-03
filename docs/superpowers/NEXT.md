@@ -56,18 +56,21 @@ through, and its nodes replace the pasted characters.
 1. Every `text/plain` paste is parsed as Markdown, with no heuristic gate —
    the boundary a conservative trigger would draw is invisible to the user,
    and is worse than being occasionally wrong.
-2. Plain text beats `text/html` only when `looksLikeMarkdown` says so, so a
-   paste off a web page keeps its links; `looksLikeMarkdown` gates that choice
-   and nothing else — it does not decide whether the plain-text path parses.
-   **Reversed 2026-09-03, by the user, after real use.** The rule was
-   backwards: a Gemini answer's plain flavour fenced the whole document and a
-   NESTED fence closed the outer one early (fences on lines 5, 63, 69 and 93),
+2. `text/html` wins whenever `htmlCarriesStructure` finds structure in it
+   (`h1-h6`, lists, tables, `pre`, `code`, `blockquote`, `img`, `a`,
+   emphasis…), because it is the source's own considered rendering and the
+   plain flavour is a lossy serialisation of it; the plain flavour is parsed
+   as Markdown only when there is no HTML, or the HTML is wrappers-only.
+   `<a>` counts as structure, so a copied paragraph keeps its link.
+   **This reverses the rule as first shipped**, which preferred the plain
+   flavour whenever `looksLikeMarkdown` said it looked like Markdown, and gave
+   HTML no say beyond that. Reversed 2026-09-03, by the user, after real use:
+   a Gemini answer's plain flavour fenced the whole document and a NESTED
+   fence closed the outer one early (fences on lines 5, 63, 69 and 93),
    producing 2 code blocks with an ASCII diagram stranded between them, while
    the same clipboard's HTML said "one code block". `htmlCarriesStructure`
-   replaces the detector, which is deleted: the source's HTML wins whenever it
-   declares structure, because it is the source's considered rendering and the
-   plain flavour is a lossy serialisation. `<a>` counts as structure, so the
-   copied-paragraph-keeps-its-link case above survives. See the spec.
+   replaces `looksLikeMarkdown`, which is deleted along with its 28 tests. See
+   the spec.
 3. Entities the parser leaves literal (`&nbsp;`, `&mdash;`, numeric
    references) are decoded on the paste path only, by `decodeEntities`, which
    skips exactly the four entities `parseMarkdown` already decodes itself
