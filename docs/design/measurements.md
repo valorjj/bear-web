@@ -317,7 +317,7 @@ min-width is 12rem (a floor); max-width is min(--bear-line-width, 100% - 3rem). 
 | line-height | `25.6px` |
 | color | `rgb(36, 31, 61)` |
 | background-color | `rgb(255, 255, 255)` |
-| padding | `48px 24px 96px` |
+| padding | `48px 24px 0px` |
 | margin | `0px 88px` |
 | max-width | `min(640px, 100% - 48px)` |
 

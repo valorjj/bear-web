@@ -464,7 +464,7 @@
       "letter-spacing": "normal",
       "color": "rgb(36, 31, 61)",
       "background-color": "rgb(255, 255, 255)",
-      "padding": "48px 24px 96px",
+      "padding": "48px 24px 0px",
       "margin": "0px 88px",
       "border-radius": "0px",
       "border-top-width": "0px",

@@ -30,6 +30,8 @@ export const EXPORT_TOKEN_NAMES = [
   '--bear-hover',
   '--bear-selected',
   '--bear-tag-fill',
+  '--bear-table-stripe',
+  '--bear-table-header',
   '--bear-hl-blue',
   '--bear-hl-green',
   '--bear-hl-pink',
@@ -88,6 +90,16 @@ const FALLBACKS: Record<ExportTokenName, string> = {
   '--bear-hover': 'buttonface',
   '--bear-selected': 'buttonface',
   '--bear-tag-fill': 'buttonface',
+  // Both table grounds degrade to the SAME system colour, and that is the
+  // least-bad option rather than an oversight. No system colour names a
+  // half-step from the page, and the two candidates that look like one are
+  // worse: canvas is the page itself, so a stripe would be invisible, and
+  // field resolves to plain white on most light platforms, which is the same
+  // failure. buttonface is a visible step from canvas in both light and dark
+  // platform palettes, so a renamed token loses the ALTERNATION and keeps a
+  // table that still reads as a table - the borders carry the grid either way.
+  '--bear-table-stripe': 'buttonface',
+  '--bear-table-header': 'buttonface',
   // No system colour names a highlight tint, so all four degrade to the same
   // neutral the DEFAULT highlight degrades to. A colour lost to a plain
   // highlight is exactly what every other Markdown reader already does with
@@ -547,7 +559,11 @@ ${declarations}
       text-indent: var(--bear-para-indent);
     }
 
+    /* Accent on all six levels, mirroring .ProseMirror. Every comment here
+       ships in the bundle and in each exported file, so the reasoning for
+       this and the three rules below lives in docs/rulings/export.md. */
     h1, h2, h3, h4, h5, h6 {
+      color: var(--bear-accent);
       font-weight: 600;
       line-height: 1.25;
       margin-top: calc(1.4em + var(--bear-para-spacing));
@@ -566,6 +582,11 @@ ${declarations}
 
     ul, ol {
       padding-left: 1.5em;
+    }
+
+    /* The marker only: the accent marks structure, never prose. */
+    li::marker {
+      color: var(--bear-accent);
     }
 
     li + li {
@@ -861,9 +882,17 @@ ${declarations}
       text-align: left;
     }
 
+    /* Both grounds are the same derived tokens .ProseMirror uses, on the
+       CELLS rather than the row, and even rows are the body rows because
+       DOMSerializer emits no thead. --bear-surface was the header ground
+       before this and left high-contrast unshaded. */
     th {
-      background: var(--bear-surface);
+      background: var(--bear-table-header);
       font-weight: 600;
+    }
+
+    tbody tr:nth-child(even) td {
+      background: var(--bear-table-stripe);
     }
 
     th > p,
@@ -882,9 +911,10 @@ ${declarations}
       min-height: 1lh;
     }
 
+    /* Accent, with the headings and markers: a break is structure. */
     hr {
       border: none;
-      border-top: 1px solid var(--bear-border);
+      border-top: 1px solid var(--bear-accent);
       margin: 1.5em 0;
     }
 

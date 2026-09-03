@@ -116,9 +116,10 @@ test.describe('the editor on a phone', () => {
     //
     // REWRITTEN in sub-project P, because the previous shape could not see the
     // defect it was named for. It read `.ProseMirror`'s `padding-bottom` (96px,
-    // `RichEditor`'s `pb-24`) and compared it against the pill's reach (68px
-    // here), and passed — while a scrolled note's last line sat squarely behind
-    // the pill. `.ProseMirror` is `min-h-0 flex-1` in a column flex container,
+    // `RichEditor`'s then-`pb-24`, since removed as measured-inert) and
+    // compared it against the pill's reach (68px here), and passed — while a
+    // scrolled note's last line sat squarely behind the pill.
+    // `.ProseMirror` is `min-h-0 flex-1` in a column flex container,
     // so its box is exactly the scroll container's height however long the note
     // is; its padding therefore sits at the bottom of that box, which on a
     // scrolled note is nowhere near the end of the content. The reserve is now
@@ -126,10 +127,10 @@ test.describe('the editor on a phone', () => {
     // and this asserts the geometry a user can see.
     //
     // This is the ONLY test that can see the coarse-pointer half of that
-    // token. `RichEditor.tsx`'s own comment records that a `coarse:pb-32` was
-    // written and then removed because nothing could be made to fail with it
-    // absent; deleting the `@media (pointer: coarse)` block in `tokens.css`
-    // must fail HERE, and does — 84px drops to 64px, under the 68px reach.
+    // token, and that is why the token has a second value where `RichEditor`'s
+    // abandoned `coarse:pb-32` had nothing to falsify it: deleting the
+    // `@media (pointer: coarse)` block in `tokens.css` must fail HERE, and
+    // does — 84px drops to 64px, under the 68px reach.
     await openNote(page);
 
     const reserve = await page

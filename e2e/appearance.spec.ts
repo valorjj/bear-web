@@ -762,46 +762,52 @@ test('the editor chrome floats as pills clear of the pane edges', async ({ page 
   }
 });
 
-test('the writing surface reserves room for the floating toolbars', async ({ page }) => {
-  // The toolbars overlay the prose rather than sitting in the flow, so the
-  // padding that keeps text out from under them is load-bearing, not
-  // decoration. Without the bottom reserve the last line of every note sits
-  // permanently behind the formatting bar with no way to scroll it clear —
-  // and the note still round-trips perfectly, so no other test in this project
-  // would notice.
+test('the writing surface reserves room for the top controls', async ({ page }) => {
+  // The top pill overlays the prose rather than sitting in the flow, so the
+  // padding that keeps the first line out from under it is load-bearing, not
+  // decoration. `padding-top` genuinely does that job: `.ProseMirror` is
+  // `min-h-0 flex-1` in a column flex container, so its box begins at the top
+  // of the scroll container and its top padding IS the gap the first line
+  // starts after.
+  //
+  // The bottom half of this test was DELETED in sub-project P's follow-up,
+  // and the deletion is the point of the comment. It compared
+  // `padding-bottom` (`RichEditor`'s `pb-24`, 96px) against the formatting
+  // pill's reach and passed — while the last line of a scrolled note sat
+  // squarely behind that pill. Padding sits at the bottom of a
+  // container-height box, which on a scrolled note is hundreds of pixels
+  // above the end of the content, so the reserve it measured was stranded off
+  // the top of the viewport. Proven by injection: with `.ProseMirror::after`
+  // deleted the assertion still passed. It also PINNED `pb-24`, so removing a
+  // class measured to be inert failed a test.
+  //
+  // 'the last line of a long note scrolls clear of the toolbar' below is the
+  // replacement: it scrolls a long note to its end and compares two bounding
+  // boxes. A test that passes against the bug it names is worse than no test,
+  // because someone will trust it.
   await openNoteWithProse(page);
 
   const pane = page.getByRole('region', { name: 'Editor' });
   const paneBox = await pane.boundingBox();
-  const padding = await page.getByRole('textbox', { name: 'Note text' }).evaluate((element) => {
-    const computed = getComputedStyle(element);
-    return {
-      top: Number.parseFloat(computed.paddingTop),
-      bottom: Number.parseFloat(computed.paddingBottom),
-    };
-  });
+  const paddingTop = await page
+    .getByRole('textbox', { name: 'Note text' })
+    .evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingTop));
 
   expect(paneBox).not.toBeNull();
   if (paneBox === null) return;
 
-  for (const [name, side] of [
-    ['Top controls', 'top'],
-    ['Formatting toolbar', 'bottom'],
-  ] as const) {
-    const box = await page.getByRole('toolbar', { name }).boundingBox();
-    expect(box, name).not.toBeNull();
-    if (box === null) continue;
+  const box = await page.getByRole('toolbar', { name: 'Top controls' }).boundingBox();
+  expect(box, 'Top controls').not.toBeNull();
+  if (box === null) return;
 
-    // How far the pill reaches into the pane from its own edge. The reserve
-    // has to cover that, or the pill overlaps text.
-    const reach =
-      side === 'top' ? box.y + box.height - paneBox.y : paneBox.y + paneBox.height - box.y;
+  // How far the pill reaches into the pane from its own edge. The reserve has
+  // to cover that, or the pill overlaps text.
+  const reach = box.y + box.height - paneBox.y;
 
-    expect(
-      padding[side],
-      `${name}: ${side} reserve ${padding[side]} vs reach ${reach}`,
-    ).toBeGreaterThanOrEqual(reach);
-  }
+  expect(
+    paddingTop,
+    `Top controls: top reserve ${paddingTop} vs reach ${reach}`,
+  ).toBeGreaterThanOrEqual(reach);
 });
 
 test('the editor typography tokens reach the rendered prose', async ({ page }) => {
@@ -1555,18 +1561,18 @@ test('table rows alternate and the header carries a shade', async ({ page }) => 
  * Sub-project P, item A. The last line of a note can scroll clear of the
  * floating formatting toolbar.
  *
- * The reserve already existed as `RichEditor`'s `pb-24` and the test above
- * ("the writing surface reserves room for the floating toolbars") already
- * passed — because it compares a PADDING VALUE against a pill's reach and
- * never asks where that padding ended up. `.ProseMirror` is `min-h-0 flex-1`
- * in a column flex container, so its box is exactly the scroll container's
- * height however long the note is and the prose overflows it; the padding
- * therefore sits at the bottom of a container-height box, which on a scrolled
- * note is nowhere near the end of the content. Measured before the fix, with
- * this same note: `padding-bottom` 96px, `.ProseMirror`'s own bottom edge at
- * viewport y = -186, the last line at 686.7-712.3 and the toolbar at 664-700
- * — the last line squarely behind the pill with the whole reserve stranded
- * off the top of the viewport.
+ * A reserve of sorts already existed as `RichEditor`'s `pb-24`, and the test
+ * above already passed — because it compared a PADDING VALUE against a pill's
+ * reach and never asked where that padding ended up. `.ProseMirror` is
+ * `min-h-0 flex-1` in a column flex container, so its box is exactly the
+ * scroll container's height however long the note is and the prose overflows
+ * it; the padding therefore sits at the bottom of a container-height box,
+ * which on a scrolled note is nowhere near the end of the content. Measured
+ * before the fix, with this same note: `padding-bottom` 96px,
+ * `.ProseMirror`'s own bottom edge at viewport y = -186, the last line at
+ * 686.7-712.3 and the toolbar at 664-700 — the last line squarely behind the
+ * pill with the whole reserve stranded off the top of the viewport. That
+ * padding is gone now, measured inert: see `RichEditor.tsx`.
  *
  * This asserts the thing the user can actually see: two bounding boxes that
  * do not overlap, with the note scrolled to its end.

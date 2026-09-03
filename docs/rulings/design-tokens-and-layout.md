@@ -323,6 +323,47 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
     accent token and differs from a paragraph, so M9a stays free to move the
     palette while a heading that fell back to body colour still fails.
 
+- **In Paper and Ink, prose structure now paints the destructive-action
+  colour, and that is ACCEPTED rather than overlooked — decided 2026-09-03,
+  by the user, on a screenshot.** Both themes declare `--bear-accent` and
+  `--bear-danger` byte-identical (`#cf3b2c` in Paper, `#ff6f5e` in Ink), so
+  in 2 of the 16 themes a heading, a list bullet and a thematic break are the
+  same colour as a delete affordance. This is the cost the struck M7.5 ruling
+  above named as its second reason, and the reversal keeps it deliberately.
+  The reasoning, recorded because a later reader will otherwise read it as a
+  regression:
+  - It reads as terracotta rather than as alarm. At the sizes the accent
+    appears in prose — a heading, a hairline rule, a bullet — the hue is warm
+    rather than urgent, and that was checked by looking at a render, not
+    reasoned about.
+  - `danger` is mostly a SOLID FILL, and a fill beside red text still reads
+    as the warning: `Button`'s `danger` variant and `PublishDialog`'s
+    `DANGER_BUTTON` are `bg-danger text-bg`, and `SyncStatus`/`AccountMenu`
+    use it as a status dot.
+  - 14 of the 16 themes are unaffected. Indigo Light, Indigo Dark and High
+    Contrast all diverge (see the `danger`/`focus` bullet above); only these
+    two still hold one value in all three slots, which is a historical
+    coincidence rather than a design.
+  - **One correction to that reasoning, measured rather than assumed.** It
+    was made on the count "only two text uses of `danger`", which is true of
+    `src/styles/editor.css` alone (`:430`, a failed code copy; `:1731`, a
+    Mermaid render error) and NOT of the app: `NoteRowMenu.tsx:98`,
+    `EditorContextMenu.tsx:78` and `TableHandleMenu.tsx:103` each set
+    `text-danger` on a destructive MENU ITEM, and `PublishDialog.tsx:348` on
+    a status line. Six text uses, four of them in components and three of
+    those the exact affordance at issue. The decision stands — those items
+    also carry their own words ("Delete", "Delete row") — but the margin is
+    thinner than the count it was taken on, so it is written down at its real
+    size.
+  - **What reopens this:** a delete affordance in Paper or Ink that stops
+    reading as dangerous. Concretely, a red menu item whose label alone no
+    longer distinguishes it from the accented prose behind it, or a report
+    from real use that a destructive action was taken by mistake in one of
+    those two themes. The fix then is NOT to un-accent the prose — that
+    reverses a decision made by looking at renders — but to let those two
+    themes diverge `danger` from `accent` the way the other fourteen already
+    do. Nothing enforces the identity; it is two lines in `tokens.css`.
+
 - **Table rows alternate, and both the stripe and the header shade are DERIVED
   from `--bear-bg` in `srgb`** — `--bear-table-stripe` at 94%/6% and
   `--bear-table-header` at 88%/12% toward `--bear-text`. Three things here are

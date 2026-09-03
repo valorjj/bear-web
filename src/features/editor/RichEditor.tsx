@@ -408,27 +408,44 @@ export function RichEditor({
         // `.outline-none` ties in specificity with the global `:focus-visible`
         // ring and loses to it on source order alone.
         //
-        // The vertical padding reserves room for the two floating toolbars
-        // rather than merely spacing the prose: they overlay this surface, so
-        // The reserve is UNCHANGED by J3's taller toolbar, and that is a
-        // measured result rather than an assumption. J3 grows the strip from
-        // 36px to 56px on a coarse pointer, so its reach into the pane becomes
-        // 12 (the `bottom-3` inset) + 56 = 68 — still inside `pb-24`'s 96.
-        // A `coarse:pb-32` was written here first and then removed: nothing
-        // could be made to fail with it absent, and a line no test can
-        // falsify is a line that will be wrong later without anyone knowing.
-        // `e2e/phoneEditor.spec.ts` guards the relationship instead, and does
-        // fail if the strip grows past the reserve.
+        // `pt-12` is the TOP reserve, and it is the only one this class list
+        // carries. Both toolbars overlay this surface rather than sitting in
+        // the flow, so each needs room kept clear of it — but only the top
+        // one can be done with padding. `.ProseMirror` is `min-h-0 flex-1`
+        // inside `EditorContent`'s column flex container, so its box begins
+        // exactly where the scroll container does and its top padding IS the
+        // gap the first line starts after. 48px covers the top pill's reach
+        // into the pane (12px `top-3` inset + a 36px strip), and
+        // `e2e/appearance.spec.ts`'s "the writing surface reserves room for
+        // the top controls" asserts that relationship rather than the number,
+        // so a taller pill or a different inset fails there.
         //
-        // `pt-12` starts the first line below the top pill and `pb-24` lets the
-        // last line scroll clear of the bottom one. Without the bottom reserve
-        // the final line of every note sits permanently behind the formatting
-        // bar with no way to scroll it into view, and the note still
-        // round-trips perfectly — so only a computed-style test can see it.
-        // `e2e/appearance.spec.ts` asserts the reserve covers each pill's
-        // actual reach into the pane, which is what keeps this correct if
-        // either toolbar's height or inset changes.
-        class: 'min-h-0 flex-1 bg-bg px-6 pt-12 pb-24 text-text focus-visible:outline-none',
+        // The BOTTOM reserve is not here. It is `.ProseMirror::after` in
+        // `src/styles/editor.css`, a real block in the flow after the last
+        // child, sized by `--bear-editor-pad-bottom` (`tokens.css`: 4rem,
+        // and 5.25rem under `@media (pointer: coarse)` for J3's 56px strip).
+        // It has to be a box in the flow because padding cannot reach the end
+        // of a long note: the same `flex-1` that makes `padding-top` work
+        // pins this element's HEIGHT to the container's, so the prose
+        // overflows its own box and `padding-bottom` lands at the bottom of a
+        // container-height box — hundreds of pixels above the last line on a
+        // scrolled note, and off the top of the viewport once it is scrolled
+        // to the end.
+        //
+        // A `pb-24` sat here from M4 until sub-project P's follow-up and was
+        // removed as MEASURED-INERT, not as tidying. With a 41-line note
+        // scrolled to its end, deleting it moved nothing: clearance between
+        // the last line and the pill stayed 16.11px at both 1280x720 and
+        // 390x844, and the scroll container's `scrollHeight` stayed 1704 and
+        // 1724 respectively — the padding contributes nothing even to
+        // scrollable extent. On a note too short to scroll it is equally
+        // inert (clearance 519.86px either way, `scrollHeight` 704 =
+        // `clientHeight`). The `coarse:pb-32` variant this comment once
+        // claimed nothing could falsify was a symptom of the same thing: the
+        // token's coarse value is what carries that case, and
+        // `e2e/phoneEditor.spec.ts` DOES fail without it (64px reserve
+        // against a 68px reach).
+        class: 'min-h-0 flex-1 bg-bg px-6 pt-12 text-text focus-visible:outline-none',
       },
     },
   });

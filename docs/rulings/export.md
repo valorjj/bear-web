@@ -181,6 +181,42 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   regresses — verified against the pre-fix stylesheet.
 
 
+- **The user's parity ruling, 2026-09-03: the same note must LOOK the same in
+  the editor, in a PDF and on a published page.** All three come out of
+  `renderNoteHtml`, so this is one stylesheet's job — and sub-project P shipped
+  three divergences at once by changing only `editor.css`: headings had no
+  colour in the export, `th` was shaded with `--bear-surface`, and `hr` drew in
+  `--bear-border`. Carried across in P's follow-up:
+  - `h1`-`h6`, `li::marker` and `hr`'s `border-top` take `--bear-accent`, all
+    six levels, exactly as `.ProseMirror` does.
+  - `th` and `tbody tr:nth-child(even) td` take `--bear-table-header` and
+    `--bear-table-stripe` — the SAME derived tokens, added to
+    `EXPORT_TOKEN_NAMES` rather than re-derived. `readExportTokens` copies a
+    custom property verbatim (reading one back does not resolve it), so the
+    `color-mix` lands in the exported `:root` beside the `--bear-bg` and
+    `--bear-text` it references and resolves there as it does in the app.
+    There is no second recipe to drift, which is the same move the callout
+    glyph tokens make.
+  - `--bear-surface` was the header ground before this, and that is why
+    `high-contrast` exported an UNSHADED header: its `bg` and `surface` are
+    both the same black. Deriving from `bg` fixes it for every theme at once.
+  - `html.test.ts`'s "the accent and the table shading stay parallel between
+    editor and export" describe guards all four, two-sided (a divergence must
+    not be fixable by changing the editor) and by VALUE rather than by
+    mention. Each assertion was verified to fail against the pre-fix
+    stylesheet. A fifth test asserts the export really emits a `<tbody>`,
+    because `tbody tr:nth-child(even) td` is a valid rule that matches nothing
+    if `DOMSerializer` ever stops wrapping rows — a table that silently lost
+    its stripes with every rule comparison still green.
+  - Two divergences deliberately NOT closed here, so they are not
+    rediscovered as new: the export has no title-line treatment (the editor's
+    `> :is(p, h1…h6):first-child` renders a note's first line large and
+    accented; the export renders it as an ordinary block), and its heading
+    sizes are literals (`1.6em`/`1.35em`/`1.15em`) where the editor derives
+    three sizes from `--bear-heading-ratio`. Both are wider than a colour and
+    were out of the follow-up's scope.
+
+
 - **Running an export lives in `useExportRunner`, not in the component that
   offers it.** Two places can start one now: the editor's own export button
   and the note list's row menu. The hook owns the progress pairing and the

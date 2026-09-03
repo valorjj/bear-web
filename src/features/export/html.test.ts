@@ -547,6 +547,101 @@ describe('table-cell paragraph rules stay parallel between editor and export', (
   });
 });
 
+/**
+ * The user's ruling, taken in sub-project P's follow-up: the same note must
+ * look the same in the editor, in a PDF and on a published page. All three of
+ * those come out of `renderNoteHtml`, so any rule the editor has and the
+ * export does not is a visible divergence rather than a detail — and until
+ * this follow-up there were three of them, each a one-line omission nobody
+ * could see from either file alone.
+ *
+ * Like the cell-paragraph pair above, these compare DECLARED RULES rather
+ * than pixels, because jsdom has no layout engine. They are deliberately
+ * two-sided: asserting only the export side would let someone "fix" a
+ * divergence by changing the editor, and asserting only that both files
+ * mention a selector would pass on two rules that disagree about the value.
+ */
+describe('the accent and the table shading stay parallel between editor and export', () => {
+  const exportCss = (): string => {
+    const html = renderNoteHtml(note, tokens);
+    return html.slice(html.indexOf('<style>') + '<style>'.length, html.indexOf('</style>'));
+  };
+
+  it('paints all six heading levels with the accent on both sides', () => {
+    const editorRule = ruleBody(
+      EDITOR_CSS,
+      '.ProseMirror h1,\n.ProseMirror h2,\n.ProseMirror h3,\n.ProseMirror h4,\n.ProseMirror h5,\n.ProseMirror h6',
+    );
+    expect(editorRule).toMatch(/color\s*:\s*var\(--bear-accent\)/);
+    expect(ruleBody(exportCss(), 'h1, h2, h3, h4, h5, h6')).toMatch(
+      /color\s*:\s*var\(--bear-accent\)/,
+    );
+  });
+
+  it('accents the list MARKER on both sides, and not the item text', () => {
+    // `::marker`, not `li`. A rule that coloured the whole item would satisfy
+    // "the accent reaches the list" and be the defect: the accent marks the
+    // structure, never the prose.
+    expect(ruleBody(EDITOR_CSS, '.ProseMirror li::marker')).toMatch(
+      /color\s*:\s*var\(--bear-accent\)/,
+    );
+    expect(ruleBody(exportCss(), 'li::marker')).toMatch(/color\s*:\s*var\(--bear-accent\)/);
+  });
+
+  it('draws a thematic break in the accent on both sides', () => {
+    // `border-top`, because an `hr` draws with a border and not with `color`.
+    // The export drew it in `--bear-border` until this follow-up, which is a
+    // divergence a reader would notice before any test would.
+    expect(ruleBody(EDITOR_CSS, '.ProseMirror hr')).toMatch(
+      /border-top\s*:[^;]*var\(--bear-accent\)/,
+    );
+    const exportRule = ruleBody(exportCss(), 'hr');
+    expect(exportRule).toMatch(/border-top\s*:[^;]*var\(--bear-accent\)/);
+    expect(exportRule, 'the export still uses the old border token').not.toMatch(
+      /var\(--bear-border\)/,
+    );
+  });
+
+  it('shades the header and stripes the body rows from the same two derived tokens', () => {
+    expect(ruleBody(EDITOR_CSS, '.ProseMirror th')).toMatch(
+      /background-color\s*:\s*var\(--bear-table-header\)/,
+    );
+    expect(ruleBody(EDITOR_CSS, '.ProseMirror tbody tr:nth-child(even) td')).toMatch(
+      /background-color\s*:\s*var\(--bear-table-stripe\)/,
+    );
+
+    const css = exportCss();
+    const header = ruleBody(css, 'th');
+    // The specific `high-contrast` defect, named rather than implied: that
+    // theme's `bg` and `surface` are both the same black, so a header shaded
+    // with `--bear-surface` had no shade at all. Asserting the derived token
+    // is present would pass on a rule that declared both.
+    expect(header).toMatch(/background\s*:\s*var\(--bear-table-header\)/);
+    expect(header, 'the export still shades its header with the surface token').not.toMatch(
+      /var\(--bear-surface\)/,
+    );
+    expect(ruleBody(css, 'tbody tr:nth-child(even) td')).toMatch(
+      /background\s*:\s*var\(--bear-table-stripe\)/,
+    );
+  });
+
+  it('emits the tbody the stripe selector needs, so the rule cannot be inert', () => {
+    // `tbody tr:nth-child(even) td` is a perfectly valid rule that matches
+    // NOTHING if `DOMSerializer` ever stops wrapping rows in a `tbody`, and
+    // the failure would be a table that silently lost its stripes with every
+    // rule-comparison test above still green.
+    const html = renderNoteHtml(
+      { ...note, text: '| a | b |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |\n' },
+      tokens,
+    );
+    expect(html).toContain('<tbody>');
+    // Three rows: the header and two body rows. Counted so a change in how
+    // rows nest — an extra wrapper, a dropped row — fails here loudly rather
+    // than leaving the stripe rule matching half of what it should.
+    expect([...html.matchAll(/<tr>/g)]).toHaveLength(3);
+  });
+});
+
 describe('stored images', () => {
   const note = (text: string) => ({ title: 'Note', text, updatedAt: 0 });
   const tokens: Record<string, string> = {};

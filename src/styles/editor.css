@@ -99,8 +99,8 @@
  * The reserve that lets the last line of a note scroll clear of the floating
  * formatting toolbar.
  *
- * A `::after` BLOCK in flow, not padding — and `RichEditor`'s `pb-24` is the
- * proof that padding cannot do this job here. `.ProseMirror` is
+ * A `::after` BLOCK in flow, not padding — and `RichEditor`'s late `pb-24`
+ * is the proof that padding cannot do this job here. `.ProseMirror` is
  * `min-h-0 flex-1` inside `EditorContent`'s column flex container, so its used
  * height is exactly the container's height however long the note is; the
  * prose then OVERFLOWS its own box and the scroll container scrolls that
@@ -122,9 +122,12 @@
  * It is not matched by `> * + *`, since `*` selects elements only, so it adds
  * exactly its own height and no rhythm.
  *
- * `RichEditor`'s `pt-12`/`pb-24` are left alone: the top reserve is real, and
- * the bottom one is now inert rather than wrong (a note short enough for its
- * padding to be on screen never scrolls at all).
+ * `RichEditor`'s `pt-12` stays: the top reserve is real, because that
+ * element's box begins where the scroll container does. Its `pb-24` was
+ * removed in sub-project P's follow-up after being measured inert — deleting
+ * it moved neither the last line's clearance (16.11px at 1280x720 and at
+ * 390x844) nor the scroll container's `scrollHeight` — so this block is the
+ * whole bottom reserve and nothing shares the job with it.
  */
 .ProseMirror::after {
   content: '';
