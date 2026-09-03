@@ -29,9 +29,11 @@ removed Tiptap extension, input rule or `markdownTokenName`; a new or changed
 `setKnownNoteTitles`, `LinkAutocomplete.ts`'s `move`/`dismiss` dispatches, and
 any other `skipTrailingNodeMeta` call site or meta-only `tr.setMeta(...)`
 dispatch anywhere in `src/features/editor/`. Also `MarkdownPaste.ts`
-(`markdownPasteKey`, `sliceFor`) and `pastedMarkdown.ts`
-(`htmlCarriesStructure`, `STRUCTURAL_HTML`, `decodeEntities`,
-`PARSER_HANDLED`); any edit to `importCycle.test.ts`.
+(`markdownPasteKey`, `sliceFor`, the guard order inside `handlePaste`) and
+`pastedMarkdown.ts` (`htmlCarriesStructure`, `STRUCTURAL_HTML`,
+`decodeEntities`, `PARSER_HANDLED`, `unwrapMarkdownFence`, `FENCE_LINE`,
+`containsFence`, `FENCE_ANYWHERE`); any edit to `importCycle.test.ts`, or to
+the `geminiAnswer.*.txt` fixtures.
 
 - **`markdown.ts` is the only importer of `@tiptap/markdown`.** The round-trip
   suite drives `MarkdownManager` standalone, with no `Editor` and no DOM, which
@@ -798,6 +800,62 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   the PASTE path only: a paste is an import, typing is authoring. Fixing it in
   `markdown.ts` would repair typed notes too but edits the one component whose
   failure corrupts notes silently.
+
+- **A ```` ```markdown ```` wrapper running to the end of a pasted payload has
+  its two wrapper lines removed before parsing, and that deliberately
+  overrides CommonMark.** `unwrapMarkdownFence` does it. A CommonMark closing
+  fence need only match the opening's LENGTH, not its info string, so any
+  fence nested inside the wrapper closes the wrapper early — and the user's
+  real Gemini answer (`fixtures/geminiAnswer.plain.txt`, committed verbatim,
+  93 lines) has exactly that shape: the wrapper opens on line 5 and means to
+  close on line 93, while the ASCII diagram carries its own fence at lines 63
+  and 69. CommonMark therefore closes it at line 63 and parsing yields **3
+  paragraphs and 2 code blocks with the diagram stranded between them**.
+  Dropping the wrapper lines instead yields `{heading: 10, bulletList: 3,
+  horizontalRule: 4, paragraph: 3, table: 1, orderedList: 3, codeBlock: 1}` —
+  **25 top-level nodes**, the whole document, diagram intact as one code
+  block. Two conditions keep the override narrow and must not be relaxed: the
+  info string must be `markdown` or `md`, which is the SOURCE declaring the
+  payload to be a document rather than us guessing; and the close must be the
+  payload's last non-blank line, so the wrapper demonstrably runs to the end
+  of the clipboard. **The fence need NOT wrap the whole payload** — this one
+  does not, lines 1-4 are Korean prose preamble — so only the two wrapper
+  lines are removed and the nested fences reach the parser untouched. That is
+  precisely what produces the counts above; returning only the fence's
+  interior would silently drop the preamble.
+
+- **Whether that unwrap OUTRANKS a structural HTML flavour is decided by
+  `containsFence`, and this is a precedence rule rather than a further
+  condition on unwrapping.** The distinction is the whole ruling and was got
+  wrong once. Two of the user's own decisions genuinely conflict here — "HTML
+  wins when it declares structure" and "unwrap a markdown-tagged wrapper" —
+  and an interior fence is what separates them, because a nested fence is what
+  makes CommonMark's greedy close destructive AND, measured, what leaves the
+  SOURCE'S OWN HTML mangled in the same place. Gemini's HTML for the reported
+  clipboard has the ASCII diagram outside every `<pre>`, verified by stripping
+  them. Interior fence lines: **2** in `geminiAnswer.plain.txt`, **0** in the
+  two-flavour payload `e2e/pasteMarkdown.spec.ts:75` pastes — whose HTML
+  declares a real `h2` and a real `table` against a plain flavour whose table
+  is ASCII art. So with an interior fence the unwrap wins and the HTML check
+  is skipped; without one the wrapper was harmless, CommonMark would have
+  parsed the payload correctly anyway, and the HTML wins. **Making the
+  interior fence a condition on UNWRAPPING instead opens a gap**: a clean
+  wrapper with no HTML flavour at all would fall through to CommonMark and
+  become one code block, which is the document N exists to stop producing.
+  `handlePaste`'s order is therefore: code block, `vscode-editor-data`, empty
+  text, unwrapped-with-interior-fence, structural HTML, unwrapped, plain text
+  — and `decodeEntities` applies to whichever string is parsed.
+
+- **`claimedByMarkdownPaste` in `markdownPaste.test.tsx` stubs `view.dispatch`
+  for the duration of its call, and that is a fix rather than a flourish.**
+  The handler INSERTS as a side effect of answering, so asking it "did you
+  claim this?" used to mutate the document — and a test that then called
+  `paste()` inserted the same payload TWICE. Every caller happened to assert
+  `toContain`, which cannot see a doubled document, so the defect read as
+  coverage for a whole sub-project; it surfaced only when a new test asserted
+  a table COUNT and got 2. Audited when fixed: no assertion had depended on
+  the doubling. Keep the stub, or exact-count assertions in that file become
+  unreliable again.
 
 - **`MarkdownPaste` uses `handlePaste`; `ImagePaste` uses
   `handleDOMEvents.paste`. That split is load-bearing, not incidental.**

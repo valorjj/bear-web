@@ -3,7 +3,12 @@ import type { JSONContent } from '@tiptap/core';
 import { Node as ProseMirrorNode, Slice } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
-import { decodeEntities, htmlCarriesStructure } from './pastedMarkdown';
+import {
+  containsFence,
+  decodeEntities,
+  htmlCarriesStructure,
+  unwrapMarkdownFence,
+} from './pastedMarkdown';
 
 export const markdownPasteKey = new PluginKey('markdownPaste');
 
@@ -122,20 +127,53 @@ export const MarkdownPaste = Extension.create<MarkdownPasteOptions>({
             // paste that would insert nothing must not be claimed.
             if (text.trim() === '') return false;
 
-            // The source's own HTML beats re-parsing its plain-text
-            // serialisation. See `htmlCarriesStructure`: a Gemini answer's
-            // plain flavour fenced the whole document and a nested fence
-            // broke it into two code blocks, while its HTML said "one code
-            // block". Plain-text Markdown parsing is for clipboards that
-            // have no HTML at all — a Copy button, a terminal, a `.md` file
-            // in a plain editor — which is the case that motivated this
-            // whole feature.
-            const html = clipboard.getData('text/html');
-            if (html !== '' && htmlCarriesStructure(html)) return false;
+            // A ```` ```markdown ```` wrapper running to the end of the
+            // payload is the SOURCE saying "this clipboard is a Markdown
+            // document", so its two wrapper lines come off. Whether that
+            // reading also OUTRANKS the source's own HTML is a separate
+            // question, and it is decided by whether the unwrapped text
+            // contains a fence of its own.
+            const unwrapped = unwrapMarkdownFence(text);
+
+            // THE PRECEDENCE RULE, and it resolves a real conflict between
+            // two rules that are each correct alone: "HTML wins when it
+            // declares structure" and "unwrap a markdown-tagged wrapper".
+            //
+            // An interior fence is what makes CommonMark's greedy close
+            // destructive — and measured on the two real payloads, it is also
+            // what makes the source's own HTML unreliable. Interior fence
+            // lines: 2 in `fixtures/geminiAnswer.plain.txt`, whose HTML is
+            // mangled in the same place as its plain text with the ASCII
+            // diagram outside every `<pre>`; 0 in the two-flavour payload
+            // `e2e/pasteMarkdown.spec.ts` pastes, whose HTML declares a real
+            // `h2` and a real `table` against an ASCII-art plain flavour.
+            //
+            // So: with an interior fence, neither flavour is trustworthy and
+            // the unwrap is the only faithful reading, so skip the HTML check
+            // entirely. Without one, the wrapper was harmless — CommonMark
+            // would have parsed the payload correctly anyway — and structural
+            // HTML is the better reading, so let it win.
+            if (unwrapped === null || !containsFence(unwrapped)) {
+              // The source's own HTML beats re-parsing its plain-text
+              // serialisation. See `htmlCarriesStructure`: a paragraph copied
+              // off a web page has its link in the HTML and nothing in its
+              // plain text. Plain-text Markdown parsing is for clipboards
+              // that have no HTML at all — a Copy button, a terminal, a `.md`
+              // file in a plain editor — which is the case that motivated
+              // this whole feature.
+              const html = clipboard.getData('text/html');
+              if (html !== '' && htmlCarriesStructure(html)) return false;
+            }
+
+            // Falling through with a non-null `unwrapped` and no structural
+            // HTML is the case that made this a precedence rule rather than a
+            // third condition on the unwrap: a clean wrapper with no HTML
+            // flavour at all still parses as the DOCUMENT it declares itself
+            // to be, never as one code block.
 
             const doc = ProseMirrorNode.fromJSON(
               view.state.schema,
-              parsePastedMarkdown(decodeEntities(text)),
+              parsePastedMarkdown(decodeEntities(unwrapped ?? text)),
             );
 
             // Through the view's own state and dispatch, NEVER

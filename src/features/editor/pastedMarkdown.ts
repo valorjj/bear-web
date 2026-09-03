@@ -57,6 +57,130 @@ export function htmlCarriesStructure(html: string): boolean {
 }
 
 /**
+ * A fenced-code-block delimiter line, with its info string captured.
+ *
+ * One pattern rather than two, because the opening and closing forms differ
+ * only in whether group 2 is empty: an empty info string closes a fence, and
+ * an info string of `markdown` opens one.
+ *
+ * `^ {0,3}` is CommonMark's own rule — four spaces of indent makes an indented
+ * code block, not a fence — so a line indented that far is correctly not seen
+ * as a fence at all.
+ */
+const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*([^\n]*?)[ \t]*$/;
+
+/** Splits on either line ending, keeping the terminator so it can be restored. */
+const LINE = /(\r\n|\n|\r)/;
+
+/**
+ * Removes a ```` ```markdown ```` wrapper fence from a pasted payload, or
+ * `null` when the payload is not of that shape.
+ *
+ * **This deliberately overrides CommonMark, whose rule is right in general and
+ * produces garbage here.** A closing fence need only match the opening's
+ * LENGTH, not its info string, so any fence nested inside a
+ * ```` ```markdown ```` wrapper closes the wrapper early. The user's real Gemini answer
+ * (`fixtures/geminiAnswer.plain.txt`, committed verbatim) opens its wrapper on
+ * line 5 and means to close it on line 93, but the ASCII diagram at lines
+ * 63/69 carries its own fence — so CommonMark closes the wrapper at line 63
+ * and parsing yields 3 paragraphs and 2 code blocks with the diagram stranded
+ * between them.
+ *
+ * **Preferring the `text/html` flavour cannot fix it**, which is why this
+ * exists at all rather than being handled upstream by `htmlCarriesStructure`.
+ * Gemini's HTML for the same clipboard is mangled identically — verified by
+ * stripping every `<pre>` and finding the diagram outside both of them — so
+ * there is no faithful flavour to defer to.
+ *
+ * **Measured.** Dropping the two wrapper lines and parsing the rest yields
+ * `{heading: 10, bulletList: 3, horizontalRule: 4, paragraph: 3, table: 1,
+ * orderedList: 3, codeBlock: 1}` — 25 top-level nodes, the whole document,
+ * with the ASCII diagram correctly a single code block.
+ *
+ * **The override is narrow on purpose, and two conditions do that work.** The
+ * info string must say `markdown` or `md`, which is the SOURCE declaring this
+ * payload to be a Markdown document rather than us guessing. And the close
+ * must be the payload's last non-blank line, so the wrapper demonstrably runs
+ * to the end of the clipboard. A fence tagged anything else, or one that
+ * closes mid-payload, is left entirely alone and parses under CommonMark's
+ * ordinary rule.
+ *
+ * Note what is NOT required: that the fence wrap the whole payload. This one
+ * does not — lines 1-4 are Korean prose preamble. Only the two wrapper lines
+ * are removed, so the preamble survives as prose and the nested fences are
+ * handed to the parser untouched, which is precisely what produces the counts
+ * above.
+ */
+export function unwrapMarkdownFence(text: string): string | null {
+  const pieces = text.split(LINE);
+  // `split` with a capturing group yields `line, eol, line, eol, …, line`, so
+  // line `i` is `pieces[i * 2]` and its terminator `pieces[i * 2 + 1]`.
+  const count = (pieces.length + 1) / 2;
+
+  let open = 0;
+  let fence = FENCE_LINE.exec(pieces[0]);
+  // The FIRST fence line, whatever it is tagged. Scanning past a
+  // ```` ```ts ```` fence to find a later markdown-tagged one would be reading
+  // a nested fence as a wrapper.
+  while (fence === null && ++open < count) fence = FENCE_LINE.exec(pieces[open * 2]);
+  if (fence === null) return null;
+
+  const tag = fence[2].toLowerCase();
+  if (tag !== 'markdown' && tag !== 'md') return null;
+
+  let close = count - 1;
+  while (close > open && pieces[close * 2].trim() === '') close -= 1;
+  // At least one line between the two, so there is a document to unwrap.
+  if (close - open < 2) return null;
+
+  const closing = FENCE_LINE.exec(pieces[close * 2]);
+  // Bare, of the same character, and at least as long — CommonMark's own
+  // closing rule, which this override keeps rather than loosens.
+  if (closing === null || closing[2] !== '') return null;
+  if (closing[1][0] !== fence[1][0] || closing[1].length < fence[1].length) return null;
+
+  // Whichever kept line ends the result loses its terminator, so removing the
+  // last line removes a line rather than leaving a blank one behind. Every
+  // other line keeps the ending it arrived with.
+  const last = close === count - 1 ? count - 2 : count - 1;
+  const kept: string[] = [];
+  for (let i = 0; i < count; i += 1) {
+    if (i === open || i === close) continue;
+    kept.push(i === last ? pieces[i * 2] : pieces[i * 2] + pieces[i * 2 + 1]);
+  }
+  return kept.join('');
+}
+
+/** Any line that opens or closes a fenced code block. */
+const FENCE_ANYWHERE = /^ {0,3}(?:`{3,}|~{3,})/m;
+
+/**
+ * Whether an unwrapped payload contains a fence of its own.
+ *
+ * This is the PRECEDENCE test between `unwrapMarkdownFence` and
+ * `htmlCarriesStructure`, not a further condition on the unwrap — and the
+ * distinction is the whole ruling. A nested fence is what makes CommonMark's
+ * greedy close destructive, and measured on the two real payloads it is also
+ * what makes the SOURCE'S OWN HTML unreliable: Gemini's HTML is mangled in
+ * the same place as its plain text, with the ASCII diagram outside every
+ * `<pre>`. So an interior fence means neither flavour can be trusted and our
+ * unwrap is the only faithful reading; its absence means the wrapper was
+ * harmless, CommonMark would have parsed the payload correctly anyway, and a
+ * structural HTML flavour is the better one.
+ *
+ * Measured, which is why this exists at all. Interior fence lines: **2** in
+ * `fixtures/geminiAnswer.plain.txt`, **0** in the two-flavour payload
+ * `e2e/pasteMarkdown.spec.ts` pastes — whose HTML declares a real `h2` and a
+ * real `table` against a plain flavour whose table is ASCII art. Making the
+ * interior fence a condition on unwrapping instead would have left a clean
+ * wrapper with NO html flavour parsing as a single code block, which is the
+ * document the user asked us to stop producing.
+ */
+export function containsFence(text: string): boolean {
+  return FENCE_ANYWHERE.test(text);
+}
+
+/**
  * The four references `parseMarkdown` decodes itself, in exactly the spellings
  * it handles. Matched case-sensitively on purpose: `&AMP;` is a legacy alias
  * the parser does NOT decode, so it must fall through and be decoded here.

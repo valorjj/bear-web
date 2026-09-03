@@ -347,3 +347,63 @@ Both go to `NEXT.md` as named residue.
 
 No new user-facing strings: decision 4 means N ships no UI, so `en.ts` and
 `ko.ts` are untouched.
+
+## Addition, 2026-09-03: unwrapping a `markdown`-tagged wrapper fence
+
+**Why this was needed after N shipped.** N's decision 2 made a structural
+`text/html` flavour beat re-parsing the plain text, and the reported Gemini
+paste was the case that motivated it. That fix was measured against the wrong
+thing. Gemini's HTML flavour is mangled in **exactly the same place** as its
+plain text — verified by stripping every `<pre>` and finding the ASCII diagram
+outside all of them — so preferring the HTML never produced the document the
+user asked for. It produced a different wrong document.
+
+**The real cause is CommonMark, and it is not a bug in CommonMark.** A closing
+fence need only match the opening's length, not its info string. The user's
+answer (`src/features/editor/fixtures/geminiAnswer.plain.txt`, 93 lines,
+committed verbatim) opens a ```` ```markdown ```` wrapper on line 5 and means
+to close it on line 93, but the ASCII diagram inside carries its own fence at
+lines 63 and 69. So the wrapper closes at line 63 and parsing yields 3
+paragraphs plus 2 code blocks with the diagram stranded between them.
+
+**Measured.** Removing the two wrapper lines and parsing the rest yields
+`{heading: 10, bulletList: 3, horizontalRule: 4, paragraph: 3, table: 1,
+orderedList: 3, codeBlock: 1}` — 25 top-level nodes, the whole document, the
+diagram intact as one code block. Note the fence does **not** wrap the whole
+payload: lines 1-4 are Korean prose preamble, which is why only the two
+wrapper lines come off rather than everything outside them.
+
+**Two decisions, both the user's.**
+
+1. **Unwrap when the first fence is tagged `markdown` or `md` and the last
+   non-blank line is a matching bare close.** The info string is the source
+   declaring the payload to be a Markdown document, and the end-of-payload
+   close shows the wrapper spans the clipboard. Those two conditions are what
+   make overriding CommonMark narrow enough to be safe.
+
+2. **Whether the unwrap outranks a structural HTML flavour is a PRECEDENCE
+   rule, decided by whether the unwrapped text contains a fence of its own.**
+   This resolves a genuine conflict between decision 1 above and N's own
+   decision 2, and it was got wrong first: the obvious move is to make the
+   interior fence a third condition on unwrapping, which opens a gap — a clean
+   wrapper arriving with no HTML flavour would fall through to CommonMark and
+   become one code block, the very document this exists to stop producing.
+
+   The discriminator was found by measurement, not reasoning. Interior fence
+   lines: **2** in the Gemini fixture, **0** in the two-flavour payload
+   `e2e/pasteMarkdown.spec.ts:75` pastes — whose HTML declares a real `h2` and
+   a real `table` against a plain flavour whose table is ASCII art. A nested
+   fence is what makes CommonMark's greedy close destructive and, on the real
+   clipboard, what makes the source's own HTML unreliable too. Absent one, the
+   wrapper was harmless and the HTML is the better reading.
+
+**Found while implementing, and worth recording.** The brief for this addition
+asserted that no existing test payload was a markdown-tagged wrapper. That was
+false — `e2e/pasteMarkdown.spec.ts:75` is exactly one, and the first
+implementation turned its real table into ASCII-art prose. It was caught by
+running the suite rather than trusting the brief, and it is what produced the
+precedence rule above.
+
+Also fixed here: `claimedByMarkdownPaste` used to dispatch as a side effect of
+answering, so pairing it with `paste()` inserted a payload twice. Invisible to
+every existing caller because they all assert `toContain`. See the ruling.

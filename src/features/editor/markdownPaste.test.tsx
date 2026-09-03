@@ -152,6 +152,15 @@ function paste(flavours: Flavours): boolean {
  * and a `vscode-editor-data` paste all report `defaultPrevented === true`
  * whether this plugin's guards are present or not. Asking the plugin directly
  * is the only faithful instrument for "this handler stayed out of the way".
+ *
+ * **`view.dispatch` is stubbed for the duration, and that is a fix rather
+ * than a flourish.** The handler INSERTS as a side effect of answering, so
+ * asking it a question used to mutate the document — and a test that then
+ * called `paste()` inserted the same payload TWICE. Every existing caller
+ * happened to assert `toContain`, which cannot see a doubled document, so the
+ * defect read as coverage; it surfaced only when a new test asserted a table
+ * COUNT and got 2. Answering without dispatching keeps this a query, so a
+ * caller may now pair it with `paste()` and still assert exact counts.
  */
 function claimedByMarkdownPaste(
   handleRef: React.RefObject<RichEditorHandle | null>,
@@ -160,9 +169,16 @@ function claimedByMarkdownPaste(
   const view = handleRef.current!.editor!.view;
   const plugin = markdownPasteKey.get(view.state)!;
   const handlePaste = plugin.props.handlePaste!;
-  return (
-    handlePaste.call(plugin, view, clipboardEvent(flavours) as ClipboardEvent, Slice.empty) === true
-  );
+  const dispatch = view.dispatch;
+  view.dispatch = () => undefined;
+  try {
+    return (
+      handlePaste.call(plugin, view, clipboardEvent(flavours) as ClipboardEvent, Slice.empty) ===
+      true
+    );
+  } finally {
+    view.dispatch = dispatch;
+  }
 }
 
 async function mounted(initialMarkdown = '', onImage?: (file: Blob) => Promise<string | null>) {
@@ -375,23 +391,127 @@ describe('MarkdownPaste', () => {
     });
   });
 
-  it('leaves the reported Gemini clipboard to ProseMirror, whose HTML is faithful', async () => {
+  it('unwraps the reported Gemini clipboard into the whole document', async () => {
     // THE REPORTED DEFECT, from the user's real clipboard, both flavours
-    // committed verbatim as fixtures.
+    // committed verbatim as fixtures. This is the point of the change.
     //
-    // The plain flavour wraps the whole answer in a ```markdown fence, and the
-    // answer itself contains a NESTED fence — fences land on lines 5, 63, 69
-    // and 93, so the inner one closes the outer one early. Parsing it yields 3
-    // paragraphs and 2 code blocks with an ASCII diagram stranded between
-    // them. The HTML flavour of the same clipboard describes `pre` twice and
-    // no headings, lists or tables at all, so ProseMirror's own HTML path
-    // renders prose plus one clean code block — which is what the source
-    // meant.
+    // The plain flavour opens a ```markdown fence on line 5 and means to close
+    // it on line 93, but the answer contains a NESTED fence at lines 63 and 69
+    // — and a CommonMark closing fence need only match the opening's LENGTH,
+    // so line 63 closes the wrapper and parsing yields 3 paragraphs plus 2
+    // code blocks with an ASCII diagram stranded between them.
+    //
+    // Deferring to the `text/html` flavour was the first attempt and it could
+    // not work: Gemini's HTML is mangled in the same place, with the diagram
+    // outside every `<pre>`. Two interior fences is exactly what says so, and
+    // it is what wins this payload the precedence over structural HTML — see
+    // the two tests below, which pin that rule in isolation.
     const handleRef = await mounted();
 
     expect(claimedByMarkdownPaste(handleRef, { plain: GEMINI_PLAIN, html: GEMINI_HTML })).toBe(
-      false,
+      true,
     );
+    paste({ plain: GEMINI_PLAIN, html: GEMINI_HTML });
+
+    await waitFor(() => {
+      const kinds: string[] = [];
+      handleRef.current!.editor!.state.doc.descendants((node) => {
+        kinds.push(node.type.name);
+      });
+      // Stated as counts, so the reported symptom fails BY NAME. The whole
+      // document is 10 headings and 1 table; the broken reading had ZERO of
+      // either and two code blocks with the diagram between them.
+      expect(kinds.filter((kind) => kind === 'heading').length).toBeGreaterThanOrEqual(8);
+      expect(kinds.filter((kind) => kind === 'table')).toHaveLength(1);
+      expect(kinds.filter((kind) => kind === 'codeBlock')).not.toHaveLength(2);
+    });
+  });
+
+  // THE PRECEDENCE RULE, in the two cases that ARE the rule. Both payloads
+  // are markdown-tagged wrappers running to the end of the clipboard, and both
+  // arrive alongside HTML that declares real structure — so `unwrapMarkdownFence`
+  // returns non-null for each and only the interior fence separates them.
+  // Reverting the rule flips exactly these two.
+  it('defers to structural HTML when the wrapper has NO interior fence', async () => {
+    // Measured: 0 interior fence lines. CommonMark would have parsed this
+    // payload correctly on its own, so the wrapper was harmless and there was
+    // nothing to override — and the HTML is the better reading, because its
+    // `table` is a real table where the plain flavour's is ASCII art.
+    //
+    // This is the exact clipboard `e2e/pasteMarkdown.spec.ts` pastes. Claiming
+    // it costs the note a real table node, which is a regression in the
+    // opposite direction from the one N exists to fix.
+    const handleRef = await mounted();
+
+    expect(
+      claimedByMarkdownPaste(handleRef, {
+        plain: '```markdown\n## Weekly report\n\n+---+---+\n| a | b |\n+---+---+\n```',
+        html: '<h2>Weekly report</h2><table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>',
+      }),
+    ).toBe(false);
+  });
+
+  it('overrides structural HTML when the wrapper HAS an interior fence', async () => {
+    // Measured: 1 interior fence line. A nested fence is what closes the
+    // wrapper early under CommonMark — and, on the real clipboard this models,
+    // what leaves the source's own HTML mangled in the same place. Neither
+    // flavour is trustworthy, so the unwrap wins.
+    const handleRef = await mounted();
+    const plain = '```markdown\n## Hi\n\n```text\ndiagram\n```\n```';
+    const html = '<h1>Something else</h1>';
+
+    expect(claimedByMarkdownPaste(handleRef, { plain, html })).toBe(true);
+    paste({ plain, html });
+
+    await waitFor(() => {
+      const kinds: string[] = [];
+      handleRef.current!.editor!.state.doc.descendants((node) => {
+        kinds.push(node.type.name);
+      });
+      // The heading and the diagram both survive, as ONE code block — the
+      // shape the wrapper destroyed. Counts, not `toContain`, so a doubled
+      // insert or a stranded second fence fails by name.
+      expect(kinds.filter((kind) => kind === 'heading')).toHaveLength(1);
+      expect(kinds.filter((kind) => kind === 'codeBlock')).toHaveLength(1);
+    });
+    expect(handleRef.current!.getMarkdown()).not.toContain('Something else');
+  });
+
+  it('parses a fence-free wrapper as a document when there is no HTML at all', async () => {
+    // THE GAP that made this a precedence rule rather than a third condition
+    // on `unwrapMarkdownFence`. With the interior fence required to unwrap,
+    // this payload would fall through to CommonMark and become ONE code block
+    // — the document the user asked us to stop producing. There is no HTML to
+    // defer to, so the unwrap stands on its own.
+    const handleRef = await mounted();
+    const plain = '```markdown\n## Hi\n\n- a\n- b\n```';
+
+    expect(claimedByMarkdownPaste(handleRef, { plain })).toBe(true);
+    paste({ plain });
+
+    await waitFor(() => {
+      const kinds: string[] = [];
+      handleRef.current!.editor!.state.doc.descendants((node) => {
+        kinds.push(node.type.name);
+      });
+      expect(kinds.filter((kind) => kind === 'heading')).toHaveLength(1);
+      expect(kinds).toContain('bulletList');
+      expect(kinds).not.toContain('codeBlock');
+    });
+  });
+
+  it('leaves a non-markdown fence to the HTML path, so the override stays narrow', async () => {
+    // The info string is what licenses overriding CommonMark. A `ts` fence is
+    // an ordinary code block, so the HTML check runs as before and claims
+    // nothing.
+    const handleRef = await mounted();
+
+    expect(
+      claimedByMarkdownPaste(handleRef, {
+        plain: '```ts\nconst a = 1;\n```',
+        html: '<pre><code>const a = 1;</code></pre>',
+      }),
+    ).toBe(false);
   });
 
   it('leaves a copied paragraph to ProseMirror, so its link survives', async () => {

@@ -825,6 +825,23 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
   diff view shows nothing. Verify by counting bytes, not by looking:
   `python3 -c "print(open(PATH).read().count(chr(0xA0)))"` must print 0.
 
+  **U+200B is the second way in, and its mechanism is ESCAPING BACKTICKS in a
+  docblock, not an editor substituting a character.** Writing prose about a
+  ` ```markdown ` fence inside a Markdown inline code span needs the
+  span to contain backticks, and reaching for a zero-width space to break
+  them up produces a backtick, U+200B, then the fence — which renders as
+  intended, survives Prettier, typechecks, lints, and passes every test. Six of them went into
+  `pastedMarkdown.ts` and `MarkdownPaste.ts` on 2026-09-03 and were caught
+  only by running the byte check above with `chr(0x200B)`. **The convention
+  that works here is the one those files already used**: a four-backtick
+  span, ` ```markdown `. Check BOTH characters on every file you
+  touched:
+  `python3 -c "d=open(PATH).read(); print(d.count(chr(0xA0)), d.count(chr(0x200B)))"`
+  must print `0 0`. And do not "fix" a batch of them with a regex over
+  backtick runs — that attempt mangled four comments into
+  `` ```` ``````markdown` `` and needed a restore from backup; replace exact
+  literals one at a time.
+
 ## Architecture boundaries
 
 - **These boundaries are enforced by `scripts/sourceLint.test.ts`, not merely
