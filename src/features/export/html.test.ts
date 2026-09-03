@@ -836,3 +836,73 @@ describe('collectDiagramSources', () => {
     expect(collectDiagramSources('```mermaid\nA\n```\n\n```mermaid\nA\n```')).toEqual(['A']);
   });
 });
+
+/**
+ * The export used to carry `1.6em / 1.35em / 1.15em` — the PRE-M9a scale —
+ * while the editor derived `1.728 / 1.44 / 1.2` from `--bear-heading-ratio`.
+ * Not merely literals where the editor derives, as NEXT.md had it: the wrong
+ * literals, for two milestones, with nothing in the repo comparing the two.
+ *
+ * These read the REAL `editor.css` rather than restating a number, so the
+ * comparison cannot go stale the way the literals did. Whitespace is squashed
+ * because Prettier wraps the editor's `calc()` across four lines and the
+ * export writes it on one.
+ */
+describe('the export mirrors the editor typography', () => {
+  /*
+   * Squashes whitespace AND the padding Prettier leaves inside a wrapped
+   * `calc( ... )`. `editor.css`'s expression is four lines long, so Prettier
+   * writes `calc( var(...)` with a space after the paren, while the export
+   * writes the same expression on one line without it. The two are identical
+   * CSS, and normalising here is what lets the assertion compare meaning
+   * rather than formatting — reformatting either file to match the other
+   * would be the wrong repair.
+   */
+  const squash = (css: string) =>
+    css.replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+
+  function fontSizeAfter(css: string, selector: string): string {
+    const at = squash(css).indexOf(selector);
+    expect(at, `${selector} not found`).toBeGreaterThan(-1);
+    const found = /font-size:\s*([^;]+);/.exec(squash(css).slice(at));
+    expect(found, `no font-size after ${selector}`).not.toBeNull();
+    return found![1]!.trim();
+  }
+
+  it('forwards the heading ratio and the title gap', () => {
+    expect(EXPORT_TOKEN_NAMES).toContain('--bear-heading-ratio');
+    expect(EXPORT_TOKEN_NAMES).toContain('--bear-title-gap');
+  });
+
+  it.each([
+    ['h1', '.ProseMirror h1 {'],
+    ['h2', '.ProseMirror h2 {'],
+    ['h3', '.ProseMirror h3 {'],
+  ])('sizes %s exactly as editor.css does', (level, editorSelector) => {
+    const exported = fontSizeAfter(renderNoteHtml(note, tokens), `${level} {`);
+    expect(exported).toBe(fontSizeAfter(EDITOR_CSS, editorSelector));
+    // The regression itself, named so a future edit cannot quietly restore it.
+    expect(exported).toContain('var(--bear-heading-ratio)');
+  });
+
+  it('gives the first block the same title treatment the editor gives it', () => {
+    const html = squash(renderNoteHtml(note, tokens));
+    expect(html).toContain('body > :is(p, h1, h2, h3, h4, h5, h6):first-child');
+    expect(html).toContain('body > :is(p, h1, h2, h3, h4, h5, h6):first-child + *');
+
+    // The title is sized off the ratio, exactly as `.ProseMirror`'s is.
+    expect(fontSizeAfter(renderNoteHtml(note, tokens), 'first-child {')).toBe(
+      fontSizeAfter(EDITOR_CSS, '.ProseMirror > :is(p, h1, h2, h3, h4, h5, h6):first-child {'),
+    );
+    // And separated by the gap token plus the additive paragraph spacing, the
+    // way `editor.css` does it — a bottom margin on the title would collapse.
+    expect(html).toContain('margin-top: calc(var(--bear-title-gap) + var(--bear-para-spacing));');
+  });
+
+  // Every token in the list must degrade, or a rename paints nothing.
+  it('gives both new tokens a fallback', () => {
+    const html = renderNoteHtml(note, {});
+    expect(html).toContain('--bear-heading-ratio: 1.2;');
+    expect(html).toContain('--bear-title-gap: 1.75em;');
+  });
+});
