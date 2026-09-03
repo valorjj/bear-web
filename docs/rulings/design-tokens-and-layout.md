@@ -1275,3 +1275,39 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   platform, and it is why the thumb alpha is low enough to read as a hairline
   rather than a bar.
 
+
+- **Five type tokens are user-controlled since Q, and may not be
+  re-hardcoded.** `--bear-font-size`, `--bear-line-height`,
+  `--bear-line-width`, `--bear-para-spacing` and `--bear-para-indent` are
+  written onto `documentElement` by `src/app/typography.ts`'s
+  `applyTypography` and by `index.html`'s pre-paint script. A new consumer
+  reads the token; a literal in its place silently ignores the reader's
+  preference, and nothing fails.
+
+- **`DEFAULTS` in `typography.ts` must stay equal to the values `tokens.css`
+  declares.** That equality is what makes `npm run measure:check` a regression
+  test for this feature: Q's defaults are today's geometry, so no measured
+  surface may move, and a diff in `measurements.md` means the preference has
+  leaked out of the prose and into the app chrome. Changing a default without
+  changing the token (or the reverse) turns a live gate into a stale one.
+  `typography.test.ts` asserts the five values literally, at the point where
+  someone would make the change.
+
+- **The bounds are duplicated in `index.html` on purpose**, because the
+  pre-paint script cannot import a module without becoming async and losing
+  the only thing it exists for. `scripts/sourceLint.test.ts` asserts the two
+  lists agree, along with the property names and the storage key. Drift is
+  silent, and worst when the script's bounds are WIDER than the model's: a
+  hand-edited mirror then paints a first frame the app immediately corrects,
+  which reads as a flash with no cause.
+
+- **`--bear-line-width` cannot widen the prose past the pane, and on a laptop
+  it usually cannot widen it at all.** `editor.css`'s rule is
+  `max-width: min(var(--bear-line-width), 100% - 3rem)`. Measured at a 1280
+  viewport with three panes open: the editor pane is 656px, so the prose is
+  capped at 608px while the 40em default already computes to 640px — dragging
+  the control rightward changes nothing, and only the downward half of its
+  range does anything. At 1800 both directions work (840px → 1128px). This is
+  the clamp behaving correctly, not a defect, and it is recorded so nobody
+  "fixes" the control: the honest reading is that at narrow widths "cramped"
+  is a PANE problem, not a measure problem.

@@ -382,6 +382,24 @@ import { describe, expect, it } from 'vitest';
  * 38 B disagreement the N2 entry records: re-run
  * `npx vitest run scripts/bundleSize.test.ts` after a build rather than
  * reasoning from any number written above.
+ *
+ * **Shipped: 349,360 B, a true eager cost of 1,505 B, leaving 1,640 B.** Q
+ * used less than half the 3,145 B it was granted — the panel, the trigger,
+ * two hooks, the model with its guard and mirror, and 11 i18n keys in two
+ * locales. (The pre-paint script is not in this figure and is not in this
+ * guard's scope: it grows `index.html`, which is first-load bytes nothing
+ * here measures. Nor is the export CSS, which ships in the eager chunk AND
+ * in every exported file.)
+ *
+ * **The "ceiling comes down" condition did NOT fire, and that is recorded
+ * rather than quietly skipped.** Applying it literally — measured plus the
+ * ~3 KB practice — gives 352,360, which is HIGHER than the 351,000 already
+ * in force, so honouring the condition would mean raising the ceiling again
+ * on the strength of a feature coming in under budget. It stays at 351,000.
+ * The 1,640 B remaining is below this file's stated ~2.5-3 KB practice and
+ * in line with what the last three raises actually left (455 B, 233 B,
+ * 775 B), so the standing observation holds: the eager closure is still
+ * functionally spent, and the durable fix is still not another raise.
  */
 const CEILING_BYTES = 351_000;
 
