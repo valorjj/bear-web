@@ -110,10 +110,19 @@
             guard is all-or-nothing for the same reason.
 
             Written as "must be INSIDE the range", not "must not be outside
-            it", and the difference is NaN. Every comparison against NaN is
-            false, so `n < min || n > max` is false for NaN and lets it
-            through — which would set `--bear-font-size: NaNpx` on the very
-            first frame. `!(n >= min && n <= max)` rejects it.
+            it". The difference is NaN: every comparison against NaN is false,
+            so `n < min || n > max` passes it through and would set
+            `--bear-font-size: NaNpx` on the very first frame.
+
+            NaN is not reachable HERE — this path is `JSON.parse`, and JSON has
+            no NaN literal — so this form is correctness rather than a fix for
+            a live hazard, and a fault injection swapping it for the negative
+            form fails nothing. It is kept because the same shape IS reachable
+            in `isTypography`, which reads the durable row that IndexedDB
+            stores by structured clone and which can hold a real NaN; having
+            the two guards agree costs nothing and stops the reasoning being
+            re-derived. `1e999` is the non-finite value that does reach here,
+            and both forms reject it.
           */
           for (var field in bounds) {
             var n = valid ? type[field] : null;
