@@ -148,6 +148,21 @@ export function readTypographyMirror(): Typography {
   }
 }
 
+/**
+ * Whether the mirror holds a real preference, as opposed to being absent or
+ * corrupt. `readTypographyMirror` cannot answer this — it returns `DEFAULTS`
+ * for all three cases, which is right for painting and wrong for deciding
+ * whether there is anything to recover.
+ */
+export function hasTypographyMirror(): boolean {
+  try {
+    const stored = localStorage.getItem(TYPOGRAPHY_MIRROR_KEY);
+    return stored !== null && isTypography(JSON.parse(stored));
+  } catch {
+    return false;
+  }
+}
+
 export function writeTypographyMirror(value: Typography): void {
   try {
     localStorage.setItem(TYPOGRAPHY_MIRROR_KEY, JSON.stringify(value));

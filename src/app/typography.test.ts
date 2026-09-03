@@ -5,6 +5,7 @@ import {
   BOUNDS,
   DEFAULTS,
   isTypography,
+  hasTypographyMirror,
   readTypographyMirror,
   snapField,
   TYPOGRAPHY_MIRROR_KEY,
@@ -151,6 +152,32 @@ describe('the mirror', () => {
   });
 
   // A mirror edited by hand in devtools, or left by an older build.
+  /*
+   * `readTypographyMirror` cannot answer "is there a preference here?" — it
+   * returns DEFAULTS for absent, corrupt and genuinely-default alike, which is
+   * right for painting and wrong for deciding whether anything needs
+   * recovering. `useTypography` heals an absent durable row only when this is
+   * true, because healing when there is nothing to recover writes DEFAULTS
+   * into the row and re-triggers the live query for no reason.
+   */
+  it('reports whether a real preference is present, which reading cannot', () => {
+    expect(hasTypographyMirror()).toBe(false);
+
+    localStorage.setItem(TYPOGRAPHY_MIRROR_KEY, 'not json');
+    expect(hasTypographyMirror()).toBe(false);
+    expect(readTypographyMirror()).toEqual(DEFAULTS);
+
+    localStorage.setItem(TYPOGRAPHY_MIRROR_KEY, JSON.stringify({ fontSize: 999 }));
+    expect(hasTypographyMirror()).toBe(false);
+
+    writeTypographyMirror({ ...DEFAULTS, fontSize: 19 });
+    expect(hasTypographyMirror()).toBe(true);
+
+    // Present AND equal to the defaults is still present.
+    writeTypographyMirror(DEFAULTS);
+    expect(hasTypographyMirror()).toBe(true);
+  });
+
   it('degrades to the defaults on unparseable or invalid content', () => {
     localStorage.setItem(TYPOGRAPHY_MIRROR_KEY, 'not json');
     expect(readTypographyMirror()).toEqual(DEFAULTS);
