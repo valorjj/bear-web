@@ -276,3 +276,97 @@ test.describe('contrast', () => {
     });
   }
 });
+
+/**
+ * The theme picker, which is the one surface where SIXTEEN palettes are on
+ * screen at once and the rules above cannot help.
+ *
+ * Every rule in this file compares tokens WITHIN one theme. A theme card is
+ * painted in its own theme and sits on a dialog painted in the app's, so the
+ * pair that matters spans two palettes and no per-theme floor sees it.
+ *
+ * Until 2026-09-04 each card was a single element carrying `data-theme`, its
+ * background and its border, so the line separating it from the panel resolved
+ * in the CARD's theme. Measured across all 240 (app x card) pairs: 52 had the
+ * card's fill within 1.10 of the panel, 34 had its border within 1.20, and 4
+ * had both — an invisible card. A user hit `solarized-light` with the `paper`
+ * card (fill 1.08, edge 1.20) and reported it.
+ *
+ * Pinning the dialog to one theme cannot fix that, and the reason is a fact
+ * about the roster rather than a preference: it runs from `paper` (pure white)
+ * to `high-contrast` (pure black), so no single panel colour contrasts with
+ * every card. The frame has to come from the APP's palette, outside the card's
+ * `data-theme` boundary — which is what these two assertions hold in place.
+ */
+test.describe('the theme picker frames every card in the app palette', () => {
+  /*
+   * 3.0 rather than 4.5. This is a boundary between two surfaces, not text on
+   * a ground, so WCAG's non-text floor is the applicable one; `--bear-faint`
+   * measured 3.33 at its worst across the roster when this was written, so the
+   * floor has real room under it without being a rubber stamp.
+   */
+  const FLOOR = 3;
+
+  for (const id of THEME_IDS) {
+    test(`${id} separates every card from the dialog panel`, async ({ page }) => {
+      // The paint-time mirror is how a user's choice reaches the app, so
+      // driving it here exercises the same path rather than a test-only one.
+      await page.addInitScript((theme: string) => {
+        localStorage.setItem('bear-web:theme', theme);
+      }, id);
+      await page.goto('/');
+      await expect(page.locator('section[aria-label]')).toHaveCount(3);
+
+      await page.getByRole('button', { name: /Change theme|테마/ }).click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+
+      const measured = await dialog.evaluate((panel) => {
+        const radios = [...panel.querySelectorAll('[role="radio"]')];
+        return {
+          panel: getComputedStyle(panel).backgroundColor,
+          frames: radios.map((radio) => getComputedStyle(radio).borderTopColor),
+          themed: radios.filter((radio) => radio.hasAttribute('data-theme')).length,
+          previews: radios.filter((radio) => radio.querySelector('[data-theme]') !== null).length,
+          count: radios.length,
+        };
+      });
+
+      expect(measured.count, 'no theme cards found').toBeGreaterThan(2);
+
+      /*
+       * The structural half, and the one that actually prevents regression.
+       * Frames drawn from the app palette take exactly TWO values across the
+       * grid — `--bear-faint` at rest and `--bear-accent` on the selected
+       * card. The moment `data-theme` moves back onto the radio, each frame
+       * resolves in its own theme and this becomes a dozen distinct values.
+       * That fails even for a pair that happens to contrast, which no ratio
+       * check can claim.
+       *
+       * Written as "at most two" rather than "exactly one" after the first
+       * version asserted one and failed on the selected card — the test was
+       * wrong there, not the component.
+       */
+      expect(measured.themed, 'a radio carries data-theme itself').toBe(0);
+      const frames = [...new Set(measured.frames)];
+      expect(frames.length, 'card frames resolve in more than the app palette').toBeLessThanOrEqual(
+        2,
+      );
+      // System paints nothing on purpose; every other card has a preview.
+      expect(measured.previews).toBe(measured.count - 1);
+
+      // Both states, because the selected card is exactly the one a user is
+      // looking at when they judge whether the picker is legible.
+      const failures = frames
+        .map((frame) => ({
+          frame,
+          ratio: contrastRatio(parseColour(frame), parseColour(measured.panel)),
+        }))
+        .filter(({ ratio }) => !(Number.isFinite(ratio) && ratio >= FLOOR));
+
+      expect(
+        failures.map((f) => `${f.frame} against the panel is ${f.ratio.toFixed(2)}`).join('; '),
+      ).toBe('');
+    });
+  }
+});

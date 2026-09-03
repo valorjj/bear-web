@@ -98,12 +98,23 @@ describe('ThemePicker', () => {
     expect(nord.textContent).toContain('quick brown fox');
   });
 
+  /*
+   * This asserted `data-theme` on the RADIO until the frame fix moved the
+   * boundary inward. That is a deliberate contract change, not an expectation
+   * bent to match new output: the radio is now app-themed chrome and the
+   * preview inside it is the only element that paints itself. See the
+   * `theme card framing` block below for why, and `ThemeDialog`'s docblock
+   * for the measurements.
+   */
   it('paints each card in its own theme, and System in none', async () => {
     setup();
     await openPicker();
 
-    expect(screen.getByRole('radio', { name: /Dracula/ })).toHaveAttribute('data-theme', 'dracula');
-    expect(screen.getByRole('radio', { name: /System/ })).not.toHaveAttribute('data-theme');
+    const dracula = screen.getByRole('radio', { name: /Dracula/ });
+    expect(dracula).not.toHaveAttribute('data-theme');
+    expect(dracula.querySelector('[data-theme="dracula"]')).not.toBeNull();
+
+    expect(screen.getByRole('radio', { name: /System/ }).querySelector('[data-theme]')).toBeNull();
   });
 
   it('applies the chosen theme to the document', async () => {
@@ -149,5 +160,45 @@ describe('ThemePicker', () => {
     await waitFor(async () => {
       expect(await settings.get(THEME_KEY, 'system')).toBe('high-contrast');
     });
+  });
+});
+
+/*
+ * The frame around a card must be drawn in the APP's palette, not the card's.
+ *
+ * Until this was fixed, the card was one element carrying `data-theme`, its
+ * own background AND its own border — so the line meant to separate it from
+ * the dialog panel resolved in the card's theme while the panel resolved in
+ * the app's, and nothing made the two contrast. Measured across all 240
+ * (app theme x card theme) pairs: 52 had the card's fill within 1.10 of the
+ * panel, 34 had the card's border within 1.20 of it, and 4 had both — the
+ * card was invisible. A user hit `solarized-light` panel with the `paper`
+ * card (fill 1.08, edge 1.20) and reported it.
+ *
+ * Pinning the dialog to a fixed theme cannot fix this: the roster runs from
+ * `paper` (pure white) to `high-contrast` (pure black), so no single panel
+ * colour contrasts with every card. Only a per-card frame outside the
+ * `data-theme` boundary can, which is what these assertions pin.
+ */
+describe('theme card framing', () => {
+  it('keeps data-theme off the radio itself, so the frame resolves in the app palette', async () => {
+    setup();
+    await openPicker();
+
+    const nord = screen.getByRole('radio', { name: 'Nord' });
+    expect(nord.getAttribute('data-theme'), 'the radio must not carry the theme').toBeNull();
+
+    // The preview is a descendant, and it is what paints itself.
+    const preview = nord.querySelector('[data-theme="nord"]');
+    expect(preview, 'no themed preview inside the card').not.toBeNull();
+  });
+
+  it('names each card by its theme alone, with the sample hidden', async () => {
+    setup();
+    await openPicker();
+    // Regression guard for the concatenated-name defect the card's own
+    // comment records: the preview text must stay out of the accessible name.
+    expect(screen.getByRole('radio', { name: 'Nord' })).toBeTruthy();
+    expect(screen.queryByRole('radio', { name: /quick brown fox/ })).toBeNull();
   });
 });
