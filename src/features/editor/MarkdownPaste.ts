@@ -3,7 +3,7 @@ import type { JSONContent } from '@tiptap/core';
 import { Node as ProseMirrorNode, Slice } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
-import { decodeEntities, looksLikeMarkdown } from './pastedMarkdown';
+import { decodeEntities, htmlCarriesStructure } from './pastedMarkdown';
 
 export const markdownPasteKey = new PluginKey('markdownPaste');
 
@@ -122,12 +122,16 @@ export const MarkdownPaste = Extension.create<MarkdownPasteOptions>({
             // paste that would insert nothing must not be claimed.
             if (text.trim() === '') return false;
 
-            // A rich source offers both flavours. Plain text wins only when it
-            // carries structure — otherwise ProseMirror's own HTML path runs,
-            // so copying a paragraph with a link off a web page keeps the
-            // link. See the spec's decision 2.
+            // The source's own HTML beats re-parsing its plain-text
+            // serialisation. See `htmlCarriesStructure`: a Gemini answer's
+            // plain flavour fenced the whole document and a nested fence
+            // broke it into two code blocks, while its HTML said "one code
+            // block". Plain-text Markdown parsing is for clipboards that
+            // have no HTML at all — a Copy button, a terminal, a `.md` file
+            // in a plain editor — which is the case that motivated this
+            // whole feature.
             const html = clipboard.getData('text/html');
-            if (html !== '' && !looksLikeMarkdown(text)) return false;
+            if (html !== '' && htmlCarriesStructure(html)) return false;
 
             const doc = ProseMirrorNode.fromJSON(
               view.state.schema,

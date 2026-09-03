@@ -1,0 +1,93 @@
+네, Claude Code가 바로 파일로 감싸서 읽고 저장할 수 있도록 **미리보기용 마크다운 형식 대신 통째로 복사해서 저장할 수 있는 단일 파일 전용 코드 블록**으로 제공해 드리겠습니다.
+
+아래 코드 블록 오른쪽 상단의 **'복사(Copy)'** 버튼을 눌러 프로젝트 root 디렉토리에 `PROMPT_FOR_CLAUDE.md` 등의 파일로 저장하신 후, Claude Code에게 `PROMPT_FOR_CLAUDE.md 파일을 읽고 이 스펙대로 개발을 진행해줘` 라고 전달하시면 됩니다.
+
+```markdown
+# SYSTEM PROMPT FOR CLAUDE CODE: SAP PROCESS ASSETIZATION RE-ARCHITECTING & SPEC-DRIVEN DEVELOPMENT
+
+## 1. Executive Context & Strategic Realignment
+- **Project Mission:** Enterprise Process Assetization platform built on Svelte, Kotlin, and MariaDB.
+- **Core Value Proposition:** "Where the SAP consultant's knowledge stays after the consultant leaves." Transition tribal knowledge into executable specs and structured SAP artifacts.
+- **Spec-Driven Mandate:** The CEO demands a strict Spec-Driven methodology. After a 1-month demo build, the UI and navigation became fragmented (29+ routes). We are resetting the navigation and architecture completely.
+- **Technical Reality Check (SAP Integration):** Direct 1:1 automated code generation from BPMN 2.0 to fully executable ABAP is technically infeasible. Instead, the system produces handover-ready artifacts (Fit-Gap matrices, Flexible Workflow definitions, ABAP extension skeletons, and RAP CDS specs) to accelerate SAP S/4HANA implementation.
+
+---
+
+## 2. Terminology & Vocabulary Alignment (SAP Standard)
+All UI labels, data structures, and AI prompts must strictly adopt official SAP S/4HANA and Signavio terminology:
+
+| Legacy / Generic Term | SAP Standard Terminology | Context / Technical Scope |
+| :--- | :--- | :--- |
+| Process Map / Diagram | BPMN 2.0 Process Architecture / Signavio Model | Global process hierarchy |
+| System Step / Task | SAP Transaction (T-Code) / Fiori App ID | e.g., ME21N, VA01, FB60 |
+| Approval Line | Flexible Workflow / Business Workflow | Approval chains by condition/threshold |
+| Standard Function | SAP Standard / Best Practice (Fit) | Out-of-the-box S/4HANA capabilities |
+| Custom Development | Enhancement (BAdI) / Custom Object (RAP / CDS) | ABAP RESTful Application Programming |
+| Configuration / Setup | Customizing (IMG / SPRO Configuration) | Business logic parameters |
+| Analysis / Gap Check | Fit-Gap Analysis & Verdict | Decision: Standard, Config, Enhancement, Custom |
+
+---
+
+## 3. Simplified Navigation & Role-Based Access Control (RBAC)
+Shrink the current 29 route clutter into 8 role-shaped menu items. Role visibility dictates menu availability (no strict backend authorization enforcement during current demo phase, but UI paths are logically isolated).
+
+### Menu Structure by Role
+1. **User (3 items):** Home · Processes · Assistant
+2. **Consultant (6 items):** + Authoring · Knowledge · SAP (Export Pipeline)
+3. **Manager (7 items):** + Governance
+4. **Admin (8 items):** + Administration
+
+### Contract Per Navigation Item
+- **Home**: Role-shaped landing page (Search, Approvals waiting, Recent updates). Absorbs generic to-do lists.
+- **Processes**: Process navigator, runbook view, Signavio diagram viewer, and SAP launch links.
+- **Assistant**: AI RAG interface citing Knowledge corpus (Wiki, SOPs, Glossary) and Process metadata.
+- **Authoring**: Bulk process creation, Excel/BPMN imports, and artifact exports (PDF/Doc/BPMN).
+- **Knowledge**: Curation portal for Wiki, SOPs, and Glossary (hidden from general users).
+- **SAP**: The primary 5-Lane SAP Export Pipeline & Fit-Gap management page.
+- **Governance**: Process ownership, staleness indicators, change request approvals.
+- **Administration**: Users, Role groups, System connections, and AI API keys.
+
+---
+
+## 4. Architectural Spec: The 5-Lane SAP Export Pipeline
+The SAP menu item acts as the SAP Export Readiness Scorecard. When a user selects a process and triggers an export run, the system evaluates the readiness across 5 distinct SAP handover lanes.
+
+### Status Indicators (Lamps)
+- **Gray (○)**: Not evaluated.
+- **Red (🔴)**: Gaps detected / Requirements incomplete (acts as the consultant's actionable To-Do list).
+- **Green (🟢)**: Fully mapped and ready for SAP development handover.
+
+### Lane Definitions & Deliverables
+
+
+```
+
+[Selected Process] ──> [Run Assessment] ──> 🔴 Config ── 🔴 Workflow ── 🟢 Standard ── 🔴 ABAP ── ○ Custom
+│
+└── (Click Lane) ──> [Detail Drawer / Artifact Generator]
+
+```
+
+1. **Config Lane (IMG / SPRO Worksheet):**
+   - Deliverable: Configuration worksheet specifying S/4HANA module settings, Organizational Units, and Business Objects implied by the process steps.
+2. **Workflow Lane (Flexible Workflow Definition):**
+   - Deliverable: Structured approval chain metadata (approver roles, threshold conditions, escalation paths) distinct from internal app approvals.
+3. **Standard Lane (Fit-Gap T-Code Matrix):**
+   - Deliverable: Mapping table connecting every BPMN task to an official SAP T-Code / Fiori App ID. Highlights unmapped steps as gaps.
+4. **ABAP Lane (Enhancement Skeletons):**
+   - Deliverable: Auto-generated ABAP Class / BAdI implementation skeletons containing structured comment headers, input/output structures, and stub methods.
+5. **Custom Lane (RAP / CDS Object Definition):**
+   - Deliverable: Core Data Services (CDS) view specifications and ABAP RESTful Application Programming model schemas for net-new SAP objects.
+
+---
+
+## 5. Immediate Action Plan for Claude Code
+1. **Refactor Routes:** Prune existing menu configuration to match the 8 core items across the 4 roles (User, Consultant, Manager, Admin).
+2. **Implement Vocabulary Guardrails:** Audit all hardcoded strings and UI texts; map them to official SAP terms (e.g., replace "Custom Logic" with "ABAP BAdI / Enhancement").
+3. **Build the SAP Export Pipeline Screen:**
+   - Construct the visual 5-lane dashboard (Config, Workflow, Standard, ABAP, Custom).
+   - Treat status lamps as Readiness Scorecards (Gaps vs. Ready).
+   - Implement the drawer layout showing "What's Lacking", "What's Done", and a code/data preview panel with Copy to Clipboard and Download File buttons.
+4. **Data Model Isolation:** Ensure internal workflow approvals (Governance) are strictly decoupled from exported SAP process approvals (Workflow Lane).
+
+```

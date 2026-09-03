@@ -6,6 +6,17 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { renderWithI18n } from '@/i18n/testing';
 
+// The user's REAL clipboard, both flavours, captured verbatim on 2026-09-03
+// from the Gemini answer whose paste was reported as mangled. Vite `?raw`
+// rather than `readFileSync`: the `app` tsconfig project carries no Node
+// types on purpose — a `process.env` under `src/` must fail typecheck — and
+// the same trick already carries the real stylesheet into `html.test.ts`.
+// They live under `src/` rather than beside the ledger because
+// `.superpowers/` is gitignored, so a test reading from there would pass here
+// and fail in CI with ENOENT.
+import GEMINI_HTML from './fixtures/geminiAnswer.html.txt?raw';
+import GEMINI_PLAIN from './fixtures/geminiAnswer.plain.txt?raw';
+
 import { normalizeMarkdown } from './markdown';
 import { markdownPasteKey } from './MarkdownPaste';
 import { RichEditor, type RichEditorHandle } from './RichEditor';
@@ -361,6 +372,79 @@ describe('MarkdownPaste', () => {
     await waitFor(() => {
       // A python-tagged fence, with the `#` still a comment rather than an H1.
       expect(handleRef.current!.getMarkdown()).toBe('```python\n# comment\nprint(1)\n```\n\n');
+    });
+  });
+
+  it('leaves the reported Gemini clipboard to ProseMirror, whose HTML is faithful', async () => {
+    // THE REPORTED DEFECT, from the user's real clipboard, both flavours
+    // committed verbatim as fixtures.
+    //
+    // The plain flavour wraps the whole answer in a ```markdown fence, and the
+    // answer itself contains a NESTED fence — fences land on lines 5, 63, 69
+    // and 93, so the inner one closes the outer one early. Parsing it yields 3
+    // paragraphs and 2 code blocks with an ASCII diagram stranded between
+    // them. The HTML flavour of the same clipboard describes `pre` twice and
+    // no headings, lists or tables at all, so ProseMirror's own HTML path
+    // renders prose plus one clean code block — which is what the source
+    // meant.
+    const handleRef = await mounted();
+
+    expect(claimedByMarkdownPaste(handleRef, { plain: GEMINI_PLAIN, html: GEMINI_HTML })).toBe(
+      false,
+    );
+  });
+
+  it('leaves a copied paragraph to ProseMirror, so its link survives', async () => {
+    // The plain flavour carries no link at all — only the HTML does. Claiming
+    // this paste would drop it silently, which is why `<a>` counts as
+    // structure.
+    const handleRef = await mounted();
+
+    expect(
+      claimedByMarkdownPaste(handleRef, {
+        plain: 'Read the announcement for details.',
+        html: '<p>Read <a href="https://example.com">the announcement</a> for details.</p>',
+      }),
+    ).toBe(false);
+  });
+
+  it('still parses a plain-only Markdown clipboard, which is the original bug', async () => {
+    // No `text/html` at all — a Copy button, a terminal, a `.md` file in a
+    // plain editor. This is the case N shipped for and it must keep working.
+    const handleRef = await mounted();
+
+    expect(claimedByMarkdownPaste(handleRef, { plain: '## Heading\n\n- one\n- two' })).toBe(true);
+    paste({ plain: '## Heading\n\n- one\n- two' });
+
+    await waitFor(() => {
+      const kinds: string[] = [];
+      handleRef.current!.editor!.state.doc.descendants((node) => {
+        kinds.push(node.type.name);
+      });
+      expect(kinds).toContain('heading');
+      expect(kinds).toContain('bulletList');
+    });
+  });
+
+  it('parses a clipboard whose HTML is only wrappers, dressed-up plain text', async () => {
+    // `div` and `span` declare nothing the plain text has lost, so the
+    // Markdown reading is the better one.
+    const handleRef = await mounted();
+
+    expect(
+      claimedByMarkdownPaste(handleRef, {
+        plain: '## Heading',
+        html: '<div><span>## Heading</span></div>',
+      }),
+    ).toBe(true);
+    paste({ plain: '## Heading', html: '<div><span>## Heading</span></div>' });
+
+    await waitFor(() => {
+      const kinds: string[] = [];
+      handleRef.current!.editor!.state.doc.descendants((node) => {
+        kinds.push(node.type.name);
+      });
+      expect(kinds).toContain('heading');
     });
   });
 

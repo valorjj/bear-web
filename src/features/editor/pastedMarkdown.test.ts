@@ -1,50 +1,52 @@
 import { describe, expect, it } from 'vitest';
 
-import { decodeEntities, looksLikeMarkdown } from './pastedMarkdown';
+import { decodeEntities, htmlCarriesStructure } from './pastedMarkdown';
 
-describe('looksLikeMarkdown', () => {
-  // Used ONLY to choose between two structured readings of the same
-  // clipboard — never between structure and literal characters. Being wrong
-  // here costs formatting fidelity, not a mangled document.
+describe('htmlCarriesStructure', () => {
+  // The question is never "which flavour looks more like Markdown" but "did
+  // the source declare structure". If it did, ProseMirror's HTML path is the
+  // faithful reading and this must answer true.
   it.each([
-    ['a fenced code block', '```ts\nconst a = 1;\n```'],
-    ['a tilde fence', '~~~\nplain\n~~~'],
-    ['a table delimiter row', '| a | b |\n| --- | --- |\n| 1 | 2 |'],
-    ['a compact table delimiter row', '|a|b|\n|---|---|\n|1|2|'],
-    ['an aligned table delimiter row', '| a | b |\n| :--- | ---: |\n| 1 | 2 |'],
-    ['an ATX heading', '## Weekly report'],
-    ['a deep ATX heading', '###### small'],
-    ['a dash list', '- one\n- two'],
-    ['a star list', '* one\n* two'],
-    ['a plus list', '+ one\n+ two'],
-    ['an ordered list', '1. one\n2. two'],
-    ['a parenthesised ordered list', '1) one\n2) two'],
-    ['a blockquote', '> quoted'],
-    ['a link', 'see [the docs](https://example.com) for more'],
-    ['an image', '![shot](files/a.webp)'],
-    ['a heading after a blank first line', '\n\n## later'],
-    ['an indented heading', '   ### three spaces is still a heading'],
-  ])('recognises %s', (_label, text) => {
-    expect(looksLikeMarkdown(text)).toBe(true);
+    ['a heading', '<h1>Title</h1>'],
+    ['a list', '<ul><li>one</li></ul>'],
+    ['a table', '<table><tr><td>a</td></tr></table>'],
+    ['a code block', '<pre><code>const a = 1;</code></pre>'],
+    ['an image', '<img src="x.png">'],
+    ['a blockquote', '<blockquote>quoted</blockquote>'],
+    // THE REASON `a` IS ON THE LIST. A paragraph copied off a web page has
+    // its link in the HTML flavour and NOTHING in its plain text, so calling
+    // this payload trivial would silently drop the link.
+    ['a link', '<a href="x">y</a>'],
+  ])('trusts the HTML flavour of %s', (_label, html) => {
+    expect(htmlCarriesStructure(html)).toBe(true);
   });
 
   it.each([
-    ['ordinary prose', 'A paragraph of prose with no markers at all.'],
-    ['prose with a stray underscore', 'the file_name is here'],
-    ['prose with a mid-line hash', 'issue #42 is open'],
-    ['prose with a mid-line dash', 'well - maybe not'],
-    // DELIBERATELY not a signal. A rich source's text/html renders these
-    // faithfully, and asterisks in a plain-text flavour are weaker evidence
-    // than any structural marker.
-    ['emphasis alone', '**bold** and _em_ and nothing else'],
-    ['an over-indented heading', '    # four spaces is a code block, not a heading'],
-    ['an over-indented list', '     - four spaces in'],
-    ['a hash with no space', '#tag'],
-    ['a table-ish line with no dashes', '| a | b |'],
-    ['a dash rule with no pipe', '-----'],
     ['the empty string', ''],
-  ])('does not recognise %s', (_label, text) => {
-    expect(looksLikeMarkdown(text)).toBe(false);
+    ['wrapper divs and spans', '<div><span>plain text</span></div>'],
+    ['a bare paragraph', '<p>just a paragraph</p>'],
+    [
+      'the scaffolding a clipboard payload comes wrapped in',
+      "<meta charset='utf-8'><html><head></head><body><div>text</div></body></html>",
+    ],
+  ])('treats %s as a plain-text document dressed in HTML', (_label, html) => {
+    expect(htmlCarriesStructure(html)).toBe(false);
+  });
+
+  // The `[\s/>]` lookahead, tested rather than trusted. Without it every
+  // page's own wrapper markup reads as structure — `<article>` matches `a`,
+  // `<header>` matches `h1`-ish prefixes — and the Markdown path becomes
+  // unreachable.
+  it.each([
+    ['article', '<article>text</article>'],
+    ['header', '<header>text</header>'],
+    ['aside', '<aside>text</aside>'],
+    ['section', '<section>text</section>'],
+    ['hr-prefixed nonsense', '<hrefish>text</hrefish>'],
+    ['imgur-like', '<imgur>text</imgur>'],
+    ['tablet', '<tablet>text</tablet>'],
+  ])('does not read <%s> as a structural tag it merely prefixes', (_label, html) => {
+    expect(htmlCarriesStructure(html)).toBe(false);
   });
 });
 

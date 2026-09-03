@@ -103,7 +103,7 @@ rule nobody can predict is worse than a rule that is occasionally wrong. The
 measured prose behaviour above removes most of the risk that motivated the
 heuristic, and `⌘Z` reverses a paste in one step.
 
-### 2. Plain text wins over `text/html` only when it looks like Markdown
+### 2. Plain text wins over `text/html` only when it looks like Markdown — REVERSED, see below
 
 A clipboard from Gemini, ChatGPT or Notion carries both flavours, and this is
 the decision the actual bug report came through.
@@ -119,6 +119,39 @@ costs formatting fidelity rather than mangling a document.
 
 Ignoring `text/html` entirely was rejected for exactly that second row: it
 would regress something that works.
+
+**REVERSED 2026-09-03, by the user, after real use.** The rule above is
+backwards and the reported clipboard is what proved it. `htmlCarriesStructure`
+replaces `looksLikeMarkdown` (which is deleted, having no caller left): the
+source's `text/html` now wins whenever it declares structure, and the plain
+flavour is read as Markdown only when there is no HTML at all or the HTML is
+pure wrappers — `div`, `span`, `p`, `br` and the document scaffolding a
+payload arrives in.
+
+What the reversal cost to establish, measured off the user's real clipboard —
+both flavours are committed as `src/features/editor/fixtures/geminiAnswer.*`:
+
+- The plain flavour wraps the whole answer in a ```` ```markdown ```` fence,
+  and the answer itself contains a NESTED fence. Fences land on lines 5, 63,
+  69 and 93, so the inner fence closes the outer one early. Parsing it yields
+  3 paragraphs and 2 code blocks with an ASCII diagram stranded between them
+  — and `looksLikeMarkdown` returned `true`, so that broken path was taken.
+- The HTML flavour of the same clipboard counts `h1`-`h6`: 0, `ul`/`ol`/`li`:
+  0, `table`: 0, `pre`: 2. Letting ProseMirror have it yields prose plus one
+  clean code block, which is what the source meant.
+- An earlier answer from the same source carried real headings and a real
+  table in its HTML. Bear renders that correctly; we did not.
+
+The general error in decision 2 was treating the two flavours as peers to be
+judged on appearance. They are not: a source's HTML is its **considered
+rendering**, and its plain text is a lossy serialisation whose re-parsing is a
+second interpretation that fences make actively wrong.
+
+The second row above survives, and is now the reason `<a>` counts as
+structure: a copied paragraph has its link in the HTML and nothing in the
+plain text, so treating that payload as trivial would drop the link. The
+`STRUCTURAL_HTML` pattern's `[\s/>]` lookahead is what keeps `<article>` from
+matching `a` and `<tablet>` from matching `table`.
 
 ### 3. Entities are decoded on the paste path only
 
@@ -183,7 +216,9 @@ unit-testable standalone — which matters because this is where the bugs will
 be.
 
 **`looksLikeMarkdown(text: string): boolean`** — used **only** for decision 2,
-and its docblock must say so. Signals, any one of which is enough:
+and its docblock must say so. (Deleted 2026-09-03 with decision 2's reversal;
+`htmlCarriesStructure` took its place. Kept here as the design as shipped.)
+Signals, any one of which is enough:
 
 - a fenced code block (```` ``` ````)
 - a table delimiter row (`|---|`)
@@ -248,6 +283,8 @@ paste event
   └─ MarkdownPaste (handlePaste)
        text/plain empty?                        → false (default runs)
        text/html present AND !looksLikeMarkdown  → false (HTML path runs)
+         [reversed 2026-09-03 to: text/html present AND
+          htmlCarriesStructure → false (HTML path runs)]
        otherwise:
          decodeEntities → parseMarkdown → Node.fromJSON → Slice
          → tr.replaceSelection → true

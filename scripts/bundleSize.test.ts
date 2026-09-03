@@ -312,6 +312,31 @@ import { describe, expect, it } from 'vitest';
  * As always: re-run `npx vitest run scripts/bundleSize.test.ts` after a build
  * to get the figure that actually shipped; do not reason from either number
  * above without doing so.
+ *
+ * ### N2 (paste flavour reversal): the ceiling does NOT move; the closure
+ * shrinks by 16 B
+ *
+ * N2 reverses N's decision 2 — the source's `text/html` now wins whenever it
+ * declares structure — which deletes `looksLikeMarkdown`, its `SIGNALS`
+ * array and `hasTableDelimiterRow`, and adds `htmlCarriesStructure`. Base
+ * (`e418037`, this branch's own base, measured on THIS machine with the same
+ * build) was **347,241 B**; N2 measures **347,225 B**, i.e. **-16 B** and
+ * **775 B** of headroom under the frozen 348,000 ceiling. `CEILING_BYTES` is
+ * untouched.
+ *
+ * Note that the N entry above records base as 345,517 B and N as 347,203 B,
+ * measured in a temporary worktree with `npm ci`. The 347,241 B base above
+ * disagrees with 347,203 B by 38 B for the same tree, which is exactly why
+ * the file keeps saying to re-measure both sides rather than diff a recorded
+ * figure against a fresh one — a 38 B discrepancy is larger than the change
+ * being judged.
+ *
+ * One measured decision came out of this. `STRUCTURAL_HTML` is a regex
+ * LITERAL, not `STRUCTURAL_TAGS.join('|')` over a named `as const` array,
+ * because the array form measured **347,253 B** against the literal's
+ * 347,225 B — **+28 B**, which would have made a defect fix grow the eager
+ * closure by 12 B over its base. The tag list lives in the docblock instead;
+ * see `src/features/editor/pastedMarkdown.ts`.
  */
 const CEILING_BYTES = 348_000;
 

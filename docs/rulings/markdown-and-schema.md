@@ -29,9 +29,9 @@ removed Tiptap extension, input rule or `markdownTokenName`; a new or changed
 `setKnownNoteTitles`, `LinkAutocomplete.ts`'s `move`/`dismiss` dispatches, and
 any other `skipTrailingNodeMeta` call site or meta-only `tr.setMeta(...)`
 dispatch anywhere in `src/features/editor/`. Also `MarkdownPaste.ts`
-(`markdownPasteKey`, `sliceFor`) and `pastedMarkdown.ts` (`looksLikeMarkdown`,
-`decodeEntities`, `PARSER_HANDLED`, `SIGNALS`); any edit to
-`importCycle.test.ts`.
+(`markdownPasteKey`, `sliceFor`) and `pastedMarkdown.ts`
+(`htmlCarriesStructure`, `STRUCTURAL_HTML`, `decodeEntities`,
+`PARSER_HANDLED`); any edit to `importCycle.test.ts`.
 
 - **`markdown.ts` is the only importer of `@tiptap/markdown`.** The round-trip
   suite drives `MarkdownManager` standalone, with no `Editor` and no DOM, which
@@ -740,14 +740,50 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   smaller than it reads. `⌘Z` reverses a paste in one step; no
   "paste as plain text" command ships, deliberately.
 
-- **`looksLikeMarkdown` gates the `text/html`-versus-`text/plain` choice and
-  NOTHING else.** Widening it to gate the plain-text path would reinstate the
-  rejected heuristic above. Where it is used, both branches are structured
-  readings of the same content, so a wrong answer costs formatting fidelity;
-  on the plain-text path it would be choosing between structure and literal
-  characters, where a wrong answer mangles a document. Emphasis (`**bold**`)
-  is deliberately not a signal, and `#tag` must not read as a heading — this
-  app's own tag syntax is a hash with no space.
+- **When a clipboard offers `text/html` that declares structure, that HTML
+  wins; the plain flavour is parsed as Markdown only when there is no HTML at
+  all or the HTML is pure wrappers.** `htmlCarriesStructure` is the gate, and
+  it asks "did the source tell us the structure", NOT "which flavour looks
+  more like Markdown". A source's HTML is its considered rendering; its
+  plain-text sibling is a lossy serialisation, and re-parsing that is a second
+  interpretation.
+
+  **This reverses the rule that shipped with N**, which was "plain text wins
+  when it looks like Markdown", and it was reversed on 2026-09-03 by the user
+  after real use rather than on taste. Measured, from the reported clipboard
+  (both flavours committed as `src/features/editor/fixtures/geminiAnswer.*`):
+  a Gemini answer's plain flavour wrapped the whole document in a
+  ```` ```markdown ```` fence, and the document itself contained a NESTED
+  fence. Fences landed on lines 5, 63, 69 and 93, so the inner fence closed
+  the outer one early — parsing it produced 3 paragraphs and 2 code blocks
+  with an ASCII diagram stranded between them. The HTML flavour of the same
+  clipboard counted `h1`-`h6`: 0, `ul`/`ol`/`li`: 0, `table`: 0, `pre`: 2, so
+  ProseMirror's own HTML path yields prose plus exactly ONE clean code block.
+  An earlier answer from the same source carried real headings and a real
+  table in its HTML; Bear renders that correctly and we did not.
+
+- **`<a>` counts as structure, and that is the point of the tag list rather
+  than an oversight.** A paragraph copied off a web page has its link in the
+  HTML flavour and NOTHING in its plain text, so calling that payload trivial
+  would silently drop the link. Emphasis, code and the table parts are on the
+  list for the same reason. Only pure wrappers — `div`, `span`, `p`, `br` and
+  the `meta`/`html`/`head`/`body` scaffolding a clipboard payload arrives
+  wrapped in — are absent, because a payload built from those alone is a
+  plain-text document dressed in HTML and its Markdown reading is better.
+  `STRUCTURAL_HTML`'s `[\s/>]` lookahead is load-bearing: without it
+  `<article>` matches `a` and `<tablet>` matches `table`, so any page's own
+  wrapper markup reads as structure and the Markdown path becomes
+  unreachable. It is a regex LITERAL rather than a named array joined with
+  `|` because the array form measured **+28 B** gzipped on the eager closure,
+  which would have made this defect fix grow the bundle.
+
+- **`looksLikeMarkdown` is GONE, deliberately, and must not come back as a
+  gate on the plain-text path.** It had no caller left once the rule above
+  landed — a plain-only clipboard is parsed unconditionally, so nothing gates
+  it — and dead code with 28 passing tests reads as coverage. Reinstating it
+  on the plain-text path would reinstate the heuristic rejected above, where
+  the choice is between structure and literal characters and a wrong answer
+  mangles a document rather than costing fidelity.
 
 - **`decodeEntities` skips exactly `&amp;` `&lt;` `&gt;` `&quot;`, and the set
   is matched case-sensitively.** Those four are what `parseMarkdown` decodes
