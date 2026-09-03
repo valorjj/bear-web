@@ -73,6 +73,15 @@ const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*([^\n]*?)[ \t]*$/;
 const LINE = /(\r\n|\n|\r)/;
 
 /**
+ * Every markdown-tagged fence line in a payload, for counting them.
+ *
+ * `g` so `String.match` returns all of them rather than the first — used with
+ * `match`, which ignores and does not advance `lastIndex`, so the shared
+ * regex is safe to reuse across calls.
+ */
+const MARKDOWN_FENCE_LINE = /^ {0,3}(?:`{3,}|~{3,})[ \t]*(?:markdown|md)[ \t]*$/gim;
+
+/**
  * Removes a ```` ```markdown ```` wrapper fence from a pasted payload, or
  * `null` when the payload is not of that shape.
  *
@@ -93,17 +102,21 @@ const LINE = /(\r\n|\n|\r)/;
  * there is no faithful flavour to defer to.
  *
  * **Measured.** Dropping the two wrapper lines and parsing the rest yields
- * `{heading: 10, bulletList: 3, horizontalRule: 4, paragraph: 3, table: 1,
- * orderedList: 3, codeBlock: 1}` — 25 top-level nodes, the whole document,
- * with the ASCII diagram correctly a single code block.
+ * `{heading: 10, bulletList: 3, horizontalRule: 4, paragraph: 5, table: 1,
+ * orderedList: 3, codeBlock: 1}` — 27 top-level nodes, the whole document,
+ * with the ASCII diagram correctly a single code block. The MOUNTED editor
+ * shows 28 and `paragraph: 6`, because StarterKit's `TrailingNode` appends
+ * one empty paragraph after any block-level paste; 27 is the parse-level
+ * figure and the one to compare against.
  *
- * **The override is narrow on purpose, and two conditions do that work.** The
- * info string must say `markdown` or `md`, which is the SOURCE declaring this
- * payload to be a Markdown document rather than us guessing. And the close
+ * **The override is narrow on purpose, and four conditions do that work.**
+ * The info string must say `markdown` or `md`, which is the SOURCE declaring
+ * this payload to be a Markdown document rather than us guessing. The close
  * must be the payload's last non-blank line, so the wrapper demonstrably runs
- * to the end of the clipboard. A fence tagged anything else, or one that
- * closes mid-payload, is left entirely alone and parses under CommonMark's
- * ordinary rule.
+ * to the end of the clipboard. There must be exactly ONE markdown-tagged
+ * fence, so two wrappers are declined rather than merged. And the content
+ * between the fences must not be entirely whitespace. A payload failing any
+ * of them is left entirely alone and parses under CommonMark's ordinary rule.
  *
  * Note what is NOT required: that the fence wrap the whole payload. This one
  * does not — lines 1-4 are Korean prose preamble. Only the two wrapper lines
@@ -128,6 +141,14 @@ export function unwrapMarkdownFence(text: string): string | null {
   const tag = fence[2].toLowerCase();
   if (tag !== 'markdown' && tag !== 'md') return null;
 
+  // Exactly ONE markdown-tagged fence, or the payload is not a single wrapper
+  // and guessing which pair is the wrapper mangles it. Two wrappers —
+  // `A` fenced, then `B` fenced — would otherwise lose the FIRST open and the
+  // LAST close, leaving the inner ```` ```markdown ```` marker as literal text
+  // inside a code block. No content is lost, but marker text reaches the note,
+  // and CommonMark's own reading (two clean code blocks) is better.
+  if ((text.match(MARKDOWN_FENCE_LINE) ?? []).length > 1) return null;
+
   let close = count - 1;
   while (close > open && pieces[close * 2].trim() === '') close -= 1;
   // At least one line between the two, so there is a document to unwrap.
@@ -138,6 +159,23 @@ export function unwrapMarkdownFence(text: string): string | null {
   // closing rule, which this override keeps rather than loosens.
   if (closing === null || closing[2] !== '') return null;
   if (closing[1][0] !== fence[1][0] || closing[1].length < fence[1].length) return null;
+
+  // An empty Markdown document is not a document, and claiming one SWALLOWS
+  // THE PASTE. `handlePaste`'s `text.trim() === ''` guard runs on the
+  // pre-unwrap text, so it cannot see a payload that becomes blank only after
+  // unwrapping: measured with the caret between `a` and `b` in a note reading
+  // `ab`, pasting ```` ```markdown ```` around nothing was claimed and
+  // inserted nothing, and the characters were gone. Refusing the unwrap sends
+  // the payload down CommonMark's ordinary path, where it is an empty code
+  // block — which is at least what the source wrote.
+  let empty = true;
+  for (let i = open + 1; i < close; i += 1) {
+    if (pieces[i * 2].trim() !== '') {
+      empty = false;
+      break;
+    }
+  }
+  if (empty) return null;
 
   // Whichever kept line ends the result loses its terminator, so removing the
   // last line removes a line rather than leaving a blank one behind. Every

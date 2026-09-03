@@ -812,13 +812,33 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   and 69. CommonMark therefore closes it at line 63 and parsing yields **3
   paragraphs and 2 code blocks with the diagram stranded between them**.
   Dropping the wrapper lines instead yields `{heading: 10, bulletList: 3,
-  horizontalRule: 4, paragraph: 3, table: 1, orderedList: 3, codeBlock: 1}` —
-  **25 top-level nodes**, the whole document, diagram intact as one code
-  block. Two conditions keep the override narrow and must not be relaxed: the
-  info string must be `markdown` or `md`, which is the SOURCE declaring the
-  payload to be a document rather than us guessing; and the close must be the
+  horizontalRule: 4, paragraph: 5, table: 1, orderedList: 3, codeBlock: 1}` —
+  **27 top-level nodes**, the whole document, diagram intact as one code
+  block. That is the PARSE-level figure; the mounted editor shows **28** and
+  `paragraph: 6`, because StarterKit's `TrailingNode` appends one empty
+  paragraph after a block-level paste — do not conflate the two.
+
+  **Four conditions keep the override narrow and must not be relaxed**, and
+  two of them are bug fixes found in review rather than design. The info
+  string must be `markdown` or `md`, which is the SOURCE declaring the
+  payload to be a document rather than us guessing. The close must be the
   payload's last non-blank line, so the wrapper demonstrably runs to the end
-  of the clipboard. **The fence need NOT wrap the whole payload** — this one
+  of the clipboard. There must be exactly ONE markdown-tagged fence in the
+  payload. And the content between the fences must not be entirely
+  whitespace.
+
+  The last two matter more than they look. **A wrapper around nothing used to
+  SWALLOW THE PASTE**: `handlePaste`'s `text.trim() === ''` guard runs on the
+  PRE-unwrap text, so it cannot see a payload that becomes blank only after
+  unwrapping — measured with the caret between `a` and `b` in a note reading
+  `ab`, an empty wrapper was claimed, inserted an empty inline slice, and
+  both characters were GONE, which is exactly what that guard's own comment
+  says must never happen. **Two wrappers used to leak marker text**: dropping
+  the first open and the last close left the inner ```` ```markdown ```` as
+  literal text inside a code block. Neither is visible in a diff; both are
+  pinned by name in `pastedMarkdown.test.ts` and `markdownPaste.test.tsx`.
+
+  **The fence need NOT wrap the whole payload** — this one
   does not, lines 1-4 are Korean prose preamble — so only the two wrapper
   lines are removed and the nested fences reach the parser untouched. That is
   precisely what produces the counts above; returning only the fence's

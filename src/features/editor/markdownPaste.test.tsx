@@ -568,6 +568,59 @@ describe('MarkdownPaste', () => {
     });
   });
 
+  it('does not swallow the paste when the wrapper is empty', async () => {
+    // THE SWALLOW. `handlePaste`'s `text.trim() === ''` guard runs on the
+    // PRE-unwrap text, so it could not see a payload that becomes blank only
+    // after unwrapping. Measured before the fix: claimed, an empty inline
+    // slice inserted NOTHING, and both characters were gone — exactly what
+    // that guard's own comment says must never happen.
+    //
+    // The cure is in `unwrapMarkdownFence`, which now refuses a wrapper around
+    // whitespace. The payload then takes CommonMark's ordinary path and
+    // becomes an empty code block, which is what the source actually wrote.
+    // So it IS still claimed; what matters is that nothing is lost.
+    const handleRef = await mounted('ab');
+    handleRef.current!.editor!.commands.setTextSelection(2);
+
+    paste({ plain: '```markdown\n\n```' });
+
+    await waitFor(() => {
+      // Both characters survive, and the empty fence lands between them.
+      expect(handleRef.current!.getMarkdown()).toBe('a\n\n```markdown\n\n```\n\nb');
+    });
+    // Stated separately so the swallow fails BY NAME rather than as a diff:
+    // the pre-fix document was exactly `ab`.
+    expect(handleRef.current!.getMarkdown()).not.toBe('ab');
+  });
+
+  it('leaves two markdown-tagged wrappers to CommonMark, rather than guessing', async () => {
+    // Dropping the FIRST open and the LAST close would leave the inner
+    // ```markdown marker as literal text inside a code block — no content
+    // lost, but marker text in the note. CommonMark reads this as two clean
+    // code blocks, which is better, so the unwrap declines and the HTML check
+    // runs as usual.
+    const handleRef = await mounted();
+    const plain = '```markdown\nA\n```\n\n```markdown\nB\n```';
+
+    expect(claimedByMarkdownPaste(handleRef, { plain, html: '<h1>Something else</h1>' })).toBe(
+      false,
+    );
+    // With no HTML to defer to, CommonMark's reading is what lands: two code
+    // blocks, and the marker text is confined to their language tags rather
+    // than appearing in the body.
+    paste({ plain });
+
+    await waitFor(() => {
+      const kinds: string[] = [];
+      handleRef.current!.editor!.state.doc.descendants((node) => {
+        kinds.push(node.type.name);
+      });
+      expect(kinds.filter((kind) => kind === 'codeBlock')).toHaveLength(2);
+    });
+    expect(handleRef.current!.getMarkdown()).toContain('A');
+    expect(handleRef.current!.getMarkdown()).toContain('B');
+  });
+
   it('does not claim a whitespace-only paste, which would swallow the characters', async () => {
     // `'   '` and `'\n'` parse to one empty paragraph, whose inline slice
     // inserts NOTHING — so claiming the event suppressed the browser and the

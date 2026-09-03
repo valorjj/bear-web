@@ -367,9 +367,13 @@ lines 63 and 69. So the wrapper closes at line 63 and parsing yields 3
 paragraphs plus 2 code blocks with the diagram stranded between them.
 
 **Measured.** Removing the two wrapper lines and parsing the rest yields
-`{heading: 10, bulletList: 3, horizontalRule: 4, paragraph: 3, table: 1,
-orderedList: 3, codeBlock: 1}` — 25 top-level nodes, the whole document, the
-diagram intact as one code block. Note the fence does **not** wrap the whole
+`{heading: 10, bulletList: 3, horizontalRule: 4, paragraph: 5, table: 1,
+orderedList: 3, codeBlock: 1}` — 27 top-level nodes, the whole document, the
+diagram intact as one code block. That is the PARSE-level count; the mounted
+editor shows 28 with `paragraph: 6`, because StarterKit's `TrailingNode`
+appends one empty paragraph after a block-level paste. Both re-measured on
+2026-09-03 — an earlier draft of this section said `paragraph: 3` and 25,
+which was simply wrong. Note the fence does **not** wrap the whole
 payload: lines 1-4 are Korean prose preamble, which is why only the two
 wrapper lines come off rather than everything outside them.
 

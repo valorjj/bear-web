@@ -68,7 +68,7 @@ describe('unwrapMarkdownFence', () => {
     // a CommonMark closing fence need only match the opening's LENGTH, so line
     // 63 closes the wrapper and the diagram is stranded between two code
     // blocks. Dropping the two wrapper lines and parsing the rest yields the
-    // whole 25-node document with the diagram as one code block.
+    // whole 27-node document with the diagram as one code block.
     const unwrapped = unwrapMarkdownFence(GEMINI_PLAIN);
 
     expect(unwrapped).not.toBeNull();
@@ -108,6 +108,20 @@ describe('unwrapMarkdownFence', () => {
     ['a four-backtick opening closed by three', '````markdown\n## Hi\n```'],
     // Four spaces of indent is an indented code block, not a fence.
     ['an indented would-be fence', '    ```markdown\n    ## Hi\n    ```'],
+    // AN EMPTY MARKDOWN DOCUMENT IS NOT A DOCUMENT, and unwrapping one used to
+    // SWALLOW THE PASTE: `handlePaste`'s `text.trim() === ''` guard runs on the
+    // pre-unwrap text, so it cannot see a payload that becomes blank only
+    // afterwards. Measured with the caret between `a` and `b` in a note
+    // reading `ab`: claimed, nothing inserted, characters gone.
+    ['a wrapper around nothing', '```markdown\n\n```'],
+    ['a wrapper around whitespace only', '```markdown\n   \n```'],
+    ['a wrapper around blank lines and tabs', '```markdown\n\n\t \n\n```'],
+    // TWO wrappers is not one wrapper, and guessing which pair is the outer
+    // one mangles it: dropping the first open and the last close leaves the
+    // inner marker as literal text inside a code block. CommonMark's own
+    // reading — two clean code blocks — is better, so decline.
+    ['two markdown-tagged wrappers', '```markdown\nA\n```\n\n```markdown\nB\n```'],
+    ['two md-tagged wrappers, mixed case', '```MD\nA\n```\n\n```md\nB\n```'],
   ])('returns null for %s', (_label, text) => {
     expect(unwrapMarkdownFence(text)).toBeNull();
   });
