@@ -68,6 +68,70 @@
         } catch (error) {
           /* Storage unavailable; the media query decides. */
         }
+
+        /*
+          The reader's typography, for the same reason and by the same means as
+          the theme above: IndexedDB is async and cannot paint the first frame,
+          so without this every launch renders at 16px/40em and then reflows the
+          whole note. Bounds and property names are duplicated from
+          `src/app/typography.ts` because a module import would be async;
+          `scripts/sourceLint.test.ts` asserts the two agree.
+
+          A separate try/catch, so a corrupt typography entry cannot cost the
+          theme its no-flash behaviour, or the reverse.
+        */
+        try {
+          var units = {
+            fontSize: 'px',
+            lineHeight: '',
+            lineWidth: 'em',
+            paraSpacing: 'em',
+            paraIndent: 'em',
+          };
+          var props = {
+            fontSize: '--bear-font-size',
+            lineHeight: '--bear-line-height',
+            lineWidth: '--bear-line-width',
+            paraSpacing: '--bear-para-spacing',
+            paraIndent: '--bear-para-indent',
+          };
+          var bounds = {
+            fontSize: [13, 22],
+            lineHeight: [1.3, 2],
+            lineWidth: [30, 70],
+            paraSpacing: [0, 1.5],
+            paraIndent: [0, 3],
+          };
+          var type = JSON.parse(localStorage.getItem('bear-web:typography'));
+          var valid = type !== null && typeof type === 'object';
+          /*
+            All five or none. A half-applied preference is a worse first frame
+            than the default one, and it would disagree with the app, whose
+            guard is all-or-nothing for the same reason.
+
+            Written as "must be INSIDE the range", not "must not be outside
+            it", and the difference is NaN. Every comparison against NaN is
+            false, so `n < min || n > max` is false for NaN and lets it
+            through — which would set `--bear-font-size: NaNpx` on the very
+            first frame. `!(n >= min && n <= max)` rejects it.
+          */
+          for (var field in bounds) {
+            var n = valid ? type[field] : null;
+            if (!(typeof n === 'number' && n >= bounds[field][0] && n <= bounds[field][1])) {
+              valid = false;
+            }
+          }
+          if (valid) {
+            for (var name in props) {
+              document.documentElement.style.setProperty(
+                props[name],
+                String(type[name]) + units[name],
+              );
+            }
+          }
+        } catch (error) {
+          /* Storage unavailable or the entry is corrupt; the tokens decide. */
+        }
       })();
     </script>
   </head>
