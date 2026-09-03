@@ -37,10 +37,84 @@ believe the table and fix this file.
 | A table pasted into a table cell is silently dropped | not started — found in N's final whole-branch review. Caret in cell `a` of a two-column table, paste `\| x \| y \|\n\| --- \| --- \|\n\| 7 \| 8 \|`: the result is `\| <br>a \| b \|` — `x`, `y`, `7`, `8` are gone and a stray hardBreak is left in cell `a`. Not a regression — pre-N inserted nothing there either — but N turns a reachable path into silent content loss, and the code-block guard added in the fix wave (`selection.$from.parent.type.spec.code`) does not cover a table target. Likely shape of a fix: detect a table-in-table paste and either flatten the pasted cells into the target cell or refuse the paste outright — refusing is the cheaper correct answer. |
 | `decoded`'s cache in `pastedMarkdown.ts` is unbounded | not started — found in N's final whole-branch review. `src/features/editor/pastedMarkdown.ts` memoises entity decodes in a module-level `Map`, keyed by anything matching `&[a-zA-Z][a-zA-Z0-9]{1,31};`, and caches MISSES as well as hits, so a large or hostile paste containing many distinct non-entities grows it for the session's lifetime. Low severity — bounded by what a user actually pastes, and each entry is tiny — but the fix is small: don't cache `null`, or cap the map. |
 | `e2e/imageResize.spec.ts`'s drag-resize persistence test fails ALONE and passes in the full suite | not started — this repo's habit is to blame e2e failures on machine load, and that habit is wrong here. The controller ran this one spec alone on a QUIET machine (load average 2.6, no contention) and it failed 2 of 3 runs on `main` and 3 of 3 on N's branch. The assertion is `expect(Math.abs(restored - after)).toBeLessThan(8)` at `e2e/imageResize.spec.ts:68`; it received **172** — a drag-resized image's width does not survive a reload, reverting by ~172px. It is a K3 (image resize) defect the full suite's noise had been hiding behind "flakes under load." The 3/3-vs-2/3 difference between branches is itself inside the noise at n=3, and N is not implicated — N touches only paste code, and a `handlePaste` plugin has no path to pointer-drag width persistence. Every characterisation attempted here has been an overclaim, and this line records the third and final one rather than re-editing the earlier two. Measured on idle machines (load 2.4-2.6): run ALONE, 3/3 fail on the feature branch and 2/3 on `main`; inside the FULL suite, it passed twice and then failed once. So it is simply INTERMITTENT, at a high enough rate to reproduce on demand — not deterministic, and not load-driven either, since every one of those runs was on a quiet machine. "Broken, not flaky" was wrong; so was "fails alone, passes in the suite". No mechanism was ever found. Whoever picks this up should reproduce with the single-spec run, expect roughly a 2-in-3 failure rate, and treat one green run as meaningless. |
-| **Q typography settings** | NOT STARTED, and it is the next real sub-project. The user's words: "the content area looks cramp. I really want to add 'setting' and line height, width, font-size. Just like bear." Bear's own panel (환경설정 → 타이포그래피) offers text/heading/code font, size in pt, line height in em, line width in em, paragraph spacing and indent, plus a reset. Decided already: **per-device persistence is enough** — `useSetting` (`src/app/useSetting.ts`) stores in Dexie with optimistic writes and flush triggers, and the sync engine deliberately does NOT carry the `settings` table (its transaction list is notes/noteTags/noteLinks/files/noteFolds/syncState), so cross-device would need a server change and was explicitly declined for now. The tokens already exist: `--bear-font-size: 16px`, `--bear-line-height: 1.6` and the editor measure, all in tokens.css's "Global — NOT themeable" tier. **This will not fit under the bundle ceiling as it stands — see the row below.** |
-| The bundle ceiling is spent: **146 B** of headroom | Measured at `2f4f83d`. The frozen ceiling is 348,000 B and the eager closure is 347,854 B. Sub-project P alone consumed 306 B, and its first draft cost 960 B — **almost entirely CSS COMMENTS**, which ship in the eager chunk AND in every exported file, a cost nobody had measured before. Three consecutive sub-projects have now each paid for themselves in bytes they did not have. The next feature of any size either raises the ceiling (a decision reserved for the user, recorded in `scripts/bundleSize.test.ts`'s docblock) or moves something eager behind a `React.lazy` boundary. `themes-*` is 232,910 B of the closure and is the obvious candidate; that is a sub-project, not a patch. |
+| **Q typography settings** | SHIPPED 2026-09-03 — see the section below |
+| The bundle ceiling is **351,000 B**, raised by the user on 2026-09-03 | Q shipped at **349,360 B**, a true eager cost of **1,505 B**, leaving **1,640 B**. Two claims this row used to make were wrong and are corrected in `scripts/bundleSize.test.ts`'s docblock with the measurements: a fourth `React.lazy` root makes the closure WORSE (+322 B), and `themes-*` is not the theme code — Rolldown's chunk names are arbitrary, the ~234 KB chunk is Tiptap/ProseMirror/React/lowlight, and splitting the real theme roster out nets about **-322 B**. The "ceiling comes down if Q lands under" condition did NOT fire: measured plus the ~3 KB practice is 352,360, higher than the ceiling already in force, so honouring it literally would have raised the number again. |
 | An empty row above the header in some pasted tables | BLOCKED ON A FILE, not on analysis. The user reported it from a note titled 우리가 직접 답할 수 없는 질문들. Ruled out by measurement: our table PARSE is correct (`tableRow > tableHeader`, verified against the committed `src/features/editor/fixtures/geminiAnswer.plain.txt`), and `.bear-table-handles` is `height: 0; pointer-events: none` so the handle layer cannot occupy a row. Most likely the empty header row is in that note's own source Markdown. Ask the user to export it (⋯ → Markdown) before spending any more time reasoning. |
 | Two editor/export divergences left open | Recorded during P's follow-up rather than fixed: the export has no title-line treatment, and its heading sizes are literals where the editor derives them from `--bear-heading-ratio`. Neither is visible in the four themes whose PDFs were pixel-verified; both will drift further as the editor gains typography controls, so Q should close them rather than widen them. |
+
+### Q. Typography settings — SHIPPED 2026-09-03
+
+Spec: `docs/superpowers/specs/2026-09-03-q-typography-settings-design.md`.
+Plan: `docs/superpowers/plans/2026-09-03-q-typography-settings.md`.
+
+From the user, out of real use: *"the content area looks cramp. I really want
+to add 'setting' and line height, width, font-size. Just like bear."* Five
+controls — font size, line height, line width, paragraph spacing, paragraph
+indent — in a modal opened from the sidebar footer, applied live, persisted per
+device, and carried into every export including the server-rendered PDF.
+
+**Four measurements were taken before anything was decided, and three of them
+changed the plan.**
+
+1. The eager closure had **145 B** of headroom. Q needed more under any shape.
+2. **Going lazier is negative here.** Converting `ThemeDialog` to `React.lazy`
+   took the closure from 347,854 B to 348,176 B — four eager chunks became six,
+   and the re-hoisted runtime cost 322 B more than deferring the whole dialog
+   saved. The freeze's first escape hatch was therefore closed by measurement,
+   not argued away.
+3. **`themes-*` was a misread filename.** In that same spike the ~234 KB chunk
+   came back named `notes-*` while a new 1,049 B chunk took the name
+   `themes-*`. This file had called it "the obvious candidate" for a lazy
+   split; the split nets about **-322 B**.
+4. The export already forwarded all five typography tokens off the live
+   cascade, so parity was free — but its `h1/h2/h3` were `1.6/1.35/1.15em`,
+   the **pre-M9a** scale, against the editor's derived `1.728/1.44/1.2`. Not
+   "literals where the editor derives", as this file had it: the WRONG
+   literals, for two milestones, because nothing compared the two files.
+
+**Two design decisions were revised while specing, and both are recorded in
+the spec.** The hook is shaped like `useTheme`, not `useSetting` — typography
+needs a paint-time mirror, and `useSetting` renders at its fallback until
+IndexedDB answers, which for a font size is the whole note reflowing on every
+launch. And Q CLOSES the two editor/export divergences rather than widening
+them, because user-controlled type is exactly what would have made them
+visible.
+
+**Three defects came out of building the hook, each found by a failing test
+and each measured before being characterised.** The heal fired when there was
+nothing to heal, writing `DEFAULTS` into the row and re-triggering the live
+query over a value the user had just chosen. The heal's read is asynchronous,
+so a change landing inside its window was overwritten by the first-render
+value the callback still held. And the live query's mount-time read resolves
+with a distinct-but-equal object, whose reference inequality re-ran the apply
+effect and rewrote the mirror with the older value — fixed with `useSetting`'s
+optimistic slot, needed here for a different reason than `useSetting` needs
+it. The third is stated no stronger than it was measured: transient and
+self-correcting, invisible to a settle-then-assert test, and fixed mainly
+because it made a test file fail 3-5 runs in 10.
+
+**What the harness could not see, and running the app could.** At a 1280
+viewport with three panes the editor pane is 656px, so the prose is capped at
+608px while the 40em default already computes to 640px — **dragging Line width
+rightward there does nothing**, and only the downward half of its range has any
+effect. At 1800 both directions work. That is the clamp behaving correctly, and
+it reframes the original report: at laptop widths "cramped" is a pane problem,
+not a measure problem. Recorded in `docs/rulings/design-tokens-and-layout.md`
+so nobody "fixes" the control.
+
+**Two of this session's own assertions were wrong and were corrected rather
+than left standing.** A `Number.isFinite` check in the guard was dead — the
+bound comparison already rejects NaN, since every comparison against it is
+false — and the test whose comment claimed to prove it passed with the check
+deleted. A regression test written for the mirror race passed 8/8 against the
+unfixed hook and was deleted for being vacuous. And an e2e comment claiming to
+test NaN through the pre-paint path was wrong in a subtler way: that path is
+`JSON.parse`, which has no NaN literal, so the reachable non-finite value is
+`1e999`.
+
+**Shipped at 349,360 B**, +1,505 B, with `measure:check` passing unchanged —
+which is the assertion that the reading preference stayed in the prose and out
+of the chrome.
 
 ### N. Paste Markdown as Markdown — SHIPPED 2026-09-02
 

@@ -66,6 +66,8 @@ export const EXPORT_TOKEN_NAMES = [
   '--bear-line-width',
   '--bear-para-spacing',
   '--bear-para-indent',
+  '--bear-heading-ratio',
+  '--bear-title-gap',
 ] as const;
 
 export type ExportTokenName = (typeof EXPORT_TOKEN_NAMES)[number];
@@ -150,6 +152,8 @@ const FALLBACKS: Record<ExportTokenName, string> = {
   '--bear-line-width': '40em',
   '--bear-para-spacing': '0em',
   '--bear-para-indent': '0em',
+  '--bear-heading-ratio': '1.2',
+  '--bear-title-gap': '1.75em',
 };
 
 /** Resolves every export token against the live cascade at `root`. */
@@ -575,9 +579,21 @@ ${declarations}
       margin-top: 0;
     }
 
-    h1 { font-size: 1.6em; }
-    h2 { font-size: 1.35em; }
-    h3 { font-size: 1.15em; }
+    body > :is(p, h1, h2, h3, h4, h5, h6):first-child {
+      font-size: calc(var(--bear-heading-ratio) * var(--bear-heading-ratio) * var(--bear-heading-ratio) * 1em);
+      color: var(--bear-accent);
+      font-weight: 700;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+    }
+
+    body > :is(p, h1, h2, h3, h4, h5, h6):first-child + * {
+      margin-top: calc(var(--bear-title-gap) + var(--bear-para-spacing));
+    }
+
+    h1 { font-size: calc(var(--bear-heading-ratio) * var(--bear-heading-ratio) * var(--bear-heading-ratio) * 1em); }
+    h2 { font-size: calc(var(--bear-heading-ratio) * var(--bear-heading-ratio) * 1em); }
+    h3 { font-size: calc(var(--bear-heading-ratio) * 1em); }
     h4, h5, h6 { font-size: 1em; }
 
     ul, ol {

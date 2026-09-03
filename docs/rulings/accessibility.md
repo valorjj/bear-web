@@ -635,3 +635,24 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   trap" tests assert both directions (`Tab` from the last control back to the
   first, `Shift+Tab` from the first back to the last) for exactly this
   reason: a trap that only wraps one direction is not a trap.
+
+- **A range input's accessible name is its label ALONE; the value goes in
+  `aria-valuetext` and the visible readout is an `aria-hidden` SIBLING.**
+  `TypographyPanel` renders `<label htmlFor>` and the readout as separate
+  elements for this reason. Putting the readout inside the label makes every
+  slider announce as "Font size 16 px" while `aria-valuetext` says the value
+  again — the concatenated-name defect this project has now shipped three
+  times (`SidebarRow`'s lost space, `NoteListItem`'s three spans,
+  `ThemeDialog`'s sample sentence, fixed by `aria-label`). The guard is
+  `TypographyPanel.test.tsx`, and moving the readout inside the label fails
+  six of its eight tests.
+
+- **`aria-valuetext` carries the unit, because the number alone is not
+  speech.** "1.6" and "40" mean nothing read aloud; "40 em" does. Line height
+  is the one field with no unit, and it is `null` in `ROWS` rather than an
+  empty string so the omission is a decision rather than a missing value.
+
+- **Reset is never disabled, including when every value is already default.**
+  A control a user reaches for and cannot press explains nothing about why.
+  Pressing it at the defaults is a no-op the user can see the result of, which
+  is better feedback than a greyed-out button.

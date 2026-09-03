@@ -582,3 +582,71 @@ describe('the spacing scale', () => {
     }
   });
 });
+
+describe('the pre-paint typography script', () => {
+  const html = readFileSync('index.html', 'utf8');
+  const model = readFileSync('src/app/typography.ts', 'utf8');
+
+  it('reads the same storage key the app writes', () => {
+    const key = model.match(/TYPOGRAPHY_MIRROR_KEY = '([^']+)'/)![1]!;
+    expect(html).toContain(`localStorage.getItem('${key}')`);
+  });
+
+  /*
+   * The script cannot import `BOUNDS` — a module import is async, and the
+   * whole point is to run before first paint. So the bounds are duplicated,
+   * and this is what stops them drifting. Drift is silent, and worst in one
+   * direction specifically: bounds WIDER here than in the model let a
+   * hand-edited mirror paint an unreadable first frame that the app then
+   * corrects, which reads as a flash with no cause.
+   */
+  it('duplicates exactly the model bounds', () => {
+    const declared = [
+      ...model.matchAll(/(\w+): \{ min: ([\d.]+), max: ([\d.]+), step: [\d.]+ \}/g),
+    ];
+    expect(declared.length, 'no bounds parsed out of typography.ts').toBe(5);
+
+    const script = html.match(/var bounds = \{([\s\S]*?)\};/)![1]!;
+    for (const [, field, min, max] of declared) {
+      expect(script, `${field} missing or wrong in the pre-paint script`).toContain(
+        `${field}: [${min}, ${max}]`,
+      );
+    }
+    expect([...script.matchAll(/\w+: \[/g)].length).toBe(5);
+  });
+
+  /*
+   * The five property names are duplicated too, and a typo in one is the
+   * quietest failure in this whole feature: four tokens apply, one does not,
+   * and the note renders in a shape no code path ever intended.
+   */
+  it('names exactly the properties the model writes', () => {
+    const declared = [...model.matchAll(/'(--bear-[a-z-]+)':/g)].map((match) => match[1]!);
+    expect(declared.length, 'no properties parsed out of typography.ts').toBe(5);
+
+    const script = html.match(/var props = \{([\s\S]*?)\};/)![1]!;
+    for (const name of declared) {
+      expect(script, `${name} missing from the pre-paint script`).toContain(`'${name}'`);
+    }
+    expect([...script.matchAll(/'--bear-[a-z-]+'/g)].length).toBe(5);
+  });
+
+  /*
+   * It has to beat the module that renders the app, or it is decorative.
+   *
+   * The `not.toBe(-1)` is load-bearing rather than belt-and-braces: `indexOf`
+   * returns -1 when the string is ABSENT, and -1 is less than any real index,
+   * so the ordering assertion alone passes when the script does not exist at
+   * all. Written that way first, it was green before a line of the script had
+   * been added. (The theme script's equivalent at the top of this file has the
+   * same shape and the same hole; it is only safe because other assertions in
+   * its block would fail first.)
+   */
+  it('runs before the app script', () => {
+    const script = html.indexOf('bear-web:typography');
+    const app = html.indexOf('/src/main.tsx');
+    expect(script, 'the pre-paint typography script is absent entirely').not.toBe(-1);
+    expect(app, 'the app script tag is absent entirely').not.toBe(-1);
+    expect(script).toBeLessThan(app);
+  });
+});

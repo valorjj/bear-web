@@ -284,6 +284,7 @@ export {
   Quote,
   Info,
   Palette,
+  Type as TypeGlyph,
   Download,
   FileCode,
   Table as TableGlyph,

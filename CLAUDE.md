@@ -69,10 +69,11 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | L5 server-rendered Mermaid diagrams                               | complete |
 | M publish: a public read-only URL for one note                    | complete |
 | N paste Markdown as Markdown                                      | complete |
+| Q typography settings: the reader's five prose controls           | complete |
 
-2593 unit tests (plus 203 server tests, 112 of which are integration tests that
-skip when `TEST_DATABASE_URL` is unset, and 71 renderer tests behind
-`npm run test:pdf`), 220 end-to-end tests. `main` is always green and
+2736 unit tests pass and 112 skip (the server integration tests, which skip
+when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
+`npm run test:pdf`), 225 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**

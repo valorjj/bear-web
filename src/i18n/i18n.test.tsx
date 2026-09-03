@@ -52,10 +52,15 @@ describe('translation bundles', () => {
     //   ones (Paper, Ink, Snow, Sepia, High Contrast) go with them so the group
     //   stays internally consistent; splitting it by etymology is a judgement
     //   nobody can apply again later without re-deciding it.
+    // - `typography.unit.px` and `typography.unit.em` are CSS unit SYMBOLS.
+    //   Korean writes them exactly as CSS does; there is nothing to translate,
+    //   and `16 픽셀` would be a different claim from what the slider sets.
     const ALLOWED_IDENTICAL = [
       'app.name',
       'export.html',
       'export.pdf',
+      'typography.unit.px',
+      'typography.unit.em',
       ...Object.keys(en).filter((key) => key.startsWith('theme.')),
     ];
 

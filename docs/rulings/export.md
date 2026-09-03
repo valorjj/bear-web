@@ -340,3 +340,45 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   `server/README.md`'s host-split section. This is the snapshot model: a
   published page is a photograph of the note at publish time, not a live view
   of it, and it stays that way until a republish sends a new photograph.
+
+- **The export's heading sizes DERIVE from `--bear-heading-ratio`, and the
+  literals they replaced were not merely un-derived — they were wrong.** From
+  M9a until sub-project Q the export shipped `h1: 1.6em`, `h2: 1.35em`,
+  `h3: 1.15em`, which `tokens.css:137` names in its own comment as "the
+  previous" scale. M9a replaced it with `--bear-heading-ratio: 1.2` and the
+  editor's derived `1.728 / 1.44 / 1.2`; the export kept the old numbers for
+  two milestones because nothing in the repo compared the two files. Q closed
+  it, because a divergence nobody can see becomes visible the moment the
+  reader controls the font size. Never re-literalise these. The guard is
+  `html.test.ts`'s "sizes %s exactly as editor.css does", which reads the REAL
+  `editor.css` through the existing `?raw` import rather than restating a
+  number — so it also catches a future drift introduced from the EDITOR side,
+  which a hardcoded expectation could not. It normalises whitespace and the
+  padding Prettier leaves inside a wrapped `calc( … )`; that normalisation is
+  comparing meaning rather than formatting, and reformatting either file to
+  make a naive comparison pass would be the wrong repair.
+
+- **The exported document gives its first block the same title treatment the
+  editor gives it**, mirroring `editor.css:218` and `:238`: `ratio³`, the
+  accent, weight 700, `line-height: 1.25`, `letter-spacing: -0.02em`, and the
+  separator placed as `margin-top` on the FOLLOWING sibling rather than as a
+  bottom margin on the title — adjacent margins collapse in a block container,
+  so a bottom margin would silently lose to whichever of the two is larger.
+  Specificity is `(0,1,2)` for `body > :is(p, h1…h6):first-child` against the
+  heading group's `(0,0,1)` and `body > * + *`'s `(0,0,1)`, so both title rules
+  win on specificity rather than on source order. This is safe only because the
+  export puts nothing before the note's own first block — the note title
+  appears in `<title>` and nowhere in `<body>`.
+
+- **`--bear-heading-ratio` and `--bear-title-gap` are forwarded tokens with
+  fallbacks (`1.2`, `1.75em`), like every other name in
+  `EXPORT_TOKEN_NAMES`.** The existing "defines every custom property it
+  references" test is what enforces the pairing: removing either name from the
+  list while a rule still references it fails there, loudly, rather than
+  shipping a document whose headings silently collapse to the initial value.
+
+- **Comments in the export stylesheet are bytes, twice over.** They ship in the
+  eager chunk AND in every exported file — sub-project P's first draft cost
+  960 B, almost entirely CSS comments. The rules Q added carry none; their
+  reasoning is the three bullets above. This is why the stylesheet already
+  says its reasoning lives in this file.

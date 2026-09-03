@@ -386,6 +386,17 @@ export const en = {
   'palette.command.signIn': 'Sign in',
   'palette.command.signOut': 'Sign out',
   'palette.command.syncNow': 'Sync now',
+  'typography.open': 'Typography',
+  'typography.label': 'Typography',
+  'typography.fontSize': 'Font size',
+  'typography.lineHeight': 'Line height',
+  'typography.lineWidth': 'Line width',
+  'typography.paraSpacing': 'Paragraph spacing',
+  'typography.paraIndent': 'Paragraph indent',
+  'typography.reset': 'Reset',
+  'typography.done': 'Done',
+  'typography.unit.px': 'px',
+  'typography.unit.em': 'em',
 } as const;
 
 export type TranslationKey = keyof typeof en;
