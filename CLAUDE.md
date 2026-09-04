@@ -73,7 +73,7 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 
 2753 unit tests pass and 112 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
-`npm run test:pdf`), 244 end-to-end tests pass and 1 skips. `main` is always green and
+`npm run test:pdf`), 245 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**
