@@ -359,3 +359,42 @@ and its `CEILING_BYTES`; `build.manifest` in `vite.config.ts`; any new
   described behaviour exist" by re-reading the existing tests, rather than by
   checking each requirement individually, will not catch an omission the
   tests never asserted in the first place.
+
+- **`scripts/sourceLint.test.ts` fails on ANY runtime import cycle under
+  `src/`, and the answer to a failure is to break the cycle, never to add an
+  exception.** A cycle here fails at MODULE INITIALISATION, not at build time:
+  `src/features/editor/markdown.ts` builds its `MarkdownManager` and `schema`
+  from `editorExtensions` at module top level, so a cycle reaching it leaves
+  that binding `undefined` and the app renders nothing. Sub-project N shipped
+  exactly that — `build`, `typecheck`, `lint`, `format` and 2473 unit tests all
+  passed, and three code reviews read the diff without seeing it, because it
+  lives in the import graph rather than in any line of the diff.
+
+- **`import type` and dynamic `import()` are excluded from that graph, on
+  purpose.** `verbatimModuleSyntax` guarantees type-only edges are written as
+  `import type` and they are erased, so they cannot participate in an
+  initialisation cycle; a dynamic `import()` is deferred, which is precisely
+  what makes a `React.lazy` boundary safe. An inline `import { type A, b }` IS
+  a runtime edge and is counted, because `b` is.
+
+- **The graph check does not replace
+  `src/features/editor/importCycle.test.ts`, and both are kept.** The static
+  check reads the import graph; the other actually EVALUATES the two modules in
+  the fatal order and asserts the binding survived. A graph check cannot see
+  that `markdown.ts` builds from `editorExtensions` at module scope, and that
+  property is what turns a cycle into a blank page rather than a harmless one.
+
+- **Two "guard the guard" assertions sit beside it and are not redundant.** A
+  resolver that silently returned nothing would make the cycle walk vacuously
+  green — this repo's worst failure shape. Breaking `moduleFile` was injected:
+  the cycle test still PASSED and only the graph-has-edges and
+  specifier-resolution assertions failed.
+
+- **Which END of a cycle you break is worth measuring, because the two are not
+  interchangeable.** The one cycle that existed when this check was written
+  (`export/index -> exportNote -> html -> editor/index -> RichEditor ->
+export/index`) could be broken at either edge. Breaking it in `html.ts`, by
+  importing the four editor leaves instead of the barrel, measured
+  **-1,222 B** — the barrel had been dragging `RichEditor` and everything it
+  reaches into the export path. Breaking it in `RichEditor.tsx` instead
+  removed the cycle equally well and **cost 329 B**.

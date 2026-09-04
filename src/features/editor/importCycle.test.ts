@@ -7,8 +7,15 @@
 // these two in this order.
 //
 // What this catches and what it does not: it reproduces THAT order, not any
-// future cycle in another direction. A static cycle check over
-// `src/features/editor/` would be stronger and is recorded as follow-up.
+// future cycle in another direction. The stronger check this comment used to
+// ask for now exists — `scripts/sourceLint.test.ts`'s "has no runtime import
+// cycles" walks the whole of `src/` and fails on a cycle in any direction.
+//
+// This file is kept alongside it rather than replaced, because the two prove
+// different things. The static check reads the import GRAPH; this one actually
+// EVALUATES the modules in the fatal order and asserts the binding survived.
+// A graph check cannot see that `markdown.ts` builds from `editorExtensions`
+// at module scope, which is the property that turns a cycle into a blank page.
 import { editorExtensions } from './extensions';
 
 import { describe, expect, it } from 'vitest';

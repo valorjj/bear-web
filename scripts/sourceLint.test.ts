@@ -60,6 +60,52 @@ function resolveImport(fromFile: string, specifier: string): string | null {
 }
 
 /**
+ * The file a specifier names, since a specifier names a MODULE and not a path:
+ * `./extensions` may be `extensions.ts`, and `@/features/export` is that
+ * directory's `index.ts`.
+ */
+function moduleFile(base: string): string | null {
+  const candidates = [
+    `${base}.ts`,
+    `${base}.tsx`,
+    join(base, 'index.ts'),
+    join(base, 'index.tsx'),
+    base,
+  ];
+  return candidates.find((path) => existsSync(path) && statSync(path).isFile()) ?? null;
+}
+
+/**
+ * Every RUNTIME import edge out of `file`.
+ *
+ * `import type` and `export type` are excluded because
+ * `verbatimModuleSyntax` guarantees they are written that way and they are
+ * erased entirely — a type-only edge cannot participate in an initialisation
+ * cycle. A dynamic `import()` is excluded for the same reason from the other
+ * direction: it is deferred, which is exactly what makes `React.lazy`
+ * boundaries safe. An inline `import { type A, b }` IS a runtime edge and is
+ * matched, because `b` is.
+ */
+function runtimeImports(file: string): string[] {
+  const source = readFileSync(file, 'utf8');
+  const edges = new Set<string>();
+
+  for (const pattern of [
+    /(?:^|\n)\s*import\s+(?!type\s)[^;]*?\s*from\s*['"]([^'"]+)['"]/g,
+    /(?:^|\n)\s*export\s+(?!type\s)[^;]*?\s*from\s*['"]([^'"]+)['"]/g,
+  ]) {
+    for (const match of source.matchAll(pattern)) {
+      const base = resolveImport(file, match[1]!);
+      if (base === null) continue;
+      const target = moduleFile(base);
+      if (target !== null && target !== file) edges.add(target);
+    }
+  }
+
+  return [...edges];
+}
+
+/**
  * `--name: value` pairs inside the first `{ … }` following `selector`.
  *
  * `selector` is matched as raw TEXT, so **leading indentation is
@@ -648,5 +694,72 @@ describe('the pre-paint typography script', () => {
     expect(script, 'the pre-paint typography script is absent entirely').not.toBe(-1);
     expect(app, 'the app script tag is absent entirely').not.toBe(-1);
     expect(script).toBeLessThan(app);
+  });
+});
+
+/*
+ * A circular import here fails at MODULE INITIALISATION, not at build time,
+ * and every other gate passes.
+ *
+ * `src/features/editor/markdown.ts` builds its `MarkdownManager` and its
+ * `schema` from `editorExtensions` at module top level, so any cycle reaching
+ * it leaves that binding `undefined`, `getSchema` throws, and THE APP RENDERS
+ * NOTHING. Sub-project N shipped exactly that: `npm run build` succeeded,
+ * typecheck, lint and format passed, 2473 unit tests passed, and three code
+ * reviews read the diff without seeing it — because it lives in the import
+ * graph rather than in any line of the diff. It was found by running the app.
+ *
+ * `src/features/editor/importCycle.test.ts` pins the ONE order that broke, by
+ * importing those two modules in it. This is the stronger check its own
+ * comment asks for: any cycle, in any direction, anywhere under `src/`.
+ *
+ * When this fails, do not add an exception. Break the cycle — usually by
+ * importing a LEAF module instead of a barrel, which is how the one cycle
+ * that existed when this test was written was removed (`RichEditor.tsx`
+ * reaching `@/features/export` closed
+ * `export/index -> exportNote -> html -> editor/index -> RichEditor`).
+ */
+describe('the import graph', () => {
+  const SOURCES = walk('src', ['.ts', '.tsx']).filter((path) => !/\.test\.tsx?$/.test(path));
+
+  it('finds a graph with edges in it', () => {
+    // Guards the guard: a resolver that returned nothing would make the cycle
+    // check below vacuously green, which is this repo's worst failure shape.
+    expect(SOURCES.length).toBeGreaterThan(50);
+    expect(SOURCES.reduce((total, file) => total + runtimeImports(file).length, 0)).toBeGreaterThan(
+      100,
+    );
+  });
+
+  it('resolves the specifier forms this codebase actually writes', () => {
+    // Alias, relative file, and barrel directory — the three shapes, each
+    // asserted against a module that really exists.
+    expect(moduleFile('src/features/export')).toBe(join('src/features/export', 'index.ts'));
+    expect(moduleFile('src/features/editor/markdown')).toBe('src/features/editor/markdown.ts');
+    expect(moduleFile('src/nonexistent/module')).toBeNull();
+  });
+
+  it('has no runtime import cycles', () => {
+    const seen = new Map<string, number>();
+    const stack: string[] = [];
+    const cycles: string[] = [];
+
+    function visit(file: string): void {
+      seen.set(file, 1);
+      stack.push(file);
+      for (const next of runtimeImports(file)) {
+        if (seen.get(next) === 1) {
+          cycles.push([...stack.slice(stack.indexOf(next)), next].join('\n    -> '));
+        } else if (seen.get(next) === undefined) {
+          visit(next);
+        }
+      }
+      stack.pop();
+      seen.set(file, 2);
+    }
+
+    for (const file of SOURCES) if (seen.get(file) === undefined) visit(file);
+
+    expect(cycles.join('\n\n'), 'runtime import cycle(s) found').toBe('');
   });
 });

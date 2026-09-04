@@ -817,6 +817,16 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
   now pins that one order. The underlying hazard remains: making
   `markdown.ts`'s two module-scope constructions lazy is the real cure.
 
+  **Since 2026-09-04 a stronger check exists**: `scripts/sourceLint.test.ts`'s
+  "has no runtime import cycles" walks every runtime edge under `src/` and
+  fails on a cycle in ANY direction, where `importCycle.test.ts` reproduces
+  only the one order that broke. Both are kept — the graph check reads
+  imports, the other evaluates them. It found one live cycle on its first
+  run (`export/index -> exportNote -> html -> editor/index -> RichEditor ->
+export/index`), latent for the same reason N's was: the order happened to
+  work. Breaking it in `html.ts` also reclaimed **1,222 B**; breaking the
+  same cycle at the other end would have cost 329 B.
+
 - **A test fixture asserting on an invisible character cannot be reviewed, and
   no gate can see it.** `&nbsp;` decodes to U+00A0, not U+0020, so
   `pastedMarkdown.test.ts` asserts `'a\u00A0b'` as a visible six-character

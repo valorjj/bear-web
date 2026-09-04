@@ -2,7 +2,32 @@ import { getSchema } from '@tiptap/core';
 import { DOMSerializer, Node as ProseMirrorNode } from '@tiptap/pm/model';
 
 import { storedImageId } from '@/data/images';
-import { DIAGRAM_LANGUAGE_ID, editorExtensions, lowlight, parseMarkdown } from '@/features/editor';
+/*
+ * The LEAF modules, never the `@/features/editor` barrel, for two measured
+ * reasons.
+ *
+ * It BREAKS A REAL INITIALISATION CYCLE. The barrel re-exports `RichEditor`,
+ * which imports `@/features/export`, which re-exports this file:
+ *
+ *   export/index -> exportNote -> html -> editor/index -> RichEditor -> export/index
+ *
+ * The barrel also pulls `markdown.ts`, which builds its manager and schema
+ * from `editorExtensions` at module TOP LEVEL — the same shape as the cycle
+ * that stopped the app booting during sub-project N. This one had not fired
+ * only because the evaluation order happened to work.
+ *
+ * And it is SMALLER, which was not the expectation. Importing the barrel here
+ * dragged `RichEditor` and everything it reaches into the export path;
+ * measured on 2026-09-04, these four leaf imports took the eager closure from
+ * 349,773 B to 348,551 B — **-1,222 B**. Breaking the same cycle from the
+ * other end instead (`RichEditor` importing export's leaves) removed the
+ * cycle equally well and COST 329 B, so the two ends are not interchangeable
+ * and this is the one to keep.
+ */
+import { DIAGRAM_LANGUAGE_ID } from '@/features/editor/codeLanguages';
+import { editorExtensions } from '@/features/editor/extensions';
+import { lowlight } from '@/features/editor/lowlight';
+import { parseMarkdown } from '@/features/editor/markdown';
 
 /** Just enough of a note to render it. */
 export interface RenderableNote {
