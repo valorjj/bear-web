@@ -71,7 +71,7 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | N paste Markdown as Markdown                                      | complete |
 | Q typography settings: the reader's five prose controls           | complete |
 
-2753 unit tests pass and 112 skip (the server integration tests, which skip
+2756 unit tests pass and 112 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
 `npm run test:pdf`), 245 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
