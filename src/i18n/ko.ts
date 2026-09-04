@@ -105,7 +105,7 @@ export const ko: Record<TranslationKey, string> = {
   'database.memory.body':
     '이 브라우저에서 bear-web이 데이터를 저장할 수 없어, 작성한 내용은 탭을 닫을 때까지만 유지됩니다. 대개 사생활 보호 모드가 원인입니다.',
 
-  'locale.switch': '언어',
+  'locale.switch': 'English로 전환',
 
   'editor.toolbar.heading': '제목',
   'editor.toolbar.checklist': '체크리스트',

@@ -297,3 +297,21 @@ sites; and `src/features/graph/useGraphSnapshot.ts`.
   scope by a topology hash so reopening after editing nothing is instant.
   Without this ruling, the next session "fixes" the graph by wiring it back
   to `useLiveQuery` and reintroduces the rearrange-under-the-cursor bug.
+
+- **`useLocalePreference`'s mirror-absent check is an OPTIMISATION, not a
+  correctness guard, and the distinction matters because `useTypography`'s
+  identical-looking check IS one.** There, recovery WROTE the settings row, and
+  doing so when nothing needed recovering clobbered a fresh choice. Here
+  recovery only reads, and a present mirror always matches the row (they are
+  written together), so removing the check costs one wasted IndexedDB read and
+  breaks no behaviour. It is therefore pinned by a read-count assertion rather
+  than by a behavioural one — an unfalsifiable guard is worse than no guard,
+  because it looks like coverage.
+
+- **What DOES protect a fresh choice there is the `touched` flag, and it only
+  works because the current locale is read through a ref.** Written first with
+  the effect's captured `locale`, the comparison used a stale value; with only
+  two locales that staleness happened to make the guard unreachable, so it
+  tested clean while an accident did its job. Reading through a ref makes the
+  comparison mean what it says and makes the guard falsifiable — removing it
+  now fails `LanguageToggle.test.tsx`.

@@ -954,6 +954,10 @@ test('every border consumes the theme width token', async ({ page }) => {
  * the scoped form is load-bearing. Restoring `:root` would leave every swatch
  * showing the ACTIVE theme's accent — six identical dots, and an app that
  * still works perfectly. No structural test can see that.
+ *
+ * The attribute sits on each card's PREVIEW, not on the radio: the radio is
+ * app-themed chrome, so its frame is guaranteed to contrast with the dialog
+ * panel whatever theme the card shows.
  */
 test('each theme card previews its own palette', async ({ page }) => {
   await page.goto('/');
@@ -961,21 +965,29 @@ test('each theme card previews its own palette', async ({ page }) => {
   await page.getByRole('button', { name: /theme|테마/i }).click();
 
   /*
-   * The property under test is the one the whole picker rests on: a card
-   * paints ITSELF, by carrying `data-theme` on its own element and letting
-   * the cascade colour it. No colour reaches TypeScript, so a palette edit
-   * updates the picker for free — and if that ever stopped working, every
-   * card would render in the document's theme and look identical.
+   * The property under test is the one the whole picker rests on: a card's
+   * PREVIEW paints itself, by carrying `data-theme` and letting the cascade
+   * colour it. No colour reaches TypeScript, so a palette edit updates the
+   * picker for free — and if that ever stopped working, every card would
+   * render in the document's theme and look identical.
    *
-   * Reads both the card's own background and its accent line, because a
+   * Reads the PREVIEW rather than the radio, and that is a deliberate contract
+   * change rather than an expectation bent to fit: the radio is now app-themed
+   * chrome so its frame can be guaranteed to contrast with the dialog panel,
+   * and only the preview inside it paints itself. See
+   * `docs/rulings/design-tokens-and-layout.md`. Reading the radio's background
+   * here now yields `rgba(0, 0, 0, 0)`, which is how this test caught the
+   * change.
+   *
+   * Reads both the preview's background and its accent line, because a
    * background-only check would pass for two themes that differ solely in
    * accent.
    */
   async function paletteOf(name: RegExp): Promise<{ bg: string; accent: string }> {
-    const card = page.getByRole('radio', { name });
+    const preview = page.getByRole('radio', { name }).locator('[data-theme]');
     return {
-      bg: await card.evaluate((element) => getComputedStyle(element).backgroundColor),
-      accent: await card
+      bg: await preview.evaluate((element) => getComputedStyle(element).backgroundColor),
+      accent: await preview
         .locator('span')
         .last()
         .evaluate((element) => getComputedStyle(element).color),

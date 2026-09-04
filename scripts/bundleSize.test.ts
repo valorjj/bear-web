@@ -391,6 +391,11 @@ import { describe, expect, it } from 'vitest';
  * here measures. Nor is the export CSS, which ships in the eager chunk AND
  * in every exported file.)
  *
+ * **Follow-up, 2026-09-04.** The theme-picker frame fix and the EN/KO language
+ * toggle together cost **413 B** (349,360 -> 349,773), leaving **1,227 B**.
+ * The picker fix is a class change and a wrapper element, effectively free;
+ * the rest is the locale mirror, `useLocalePreference` and one i18n key.
+ *
  * **The "ceiling comes down" condition did NOT fire, and that is recorded
  * rather than quietly skipped.** Applying it literally — measured plus the
  * ~3 KB practice — gives 352,360, which is HIGHER than the 351,000 already

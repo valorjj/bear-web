@@ -1311,3 +1311,53 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   the clamp behaving correctly, not a defect, and it is recorded so nobody
   "fixes" the control: the honest reading is that at narrow widths "cramped"
   is a PANE problem, not a measure problem.
+
+- **In the theme picker, the FRAME comes from the app's palette and only the
+  PREVIEW carries `data-theme`.** Never move the attribute back onto the radio.
+  When the card was one element carrying `data-theme`, its background and its
+  border, the line separating it from the dialog panel resolved in the card's
+  theme while the panel resolved in the app's, and nothing made them contrast:
+  across all 240 (app theme × card theme) pairs, 52 had the card's fill within
+  1.10 of the panel, 34 had its border within 1.20, and **4 had both** —
+  `solarized-light`/`paper`, `rose-dawn`/`paper`, `sepia`/`solarized-light`,
+  `sepia`/`rose-dawn`. A user reported the first of those.
+
+- **Pinning the picker's panel to a fixed theme cannot fix that, and the reason
+  is structural rather than aesthetic.** The roster spans `paper` (pure white)
+  to `high-contrast` (pure black), so no single panel colour contrasts with
+  every card; whatever the panel is pinned to, some card vanishes into it. Only
+  a per-card frame outside the `data-theme` boundary works. Pinning would also
+  stop the dialog showing the theme it just applied.
+
+- **That frame is `--bear-faint`, not `--bear-border`, and the difference is
+  measured.** Against each theme's own background, `--bear-border` runs
+  1.27–1.31 and `--bear-faint` runs 3.33–3.86. A hairline would have lifted the
+  worst case only from 1.18 to about 1.27, which is why the obvious fix was
+  rejected. Weakening it back to `--bear-border` fails 15 of the 16 gate tests;
+  only `high-contrast` survives, where the hairline happens to be 21:1.
+
+- **The frame is a real 1px border in BOTH states, never a ring in one and a
+  border in the other.** Selecting a card must not shift the grid by a pixel,
+  and `e2e/contrast.spec.ts` reads the frame colour straight off `borderColor`
+  rather than parsing it out of a box-shadow.
+
+- **The language preference is read SYNCHRONOUSLY, during `I18nProvider`'s
+  first render.** `src/i18n/localeMirror.ts` exists for that and nothing else,
+  which is also why it lives in `src/i18n/` rather than beside the theme's
+  mirror in `src/app/`: the provider needs it before any effect runs, and
+  importing from `src/app/` would drag the application layer into every test
+  that renders a translated component. Moving the read into an effect fails
+  `e2e/locale.spec.ts`'s no-flash test AND a unit test — measured, by doing it.
+
+- **`readLocaleMirror` returns `null` for absence, never a default.** "Nothing
+  stored" and "the reader chose English" are different states: the first must
+  fall through to `detectLocale`, and a default of `'en'` here would silently
+  override language detection for every new visitor, which is the one thing it
+  must not do.
+
+- **`locale.switch` is ONE key meaning "switch to the other language", so the
+  active bundle supplies the direction** — English reads "Switch to Korean",
+  Korean reads the reverse. Two keys would let the bundles drift into
+  disagreeing about which way the button goes, and no test would catch it. The
+  key predated its first consumer and read "Language"; it was never rendered,
+  so it was repointed rather than duplicated.
