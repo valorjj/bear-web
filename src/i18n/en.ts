@@ -103,7 +103,11 @@ export const en = {
   'database.memory.body':
     'This browser will not let bear-web store data, so anything you write is kept only until you close this tab. Private browsing is the usual cause.',
 
-  'locale.switch': 'Language',
+  // Always "switch to the OTHER language", so the active bundle is what makes
+  // the direction right. Two keys would let the bundles disagree about which
+  // way the button goes, and nothing would catch it. This key predated its
+  // first consumer and read 'Language'; it was never rendered.
+  'locale.switch': 'Switch to Korean',
 
   'editor.toolbar.heading': 'Heading',
   'editor.toolbar.checklist': 'Checklist',

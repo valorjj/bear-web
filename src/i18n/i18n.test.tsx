@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { en } from './en';
 import { detectLocale, I18nProvider, useLocale, useT } from './index';
@@ -154,5 +154,57 @@ describe('detectLocale', () => {
     expect(detectLocale(['ko'])).toBe('ko');
     expect(detectLocale(['ko-KR'])).toBe('ko');
     expect(detectLocale(['KO-kr'])).toBe('ko');
+  });
+});
+
+describe('locale precedence at first render', () => {
+  beforeEach(() => localStorage.clear());
+
+  const first = (): string => screen.getByTestId('locale').textContent ?? '';
+
+  /*
+   * Asserted on the FIRST rendered output, never after a `waitFor`. The whole
+   * value of reading the mirror synchronously is that no frame shows the
+   * detected language before swapping, and an assertion that tolerates a swap
+   * cannot tell the two implementations apart.
+   */
+  it('prefers a stored choice over browser detection', () => {
+    localStorage.setItem('bear-web:locale', 'ko');
+    render(
+      <I18nProvider>
+        <Probe />
+      </I18nProvider>,
+    );
+    expect(first()).toBe('ko');
+  });
+
+  it('falls through to detection when nothing is stored', () => {
+    render(
+      <I18nProvider>
+        <Probe />
+      </I18nProvider>,
+    );
+    // jsdom reports an English navigator, so detection yields English.
+    expect(first()).toBe('en');
+  });
+
+  it('lets an explicit prop win over both', () => {
+    localStorage.setItem('bear-web:locale', 'ko');
+    render(
+      <I18nProvider locale="en">
+        <Probe />
+      </I18nProvider>,
+    );
+    expect(first()).toBe('en');
+  });
+
+  it('ignores a corrupt stored value rather than rendering nothing', () => {
+    localStorage.setItem('bear-web:locale', 'jp');
+    render(
+      <I18nProvider>
+        <Probe />
+      </I18nProvider>,
+    );
+    expect(first()).toBe('en');
   });
 });

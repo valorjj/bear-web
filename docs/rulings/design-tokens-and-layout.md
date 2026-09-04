@@ -1340,3 +1340,24 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   border in the other.** Selecting a card must not shift the grid by a pixel,
   and `e2e/contrast.spec.ts` reads the frame colour straight off `borderColor`
   rather than parsing it out of a box-shadow.
+
+- **The language preference is read SYNCHRONOUSLY, during `I18nProvider`'s
+  first render.** `src/i18n/localeMirror.ts` exists for that and nothing else,
+  which is also why it lives in `src/i18n/` rather than beside the theme's
+  mirror in `src/app/`: the provider needs it before any effect runs, and
+  importing from `src/app/` would drag the application layer into every test
+  that renders a translated component. Moving the read into an effect fails
+  `e2e/locale.spec.ts`'s no-flash test AND a unit test — measured, by doing it.
+
+- **`readLocaleMirror` returns `null` for absence, never a default.** "Nothing
+  stored" and "the reader chose English" are different states: the first must
+  fall through to `detectLocale`, and a default of `'en'` here would silently
+  override language detection for every new visitor, which is the one thing it
+  must not do.
+
+- **`locale.switch` is ONE key meaning "switch to the other language", so the
+  active bundle supplies the direction** — English reads "Switch to Korean",
+  Korean reads the reverse. Two keys would let the bundles drift into
+  disagreeing about which way the button goes, and no test would catch it. The
+  key predated its first consumer and read "Language"; it was never rendered,
+  so it was repointed rather than duplicated.

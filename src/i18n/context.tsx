@@ -10,6 +10,7 @@ import {
 
 import { en, type TranslationKey } from './en';
 import { ko } from './ko';
+import { readLocaleMirror } from './localeMirror';
 
 export type Locale = 'ko' | 'en';
 
@@ -46,8 +47,23 @@ export function I18nProvider({
   children: ReactNode;
   locale?: Locale;
 }): ReactElement {
+  /*
+   * Precedence: an explicit prop (tests), then the reader's own stored choice,
+   * then browser detection. The mirror is read SYNCHRONOUSLY here, during the
+   * first render, so a reader who chose a language never sees one frame of the
+   * detected one before it swaps — the same reason `index.html` applies the
+   * theme before first paint, minus the need for an inline script, because no
+   * app text is painted until React mounts.
+   *
+   * The durable row in the settings table is the source of truth and is read
+   * by `useLocalePreference`; this mirror is a cache that exists only to make
+   * that read invisible.
+   */
   const [locale, setLocale] = useState<Locale>(
-    initial ?? detectLocale(typeof navigator === 'undefined' ? [] : navigator.languages),
+    () =>
+      initial ??
+      readLocaleMirror() ??
+      detectLocale(typeof navigator === 'undefined' ? [] : navigator.languages),
   );
 
   // Keep the document's declared language in sync with what is actually
