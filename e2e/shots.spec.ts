@@ -304,5 +304,25 @@ for (const theme of THEMES) {
       await blur(page);
       await shot(editor, `11-editor-folded-${theme.name}`);
     });
+
+    /**
+     * The first-visit gate. Its own `storageState` override is added as a
+     * NESTED describe rather than replacing the outer `test.use` above:
+     * Playwright merges `test.use` calls down the describe chain, so this
+     * contributes only `storageState` and keeps the outer viewport, colour
+     * scheme, locale and timezone intact.
+     */
+    test.describe('landing', () => {
+      test.use({ storageState: { cookies: [], origins: [] } });
+
+      test(`landing @shots`, async ({ page }) => {
+        await page.goto('/');
+        // The gate must actually be showing, not the app shell it sits in
+        // front of -- otherwise this silently shoots the wrong screen.
+        await expect(page.getByRole('heading', { name: 'markflowing' })).toBeVisible();
+        await blur(page);
+        await shot(page, `17-landing-${theme.name}`);
+      });
+    });
   });
 }

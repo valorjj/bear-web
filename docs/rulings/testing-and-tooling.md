@@ -19,7 +19,9 @@ in `src/features/editor/HeadingFold.ts`'s badge handlers or
 `src/features/graph/runLayout.ts` and `layoutGraph.ts`; `scripts/bundleSize.test.ts`
 and its `CEILING_BYTES`; `build.manifest` in `vite.config.ts`; any new
 `React.lazy` boundary, and any new runtime dependency reachable from
-`main.tsx`.
+`main.tsx`; `playwright.config.ts`'s `use.storageState`, `vitest.setup.ts`'s
+`beforeEach`, `scripts/harnessDefaults.test.ts`, and any e2e or
+component spec that opts out of the landing gate's pre-dismissed default.
 
 - **The eager-JS ceiling is a FROZEN budget at 346,500 B gzipped, not a
   ratchet. Ruled 2026-08-31, before L5.** From K1 onward the ceiling was raised
@@ -359,3 +361,68 @@ and its `CEILING_BYTES`; `build.manifest` in `vite.config.ts`; any new
   described behaviour exist" by re-reading the existing tests, rather than by
   checking each requirement individually, will not catch an omission the
   tests never asserted in the first place.
+
+- **`scripts/sourceLint.test.ts` fails on ANY runtime import cycle under
+  `src/`, and the answer to a failure is to break the cycle, never to add an
+  exception.** A cycle here fails at MODULE INITIALISATION, not at build time:
+  `src/features/editor/markdown.ts` builds its `MarkdownManager` and `schema`
+  from `editorExtensions` at module top level, so a cycle reaching it leaves
+  that binding `undefined` and the app renders nothing. Sub-project N shipped
+  exactly that — `build`, `typecheck`, `lint`, `format` and 2473 unit tests all
+  passed, and three code reviews read the diff without seeing it, because it
+  lives in the import graph rather than in any line of the diff.
+
+- **`import type` and dynamic `import()` are excluded from that graph, on
+  purpose.** `verbatimModuleSyntax` guarantees type-only edges are written as
+  `import type` and they are erased, so they cannot participate in an
+  initialisation cycle; a dynamic `import()` is deferred, which is precisely
+  what makes a `React.lazy` boundary safe. An inline `import { type A, b }` IS
+  a runtime edge and is counted, because `b` is.
+
+- **The graph check does not replace
+  `src/features/editor/importCycle.test.ts`, and both are kept.** The static
+  check reads the import graph; the other actually EVALUATES the two modules in
+  the fatal order and asserts the binding survived. A graph check cannot see
+  that `markdown.ts` builds from `editorExtensions` at module scope, and that
+  property is what turns a cycle into a blank page rather than a harmless one.
+
+- **Two "guard the guard" assertions sit beside it and are not redundant.** A
+  resolver that silently returned nothing would make the cycle walk vacuously
+  green — this repo's worst failure shape. Breaking `moduleFile` was injected:
+  the cycle test still PASSED and only the graph-has-edges and
+  specifier-resolution assertions failed.
+
+- **Which END of a cycle you break is worth measuring, because the two are not
+  interchangeable.** The one cycle that existed when this check was written
+  (`export/index -> exportNote -> html -> editor/index -> RichEditor ->
+export/index`) could be broken at either edge. Breaking it in `html.ts`, by
+  importing the four editor leaves instead of the barrel, measured
+  **-1,222 B** — the barrel had been dragging `RichEditor` and everything it
+  reaches into the export path. Breaking it in `RichEditor.tsx` instead
+  removed the cycle equally well and **cost 329 B**.
+
+- **`playwright.config.ts`'s `use.storageState` and `vitest.setup.ts`'s
+  `beforeEach` both pre-dismiss the landing gate, and BOTH keys matter.**
+  Setting only the "seen" key would close the gate but leave the seed
+  condition live, so the first render after boot would inject a welcome note
+  into every one of the 37 e2e specs (and much of the component suite) that
+  assumes an empty database — 13 of them start from zero notes specifically. A
+  test that wants the landing (or the seed) must opt out explicitly, the way
+  `e2e/landing.spec.ts` does with `test.use({ storageState: { cookies: [],
+origins: [] } })`. `scripts/harnessDefaults.test.ts` pins the
+  literal values both harness files must spell by hand — neither may import
+  from `src/` — so removing either default turns most of the suite red at
+  once; that is the intended failure mode, not a regression to quietly fix by
+  loosening the test. It lives in `scripts/`, not beside the gate constants it
+  imports, because `tsconfig.node.json` already includes `scripts` with real
+  Node types: keeping it under `src/` had required an ambient
+  `declare module 'node:fs'` that leaked into the whole `app` project rather
+  than staying scoped to one file — exactly the guard this repo's `src/`
+  Node-type ban exists to enforce.
+
+- **The contrast and shots landing cases must assert the landing heading
+  visible BEFORE measuring or screenshotting, never after.** Without both the
+  `storageState` override and that assertion, the block silently measures (or
+  photographs) the **app shell** instead of the landing screen, and passes —
+  the same shape of false-green as `parseColour`'s `NaN`: a check that looks
+  like coverage but is measuring the wrong screen entirely.

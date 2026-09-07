@@ -70,10 +70,11 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 | M publish: a public read-only URL for one note                    | complete |
 | N paste Markdown as Markdown                                      | complete |
 | Q typography settings: the reader's five prose controls           | complete |
+| R landing page: first-visit gate, guest mode, welcome note        | complete |
 
-2753 unit tests pass and 112 skip (the server integration tests, which skip
+2794 unit tests pass and 112 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
-`npm run test:pdf`), 245 end-to-end tests pass and 1 skips. `main` is always green and
+`npm run test:pdf`), 264 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**
@@ -143,13 +144,18 @@ committed `measurements.md` into an unrelated diff. `grepInvert` on
   state, a folded heading-dense note, the open note-list options menu, a
   three-language code note (one unregistered language, to keep the plain-
   render fallback visible), the right-click context menu open on a table cell
-  (its tallest form), the exported document, and the relationship graph opened
-  via its keyboard shortcut, **in every theme in the roster** (16 shots × 16
-  themes = 256 files, up from 240 when L3 added the graph shot). The theme
+  (its tallest form), the exported document, the relationship graph opened
+  via its keyboard shortcut, and the first-visit landing screen, **in every
+  theme in the roster** (17 shots × 16 themes = 272 files, up from 256 when R
+  added the landing shot). The theme
   list is derived from `themes.ts` by a regex requiring `id`, `labelKey` and
   `group` on ONE line in that order — a Prettier reflow would make it match
   nothing, and an empty list renders the default theme sixteen times with no
-  error. Count the files, do not trust the exit code.
+  error. Count the files, do not trust the exit code. The landing shot needs
+  its own `storageState` opt-out (`{ cookies: [], origins: [] }`) — every
+  other shot relies on the shared default that pre-dismisses the landing
+  gate, so without the override this shot would silently photograph the app
+  shell instead.
   Themes are selected through the paint-time mirror, the way a user selects
   one. Until M9a it drove `colorScheme` instead, i.e. the media query, and the
   shot labelled `paper` silently started rendering Indigo Light the moment the
@@ -223,7 +229,7 @@ All six must pass before any commit.
   therefore only means anything on the machine that generated the file.
   `scripts/ciCoverage.test.ts` now asserts it is absent from `ci.yml`, so
   re-adding it fails loudly with the reason attached.
-- **`npm run shots` stays on demand.** 256 screenshots have no meaningful
+- **`npm run shots` stays on demand.** 272 screenshots have no meaningful
   pass/fail and nothing can diff them but a person. Run it when you change
   something visual; count the files, do not trust the exit code.
 
@@ -816,6 +822,16 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
   the fault is not in the new spec. `src/features/editor/importCycle.test.ts`
   now pins that one order. The underlying hazard remains: making
   `markdown.ts`'s two module-scope constructions lazy is the real cure.
+
+  **Since 2026-09-04 a stronger check exists**: `scripts/sourceLint.test.ts`'s
+  "has no runtime import cycles" walks every runtime edge under `src/` and
+  fails on a cycle in ANY direction, where `importCycle.test.ts` reproduces
+  only the one order that broke. Both are kept — the graph check reads
+  imports, the other evaluates them. It found one live cycle on its first
+  run (`export/index -> exportNote -> html -> editor/index -> RichEditor ->
+export/index`), latent for the same reason N's was: the order happened to
+  work. Breaking it in `html.ts` also reclaimed **1,222 B**; breaking the
+  same cycle at the other end would have cost 329 B.
 
 - **A test fixture asserting on an invisible character cannot be reviewed, and
   no gate can see it.** `&nbsp;` decodes to U+00A0, not U+0020, so

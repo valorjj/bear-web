@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 
-export type ButtonVariant = 'default' | 'primary' | 'danger' | 'ghost' | 'soft';
-export type ButtonSize = 'sm' | 'md' | 'touch';
+export type ButtonVariant = 'default' | 'primary' | 'danger' | 'ghost' | 'quiet' | 'soft';
+export type ButtonSize = 'sm' | 'md' | 'touch' | 'lg';
 
 export interface ButtonProps {
   onClick: () => void;
@@ -38,6 +38,25 @@ const VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-accent text-bg hover:opacity-90',
   danger: 'bg-danger text-bg hover:opacity-90',
   ghost: 'text-muted hover:bg-hover hover:text-text',
+  /*
+   * `ghost` with a foreground that passes on any ground. Same shape, same
+   * hover, one difference: it rests at `text-text` instead of `text-muted`.
+   *
+   * It exists because `ghost`'s quietness is tuned for `bg` and `surface`,
+   * the grounds a pane paints, and `--bear-muted` is chosen against those. On
+   * `canvas` that choice does not hold: in a light theme `canvas` is a
+   * mid-tone laid BEHIND the panes, and `muted` on it measures as low as 3.80
+   * (gruvbox-light) against WCAG AA's 4.5 for text. The landing screen is the
+   * one surface that paints controls straight onto canvas, and "Continue as
+   * guest" is a call to action, not decoration — see the RULES comment in
+   * `e2e/contrast.spec.ts`.
+   *
+   * Reach for this over `ghost` for a text-only control on any ground where
+   * `muted` does not clear 4.5. It is NOT a general replacement: on `bg` and
+   * `surface`, `ghost` is the right quiet-until-hovered control and this one
+   * would make a secondary action shout.
+   */
+  quiet: 'text-text hover:bg-hover',
   // A resting fill, for a control on a TOUCH surface. `ghost` is defined as
   // quiet-until-hovered, which on a touch device means quiet forever — there
   // is no pointer to cross it. M9a made the note-list header `ghost` because
@@ -62,6 +81,11 @@ const SIZES: Record<ButtonSize, string> = {
   // for 24. Square and circular, because at this size it holds one glyph and
   // nothing else.
   touch: 'h-11 w-11 rounded-full',
+  // A full-width, 44px-tall action for a screen with no other controls to
+  // sit beside — the landing screen's two buttons. Distinct from `touch`:
+  // that size is square for a single glyph, this one carries a label and
+  // needs `w-full` from the caller, which no other size sets.
+  lg: 'h-11 px-4 text-ui rounded-sm',
 };
 
 /*
@@ -77,6 +101,7 @@ const NEEDS_TOUCH_TARGET: Record<ButtonSize, string> = {
   sm: 'touch-target',
   md: 'touch-target',
   touch: '',
+  lg: '',
 };
 
 export function Button({

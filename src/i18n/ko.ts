@@ -262,6 +262,12 @@ export const ko: Record<TranslationKey, string> = {
   'account.signOut.confirm': '로그아웃',
   'account.signOut.cancel': '취소',
 
+  'landing.wordmark': 'markflowing',
+  'landing.tagline': '내 기기에 머무는 마크다운 메모.',
+  'landing.signIn': 'Google로 로그인',
+  'landing.guest': '게스트로 계속하기',
+  'landing.pending': '로그인하는 중…',
+
   'sync.idle': '메모가 백업되었습니다',
   'sync.pending': '아직 백업되지 않았습니다',
   'sync.syncing': '백업하는 중…',
