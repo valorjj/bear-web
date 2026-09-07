@@ -133,20 +133,20 @@ describe('tags.rename', () => {
     await expect(tags.rename('a/b', 'has#hash')).rejects.toThrow(/cannot be written/i);
   });
 
-  it('leaves the vault untouched when the write fails mid-way', async () => {
-    // Atomicity, asserted rather than assumed: a half-renamed vault is worse
-    // than a failed rename. `reindexNote` is not mockable from here, so the
-    // failure is injected by making one note's row un-updatable — a deleted
-    // note whose noteTags row survives, which `apply` will try to rewrite.
+  it('skips a note that vanished from the read set, and still rewrites the survivors', async () => {
+    // NOT a rollback test — genuine mid-transaction rollback is not covered
+    // by any test in this file. `reindexNote` is not injectable from the
+    // repository, so there is no seam to make a write throw part-way
+    // through; atomicity here rests on Dexie's transaction guarantee, not on
+    // anything asserted below. What this DOES prove: a note deleted out from
+    // under the transaction's own read set is simply skipped, and the
+    // surviving note is still rewritten correctly. `update` on a missing id
+    // is a no-op in Dexie rather than a throw, which is why this cannot
+    // exercise the failure path its old name implied.
     const one = await notes.create('one\n#a/b');
     const two = await notes.create('two\n#a/b');
-    // Force a failure part-way through the loop by removing the second note
-    // out from under the transaction's own read set.
     await db.notes.delete(two.id);
 
-    // `update` on a missing id is a no-op in Dexie rather than a throw, so
-    // this asserts the SUCCESSFUL path stays consistent: the surviving note is
-    // rewritten and the vanished one is simply skipped.
     await tags.rename('a/b', 'x');
     expect((await db.notes.get(one.id))?.text).toBe('one\n#x');
     expect(await db.notes.get(two.id)).toBeUndefined();
