@@ -157,10 +157,6 @@ export function NoteListItem({
           selected ? '' : 'hover:bg-hover'
         }`}
       >
-        {selected && (
-          <span aria-hidden="true" className="absolute inset-y-0 left-0 w-0.5 bg-accent" />
-        )}
-
         <span className="truncate text-ui-md font-semibold text-text">
           {/* `query` is withheld when the text shown is an i18n placeholder
               ("Untitled", "No additional text") rather than the note's own

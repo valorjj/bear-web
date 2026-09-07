@@ -161,7 +161,7 @@ export function AccountMenu(): ReactElement {
         <p className="text-ui text-text px-2">{t('account.notesLocal')}</p>
 
         {state.status === 'unavailable' ? null : (
-          <div className="border-border border-t pt-1">
+          <div className="pt-1">
             {state.status === 'signedIn'
               ? row(t('account.signOut'), () => setConfirmingSignOut(true))
               : row(t('account.signIn.google'), signIn)}
@@ -270,6 +270,7 @@ export function AccountMenu(): ReactElement {
           label={t('account.menu')}
           className="z-20"
           style={placement}
+          triggerRef={triggerRef}
         >
           {body()}
         </Popover>

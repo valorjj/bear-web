@@ -67,8 +67,8 @@ export function SidebarContent({
       <div className="border-border flex shrink-0 items-center gap-1 border-t p-1">
         <ThemePicker />
         <TypographyButton />
-        <LanguageToggle />
         <AccountMenu />
+        <LanguageToggle />
       </div>
     </>
   );

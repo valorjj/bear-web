@@ -1,4 +1,11 @@
-import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useRef } from 'react';
+import {
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useRef,
+} from 'react';
 
 export interface PopoverProps {
   open: boolean;
@@ -18,6 +25,16 @@ export interface PopoverProps {
    * fixed` with viewport coordinates, which cannot be a static class.
    */
   style?: CSSProperties;
+  /**
+   * The control that opens this surface, so an outside-pointerdown on it is
+   * ignored.
+   *
+   * Without it the trigger is "outside" like anything else: its pointerdown
+   * closes the surface and its own click then reopens it, so the menu appears
+   * frozen open and the user's click reads as ignored. Optional, because a
+   * popover opened some other way has no trigger to exempt.
+   */
+  triggerRef?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -47,6 +64,7 @@ export function Popover({
   children,
   className = '',
   style,
+  triggerRef,
 }: PopoverProps): ReactElement | null {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -85,6 +103,38 @@ export function Popover({
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
+
+  /**
+   * Dismissal by pointing somewhere else.
+   *
+   * `pointerdown` rather than `click`, for two reasons. A drag that STARTS
+   * inside the surface and releases outside it fires a `click` whose target
+   * is outside — closing a menu the user was interacting with — and
+   * `pointerdown` is judged where the gesture began. It also fires before
+   * focus moves, so the surface closes without a frame of the trap fighting
+   * the browser over where focus should land.
+   *
+   * The trigger is exempt: it is outside this element, so without the check
+   * its pointerdown closes the surface and its own click immediately reopens
+   * it. See `triggerRef`.
+   *
+   * Capture phase, so a child that stops propagation cannot silently disable
+   * dismissal for the whole surface.
+   */
+  useEffect(() => {
+    if (!open) return;
+
+    function onPointerDown(event: PointerEvent): void {
+      const target = event.target as Node | null;
+      if (target === null) return;
+      if (ref.current?.contains(target) === true) return;
+      if (triggerRef?.current?.contains(target) === true) return;
+      onClose();
+    }
+
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [open, onClose, triggerRef]);
 
   if (!open) return null;
 
