@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { type ReactElement, useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -289,6 +289,49 @@ describe('SidebarRow', () => {
     });
 
     expect(screen.getByRole('button', { name: /Urgent/ })).toBeInTheDocument();
+  });
+
+  it('raises a context-menu request at the pointer on right-click', () => {
+    const onContextMenu = vi.fn();
+    renderRow({ onContextMenu });
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Work/ }), {
+      clientX: 40,
+      clientY: 90,
+    });
+
+    // A VALUE, not merely "it was called": a zero-size rect AT the pointer is
+    // what anchors the menu, and asserting only the call count would pass
+    // against a handler that anchored on the row instead.
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+    const rect = onContextMenu.mock.calls[0]![0] as DOMRect;
+    expect([rect.left, rect.top, rect.width, rect.height]).toEqual([40, 90, 0, 0]);
+  });
+
+  it('raises it from Shift+F10 anchored on the row, not the pointer', () => {
+    const onContextMenu = vi.fn();
+    renderRow({ onContextMenu });
+
+    const row = screen.getByRole('button', { name: /Work/ });
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not intercept contextmenu when no handler is given', () => {
+    renderRow();
+
+    // With no handler, nothing wires a `contextmenu` listener onto the row at
+    // all, so the native menu is left free to open — `fireEvent` reports that
+    // as `true` (not prevented). This is a value that actually changes with
+    // the behaviour: a handler wired unconditionally would call
+    // `preventDefault` even with `onContextMenu` undefined, and this
+    // assertion would catch that, unlike a bare "did not throw" check.
+    const notPrevented = fireEvent.contextMenu(screen.getByRole('button', { name: /Work/ }), {
+      clientX: 40,
+      clientY: 90,
+    });
+    expect(notPrevented).toBe(true);
   });
 });
 

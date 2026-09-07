@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 
+import { useLongPress } from '@/lib/useLongPress';
 import { ChevronRight, Icon } from '@/ui/Icon';
 
 export interface SidebarRowDisclosure {
@@ -35,6 +36,16 @@ export interface SidebarRowProps {
    * rather than importing the pane-width constants.
    */
   touch?: boolean;
+  /**
+   * Opens the row's action menu — right-click, long-press, or `Shift+F10`
+   * with the row focused. Receives the viewport rect to anchor against: a
+   * zero-size rect at the pointer for a press, the row's own rect for the
+   * keyboard route.
+   *
+   * A callback, so this primitive stays ignorant of tags, scopes and menus —
+   * the same reason `disclosure` is a prop rather than a scope import.
+   */
+  onContextMenu?: (rect: DOMRect) => void;
 }
 
 const INDENT_REM = 0.75;
@@ -57,9 +68,19 @@ export function SidebarRow({
   current = 'page',
   children,
   touch = false,
+  onContextMenu,
 }: SidebarRowProps): ReactElement {
+  // `useLongPress` owns `contextmenu` as well as the touch timer, because the
+  // two have to be deduplicated: Android Chrome raises `contextmenu` from a
+  // long press at nearly the same moment the timer fires, and iOS Safari
+  // raises none at all. `NoteListItem` learned this first.
+  const longPress = useLongPress({
+    onPress: (point) => onContextMenu?.(new DOMRect(point.x, point.y, 0, 0)),
+  });
+  const pressHandlers = onContextMenu === undefined ? {} : longPress;
+
   return (
-    <li>
+    <li {...pressHandlers}>
       <div className="flex items-center gap-1">
         {disclosure === undefined ? (
           // A spacer, not nothing: without it a leaf row's label sits one
@@ -85,6 +106,11 @@ export function SidebarRow({
         <button
           type="button"
           onClick={onSelect}
+          onKeyDown={(event) => {
+            if (event.key !== 'F10' || !event.shiftKey) return;
+            event.preventDefault();
+            onContextMenu?.(event.currentTarget.getBoundingClientRect());
+          }}
           aria-current={selected ? current : undefined}
           aria-expanded={disclosure === undefined ? undefined : disclosure.expanded}
           style={{ paddingLeft: `${0.5 + depth * INDENT_REM}rem` }}
