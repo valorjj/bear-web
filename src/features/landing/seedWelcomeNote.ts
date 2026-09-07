@@ -1,7 +1,6 @@
 import type { Locale } from '@/i18n';
 
 import { hasLandingBeenSeen, hasSeededWelcome, markWelcomeSeeded } from './gate';
-import { WELCOME_NOTE } from './welcomeNote';
 
 export interface SeedDeps {
   /** Injected rather than imported, so this is testable without Dexie. */
@@ -52,6 +51,25 @@ export async function seedWelcomeNote({ listActive, create, locale }: SeedDeps):
   }
 
   try {
+    /*
+     * Loaded here, not imported at the top, and the placement is the point.
+     *
+     * `welcomeNote.ts` carries the full note body in BOTH locales — around
+     * 1.4 kB of raw source that runs at most once in a device's lifetime, and
+     * for most devices never at all, since the emptiness check above declines
+     * first. A static import puts that squarely in the entry closure the
+     * bundle ceiling measures; a dynamic one leaves it in a chunk fetched
+     * only on the single boot that actually seeds.
+     *
+     * It sits AFTER every guard for the same reason. Hoisting it above them
+     * would fetch the chunk on every boot and reclaim nothing.
+     *
+     * `src/features/landing/index.ts` deliberately does NOT re-export
+     * `WELCOME_NOTE`: a static re-export from a barrel the app imports
+     * eagerly would pull the module back into the closure and undo this,
+     * silently — the bundle would simply grow again with no error anywhere.
+     */
+    const { WELCOME_NOTE } = await import('./welcomeNote');
     await create(WELCOME_NOTE[locale]);
   } catch {
     // Leave the flag unset so a later boot can try again. A visitor with no

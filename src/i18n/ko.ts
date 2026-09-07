@@ -1,7 +1,7 @@
 import type { TranslationKey } from './en';
 
 export const ko: Record<TranslationKey, string> = {
-  'app.name': 'bear-web',
+  'app.name': 'markflowing',
 
   'pane.sidebar': '사이드바',
   'pane.noteList': '메모 목록',
@@ -81,10 +81,10 @@ export const ko: Record<TranslationKey, string> = {
   'confirm.cancel': '취소',
   'confirm.deleteForever.title': '이 메모를 완전히 삭제할까요?',
   'confirm.deleteForever.body':
-    '이 메모는 영구적으로 삭제됩니다. bear-web은 다른 어디에도 사본을 두지 않으므로 되돌릴 수 없습니다.',
+    '이 메모는 영구적으로 삭제됩니다. markflowing은 다른 어디에도 사본을 두지 않으므로 되돌릴 수 없습니다.',
   'confirm.emptyTrash.title': '휴지통을 비울까요?',
   'confirm.emptyTrash.body':
-    '휴지통의 모든 메모가 영구적으로 삭제됩니다. bear-web은 다른 어디에도 사본을 두지 않으므로 되돌릴 수 없습니다.',
+    '휴지통의 모든 메모가 영구적으로 삭제됩니다. markflowing은 다른 어디에도 사본을 두지 않으므로 되돌릴 수 없습니다.',
   'confirm.trashNote.title': '이 메모를 휴지통으로 옮길까요?',
   'confirm.trashNote.body': '나중에 휴지통에서 복원할 수 있습니다.',
 
@@ -103,7 +103,7 @@ export const ko: Record<TranslationKey, string> = {
 
   'database.memory.title': '메모가 저장되지 않습니다',
   'database.memory.body':
-    '이 브라우저에서 bear-web이 데이터를 저장할 수 없어, 작성한 내용은 탭을 닫을 때까지만 유지됩니다. 대개 사생활 보호 모드가 원인입니다.',
+    '이 브라우저에서 markflowing이 데이터를 저장할 수 없어, 작성한 내용은 탭을 닫을 때까지만 유지됩니다. 대개 사생활 보호 모드가 원인입니다.',
 
   'locale.switch': 'English로 전환',
 
