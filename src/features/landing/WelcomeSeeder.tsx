@@ -25,6 +25,25 @@ import { seedWelcomeNote } from './seedWelcomeNote';
  * deliberate: seeding against an unreachable server would inject a note that
  * duplicates the moment the server answers.
  *
+ * **`settled` names the three session statuses explicitly, and must not be
+ * rewritten as a negation of `signedIn`.** It was `!signedIn || (…)` until
+ * 2026-09-07, and that shipped a bug the whole gate exists to prevent:
+ * `useSession` starts EVERY boot at `loading`, so `!signedIn` was true on the
+ * very first commit, the effect fired, `ran.current` latched, and the seed ran
+ * before `/me` had answered. The signed-in half of the condition was
+ * unreachable in production. Each branch below is deliberate:
+ *
+ *   - `signedOut` seeds immediately. A guest has no session hint, so
+ *     `useSession` resolves `signedOut` in a microtask with no fetch at all
+ *     (`useSession.ts`) — the seed lands one tick later than it used to, and
+ *     the guest path is otherwise unchanged.
+ *   - `loading` must NOT seed. Nothing is known yet about whether an
+ *     account's notes are about to arrive; that was the bug.
+ *   - `unavailable` must NOT seed. It can only be reached when a session hint
+ *     was present, i.e. this browser HAS signed in before, so an account's
+ *     notes may well exist and be unreachable rather than absent. Seeding here
+ *     is how a second device ends up with a duplicate welcome note.
+ *
  * There is deliberately no `useLiveQuery` here. `docs/rulings/notes-lifecycle.md`
  * warns about writes gated on a live query, and this is a write; the note
  * count is read once, imperatively, inside `seedWelcomeNote`.
@@ -35,8 +54,9 @@ export function WelcomeSeeder(): null {
   const { locale } = useLocale();
   const ran = useRef(false);
 
-  const signedIn = state.status === 'signedIn';
-  const settled = !signedIn || (sync.status === 'idle' && sync.lastSyncedAt !== null);
+  const settled =
+    state.status === 'signedOut' ||
+    (state.status === 'signedIn' && sync.status === 'idle' && sync.lastSyncedAt !== null);
 
   useEffect(() => {
     if (ran.current || !settled) return;

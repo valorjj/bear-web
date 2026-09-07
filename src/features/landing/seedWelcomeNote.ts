@@ -34,7 +34,22 @@ export async function seedWelcomeNote({ listActive, create, locale }: SeedDeps):
   if (hasSeededWelcome()) return false;
 
   const existing = await listActive();
-  if (existing.length > 0) return false;
+  if (existing.length > 0) {
+    // This device is settled and already has notes, so it will never want a
+    // welcome note again — record that, rather than re-reading every active
+    // note on every boot forever. Without the mark, a device that is later
+    // emptied (everything trashed and purged) seeds a welcome note on its
+    // next boot and syncs it up: the exact "delete it and it comes back"
+    // the flag exists to prevent.
+    //
+    // This is safe ONLY because `WelcomeSeeder`'s `settled` gate means this
+    // function is never reached in an unsettled state — see its docblock. If
+    // that gate ever let `loading` or `unavailable` through again, this line
+    // would permanently mark a device seeded on the strength of a note count
+    // read before the account's notes had arrived.
+    markWelcomeSeeded();
+    return false;
+  }
 
   try {
     await create(WELCOME_NOTE[locale]);

@@ -35,11 +35,16 @@ describe('seedWelcomeNote', () => {
   // This is the assertion that stops a second device receiving a duplicate:
   // sync has settled, the account's notes have arrived, so there is nothing
   // to teach and nothing to add.
-  it('does NOT seed when notes already exist', async () => {
+  //
+  // It marks the device seeded anyway. The question "should this device ever
+  // get a welcome note?" is answered NO for good here, so re-asking it costs
+  // a full `listActive()` on every boot forever — and worse, answers
+  // differently if the device is ever emptied.
+  it('does NOT seed when notes already exist, but DOES mark the device seeded', async () => {
     localStorage.setItem(LANDING_SEEN_KEY, '1');
     await expect(seedWelcomeNote(deps([{ id: 'existing' }]))).resolves.toBe(false);
     expect(create).not.toHaveBeenCalled();
-    expect(localStorage.getItem(LANDING_SEEDED_KEY)).toBe(null);
+    expect(localStorage.getItem(LANDING_SEEDED_KEY)).toBe('1');
   });
 
   it('does NOT seed twice on the same device', async () => {

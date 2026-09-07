@@ -326,18 +326,66 @@ sites; `src/features/graph/useGraphSnapshot.ts`; and
   a keystroke. Anything true of `notes.create()` elsewhere in this file is
   true of it.
 
-- **The gate is `seen && !seeded && count === 0 && settled`, and `settled` is
-  `!signedIn || (sync.status === 'idle' && sync.lastSyncedAt !== null)` — a
-  VALUE, not an idle-after-syncing TRANSITION.** The `!signedIn` half is the
-  GUEST short-circuit, and it is the branch that matters most: it is the
-  primary path the landing's e2e spec exercises, and a guest has no sync
-  status to wait on at all, so `settled` must be unconditionally true for one
-  the moment `signedIn` is false. For a signed-in account, a transition rule
-  — waiting for `syncing` to flip to `idle` — would miss the seed forever on
-  an account whose first sync completes before `WelcomeSeeder` mounts: that
-  component never observes a `syncing` status at all, so there is no edge to
-  detect. Reading the settled VALUE instead of a transition is what makes the
-  seed reachable on the fastest-syncing accounts, not just the slow ones.
+- **The gate is `seen && !seeded && count === 0 && settled`, and `settled`
+  names the session statuses EXPLICITLY:**
+
+  ```ts
+  const settled =
+    state.status === 'signedOut' ||
+    (state.status === 'signedIn' && sync.status === 'idle' && sync.lastSyncedAt !== null);
+  ```
+
+  **It must never be written as a negation of `signedIn`.** It was
+  `!signedIn || (sync.status === 'idle' && sync.lastSyncedAt !== null)` until
+  2026-09-07, and this file described that `!signedIn` half as "the GUEST
+  short-circuit". It is not, and that mis-description is what let the bug
+  live: `!signedIn` also covers `loading` and `unavailable`. `useSession`
+  starts EVERY boot at `loading`, so the negation was true on the very first
+  commit, the effect fired, `ran.current` latched, and the note was seeded
+  before `/me` had answered — the signed-in half of the condition was
+  unreachable in production. On a second device that meant a welcome note
+  created into an empty local database, then `AdoptNotesDialog` offering to
+  push the duplicate up.
+
+  There are three statuses, not two, and each branch is a separate ruling:
+
+  - **`signedOut` seeds immediately.** A guest has no session hint, so
+    `useSession` resolves `signedOut` in a microtask with no fetch at all;
+    the seed lands one tick after mount rather than during it. This is the
+    path the landing's e2e spec exercises.
+  - **`loading` must NOT seed.** Nothing is yet known about whether an
+    account's notes are on their way, and an empty local database in that
+    window is not evidence of an empty account.
+  - **`unavailable` must NOT seed.** It is reachable only when a session hint
+    was present, i.e. this browser HAS signed in before. Unreachable is not
+    the same answer as signed out, and treating it as one seeds a duplicate
+    into an account whose notes simply could not be fetched.
+
+- **`settled` is a VALUE, not an idle-after-syncing TRANSITION.** For a
+  signed-in account, a transition rule — waiting for `syncing` to flip to
+  `idle` — would miss the seed forever on an account whose first sync
+  completes before `WelcomeSeeder` mounts: that component never observes a
+  `syncing` status at all, so there is no edge to detect. Reading the settled
+  VALUE instead of a transition is what makes the seed reachable on the
+  fastest-syncing accounts, not just the slow ones.
+
+- **A mocked session cannot test this gate, and `WelcomeSeeder.test.tsx`
+  alone did not.** Those tests inject `session = { status: 'signedIn' }` from
+  render 0 — a state the real app never starts in — so every one of them
+  passed against the buggy expression. `WelcomeSeeder.boot.test.tsx` renders
+  the component inside the REAL `SessionProvider` with `SESSION_HINT_KEY` set
+  and `/me` held open, and asserts nothing seeds while the fetch is in
+  flight. Keep both: the mocked file covers the decision table, the boot file
+  covers the sequence.
+
+- **`seedWelcomeNote` marks the device seeded when it declines because notes
+  already exist, and that is safe only because of the gate above.** Returning
+  `false` without the mark left every existing install and every second
+  device re-reading `notes.listActive()` on every boot forever, and — worse —
+  meant a device later emptied to zero notes would seed a welcome note and
+  sync it up, the "delete it and it comes back" the flag exists to prevent.
+  The mark is only correct because the settled gate guarantees the count was
+  read after the account's notes had arrived.
 
 - **No `useLiveQuery` gates this write.** The count check reads the database
   once at the moment the gate's conditions are otherwise satisfied; making it
