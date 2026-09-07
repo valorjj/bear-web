@@ -822,11 +822,35 @@
  * The leading side keeps its full inset, since the `#` needs the room to read
  * as part of the chip rather than as loose prose.
  */
+/*
+ * The tag pill renders as TWO spans, not one, and the CSS below depends on it.
+ *
+ * `tagSyntaxDecorations` overlaps the pill's range with a one-character
+ * decoration over the `#`, and ProseMirror renders overlapping inline
+ * decorations by splitting the text into one span per distinct class set. So
+ * `.bear-tag__hash` is the `#` and `.bear-tag:not(.bear-tag__hash)` is the
+ * name — and the visible pill is drawn ENTIRELY by the name span, with the
+ * hash span collapsed to zero width so the two can never show a seam.
+ *
+ * The `#` is hidden, not removed: it is real document text, so it is still
+ * copied, still serialized, still exported, and still visible the moment the
+ * caret enters the tag — at which point `tagDecorations` suppresses the pill
+ * altogether and the tag is plain text again. That suppression is what makes
+ * hiding the sigil safe rather than a trap: the character is never invisible
+ * at a moment when the user could be trying to edit it.
+ *
+ * The policy this replaced ("this app never hides Markdown syntax") was
+ * MIS-STATED, not merely reversed. The editor holds a real ProseMirror
+ * document: `**bold**` is a mark, `# ` is a heading node, a fence is a
+ * `codeBlock` — none of them carry syntax in the document to hide, so the
+ * rule only ever applied to the two constructs that live as plain text under
+ * a decoration, `#tag` and `[[title]]`. The rule now is the one the reference
+ * app follows: rendered syntax is hidden, and the syntax under the caret is
+ * revealed. See `docs/rulings/tag-pills.md`.
+ */
 .ProseMirror .bear-tag {
-  color: var(--bear-accent);
+  color: var(--bear-text);
   background-color: var(--bear-tag-fill);
-  border-radius: var(--bear-radius-sm);
-  padding: 0.05em 0.15em 0.05em 0.25em;
   /*
    * A pill that wraps gets a complete box on each line rather than one box
    * sliced through the middle, which is the default (`slice`) and reads as a
@@ -839,6 +863,53 @@
 }
 
 /*
+ * The `#` itself. `font-size: 0` removes its WIDTH without removing the
+ * character; no fill and no padding, so it contributes nothing to the box the
+ * name span draws.
+ */
+.ProseMirror .bear-tag.bear-tag__hash {
+  font-size: 0;
+  padding: 0;
+  background: none;
+}
+
+/* The pill proper. Set above body size on purpose: it is an object in the
+ * prose, and at body size the fill reads as a highlight instead. */
+.ProseMirror .bear-tag:not(.bear-tag__hash) {
+  font-size: 1.15em;
+  border-radius: 999px;
+  padding: 0.16em 0.66em 0.16em 0.5em;
+  /*
+   * A pill does not break across lines. `box-decoration-break: clone` above
+   * makes a wrapped fragment a complete box, which was the right answer while
+   * the pill was small type with 0.15em of padding — but the glyph lives in
+   * this span's `::before`, so a break between it and the name leaves a box
+   * containing NOTHING but the glyph at the end of one line and the name in a
+   * second box on the next. It reads as two pills, one of them empty.
+   * Measured, not guessed: `#economy/us-market` in the corpus note did exactly
+   * this at the new size. `nowrap` moves the whole pill to the next line
+   * instead. A tag longer than the 40em measure would now overflow rather than
+   * wrap, which is a trade accepted knowingly — that tag is pathological, and
+   * an orphaned glyph is not.
+   */
+  white-space: nowrap;
+}
+
+.ProseMirror .bear-tag:not(.bear-tag__hash)::before {
+  content: '';
+  display: inline-block;
+  inline-size: 0.82em;
+  block-size: 0.82em;
+  margin-inline-end: 0.26em;
+  vertical-align: -0.08em;
+  background-color: currentColor;
+  mask-image: var(--bear-tag-icon);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+
+/*
  * While Mod is held, pills read as controls. Someone holding Cmd on the way to
  * Cmd-B sees every pill in the note answer, which teaches the gesture without
  * a word of copy — and it is the only affordance there is, since plain click
@@ -848,7 +919,7 @@
  * Ink, which would make holding the modifier look like the pill fading
  * rather than lighting up.
  */
-[data-mod-held='true'] .ProseMirror .bear-tag {
+[data-mod-held='true'] .ProseMirror .bear-tag:not(.bear-tag__hash) {
   cursor: pointer;
   background-color: var(--bear-tag-fill-strong);
 }
@@ -859,8 +930,9 @@
  * link and a tag are the same kind of thing to the eye (a piece of inline
  * chrome over plain text), and this is the resolved, common case.
  *
- * The brackets stay visible for the same reason `#` does on a tag pill: this
- * app never hides Markdown syntax.
+ * The brackets are collapsed for the same reason a tag's `#` is, and on the
+ * same condition: only on a RESOLVED pill, and only while the caret is
+ * outside it. See `linkSyntaxDecorations`.
  */
 .ProseMirror .bear-link {
   border-radius: var(--bear-radius-sm);
@@ -869,7 +941,20 @@
   box-decoration-break: clone;
 }
 
-.ProseMirror .bear-link[data-resolved='true'] {
+/*
+ * `[[` and `]]` on a RESOLVED pill, collapsed exactly as a tag's `#` is —
+ * three spans here rather than two, since the brackets bracket the title.
+ * Unresolved pills get no bracket decoration at all (`linkSyntaxDecorations`),
+ * so their brackets stay visible: with no fill of their own, the brackets are
+ * the only thing marking them as a link to a note that does not exist yet.
+ */
+.ProseMirror .bear-link.bear-link__bracket {
+  font-size: 0;
+  padding: 0;
+  background: none;
+}
+
+.ProseMirror .bear-link[data-resolved='true']:not(.bear-link__bracket) {
   color: var(--bear-accent);
   background-color: var(--bear-tag-fill);
 }
@@ -888,7 +973,7 @@
   text-underline-offset: 0.15em;
 }
 
-[data-mod-held='true'] .ProseMirror .bear-link[data-resolved='true'] {
+[data-mod-held='true'] .ProseMirror .bear-link[data-resolved='true']:not(.bear-link__bracket) {
   cursor: pointer;
   background-color: var(--bear-tag-fill-strong);
 }

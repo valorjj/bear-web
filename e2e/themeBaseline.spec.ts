@@ -22,6 +22,15 @@ import { readThemeTokens } from './fixtures/tokens.ts';
  * contrast harness only checks floors, and a drifted-but-still-legible colour
  * clears them.
  *
+ * **`tag-fill` and `tag-fill-strong` were deliberately re-based on
+ * 2026-09-07, for all five themes.** They were tints of `--bear-accent`; the
+ * tag pill was restyled to read as an object in the prose rather than as
+ * emphasis on it, so they are now tints of `--bear-text` (and a neutral
+ * opaque pair in High Contrast, which uses opaque fills throughout). That is
+ * a change of intent, not the drift this file exists to catch — every other
+ * token in the baseline is untouched, which is exactly what made the two
+ * distinguishable here.
+ *
  * Comparison is by parsed RGBA, never by string. A value that reads `rgb(…)`
  * today may legitimately read `color(srgb …)` afterwards while denoting the
  * same colour — which is exactly why `parseColour` had to learn that format

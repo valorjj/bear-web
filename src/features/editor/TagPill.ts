@@ -161,6 +161,29 @@ export function tagDecorations(
   return decorations;
 }
 
+/**
+ * The `#` of every pill, as its own one-character decoration, so CSS can
+ * collapse it and `.bear-tag::before` can draw a glyph where it was.
+ *
+ * Derived from the PILL decorations, deliberately, rather than from a second
+ * doc walk. That is what makes the two incapable of disagreeing: a tag whose
+ * pill was suppressed because the caret is inside it has no hash decoration
+ * either, so the `#` becomes visible at exactly the moment the user is
+ * editing it — the reveal-on-edit behaviour falls out of the existing
+ * suppression rule instead of being a second rule that could drift from it.
+ *
+ * It also leaves `tagDecorations`' contract untouched, which matters more
+ * than it looks: `tagAgreement.test.ts` derives tag NAMES from that
+ * function's output by reading the text under each range, and an extra
+ * one-character range in that list would read as a tag called `#` and break
+ * the agreement guard for a purely cosmetic change.
+ */
+export function tagSyntaxDecorations(pills: readonly Decoration[]): Decoration[] {
+  return pills.map((pill) =>
+    Decoration.inline(pill.from, pill.from + 1, { class: 'bear-tag__hash' }),
+  );
+}
+
 export const TagPill = Extension.create<TagPillOptions>({
   name: 'tagPill',
 
@@ -191,10 +214,8 @@ export const TagPill = Extension.create<TagPillOptions>({
         key: tagPillKey,
         props: {
           decorations(state) {
-            return DecorationSet.create(
-              state.doc,
-              tagDecorations(state, editor.isFocused, activateHint),
-            );
+            const pills = tagDecorations(state, editor.isFocused, activateHint);
+            return DecorationSet.create(state.doc, [...pills, ...tagSyntaxDecorations(pills)]);
           },
 
           handleDOMEvents: {

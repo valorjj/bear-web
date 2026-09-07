@@ -487,8 +487,8 @@ test('a modifier click on a tag pill filters by that tag, and does not move the 
   await expect(noteList.getByText('Groceries')).toBeVisible();
   await expect(noteList.getByText('Ship #work today')).toBeVisible();
 
-  const pill = editor.locator('.bear-tag');
-  await expect(pill).toHaveText('#work');
+  const pill = editor.locator('.bear-tag:not(.bear-tag__hash)');
+  await expect(pill).toHaveText('work');
 
   await pill.click({ modifiers: ['ControlOrMeta'] });
 
@@ -560,8 +560,8 @@ test('a modifier click on a tag the app declines places the caret instead of doi
 
   // The pill is painted even though the tag is not in the index — the editor
   // deliberately learns nothing about scopes.
-  const pill = editor.locator('.bear-tag');
-  await expect(pill).toHaveText('#work');
+  const pill = editor.locator('.bear-tag:not(.bear-tag__hash)');
+  await expect(pill).toHaveText('work');
 
   await pill.click({ modifiers: ['ControlOrMeta'] });
 
@@ -588,11 +588,11 @@ test('a plain click on a tag pill places the caret and does not filter', async (
   await page.keyboard.type('Ship #work today');
   await editor.blur();
 
-  await editor.locator('.bear-tag').click();
+  await editor.locator('.bear-tag:not(.bear-tag__hash)').click();
 
   // The caret landed in the tag, so its pill is suppressed — that is the
   // observable proof the click was an edit rather than an activation.
-  await expect(editor.locator('.bear-tag')).toHaveCount(0);
+  await expect(editor.locator('.bear-tag:not(.bear-tag__hash)')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
     'aria-current',
     'page',

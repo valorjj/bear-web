@@ -271,9 +271,14 @@ test.describe('@measure', () => {
         'Also what an unsupported construct — a table — currently renders as.',
       ),
       await measure(
-        prose.locator('.bear-tag').first(),
+        // `:not(.bear-tag__hash)`, because a pill renders as TWO spans: the
+        // collapsed `#` and the name that draws the box. A bare `.bear-tag`
+        // matches the collapsed one first and measured a 0 x 0 transparent
+        // box — a reference file that looks like coverage while recording
+        // nothing at all.
+        prose.locator('.bear-tag:not(.bear-tag__hash)').first(),
         'editor: tag pill',
-        'A decoration, not a mark.',
+        'A decoration, not a mark. Two spans: the `#` is collapsed and the name draws the pill.',
       ),
       await measure(prose.locator('ul[data-type="taskList"] li').first(), 'editor: task item', ''),
     ];

@@ -272,14 +272,21 @@
     var(--bear-accent) calc(var(--bear-tint) * 100%),
     transparent
   );
+  /*
+   * DERIVED FROM `--bear-text`, not from `--bear-accent`, since 2026-09-07.
+   * The pill is meant to read as an object sitting in the prose the way
+   * Bear's does, and an accent tint reads as emphasis on the text instead.
+   * The tint SCALE is unchanged, so each theme's existing per-theme tuning
+   * still applies — only the hue the tint is taken from moved.
+   */
   --bear-tag-fill: color-mix(
     in srgb,
-    var(--bear-accent) calc(var(--bear-tint-mid) * 100%),
+    var(--bear-text) calc(var(--bear-tint-mid) * 100%),
     transparent
   );
   --bear-tag-fill-strong: color-mix(
     in srgb,
-    var(--bear-accent) calc(var(--bear-tint-strong) * 100%),
+    var(--bear-text) calc(var(--bear-tint-strong) * 100%),
     transparent
   );
 
@@ -485,6 +492,18 @@
    * `triangle-alert` and `circle-x`, copied verbatim. `stroke='black'` is
    * arbitrary: a mask reads alpha, not colour.
    */
+  /*
+   * The tag pill's glyph, drawn where the `#` used to be. lucide `Hash`,
+   * verbatim, in the same masked-data-URI form the callout icons above use —
+   * a mask keys on ALPHA, so `stroke='black'` is simply "opaque" and the pill
+   * colours the glyph with its own `currentColor`.
+   *
+   * A mask rather than `lucide-react`: this draws inside a ProseMirror
+   * decoration, which cannot render React, and importing the icon package
+   * into the editor was measured at +57 kB gzip and rejected once already
+   * (see `Icon.tsx`).
+   */
+  --bear-tag-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 9h16'/%3E%3Cpath d='M4 15h16'/%3E%3Cpath d='M10 3 8 21'/%3E%3Cpath d='M16 3l-2 18'/%3E%3C/svg%3E");
   --bear-cal-icon-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E");
   --bear-cal-icon-tip: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5'/%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3C/svg%3E");
   --bear-cal-icon-success: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E");
@@ -635,8 +654,8 @@
   --bear-hover: rgb(40 34 66 / 0.05);
   --bear-selected: rgb(91 74 214 / 0.09);
   --bear-shadow: rgb(40 34 66 / 0.07);
-  --bear-tag-fill: rgb(91 74 214 / 0.12);
-  --bear-tag-fill-strong: rgb(91 74 214 / 0.26);
+  --bear-tag-fill: rgb(36 31 61 / 0.12);
+  --bear-tag-fill-strong: rgb(36 31 61 / 0.26);
   /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
      not repeated here; these four are the `==`-less `<mark class="hl-*">`
      colours. Translucent over the page rather than opaque, the same trick
@@ -675,8 +694,8 @@
   --bear-selected: rgb(207 59 44 / 0.11);
   --bear-shadow: rgb(28 27 25 / 0.14);
   --bear-canvas: #e8e4de;
-  --bear-tag-fill: rgb(207 59 44 / 0.16);
-  --bear-tag-fill-strong: rgb(207 59 44 / 0.32);
+  --bear-tag-fill: rgb(28 27 25 / 0.16);
+  --bear-tag-fill-strong: rgb(28 27 25 / 0.32);
   /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
      not repeated here; these four are the `==`-less `<mark class="hl-*">`
      colours. Translucent over the page rather than opaque, the same trick
@@ -732,8 +751,8 @@
   --bear-hover: rgb(40 34 66 / 0.05);
   --bear-selected: rgb(91 74 214 / 0.09);
   --bear-shadow: rgb(40 34 66 / 0.07);
-  --bear-tag-fill: rgb(91 74 214 / 0.12);
-  --bear-tag-fill-strong: rgb(91 74 214 / 0.26);
+  --bear-tag-fill: rgb(36 31 61 / 0.12);
+  --bear-tag-fill-strong: rgb(36 31 61 / 0.26);
   /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
      not repeated here; these four are the `==`-less `<mark class="hl-*">`
      colours. Translucent over the page rather than opaque, the same trick
@@ -916,8 +935,8 @@
   --bear-hover: rgb(255 255 255 / 0.06);
   --bear-selected: rgb(155 140 255 / 0.2);
   --bear-shadow: rgb(0 0 0 / 0.4);
-  --bear-tag-fill: rgb(155 140 255 / 0.22);
-  --bear-tag-fill-strong: rgb(155 140 255 / 0.38);
+  --bear-tag-fill: rgb(240 237 247 / 0.22);
+  --bear-tag-fill-strong: rgb(240 237 247 / 0.38);
   /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
      not repeated here; these four are the `==`-less `<mark class="hl-*">`
      colours. Translucent over the page rather than opaque, the same trick
@@ -954,8 +973,8 @@
   --bear-selected: rgb(255 111 94 / 0.18);
   --bear-shadow: rgb(0 0 0 / 0.5);
   --bear-canvas: #121211;
-  --bear-tag-fill: rgb(255 111 94 / 0.18);
-  --bear-tag-fill-strong: rgb(255 111 94 / 0.32);
+  --bear-tag-fill: rgb(235 233 229 / 0.18);
+  --bear-tag-fill-strong: rgb(235 233 229 / 0.32);
   /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
      not repeated here; these four are the `==`-less `<mark class="hl-*">`
      colours. Translucent over the page rather than opaque, the same trick
@@ -1105,8 +1124,8 @@
    */
   --bear-scroll-a: 0.6;
   --bear-scroll-hover-a: 0.85;
-  --bear-tag-fill: #4a3d00;
-  --bear-tag-fill-strong: #6b5800;
+  --bear-tag-fill: #3a3a3a;
+  --bear-tag-fill-strong: #555555;
   /*
    * The syntax palette, overridden rather than interpolated. This theme's
    * surface is pure black, and the shared dark palette's saturated hues do not
@@ -1169,8 +1188,8 @@
     --bear-hover: rgb(255 255 255 / 0.06);
     --bear-selected: rgb(155 140 255 / 0.2);
     --bear-shadow: rgb(0 0 0 / 0.4);
-    --bear-tag-fill: rgb(155 140 255 / 0.22);
-    --bear-tag-fill-strong: rgb(155 140 255 / 0.38);
+    --bear-tag-fill: rgb(240 237 247 / 0.22);
+    --bear-tag-fill-strong: rgb(240 237 247 / 0.38);
     /* Named highlight fills. The DEFAULT highlight is `--bear-selected` and is
        not repeated here; these four are the `==`-less `<mark class="hl-*">`
        colours. Translucent over the page rather than opaque, the same trick

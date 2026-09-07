@@ -418,19 +418,19 @@ Also what an unsupported construct — a table — currently renders as.
 
 ## editor: tag pill
 
-A decoration, not a mark.
+A decoration, not a mark. Two spans: the `#` is collapsed and the name draws the pill.
 
 | Property | Value |
 | --- | --- |
-| box | 573.6 x 46.2 |
+| box | 206.5 x 27.9 |
 | font-family | `"Pretendard Variable", system-ui, sans-serif` |
-| font-size | `16px` |
+| font-size | `18.4px` |
 | font-weight | `400` |
-| line-height | `25.6px` |
-| color | `rgb(91, 74, 214)` |
-| background-color | `rgba(91, 74, 214, 0.12)` |
-| padding | `0.8px 2.4px 0.8px 4px` |
-| border-radius | `6px` |
+| line-height | `29.44px` |
+| color | `rgb(36, 31, 61)` |
+| background-color | `rgba(36, 31, 61, 0.12)` |
+| padding | `2.944px 12.144px 2.944px 9.2px` |
+| border-radius | `999px` |
 
 ## editor: task item
 

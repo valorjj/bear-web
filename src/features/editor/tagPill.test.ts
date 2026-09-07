@@ -3,12 +3,26 @@ import type { DecorationSet } from '@tiptap/pm/view';
 import { describe, expect, it } from 'vitest';
 
 import { buildEditorExtensions, editorExtensions } from './extensions';
-import { TagPill, tagDecorations, tagRangeAt } from './TagPill';
+import { TagPill, tagDecorations, tagRangeAt, tagSyntaxDecorations } from './TagPill';
 import type { TagPillOptions } from './TagPill';
 
 function docFor(content: string): Editor {
   return new Editor({ extensions: editorExtensions, content });
 }
+
+/**
+ * One rendered pill.
+ *
+ * `:not(.bear-tag__hash)` is load-bearing, not defensive. The hash decoration
+ * overlaps the pill's own range, and ProseMirror renders overlapping inline
+ * decorations by splitting the text into one span per distinct class set — so
+ * a single pill renders as `<span class="bear-tag bear-tag__hash">#</span>`
+ * followed by `<span class="bear-tag">work</span>`, and a bare `.bear-tag`
+ * would count two elements per pill. This selector names the NAME segment,
+ * of which there is still exactly one per pill, so every count below means
+ * what it meant before the glyph landed.
+ */
+const PILL = '.bear-tag:not(.bear-tag__hash)';
 
 /** The decorations this plugin would produce for the given state. */
 function decorationsOf(editor: Editor): Array<{ from: number; to: number }> {
@@ -327,10 +341,10 @@ describe('mounted plugin (real DOM, not a direct tagDecorations call)', () => {
     const neutral = 1 + andIndex + 2;
 
     editor.commands.setTextSelection(insideWork);
-    expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(1);
+    expect(editor.view.dom.querySelectorAll(PILL)).toHaveLength(1);
 
     editor.commands.setTextSelection(neutral);
-    expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(2);
+    expect(editor.view.dom.querySelectorAll(PILL)).toHaveLength(2);
 
     editor.destroy();
   });
@@ -348,7 +362,7 @@ describe('mounted plugin (real DOM, not a direct tagDecorations call)', () => {
     // 1 (the opening edge of '#work') by default. Unfocused, both tags
     // should be pilled.
     expect(editor.isFocused).toBe(false);
-    expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(2);
+    expect(editor.view.dom.querySelectorAll(PILL)).toHaveLength(2);
 
     // A real 'focus' DOM event, not a property assignment: this is what
     // exercises Tiptap's own `FocusEvents` extension, which sets
@@ -356,11 +370,11 @@ describe('mounted plugin (real DOM, not a direct tagDecorations call)', () => {
     // plugin's suppression depends on to ever repaint.
     editor.view.dom.focus();
     expect(editor.isFocused).toBe(true);
-    expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(1);
+    expect(editor.view.dom.querySelectorAll(PILL)).toHaveLength(1);
 
     editor.view.dom.blur();
     expect(editor.isFocused).toBe(false);
-    expect(editor.view.dom.querySelectorAll('.bear-tag')).toHaveLength(2);
+    expect(editor.view.dom.querySelectorAll(PILL)).toHaveLength(2);
 
     editor.destroy();
   });
@@ -671,6 +685,78 @@ describe('tag activation', () => {
 
     expect(original).toEqual(['work']);
     expect(replaced).toEqual([]);
+    editor.destroy();
+  });
+});
+
+describe('tag syntax decorations', () => {
+  /**
+   * The `#` is collapsed so the pill can draw a glyph in its place, the way
+   * Bear's pill reads. Derived from the PILL decorations rather than from a
+   * second doc walk, which is what guarantees the two can never disagree:
+   * a tag with no pill (the caret is inside it, so its plain text shows for
+   * editing) has no hash to collapse either, and the syntax is visible at
+   * exactly the moment the user needs to edit it.
+   */
+  it('collapses exactly the leading # of every pill', () => {
+    const editor = docFor('<p>a #work b</p>');
+    const pills = tagDecorations(editor.state);
+    const syntax = tagSyntaxDecorations(pills);
+
+    expect(syntax).toHaveLength(1);
+    const [{ from, to }] = syntax;
+    expect(to - from!).toBe(1);
+    expect(editor.state.doc.textBetween(from!, to!)).toBe('#');
+    editor.destroy();
+  });
+
+  it('collapses one # per occurrence', () => {
+    const editor = docFor('<p>#work then #home</p>');
+    const full = editor.state.doc.textBetween(0, editor.state.doc.content.size);
+    editor.commands.setTextSelection(1 + full.indexOf('then') + 2);
+
+    const syntax = tagSyntaxDecorations(tagDecorations(editor.state));
+    expect(syntax).toHaveLength(2);
+    for (const { from, to } of syntax) {
+      expect(editor.state.doc.textBetween(from, to)).toBe('#');
+    }
+    editor.destroy();
+  });
+
+  it('collapses nothing while the caret is inside the tag, so the # can be edited', () => {
+    const editor = docFor('<p>a #work b</p>');
+    const full = editor.state.doc.textBetween(0, editor.state.doc.content.size);
+    // Inside `#work`, which suppresses the pill — and therefore the collapse.
+    editor.commands.setTextSelection(1 + full.indexOf('#work') + 2);
+
+    expect(tagDecorations(editor.state)).toHaveLength(0);
+    expect(tagSyntaxDecorations(tagDecorations(editor.state))).toHaveLength(0);
+    editor.destroy();
+  });
+});
+
+describe('the rendered pill markup', () => {
+  it('splits into a collapsed hash span and a name span', () => {
+    // The rendering the CSS depends on. Asserted here rather than inferred
+    // from the decoration list, because the split is ProseMirror's doing
+    // (overlapping inline decorations merge per text segment) and not
+    // something either decoration function states on its own.
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const editor = new Editor({
+      extensions: editorExtensions,
+      content: '<p>a #work b</p>',
+      element: container,
+    });
+
+    const hash = editor.view.dom.querySelectorAll('.bear-tag.bear-tag__hash');
+    expect(hash).toHaveLength(1);
+    expect(hash[0]!.textContent).toBe('#');
+
+    const name = editor.view.dom.querySelectorAll(PILL);
+    expect(name).toHaveLength(1);
+    expect(name[0]!.textContent).toBe('work');
+
     editor.destroy();
   });
 });

@@ -2,7 +2,7 @@ import { Editor, isMacOS } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { buildEditorExtensions, editorExtensions } from './extensions';
-import { linkRangeAt } from './LinkPill';
+import { linkDecorations, linkRangeAt, linkSyntaxDecorations } from './LinkPill';
 
 // jsdom has no layout engine, so ProseMirror's `coordsAtPos`/`posAtCoords`
 // (reached here via `view.posAtCoords`) throw on APIs jsdom never
@@ -374,5 +374,57 @@ describe('link activation', () => {
     const pills = container.querySelectorAll('.bear-link');
     expect(pills).toHaveLength(2);
     pills.forEach((pill) => expect(pill.getAttribute('title')).toBe('Cmd-click to open'));
+  });
+});
+
+describe('link syntax decorations', () => {
+  /**
+   * Brackets collapse on a RESOLVED pill only. An unresolved link carries no
+   * fill at all — muted text plus a dashed underline (`editor.css`) — so the
+   * `[[` `]]` are the only thing distinguishing "a link to a note I have not
+   * written yet" from ordinary prose. Hiding them there would erase the
+   * signal; hiding them on a filled pill costs nothing, because the pill
+   * itself is the signal.
+   */
+  it('collapses both brackets of a resolved pill', () => {
+    const editor = new Editor({
+      extensions: editorExtensions,
+      content: '<p>see [[Notes]] here</p>',
+    });
+    const pills = linkDecorations(editor.state, new Set(['notes']));
+    const syntax = linkSyntaxDecorations(pills);
+
+    expect(syntax).toHaveLength(2);
+    for (const { from, to } of syntax) {
+      expect(editor.state.doc.textBetween(from, to)).toMatch(/^(\[\[|\]\])$/);
+    }
+    editor.destroy();
+  });
+
+  it('leaves an unresolved pill with its brackets visible', () => {
+    const editor = new Editor({
+      extensions: editorExtensions,
+      content: '<p>see [[Nope]] here</p>',
+    });
+    const pills = linkDecorations(editor.state, new Set());
+
+    expect(pills).toHaveLength(1);
+    expect(linkSyntaxDecorations(pills)).toHaveLength(0);
+    editor.destroy();
+  });
+
+  it('collapses nothing while the caret is inside the link', () => {
+    const editor = new Editor({
+      extensions: editorExtensions,
+      content: '<p>see [[Notes]] here</p>',
+    });
+    const full = editor.state.doc.textBetween(0, editor.state.doc.content.size);
+    editor.commands.setTextSelection(1 + full.indexOf('[[Notes]]') + 3);
+
+    expect(linkDecorations(editor.state, new Set(['notes']))).toHaveLength(0);
+    expect(linkSyntaxDecorations(linkDecorations(editor.state, new Set(['notes'])))).toHaveLength(
+      0,
+    );
+    editor.destroy();
   });
 });

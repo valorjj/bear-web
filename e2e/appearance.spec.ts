@@ -670,9 +670,15 @@ test('a tag renders as a pill, distinct from the prose beside it', async ({ page
   // it before measuring — otherwise this test measures the suppressed state.
   await page.keyboard.press('End');
 
-  const pill = editor.locator('.bear-tag');
+  // `:not(.bear-tag__hash)` names the NAME span. A pill renders as two spans
+  // since the glyph landed — the collapsed `#` and the name that draws the
+  // box — so a bare `.bear-tag` matches two elements per pill.
+  const pill = editor.locator('.bear-tag:not(.bear-tag__hash)');
   await expect(pill).toHaveCount(1);
-  await expect(pill).toHaveText('#work');
+  await expect(pill).toHaveText('work');
+  // The `#` is hidden, not deleted: still one character of real document
+  // text, which is what keeps copy, serialization and export unaffected.
+  await expect(editor.locator('.bear-tag.bear-tag__hash')).toHaveText('#');
 
   const measured = await pill.evaluate((element) => {
     const own = getComputedStyle(element);
@@ -681,8 +687,10 @@ test('a tag renders as a pill, distinct from the prose beside it', async ({ page
       color: own.color,
       background: own.backgroundColor,
       radius: Number.parseFloat(own.borderTopLeftRadius),
+      fontSize: Number.parseFloat(own.fontSize),
       proseColor: prose === null ? null : getComputedStyle(prose).color,
       proseBackground: prose === null ? null : getComputedStyle(prose).backgroundColor,
+      proseFontSize: prose === null ? null : Number.parseFloat(getComputedStyle(prose).fontSize),
       proseFound: prose !== null,
     };
   });
@@ -690,7 +698,16 @@ test('a tag renders as a pill, distinct from the prose beside it', async ({ page
   // A null lookup must fail, not satisfy the comparison — the trap that made
   // two assertions in this file vacuous until M7.5's final review.
   expect(measured.proseFound).toBe(true);
-  expect(measured.color).not.toBe(measured.proseColor);
+  // The pill's TEXT COLOUR deliberately matches the prose since 2026-09-07.
+  // It used to be `--bear-accent`, and this assertion used to read
+  // `not.toBe(proseColor)`; the pill was restyled to read as a neutral object
+  // sitting in the sentence rather than as emphasis on it, so colour is no
+  // longer one of the things that separates the two — and asserting that it
+  // is would pin a look the app deliberately abandoned.
+  expect(measured.color).toBe(measured.proseColor);
+  // What separates it now, instead, and each is a value that moves with the
+  // behaviour: a fill, a radius, and type set ABOVE the prose it sits in.
+  expect(measured.fontSize).toBeGreaterThan(measured.proseFontSize!);
   // Not-transparent and not-equal-to-the-surrounding-prose are two different
   // failures, per the pane-card test above: a transparent pill's computed
   // `backgroundColor` is the literal string `rgba(0, 0, 0, 0)`, never equal to

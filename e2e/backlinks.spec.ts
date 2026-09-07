@@ -96,20 +96,31 @@ test.describe('backlinks', () => {
     await page.getByRole('button', { name: rowNamed(SPRINT_TITLE) }).click();
     const editor = editorLocator(page);
 
-    const pill = editor.locator('.bear-link', { hasText: SEED_TITLE });
+    // Wait for RESOLUTION before taking a handle, the way the Mod-click test
+    // above does. `setKnownNoteTitles` arrives a tick after mount, and a
+    // resolved pill renders as three spans (`[[`, the title, `]]` — the
+    // brackets are collapsed by `linkSyntaxDecorations`) where an unresolved
+    // one is a single span. So a handle taken during the unresolved instant
+    // is destroyed, not merely re-attributed, and Playwright then waits out
+    // the full timeout on an element that will never be visible again.
+    await expect(editor).toContainText(SPRINT_TITLE);
+    await expect(editor.locator('.bear-link', { hasText: SEED_TITLE })).toHaveAttribute(
+      'data-resolved',
+      'true',
+    );
+
+    // The title span, not the whole pill: `.bear-link` matches the two
+    // collapsed bracket spans too, and a zero-width span cannot be clicked.
+    const pill = editor.locator('.bear-link:not(.bear-link__bracket)', { hasText: SEED_TITLE });
     await expect(pill).toHaveCount(1);
 
-    // Click near the RIGHT edge of the pill, after its closing `]]`, not its
-    // centre. A click landing mid-title (say, between `[[` and `Seeding`)
-    // puts the caret where `linkAutocompleteMatchAt` sees an "unclosed [["
-    // immediately behind it — the closing `]]` a few characters further
-    // along the same line does not stop that scan — so the contenteditable
-    // flips to `role="combobox"` and `getByRole('textbox', …)` stops
-    // matching it at all, which read as "the editor vanished" until traced.
-    // Landing past the closing brackets keeps this test about the plain
-    // click's own contract, not a second, unrelated plugin.
-    const box = (await pill.boundingBox())!;
-    await pill.click({ position: { x: box.width - 2, y: box.height / 2 } });
+    // Mid-pill is safe here: `linkAutocompleteMatchAt` refuses to open inside
+    // an already-complete `[[Title]]` (`LinkAutocomplete.ts`), so the caret
+    // landing between `[[` and the title no longer flips the contenteditable
+    // to `role="combobox"`. This test previously clicked 2px from the right
+    // edge to dodge exactly that, and the comment explaining why outlived the
+    // fix it was working around.
+    await pill.click();
 
     // The caret landed inside the link's range, so its decoration is
     // suppressed while the caret sits there — the same observable

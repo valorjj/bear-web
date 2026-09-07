@@ -626,22 +626,22 @@
   },
   {
     "surface": "editor: tag pill",
-    "note": "A decoration, not a mark.",
+    "note": "A decoration, not a mark. Two spans: the `#` is collapsed and the name draws the pill.",
     "box": {
-      "width": 573.6,
-      "height": 46.2
+      "width": 206.5,
+      "height": 27.9
     },
     "style": {
       "font-family": "\"Pretendard Variable\", system-ui, sans-serif",
-      "font-size": "16px",
+      "font-size": "18.4px",
       "font-weight": "400",
-      "line-height": "25.6px",
+      "line-height": "29.44px",
       "letter-spacing": "normal",
-      "color": "rgb(91, 74, 214)",
-      "background-color": "rgba(91, 74, 214, 0.12)",
-      "padding": "0.8px 2.4px 0.8px 4px",
+      "color": "rgb(36, 31, 61)",
+      "background-color": "rgba(36, 31, 61, 0.12)",
+      "padding": "2.944px 12.144px 2.944px 9.2px",
       "margin": "0px",
-      "border-radius": "6px",
+      "border-radius": "999px",
       "border-top-width": "0px",
       "border-bottom-width": "0px",
       "gap": "normal",

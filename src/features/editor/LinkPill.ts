@@ -134,10 +134,43 @@ export function linkDecorations(
         'data-resolved': String(resolved),
       };
       if (activateHint !== null) attrs.title = activateHint;
-      decorations.push(Decoration.inline(from, to, attrs));
+      // `resolved` also goes in the decoration's SPEC, not only its rendered
+      // attributes: `linkSyntaxDecorations` below has to know it, and
+      // `Decoration.spec` is public where the rendered attrs are reachable
+      // only through ProseMirror's internal decoration type.
+      decorations.push(Decoration.inline(from, to, attrs, { resolved }));
     }
     return false;
   });
+
+  return decorations;
+}
+
+/**
+ * The `[[` and `]]` of every RESOLVED pill, as their own decorations, so CSS
+ * can collapse them the way `bear-tag__hash` collapses a tag's `#`.
+ *
+ * Resolved only, and that is a deliberate divergence from the tag pill rather
+ * than an oversight. An unresolved link carries no fill at all — muted text
+ * plus a dashed underline (`editor.css`) — so its brackets are the only thing
+ * separating "a link to a note I have not written yet" from ordinary prose.
+ * Hiding them there would delete the signal; hiding them on a filled pill
+ * costs nothing, because the fill IS the signal.
+ *
+ * Derived from the pill decorations for the same reason `tagSyntaxDecorations`
+ * is: suppression while the caret is inside the link then applies to the
+ * brackets automatically, so they reappear exactly when they are editable.
+ */
+export function linkSyntaxDecorations(pills: readonly Decoration[]): Decoration[] {
+  const decorations: Decoration[] = [];
+
+  for (const pill of pills) {
+    if (pill.spec?.resolved !== true) continue;
+    // `[[` and `]]` are two characters each, and `linkHitsIn` reports a range
+    // covering the whole `[[title]]`, so the two ends are fixed offsets.
+    decorations.push(Decoration.inline(pill.from, pill.from + 2, { class: 'bear-link__bracket' }));
+    decorations.push(Decoration.inline(pill.to - 2, pill.to, { class: 'bear-link__bracket' }));
+  }
 
   return decorations;
 }
@@ -220,10 +253,13 @@ export const LinkPill = Extension.create<LinkPillOptions>({
 
         props: {
           decorations(state) {
-            return DecorationSet.create(
-              state.doc,
-              linkDecorations(state, knownNoteTitles(state), editor.isFocused, linkActivateHint),
+            const pills = linkDecorations(
+              state,
+              knownNoteTitles(state),
+              editor.isFocused,
+              linkActivateHint,
             );
+            return DecorationSet.create(state.doc, [...pills, ...linkSyntaxDecorations(pills)]);
           },
 
           handleDOMEvents: {

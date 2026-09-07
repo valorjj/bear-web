@@ -16,7 +16,10 @@ tokens or the `.bear-tag` rules in `src/styles/editor.css`, and the suites
 (`linkDecorations`, `linkRangeAt`, `linkHitsIn`, `LinkPillOptions`, its
 `handleDOMEvents.mousedown`), `AppShell.handleActivateLink`, and
 `linkPill.test.ts` — the link pill's activation is a deliberate copy of this
-file's contract, not an independent design.
+file's contract, not an independent design. Also `tagSyntaxDecorations` and
+`linkSyntaxDecorations`, the `bear-tag__hash` / `bear-link__bracket` classes,
+the `--bear-tag-icon` token, and any selector anywhere that counts
+`.bear-tag` or `.bear-link` elements.
 
 - **`LinkPill`'s activation matches `TagPill`'s exactly: `Mod`-click
   activates, a plain click places the caret, and `onActivateLink === null`
@@ -339,3 +342,98 @@ file's contract, not an independent design.
   `useState` initializer — and restore it in a `finally`. This milestone
   shipped two tests named for platform branches that could never execute
   them.
+
+## The sigil is hidden in the rendered state, and revealed under the caret
+
+Added 2026-09-07, when the tag pill was restyled to read as an object in the
+prose rather than as emphasis on it.
+
+- **"This app never hides Markdown syntax" is retired, and it was
+  MIS-STATED rather than merely wrong.** It lived as a comment in
+  `src/styles/editor.css` beside the link pill. The editor holds a real
+  ProseMirror document, not Markdown text: `**bold**` is a `strong` mark,
+  `# ` is a heading node, a fenced block is a `codeBlock`. None of those have
+  any syntax in the document to hide or show, so the rule could only ever
+  have applied to the two constructs that live as PLAIN TEXT with a
+  decoration painted over them — `#tag` and `[[title]]`. It described two
+  special cases as a universal principle, which is why reversing it for tags
+  read as breaking a rule rather than as correcting one.
+
+  The replacement, which is also what the reference app does — measured from
+  two screenshots on 2026-09-07, not assumed: **rendered syntax is hidden,
+  and the syntax under the caret is revealed.** Bear shows `**` dimmed on the
+  line the caret is in and hides it everywhere else; with the caret in a
+  heading, nothing in the note shows a marker at all.
+
+- **The reveal is not a second rule, and must not become one.** It falls out
+  of the suppression that `tagDecorations` and `linkDecorations` already
+  perform: a tag or link the selection intersects gets NO pill, so there is
+  nothing to hide its sigil either. `tagSyntaxDecorations` and
+  `linkSyntaxDecorations` are therefore derived from the PILL decorations —
+  mapped from their ranges, never computed from a second doc walk — which is
+  what makes the two incapable of disagreeing. Any future change that
+  computes the collapse independently reintroduces the possibility of a
+  hidden sigil the user cannot reveal, which is the one outcome this design
+  exists to prevent.
+
+- **A pill therefore renders as TWO spans, and a resolved link pill as
+  THREE.** ProseMirror splits overlapping inline decorations into one span
+  per distinct class set, so `#work` is
+  `<span class="bear-tag bear-tag__hash">#</span><span class="bear-tag">work</span>`.
+  Every selector that counts pills must exclude the sigil span
+  (`.bear-tag:not(.bear-tag__hash)`), and this is not hypothetical
+  book-keeping: a bare `.bear-tag` in `e2e/measure.spec.ts` matched the
+  collapsed span first and recorded a **0 x 0 transparent box** into the
+  committed `measurements.md` — a reference file that looks like coverage
+  while measuring nothing. `tagPill.test.ts`, `appearance.spec.ts` and
+  `notes.spec.ts` all had to be corrected the same way.
+
+- **Link brackets collapse on a RESOLVED pill only.** An unresolved link
+  carries no fill — muted text plus a dashed underline — so its `[[ ]]` are
+  the only thing separating "a link to a note I have not written yet" from
+  ordinary prose. Hiding them there deletes the signal; hiding them on a
+  filled pill costs nothing, because the fill IS the signal.
+
+- **`white-space: nowrap` on the pill is load-bearing, not tidying.** The
+  glyph is drawn by the name span's `::before`, and
+  `box-decoration-break: clone` gives a wrapped fragment a complete box — so
+  a break between glyph and name produced a box containing nothing but the
+  glyph at the end of one line and the name in a second box on the next,
+  reading as two pills, one of them empty. Measured with
+  `#economy/us-market` from the corpus at the new size, not guessed. The
+  accepted cost is that a tag longer than the 40em measure overflows instead
+  of wrapping.
+
+- **`--bear-tag-fill` is derived from `--bear-text`, not `--bear-accent`.**
+  An accent tint reads as emphasis on the text; the pill is meant to read as
+  an object sitting in it. The tint SCALE is unchanged, so each theme's own
+  tuning still applies. All seven explicit per-theme overrides had to move
+  too — High Contrast keeps OPAQUE fills, as everything in that theme does,
+  with only the hue going neutral — and `e2e/fixtures/themeBaseline.json` was
+  re-based for the five pre-F themes with the reason recorded in that spec's
+  docblock. That guard exists to catch accidental drift; this was a change of
+  intent, and the fact that every other token in the baseline stayed
+  identical is what made the two distinguishable.
+
+  Note the second, indented copy of the dark palette inside
+  `@media (prefers-color-scheme: dark)`: a two-space search-and-replace over
+  `tokens.css` silently skips it, and `sourceLint.test.ts`'s
+  "keeps the system-dark block identical to its named theme" is what catches
+  the miss.
+
+- **The pill's TEXT COLOUR now matches the prose deliberately**, so
+  `appearance.spec.ts`'s pill test asserts `toBe(proseColor)` where it used
+  to assert `not.toBe`. What separates a pill from the prose is the fill, the
+  radius and type set above the surrounding size — the last of which the test
+  now asserts, and which was demonstrated to fail against a stylesheet
+  sabotaged back to `1em`.
+
+- **Open, and deliberately not settled here: Bear keeps the FORMATTING while
+  revealing the syntax; we drop the decoration entirely.** Bear's `**text**`
+  stays bold with the markers dimmed beside it; our tag reverts to plain text
+  the moment the caret enters, because `tagDecorations`' suppression predates
+  the glyph and exists so character widths do not jump while a tag is being
+  typed. At the pill's new size, keeping the pill and adding a visible `#`
+  would jump the line further than Bear's two dim asterisks do. Whether the
+  pill should persist through editing is a real question; it is not answered
+  by this ruling.
