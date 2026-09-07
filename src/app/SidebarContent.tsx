@@ -4,7 +4,6 @@ import { AccountMenu } from '@/features/account';
 import { ThemePicker } from '@/features/appearance';
 import { LanguageToggle } from '@/features/locale';
 import { TypographyButton } from '@/features/typography';
-import { Logo } from '@/ui/Logo';
 import type { NoteScope } from '@/features/notes';
 import { SmartListSidebar } from '@/features/notes';
 import type { SmartListCounts } from '@/features/notes';
@@ -66,18 +65,10 @@ export function SidebarContent({
       </div>
 
       <div className="border-border flex shrink-0 items-center gap-1 border-t p-1">
-        {/*
-          The mark sits opposite the controls rather than among them: it is
-          identification, not something to press, and a brand glyph inside a
-          row of four buttons reads as a fifth one.
-        */}
-        <Logo size={18} className="text-accent ms-2 shrink-0" />
-        <div className="ms-auto flex items-center gap-1">
-          <ThemePicker />
-          <TypographyButton />
-          <AccountMenu />
-          <LanguageToggle />
-        </div>
+        <ThemePicker />
+        <TypographyButton />
+        <AccountMenu />
+        <LanguageToggle />
       </div>
     </>
   );
