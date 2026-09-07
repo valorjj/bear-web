@@ -327,13 +327,17 @@ sites; `src/features/graph/useGraphSnapshot.ts`; and
   true of it.
 
 - **The gate is `seen && !seeded && count === 0 && settled`, and `settled` is
-  `lastSyncedAt !== null`, not an idle-after-syncing TRANSITION.** A
-  transition rule — waiting for `syncing` to flip to `idle` — would miss the
-  seed forever on an account whose first sync completes before
-  `WelcomeSeeder` mounts: that component never observes a `syncing` status at
-  all, so there is no edge to detect. Reading the settled VALUE instead of a
-  transition is what makes the seed reachable on the fastest-syncing accounts,
-  not just the slow ones.
+  `!signedIn || (sync.status === 'idle' && sync.lastSyncedAt !== null)` — a
+  VALUE, not an idle-after-syncing TRANSITION.** The `!signedIn` half is the
+  GUEST short-circuit, and it is the branch that matters most: it is the
+  primary path the landing's e2e spec exercises, and a guest has no sync
+  status to wait on at all, so `settled` must be unconditionally true for one
+  the moment `signedIn` is false. For a signed-in account, a transition rule
+  — waiting for `syncing` to flip to `idle` — would miss the seed forever on
+  an account whose first sync completes before `WelcomeSeeder` mounts: that
+  component never observes a `syncing` status at all, so there is no edge to
+  detect. Reading the settled VALUE instead of a transition is what makes the
+  seed reachable on the fastest-syncing accounts, not just the slow ones.
 
 - **No `useLiveQuery` gates this write.** The count check reads the database
   once at the moment the gate's conditions are otherwise satisfied; making it

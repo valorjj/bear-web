@@ -83,8 +83,9 @@ fit that contract). Recorded in `docs/rulings/design-tokens-and-layout.md`.
 The gap is not the landing spec itself — that added exactly 3, as predicted —
 it is the 16 per-theme contrast cases the plan's arithmetic omitted, which the
 landing case in `e2e/contrast.spec.ts` added alongside its own sweep. Unit
-went from 2756 to 2794 (38 new, across `harnessDefaults.test.ts`, the gate
-hook, `seedWelcomeNote`, `WelcomeSeeder`, and the `Landing` component itself).
+went from 2756 to 2794 (38 new, across `scripts/harnessDefaults.test.ts`, the
+gate hook, `seedWelcomeNote`, `WelcomeSeeder`, and the `Landing` component
+itself).
 
 **`measure:check` passed unchanged**, as expected: the landing adds a new
 surface but alters no existing geometry, so nothing in the committed

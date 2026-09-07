@@ -20,7 +20,7 @@ in `src/features/editor/HeadingFold.ts`'s badge handlers or
 and its `CEILING_BYTES`; `build.manifest` in `vite.config.ts`; any new
 `React.lazy` boundary, and any new runtime dependency reachable from
 `main.tsx`; `playwright.config.ts`'s `use.storageState`, `vitest.setup.ts`'s
-`beforeEach`, `src/features/landing/harnessDefaults.test.ts`, and any e2e or
+`beforeEach`, `scripts/harnessDefaults.test.ts`, and any e2e or
 component spec that opts out of the landing gate's pre-dismissed default.
 
 - **The eager-JS ceiling is a FROZEN budget at 346,500 B gzipped, not a
@@ -409,11 +409,16 @@ export/index`) could be broken at either edge. Breaking it in `html.ts`, by
   assumes an empty database — 13 of them start from zero notes specifically. A
   test that wants the landing (or the seed) must opt out explicitly, the way
   `e2e/landing.spec.ts` does with `test.use({ storageState: { cookies: [],
-origins: [] } })`. `src/features/landing/harnessDefaults.test.ts` pins the
+origins: [] } })`. `scripts/harnessDefaults.test.ts` pins the
   literal values both harness files must spell by hand — neither may import
   from `src/` — so removing either default turns most of the suite red at
   once; that is the intended failure mode, not a regression to quietly fix by
-  loosening the test.
+  loosening the test. It lives in `scripts/`, not beside the gate constants it
+  imports, because `tsconfig.node.json` already includes `scripts` with real
+  Node types: keeping it under `src/` had required an ambient
+  `declare module 'node:fs'` that leaked into the whole `app` project rather
+  than staying scoped to one file — exactly the guard this repo's `src/`
+  Node-type ban exists to enforce.
 
 - **The contrast and shots landing cases must assert the landing heading
   visible BEFORE measuring or screenshotting, never after.** Without both the
