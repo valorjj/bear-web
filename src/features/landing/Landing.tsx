@@ -57,7 +57,7 @@ function LandingScreen({ onEnter }: LandingProps): ReactElement {
     <main className="bg-canvas flex h-dvh flex-col items-center justify-center px-6">
       <div className="flex w-full max-w-[360px] flex-col items-center gap-8">
         <div className="flex flex-col items-center gap-2 text-center">
-          <h1 className="text-text text-ui-lg font-semibold tracking-tight">
+          <h1 className="text-text text-3xl font-semibold tracking-tight">
             {t('landing.wordmark')}
           </h1>
           <p className="text-muted text-ui text-balance">{t('landing.tagline')}</p>
