@@ -31,7 +31,8 @@ spacing, `rounded-*`, `shadow-*` or `outline-none` utility; a plain CSS
 `e2e/smoke.spec.ts`; `src/features/notes/NoteListItem.tsx`'s row structure and
 `src/features/notes/thumbnail.ts`; `src/lib/useLayoutMode.ts`'s breakpoints,
 `src/app/SidebarDrawer.tsx`, `src/ui/Dialog.tsx`'s `placement`, and
-`src/app/paneWidths.ts`'s `SHELL_CHROME_WIDTH` / `maxPaneWidth`.
+`src/app/paneWidths.ts`'s `SHELL_CHROME_WIDTH` / `maxPaneWidth`; and the four
+brand hex literals in `src/features/landing/GoogleMark.tsx`.
 
 - **Tokens sit in THREE TIERS, and the split is what the theme system rests
   on.** Tier 1, palette (16 tokens): `bg` `surface` `sidebar` `canvas` `text`
@@ -1361,3 +1362,14 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   disagreeing about which way the button goes, and no test would catch it. The
   key predated its first consumer and read "Language"; it was never rendered,
   so it was repointed rather than duplicated.
+
+- **`GoogleMark.tsx`'s four brand hex values are the sole permitted literal
+  colours outside `tokens.css`.** They render Google's own "G" mark for the
+  landing screen's sign-in button, and a trademark's colours are not the
+  app's to recolour: they must not shift with the theme, so they are plain
+  hex literals rather than `--bear-*` custom properties, and `e2e/contrast.spec.ts`'s
+  landing case excludes the mark from its sweep for the same reason — there is
+  no ratio to enforce against a fixed third-party mark. This is deliberately
+  not folded into `Icon.tsx`: that file holds lucide's verbatim `__iconNode`
+  arrays, walked by its own test as single-colour shapes taking their colour
+  from `currentColor`, and a four-colour trademark does not fit that contract.

@@ -19,7 +19,9 @@ in `src/features/editor/HeadingFold.ts`'s badge handlers or
 `src/features/graph/runLayout.ts` and `layoutGraph.ts`; `scripts/bundleSize.test.ts`
 and its `CEILING_BYTES`; `build.manifest` in `vite.config.ts`; any new
 `React.lazy` boundary, and any new runtime dependency reachable from
-`main.tsx`.
+`main.tsx`; `playwright.config.ts`'s `use.storageState`, `vitest.setup.ts`'s
+`beforeEach`, `src/features/landing/harnessDefaults.test.ts`, and any e2e or
+component spec that opts out of the landing gate's pre-dismissed default.
 
 - **The eager-JS ceiling is a FROZEN budget at 346,500 B gzipped, not a
   ratchet. Ruled 2026-08-31, before L5.** From K1 onward the ceiling was raised
@@ -398,3 +400,24 @@ export/index`) could be broken at either edge. Breaking it in `html.ts`, by
   **-1,222 B** — the barrel had been dragging `RichEditor` and everything it
   reaches into the export path. Breaking it in `RichEditor.tsx` instead
   removed the cycle equally well and **cost 329 B**.
+
+- **`playwright.config.ts`'s `use.storageState` and `vitest.setup.ts`'s
+  `beforeEach` both pre-dismiss the landing gate, and BOTH keys matter.**
+  Setting only the "seen" key would close the gate but leave the seed
+  condition live, so the first render after boot would inject a welcome note
+  into every one of the 37 e2e specs (and much of the component suite) that
+  assumes an empty database — 13 of them start from zero notes specifically. A
+  test that wants the landing (or the seed) must opt out explicitly, the way
+  `e2e/landing.spec.ts` does with `test.use({ storageState: { cookies: [],
+origins: [] } })`. `src/features/landing/harnessDefaults.test.ts` pins the
+  literal values both harness files must spell by hand — neither may import
+  from `src/` — so removing either default turns most of the suite red at
+  once; that is the intended failure mode, not a regression to quietly fix by
+  loosening the test.
+
+- **The contrast and shots landing cases must assert the landing heading
+  visible BEFORE measuring or screenshotting, never after.** Without both the
+  `storageState` override and that assertion, the block silently measures (or
+  photographs) the **app shell** instead of the landing screen, and passes —
+  the same shape of false-green as `parseColour`'s `NaN`: a check that looks
+  like coverage but is measuring the wrong screen entirely.

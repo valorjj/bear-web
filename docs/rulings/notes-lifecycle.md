@@ -17,7 +17,8 @@ symbols `autoFocus`, `seedText`,
 `folds.set` call sites; the Backspace/Delete guard in
 `src/features/editor/HeadingFold.ts`'s `handleKeyDown`; `notes.purge` /
 `notes.save` call sites; `src/data/reindex.ts`'s `reindexNote` and its call
-sites; and `src/features/graph/useGraphSnapshot.ts`.
+sites; `src/features/graph/useGraphSnapshot.ts`; and
+`src/features/landing/WelcomeSeeder.tsx` / `seedWelcomeNote.ts`.
 
 - **A SECOND derived index, `noteLinks`, now rides `reindexNote` alongside
   `noteTags` (L2)** — `reindexNote(db, noteId, text, parseTags, parseLinks,
@@ -315,3 +316,27 @@ sites; and `src/features/graph/useGraphSnapshot.ts`.
   tested clean while an accident did its job. Reading through a ref makes the
   comparison mean what it says and makes the guard falsifiable — removing it
   now fails `LanguageToggle.test.tsx`.
+
+## The welcome note is seeded through the ordinary write path, not a special one
+
+- **`WelcomeSeeder.tsx` calls `seedWelcomeNote.ts`, which writes through
+  `notes.create()` exactly like any note a person types themselves.** It
+  carries no special kind, no sync exemption, and no separate reconciliation
+  path — it is a normal note that happens to be created by the app instead of
+  a keystroke. Anything true of `notes.create()` elsewhere in this file is
+  true of it.
+
+- **The gate is `seen && !seeded && count === 0 && settled`, and `settled` is
+  `lastSyncedAt !== null`, not an idle-after-syncing TRANSITION.** A
+  transition rule — waiting for `syncing` to flip to `idle` — would miss the
+  seed forever on an account whose first sync completes before
+  `WelcomeSeeder` mounts: that component never observes a `syncing` status at
+  all, so there is no edge to detect. Reading the settled VALUE instead of a
+  transition is what makes the seed reachable on the fastest-syncing accounts,
+  not just the slow ones.
+
+- **No `useLiveQuery` gates this write.** The count check reads the database
+  once at the moment the gate's conditions are otherwise satisfied; making it
+  reactive would re-run the whole seed decision on every note count change,
+  including the seed's own write, for no behavioural gain — the same shape
+  the graph snapshot section above rejects for a different reason.

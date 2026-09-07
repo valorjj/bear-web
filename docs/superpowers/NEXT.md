@@ -1,8 +1,8 @@
 # Next up
 
 Written 2026-08-20 after M8 + M9a shipped; last reconciled against
-`CLAUDE.md` on **2026-09-01**, when sub-project M (publish, a public
-read-only URL for one note) shipped.
+`CLAUDE.md` on **2026-09-07**, when sub-project R (the first-visit landing
+page) shipped.
 
 This file exists so a fresh session can resume without re-deriving decisions
 already made. Delete a section once its sub-project has a real spec in
@@ -19,14 +19,15 @@ believe the table and fix this file.
 ## Where things stand
 
 - `main` carries everything in `CLAUDE.md`'s status table marked complete —
-  through **L5 (server-rendered Mermaid diagrams), 2026-09-01**. Live on Pages.
-- 2444 unit tests, 208 end-to-end. All six gates green.
+  through **R (first-visit landing page), 2026-09-07**. Live on Pages.
+- 2794 unit tests, 264 end-to-end. All six gates green.
 - Every sub-project branch named in this file is merged and deleted.
 
-**What is actually left, as of 2026-09-03:**
+**What is actually left, as of 2026-09-07:**
 
 | Open | State |
 | --- | --- |
+| **R landing page** | SHIPPED 2026-09-07 — see the section below |
 | **N paste Markdown as Markdown** | SHIPPED 2026-09-02 — see the spec |
 | **J4 platform chrome** | not started — the last of the four |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
@@ -41,6 +42,69 @@ believe the table and fix this file.
 | The bundle ceiling is **351,000 B**, raised by the user on 2026-09-03 | Q shipped at **349,360 B**, a true eager cost of **1,505 B**, leaving **1,640 B**. Two claims this row used to make were wrong and are corrected in `scripts/bundleSize.test.ts`'s docblock with the measurements: a fourth `React.lazy` root makes the closure WORSE (+322 B), and `themes-*` is not the theme code — Rolldown's chunk names are arbitrary, the ~234 KB chunk is Tiptap/ProseMirror/React/lowlight, and splitting the real theme roster out nets about **-322 B**. The "ceiling comes down if Q lands under" condition did NOT fire: measured plus the ~3 KB practice is 352,360, higher than the ceiling already in force, so honouring it literally would have raised the number again. |
 | An empty row above the header in some pasted tables | BLOCKED ON A FILE, not on analysis. The user reported it from a note titled 우리가 직접 답할 수 없는 질문들. Ruled out by measurement: our table PARSE is correct (`tableRow > tableHeader`, verified against the committed `src/features/editor/fixtures/geminiAnswer.plain.txt`), and `.bear-table-handles` is `height: 0; pointer-events: none` so the handle layer cannot occupy a row. Most likely the empty header row is in that note's own source Markdown. Ask the user to export it (⋯ → Markdown) before spending any more time reasoning. |
 | Two editor/export divergences left open | Recorded during P's follow-up rather than fixed: the export has no title-line treatment, and its heading sizes are literals where the editor derives them from `--bear-heading-ratio`. Neither is visible in the four themes whose PDFs were pixel-verified; both will drift further as the editor gains typography controls, so Q should close them rather than widen them. |
+
+### R. The landing page — SHIPPED 2026-09-07
+
+Spec and plan: `docs/superpowers/plans/`, `.superpowers/sdd/2026-09-07-r-landing-page/`.
+
+A first-visit landing screen (`markflowing`, "Sign in with Google", "Continue
+as guest") gates the app the very first time a browser opens it, then never
+returns — a storage-backed gate flag, checked once at boot, decides whether
+`Landing` or the app shell renders. Choosing guest seeds one welcome note (an
+inline `#inbox` tag, so the seed exercises the real parser and the real tag
+index rather than a synthetic fixture) through the ordinary `notes.create()`
+path, gated on `seen && !seeded && count === 0 && settled`. See
+`docs/rulings/notes-lifecycle.md` for why `settled` is a value
+(`lastSyncedAt !== null`) rather than an idle-after-syncing transition, and
+`docs/rulings/testing-and-tooling.md` for why both the shared `storageState`
+default and `vitest.setup.ts`'s `beforeEach` must pre-dismiss the gate with
+BOTH its keys.
+
+**The bundle measured under the ceiling, with little room to spare.** The
+eager JS closure came in at **350,720 B** gzipped against the frozen
+351,000 B ceiling — **280 B** of headroom, well inside what the pre-R
+baseline (349,360 B) had left (1,640 B), so the landing screen, `GoogleMark`'s
+four brand-colour paths and the welcome note's two bodies together cost
+roughly 1,360 B. No `React.lazy` boundary was reached for — the landing sits
+on the critical path for exactly the visitors with the coldest cache, so
+deferring it would only move the cost, not remove it — and the closure came
+in under the ceiling as measured, so no trimming or lazy-loading decision was
+forced.
+
+**The Google mark's four brand hex values are the one exception to "every
+colour is a token."** They render a third party's trademark and must not
+shift with the theme, so they are plain literals in
+`src/features/landing/GoogleMark.tsx`, excluded from the contrast sweep, and
+deliberately not folded into `Icon.tsx` (whose lucide `__iconNode` arrays are
+walked as single-colour shapes by its own test — a four-colour mark does not
+fit that contract). Recorded in `docs/rulings/design-tokens-and-layout.md`.
+
+**The plan predicted 248 e2e tests (245 + 3 new); the real figure is 264.**
+The gap is not the landing spec itself — that added exactly 3, as predicted —
+it is the 16 per-theme contrast cases the plan's arithmetic omitted, which the
+landing case in `e2e/contrast.spec.ts` added alongside its own sweep. Unit
+went from 2756 to 2794 (38 new, across `harnessDefaults.test.ts`, the gate
+hook, `seedWelcomeNote`, `WelcomeSeeder`, and the `Landing` component itself).
+
+**`measure:check` passed unchanged**, as expected: the landing adds a new
+surface but alters no existing geometry, so nothing in the committed
+`measurements.md`/`.json` had reason to move.
+
+**Findings worth carrying forward:**
+
+- Both harness defaults (`playwright.config.ts`'s `use.storageState` and
+  `vitest.setup.ts`'s `beforeEach`) must set BOTH the "seen" and "seeded"
+  keys. Setting only "seen" closes the gate but leaves the seed condition
+  live, which would inject a welcome note into every spec and component test
+  that assumes an empty database.
+- The contrast and shots landing cases must assert the landing heading
+  visible before measuring or screenshotting. Skipping that check is
+  invisible in the diff and in the exit code: the block would silently
+  measure or photograph the app shell instead and pass — the same shape of
+  false-green as `parseColour`'s `NaN`.
+- `npm run shots` grows from 256 to 272 files (17 shots × 16 themes); the
+  landing shot needs its own `storageState` opt-out, the same way the e2e
+  spec does.
 
 ### Q. Typography settings — SHIPPED 2026-09-03
 
