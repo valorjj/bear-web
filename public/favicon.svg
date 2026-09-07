@@ -2,33 +2,47 @@
   <!--
     The mark: a hash whose horizontals flow.
 
-    `#` is the only glyph that means both things this app is. It is Markdown's
-    heading marker, and it is this app's organising primitive — notes here are
-    filed by inline hashtags rather than folders. The horizontals are given a
-    shallow wave so the mark reads as the name at size and still resolves to a
-    clean hashtag at 16px, where a deeper curve turns to mush.
+    A hash is the only glyph that means both things this app is. It is
+    Markdown's heading marker, and it is this app's organising primitive:
+    notes here are filed by inline hashtags rather than folders. The
+    horizontals carry a shallow wave so the mark reads as the name at size
+    and still resolves to a clean hash at 16px, where a deeper curve mushes.
 
-    The colours are literal on purpose, and this file is the ONE place in the
-    project where that is correct: a favicon is fetched by the browser as a
-    standalone document and never sees the app's stylesheet, so
-    `var(--bear-accent)` would resolve to nothing. `src/ui/Logo.tsx` is the
-    in-app mark and uses `currentColor` so all sixteen themes drive it.
+    NOTHING IN THIS COMMENT MAY CONTAIN TWO CONSECUTIVE HYPHENS. XML forbids
+    them inside a comment, and an SVG that fails to parse does not degrade to
+    an unstyled icon; the browser drops it entirely and shows its own default
+    glyph, with a clean 200 in the network panel and no error in the console.
+    That shipped once, on 2026-09-07, because an earlier version of this very
+    comment named a CSS custom property in full.
 
-    The media query is not decoration. At #5b4ad6 on a dark tab strip the mark
-    is close to invisible; measured against the dark chrome it needed the
-    lighter tint to stay legible.
+    The colours are literal, and this file is the one place in the project
+    where that is correct. A favicon is fetched as a standalone document and
+    never sees the app's stylesheet, so a design token would resolve to
+    nothing. src/ui/Logo.tsx is the in-app mark and uses currentColor, so all
+    sixteen themes drive it.
+
+    The stroke is set by a CSS RULE, not by a presentation attribute holding
+    var(). Presentation attributes do not reliably resolve custom properties
+    in image context, and the failure there is also silent: the paths render
+    with no stroke at all.
+
+    The media query is not decoration. At the light accent on a dark tab strip
+    the mark is close to invisible, so the dark scheme gets a lighter tint.
   -->
   <style>
-    :root {
-      --mark: #5b4ad6;
+    .mark {
+      fill: none;
+      stroke: #5b4ad6;
+      stroke-width: 3.2;
+      stroke-linecap: round;
     }
     @media (prefers-color-scheme: dark) {
-      :root {
-        --mark: #a99cf5;
+      .mark {
+        stroke: #a99cf5;
       }
     }
   </style>
-  <g fill="none" stroke="var(--mark)" stroke-width="3.2" stroke-linecap="round">
+  <g class="mark">
     <path d="M13 5 L10 27" />
     <path d="M23 5 L20 27" />
     <path d="M4 13.2 q6 -1.8 12 0 t12 0" />
