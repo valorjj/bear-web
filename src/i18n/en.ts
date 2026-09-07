@@ -291,6 +291,12 @@ export const en = {
   'account.signOut.confirm': 'Sign out',
   'account.signOut.cancel': 'Cancel',
 
+  'landing.wordmark': 'markflowing',
+  'landing.tagline': 'Markdown notes that stay on your device.',
+  'landing.signIn': 'Sign in with Google',
+  'landing.guest': 'Continue as guest',
+  'landing.pending': 'Signing you in…',
+
   'sync.idle': 'Notes are backed up',
   // The signed-in-but-never-synced state. `sync.idle` is the resting state
   // both BEFORE the first run and after a successful one, and claiming a

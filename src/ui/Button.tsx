@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 
 export type ButtonVariant = 'default' | 'primary' | 'danger' | 'ghost' | 'soft';
-export type ButtonSize = 'sm' | 'md' | 'touch';
+export type ButtonSize = 'sm' | 'md' | 'touch' | 'lg';
 
 export interface ButtonProps {
   onClick: () => void;
@@ -62,6 +62,11 @@ const SIZES: Record<ButtonSize, string> = {
   // for 24. Square and circular, because at this size it holds one glyph and
   // nothing else.
   touch: 'h-11 w-11 rounded-full',
+  // A full-width, 44px-tall action for a screen with no other controls to
+  // sit beside — the landing screen's two buttons. Distinct from `touch`:
+  // that size is square for a single glyph, this one carries a label and
+  // needs `w-full` from the caller, which no other size sets.
+  lg: 'h-11 px-4 text-ui rounded-sm',
 };
 
 /*
@@ -77,6 +82,7 @@ const NEEDS_TOUCH_TARGET: Record<ButtonSize, string> = {
   sm: 'touch-target',
   md: 'touch-target',
   touch: '',
+  lg: '',
 };
 
 export function Button({
