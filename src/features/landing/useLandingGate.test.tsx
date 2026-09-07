@@ -27,15 +27,24 @@ describe('useLandingGate', () => {
     expect(localStorage.getItem(LANDING_SEEN_KEY)).toBe('1');
   });
 
-  // The flag is read in a lazy initialiser, so it is read once at mount and
-  // never again. Without that, a re-render would re-read storage on the
-  // render path — cheap here, but the wrong shape, and it makes `dismiss`
-  // the only thing that can close the gate.
-  it('does not reopen when storage is cleared after mount', () => {
+  // The flag is read once at mount, and React owns `open` from then on: a
+  // later storage change — another tab, a cleared site data, a stray write —
+  // cannot reopen or close the gate underneath the user. Only `dismiss` can.
+  // Both directions matter: a write that clears the flag must not reopen a
+  // closed gate, and a write that sets the flag must not close an open one.
+  it('the gate never reopens on its own — only dismiss closes it', () => {
     localStorage.setItem(LANDING_SEEN_KEY, '1');
     const { result, rerender } = renderHook(() => useLandingGate());
     localStorage.clear();
     rerender();
     expect(result.current.open).toBe(false);
+  });
+
+  it('the gate never closes on its own — only dismiss closes it', () => {
+    localStorage.removeItem(LANDING_SEEN_KEY);
+    const { result, rerender } = renderHook(() => useLandingGate());
+    localStorage.setItem(LANDING_SEEN_KEY, '1');
+    rerender();
+    expect(result.current.open).toBe(true);
   });
 });
