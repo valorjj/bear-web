@@ -4,7 +4,7 @@ import '@testing-library/jest-dom/vitest';
 import { Blob as NodeBlob } from 'node:buffer';
 
 import { cleanup } from '@testing-library/react';
-import { afterEach } from 'vitest';
+import { afterEach, beforeEach } from 'vitest';
 
 /**
  * What `matchMedia` reports before a test says otherwise. Desktop, so the
@@ -54,6 +54,28 @@ globalThis.Blob = NodeBlob as unknown as typeof Blob;
 
 afterEach(() => {
   cleanup();
+});
+
+/**
+ * Every component test lands in the app, not on the landing screen.
+ *
+ * Set here rather than in each test file for the reason the e2e default
+ * exists: a test written months from now cannot forget it. A test that
+ * genuinely wants the landing screen clears these two keys itself.
+ *
+ * `localStorage` is reached through `globalThis` with a local shape because
+ * this file lives in the `node` tsconfig project (`lib: ["ES2023"]`, no DOM)
+ * on purpose -- the same reason the `matchMedia` stub declares its own type.
+ * jsdom supplies the real object at runtime.
+ */
+interface StorageStub {
+  setItem(key: string, value: string): void;
+}
+
+beforeEach(() => {
+  const storage = (globalThis as { localStorage?: StorageStub }).localStorage;
+  storage?.setItem('bear-web:landing:seen', '1');
+  storage?.setItem('bear-web:landing:seeded', '1');
 });
 
 /**
