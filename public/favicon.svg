@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="markflowing">
+  <!--
+    The mark: a hash whose horizontals flow.
+
+    `#` is the only glyph that means both things this app is. It is Markdown's
+    heading marker, and it is this app's organising primitive — notes here are
+    filed by inline hashtags rather than folders. The horizontals are given a
+    shallow wave so the mark reads as the name at size and still resolves to a
+    clean hashtag at 16px, where a deeper curve turns to mush.
+
+    The colours are literal on purpose, and this file is the ONE place in the
+    project where that is correct: a favicon is fetched by the browser as a
+    standalone document and never sees the app's stylesheet, so
+    `var(--bear-accent)` would resolve to nothing. `src/ui/Logo.tsx` is the
+    in-app mark and uses `currentColor` so all sixteen themes drive it.
+
+    The media query is not decoration. At #5b4ad6 on a dark tab strip the mark
+    is close to invisible; measured against the dark chrome it needed the
+    lighter tint to stay legible.
+  -->
+  <style>
+    :root {
+      --mark: #5b4ad6;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --mark: #a99cf5;
+      }
+    }
+  </style>
+  <g fill="none" stroke="var(--mark)" stroke-width="3.2" stroke-linecap="round">
+    <path d="M13 5 L10 27" />
+    <path d="M23 5 L20 27" />
+    <path d="M4 13.2 q6 -1.8 12 0 t12 0" />
+    <path d="M3 20.8 q6 -1.8 12 0 t12 0" />
+  </g>
+</svg>
