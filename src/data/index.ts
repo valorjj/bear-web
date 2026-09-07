@@ -52,7 +52,7 @@ export type {
   RemoteTag,
   Transport,
 } from './sync/transport';
-export { findTagRanges, parseTags } from './tags';
+export { canWriteTag, findTagRanges, normalizeTag, parseTags, rewriteTag } from './tags';
 export type { TagRange } from './tags';
 export { buildTitleIndex, findLinkRanges, normalizeTitle, parseLinks } from './links';
 export type { LinkRange, TitledNote } from './links';

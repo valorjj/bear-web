@@ -54,7 +54,7 @@ function trimTrailing(input: string): string {
   return value;
 }
 
-function normalizeTag(raw: string): string | null {
+export function normalizeTag(raw: string): string | null {
   // Deliberate asymmetry between the two tag forms: the simple-form scanner
   // stops AT a mask, so `#work`x`` yields `work` — the mask is a boundary,
   // never inspected. The multi-word form takes the far `#` as its closer
