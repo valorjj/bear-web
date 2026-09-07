@@ -278,6 +278,73 @@ test.describe('contrast', () => {
 });
 
 /**
+ * The landing gate, which needs its OWN `storageState` override: the shared
+ * default in `playwright.config.ts` pre-dismisses it for every other spec in
+ * this file. Without the override this block would silently measure the
+ * app shell instead of the landing screen and pass — the exact shape of
+ * failure `parseColour`'s `NaN` blind spot had, so the visibility assertion
+ * below is not optional.
+ *
+ * The Google mark is excluded on purpose: `GoogleMark.tsx`'s four paths are a
+ * third party's trademark colours, fixed rather than token-driven, and are
+ * not ours to recolour or to hold to this palette's floors.
+ */
+test.describe('landing', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  for (const id of THEME_IDS) {
+    test(`${id} clears its contrast floors on the landing screen`, async ({ page }) => {
+      await page.addInitScript((theme: string) => {
+        localStorage.setItem('bear-web:theme', theme);
+      }, id);
+      await page.goto('/');
+
+      // The gate must actually be showing, not the app shell it sits in
+      // front of.
+      await expect(page.getByRole('heading', { name: 'markflowing' })).toBeVisible();
+
+      const tokens = await readThemeTokens(page, id, READ);
+
+      for (const name of READ) {
+        expect(tokens[name], `--bear-${name} resolved to nothing in ${id}`).toBeTruthy();
+      }
+
+      const failures: string[] = [];
+
+      for (const rule of [...RULES, ...DECORATIVE]) {
+        for (const ground of rule.grounds) {
+          const ratio = contrastRatio(parseColour(tokens[rule.fg]!), parseColour(tokens[ground]!));
+          if (!Number.isFinite(ratio)) {
+            failures.push(`${rule.fg} on ${ground}: unparseable colour (ratio was ${ratio})`);
+          } else if (ratio < rule.min) {
+            failures.push(`${rule.fg} on ${ground}: ${ratio.toFixed(2)} < ${rule.min}`);
+          }
+        }
+      }
+
+      for (const rule of OVERLAYS) {
+        const ground = composite(
+          parseColour(tokens[rule.overlay]!),
+          parseColour(tokens[rule.ground]!),
+        );
+        const ratio = contrastRatio(parseColour(tokens[rule.fg]!), ground);
+        if (!Number.isFinite(ratio)) {
+          failures.push(
+            `${rule.fg} on ${rule.overlay} over ${rule.ground}: unparseable colour (ratio was ${ratio})`,
+          );
+        } else if (ratio < rule.min) {
+          failures.push(
+            `${rule.fg} on ${rule.overlay} over ${rule.ground}: ${ratio.toFixed(2)} < ${rule.min}`,
+          );
+        }
+      }
+
+      expect(failures, `${id}\n${failures.join('\n')}`).toEqual([]);
+    });
+  }
+});
+
+/**
  * The theme picker, which is the one surface where SIXTEEN palettes are on
  * screen at once and the rules above cannot help.
  *
