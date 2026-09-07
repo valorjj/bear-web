@@ -405,8 +405,54 @@ import { describe, expect, it } from 'vitest';
  * in line with what the last three raises actually left (455 B, 233 B,
  * 775 B), so the standing observation holds: the eager closure is still
  * functionally spent, and the durable fix is still not another raise.
+ *
+ * ### S1 (tag rename and delete): the ceiling moves to 355,000, decided by
+ * the user on 2026-09-08
+ *
+ * `main`, the branch point, measures **350,514 B** — only **486 B** of
+ * headroom under the 351,000 ceiling before this sub-project touched
+ * anything. Tasks 1-2 (the pure `rewriteTag`/`canWriteTag` engine plus the
+ * `tags.rename`/`tags.remove`/`tags.affected` repository methods) measure
+ * **351,120 B** — **606 B** of real growth, 120 B over the ceiling in
+ * force. This is the first task to pull any of S1's code into the eager
+ * boot closure (`src/data/repositories/index.ts` is imported at app root);
+ * Task 1 alone added nothing eager.
+ *
+ * **Going lazier was tried and measured WORSE, and that is worth recording
+ * in full because it is counter-intuitive and otherwise gets tried again.**
+ * Moving `rewriteTag`/`removalRange` behind `await import('../tags/
+ * rewriteTagEngine')` inside `apply()`, with `canWriteTag`/`tagToken` left
+ * eager (Task 5's rename popover calls `canWriteTag` during render, so it
+ * cannot move), measured **351,157 B — 37 B WORSE** than the 351,120 B
+ * before the split, not better. The dynamic `rewriteTagEngine.ts` still
+ * imports `findTagRanges` from `parseTags.ts`, which the eager
+ * `canWriteTag`/`tagToken` also still reach — so the engine and the eager
+ * code end up sharing a dependency across the eager/dynamic boundary, and
+ * Rolldown extracts that shared code into its own chunk rather than
+ * inlining it at either call site. That extraction produced a new **919 B**
+ * eager chunk (`rewriteTag-*.js`), while the split genuinely removed only
+ * ~884 B from `EmptyState-*` — a net loss once the new chunk's own
+ * extraction and standalone-gzip overhead is counted. The split's code (a
+ * `rewriteTagEngine.ts` file and a dynamic import in `apply()`) was
+ * reverted rather than kept half-effective; `rewriteTag` stays exactly
+ * where Task 1 put it, statically re-exported from `src/data/tags/
+ * index.ts` and `src/data/index.ts`.
+ *
+ * Why 355,000 rather than a tighter figure sized to Tasks 1-2 alone: four
+ * tasks of eager UI remain in this plan — a tag context menu, a rename
+ * popover, the shell wiring, and the i18n keys those need — so a raise
+ * measured only against 606 B of growth would need to be re-asked three
+ * more times before the branch is done.
+ *
+ * So `CEILING_BYTES` moves to **355,000**, decided BY THE USER on
+ * 2026-09-08. The ceiling remains FROZEN under the same rule as every raise
+ * before it; this does not reopen routine ratcheting. **When this branch
+ * finishes, this number comes DOWN to S1's measured closure plus about
+ * 3 KB rather than staying at the ask** — the same condition the 351,000
+ * raise carried, so the ceiling re-freezes at an honest figure instead of
+ * ratcheting upward. That ratchet is a later task's job, not this one's.
  */
-const CEILING_BYTES = 351_000;
+const CEILING_BYTES = 355_000;
 
 interface ManifestChunk {
   file: string;
