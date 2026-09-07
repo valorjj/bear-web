@@ -44,17 +44,24 @@ const THEME_IDS = [
  *     let size and weight carry the hierarchy, or these rows have to grow and
  *     seven palettes have to move.
  *
- *     KNOWN GAP, open as of 2026-09-07: the "Continue as guest" control is
- *     `Button variant="ghost"`, and `ghost` is `text-muted`. It therefore
- *     still paints muted on canvas, and measures the same seven ratios above
- *     (3.80 on gruvbox-light) — verified in a real browser, not inferred.
- *     Adding `canvas` back to the `muted` row would catch it and would also
- *     fail for the wrong reason, since `muted` on canvas is fine anywhere the
- *     landing does not paint; and `className="text-text"` cannot fix it,
- *     because `Button` concatenates its classes and equal-specificity
- *     utilities are decided by stylesheet order, not attribute order. The
- *     real fix is a variant that OMITS `text-muted`, which is a change to a
- *     shared primitive and is not this file's to make.
+ *     `canvas` must stay OUT of the `muted` row permanently, and the reason is
+ *     a palette fact rather than a fact about today's markup. These rows
+ *     compare TOKEN PAIRS, not usages: `muted` on `canvas` measures 3.80 in
+ *     gruvbox-light whether or not a single glyph is painted that way, so the
+ *     row would fail exactly as it did on 2026-09-07 no matter how the landing
+ *     is written. Removing every muted-on-canvas glyph — which R did — does
+ *     not make the pair passable; it makes the pair unused. Do not read a
+ *     clean landing screen as licence to add the row back.
+ *
+ *     What keeps the screen honest instead is `Button`'s `quiet` variant. The
+ *     "Continue as guest" control was `ghost` (i.e. `text-muted`) until
+ *     2026-09-07 and measured those same seven ratios in a real browser —
+ *     3.80 on gruvbox-light, on one of the screen's two calls to action. It is
+ *     `quiet` now, which is `ghost` resting at `text-text`. Note that
+ *     `className="text-text"` would NOT have fixed it: `Button` concatenates
+ *     its classes, so two equal-specificity utilities are decided by
+ *     stylesheet order and not by attribute order — the `Pane`/`shadow-none`
+ *     trap. A variant that OMITS `text-muted` is the only reliable form.
  *   - `accent` and `danger` are not text on `sidebar`. A selected sidebar row
  *     is `text-text` on `bg-selected`; the accent appears there only as the 2px
  *     edge marker, a graphical object. Accent-as-text is the search highlight

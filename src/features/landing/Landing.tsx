@@ -67,9 +67,9 @@ function LandingScreen({ onEnter }: LandingProps): ReactElement {
             light measured 3.80:1). `text` clears 4.5 on canvas in all sixteen.
             Nothing is lost — hierarchy here is size and weight, a 30px
             semibold wordmark against 14px regular, not colour.
-            `e2e/contrast.spec.ts` holds the rule; see its RULES comment,
-            which also records the one string on this screen still painting
-            muted on canvas — the ghost-variant "Continue as guest" button.
+            `e2e/contrast.spec.ts` holds the rule; see its RULES comment. The
+            guest button below is `quiet` rather than `ghost` for the same
+            reason — `ghost` rests at `text-muted`.
           */}
           <p className="text-text text-ui text-balance">{t('landing.tagline')}</p>
         </div>
@@ -85,7 +85,7 @@ function LandingScreen({ onEnter }: LandingProps): ReactElement {
               <GoogleMark />
               <span>{t('landing.signIn')}</span>
             </Button>
-            <Button variant="ghost" size="lg" onClick={onEnter} className="w-full gap-3">
+            <Button variant="quiet" size="lg" onClick={onEnter} className="w-full gap-3">
               {t('landing.guest')}
             </Button>
           </div>
