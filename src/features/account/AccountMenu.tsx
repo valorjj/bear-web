@@ -11,7 +11,8 @@ import { AdoptNotesDialog } from './AdoptNotesDialog';
 import { useSessionValue } from './SessionContext';
 import { Status, syncSummary, SyncStatus, type StatusTone } from './SyncStatus';
 import { useImageUsage } from './useImageUsage';
-import { useSync, type SyncStatusValue } from './useSync';
+import { useSyncValue } from './SyncContext';
+import { type SyncStatusValue } from './useSync';
 
 /**
  * The badge's fill, keyed by the same tone `SyncStatus` uses for its dot, so
@@ -53,7 +54,7 @@ const GAP = 8;
 export function AccountMenu(): ReactElement {
   const t = useT();
   const { state, signIn, signOut } = useSessionValue();
-  const sync = useSync(state);
+  const sync = useSyncValue();
   const [open, setOpen] = useState(false);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);

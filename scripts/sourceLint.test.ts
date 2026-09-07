@@ -763,3 +763,45 @@ describe('the import graph', () => {
     expect(cycles.join('\n\n'), 'runtime import cycle(s) found').toBe('');
   });
 });
+
+/**
+ * `useSync` is a SINGLETON, and nothing in the rest of the suite can see a
+ * second instance of it.
+ *
+ * Every gate passed while three always-mounted components each called it
+ * (`CommandPaletteHost`, `WelcomeSeeder`, `AccountMenu`). Each call built its
+ * own engine, its own `runningRef` concurrency guard and its own Dexie
+ * `notes.hook` debounce, so one autosave write scheduled three timers that
+ * fired together, three engines collected the same note at the same
+ * `baseRev`, the server accepted the first push and conflicted the rest, and
+ * `resolveConflicts` minted a `(conflict)` copy of half-typed text — on one
+ * device, with no second device anywhere. `useSync.ts`'s own comment names
+ * the hazard; the guard was simply at the wrong scope.
+ *
+ * A behavioural test lives in `SyncContext.test.tsx` and proves the provider
+ * really shares one runner. This one is the thing that catches the
+ * regression: a fourth caller is a one-line diff that reads as obviously
+ * correct, and only a count over the source can see it.
+ */
+describe('the sync runner', () => {
+  const SOURCES = walk('src', ['.ts', '.tsx']).filter((path) => !/\.test\.tsx?$/.test(path));
+
+  it('is instantiated in exactly one place', () => {
+    const callers = SOURCES.filter((path) => path !== join('src/features/account', 'useSync.ts'))
+      .filter((path) => /\buseSync\(/.test(readFileSync(path, 'utf8')))
+      .sort();
+
+    expect(callers).toEqual([join('src/features/account', 'SyncContext.tsx')]);
+  });
+
+  it('is not exported from the feature barrel', () => {
+    // Structural, on top of the count above: a consumer outside
+    // `src/features/account/` cannot reach the hook at all, only the
+    // provider and `useSyncValue`. The type re-exports are deliberate and
+    // stay — `export type` carries no runtime hook.
+    const barrel = readFileSync(join('src/features/account', 'index.ts'), 'utf8');
+
+    expect(barrel).toMatch(/export \{ SyncProvider, useSyncValue \}/);
+    expect(barrel).not.toMatch(/^export \{[^}]*\buseSync\b[^}]*\} from '\.\/useSync';$/m);
+  });
+});

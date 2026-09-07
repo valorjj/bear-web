@@ -2,7 +2,7 @@ import { render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SESSION_HINT_KEY } from '@/data';
-import { SessionProvider } from '@/features/account';
+import { SessionProvider, SyncProvider } from '@/features/account';
 import { I18nProvider } from '@/i18n';
 
 import { LANDING_SEEN_KEY } from './gate';
@@ -18,6 +18,12 @@ import { WelcomeSeeder } from './WelcomeSeeder';
  * the first commit, and the seed ran before `/me` had answered. Those tests
  * cover the decision table; this file covers the sequence, using the real
  * `SessionProvider` and a real (stubbed) `fetch`.
+ *
+ * The real `SyncProvider` too, deliberately: `WelcomeSeeder` reads its
+ * `lastSyncedAt` and no case below ever ends signed in (401, a throwing
+ * fetch, no hint at all), so the provider's `useSync` never reaches an
+ * account id and never syncs anything. Mocking it here would remove the one
+ * thing this file exists to exercise — the real wiring.
  */
 
 const seed = vi.fn(async (..._args: unknown[]) => true);
@@ -27,7 +33,9 @@ function mount() {
   return render(
     <I18nProvider>
       <SessionProvider>
-        <WelcomeSeeder />
+        <SyncProvider>
+          <WelcomeSeeder />
+        </SyncProvider>
       </SessionProvider>
     </I18nProvider>,
   );

@@ -152,7 +152,15 @@ test.describe('publish', () => {
 
     await confirmDialog.getByRole('button', { name: 'Unpublish' }).click();
 
-    expect(deleteCalls).toBe(1);
+    // Polled, not read synchronously. `click()` resolves once the click is
+    // DISPATCHED, not once React's async handler has reached `fetch`, so a
+    // bare `expect(deleteCalls).toBe(1)` here asserts delivery within a
+    // microtask — and it lost twice on a loaded Mac Mini while the DELETE was
+    // being sent perfectly correctly. This is the sanctioned direction for
+    // `expect.poll`: a state being WAITED for, not one asserted not to drift.
+    // The `toBe(0)` above stays synchronous on purpose — it asserts an
+    // ABSENCE, after awaited conditions, and polling it would prove nothing.
+    await expect.poll(() => deleteCalls).toBe(1);
     await expect(page.getByRole('button', { name: 'Publish to web' })).toBeVisible();
   });
 

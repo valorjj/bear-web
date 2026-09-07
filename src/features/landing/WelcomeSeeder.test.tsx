@@ -12,7 +12,7 @@ let sync = { status: 'idle' as string, lastSyncedAt: null as number | null };
 
 vi.mock('@/features/account', () => ({
   useSessionValue: () => ({ state: session }),
-  useSync: () => sync,
+  useSyncValue: () => sync,
 }));
 
 // `useLocale` requires an `I18nProvider` ancestor and this component renders

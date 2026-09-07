@@ -12,7 +12,36 @@ it, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`,
 `src/features/account/useSync.ts`, `src/features/account/SyncStatus.tsx`,
 `src/features/account/AdoptNotesDialog.tsx`, `notes.purge` / `notes.save` /
 `setPinned` / `trash` / `restore` in `src/data/repositories/notes.ts`,
-`markAllDirty`, and `src/data/reindex.ts`'s `reindexNote`.
+`markAllDirty`, `src/data/reindex.ts`'s `reindexNote`, and
+`src/features/account/SyncContext.tsx`.
+
+- **`useSync` is a SINGLETON, reached only through `SyncProvider` /
+  `useSyncValue`, and a second caller manufactures `(conflict)` copies out of
+  nothing.** The hook holds its concurrency guard in a `useRef` and registers
+  its own Dexie `notes.hook` debounce, so a second CALLER is a second engine
+  with a second guard that cannot see the first. It had grown to three
+  always-mounted callers — `CommandPaletteHost`, `WelcomeSeeder`,
+  `AccountMenu` — so ONE autosave write scheduled three debounce timers that
+  fired together, three engines collected the same note at the same `baseRev`,
+  the server allocated a rev for the first push and conflicted the other two
+  (`current.rev > incoming.baseRev`), and `resolveConflicts` — finding the
+  local text had moved on, because the user was still typing — minted a
+  `(conflict)` copy of the half-typed text and overwrote the note with the
+  server's older copy. Reported from production on 2026-09-07 on a SINGLE
+  device with no second actor anywhere: a note tagged `#a/b/c/d` left behind a
+  `TEST3 (conflict)` holding the `#a/b` it had passed through. Two further
+  defects were the same root cause and are fixed by the same single instance:
+  the three instances each held their own `status`/`lastSyncedAt`, so the
+  spinner in `AccountMenu` and the palette's sync command could disagree about
+  whether a sync was running; and because only `AccountMenu` renders
+  `AdoptNotesDialog`, answering it cleared that one instance's `adoptionRef`
+  and left the other two blocked for the session, so `WelcomeSeeder`'s
+  `lastSyncedAt` never arrived and the welcome note was never seeded after an
+  adoption. `useSync` is deliberately absent from `src/features/account/
+index.ts`, and `scripts/sourceLint.test.ts` fails on a second call site
+  anywhere under `src/` — every one of the six gates passed while this was
+  shipping, and a fourth caller is a one-line diff that reads as obviously
+  correct.
 
 - **`nextRev` must be called inside a transaction, and the
   `SELECT ... FOR UPDATE` is what makes it safe.** Two concurrent pushes each

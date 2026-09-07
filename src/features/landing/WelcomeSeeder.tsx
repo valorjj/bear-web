@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import { notes } from '@/data';
-import { useSessionValue, useSync } from '@/features/account';
+import { useSessionValue, useSyncValue } from '@/features/account';
 import { useLocale } from '@/i18n';
 
 import { seedWelcomeNote } from './seedWelcomeNote';
@@ -50,7 +50,7 @@ import { seedWelcomeNote } from './seedWelcomeNote';
  */
 export function WelcomeSeeder(): null {
   const { state } = useSessionValue();
-  const sync = useSync(state);
+  const sync = useSyncValue();
   const { locale } = useLocale();
   const ran = useRef(false);
 

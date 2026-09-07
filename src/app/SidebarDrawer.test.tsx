@@ -28,6 +28,25 @@ vi.mock('@/features/account/SessionContext', async (importOriginal) => {
   };
 });
 
+// The same deep-module rule for the sync controller `AccountMenu` reads
+// beside the session. A barrel mock would replace a binding nothing under
+// test imports.
+vi.mock('@/features/account/SyncContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/account/SyncContext')>();
+  return {
+    ...actual,
+    useSyncValue: () => ({
+      status: 'idle' as const,
+      message: null,
+      lastSyncedAt: null,
+      syncNow: vi.fn(),
+      adoption: null,
+      onAdopt: vi.fn(),
+      onDiscard: vi.fn(),
+    }),
+  };
+});
+
 function renderDrawer(overrides: Partial<SidebarDrawerProps> = {}): {
   onClose: SidebarDrawerProps['onClose'];
   onScopeChange: SidebarDrawerProps['onScopeChange'];

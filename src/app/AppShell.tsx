@@ -36,7 +36,7 @@ import { Button } from '@/ui/Button';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { EmptyState } from '@/ui/EmptyState';
 import { ChevronLeft, Icon } from '@/ui/Icon';
-import { SessionProvider, useSessionValue, useSync } from '@/features/account';
+import { SessionProvider, SyncProvider, useSessionValue, useSyncValue } from '@/features/account';
 import { ExportProgressProvider, useExportProgress, type ExportFormat } from '@/features/export';
 import { WelcomeSeeder } from '@/features/landing';
 import type { CommandDeps } from '@/features/palette/commands';
@@ -507,42 +507,43 @@ export function AppShell(): ReactElement {
     <ExportProgressProvider>
       <ExportProgressBar />
       <SessionProvider>
-        <WelcomeSeeder />
-        {view === 'graph' ? (
-          <Suspense fallback={<div className="bg-canvas h-full w-full" aria-busy="true" />}>
-            <GraphView
-              activeId={selectedNoteId}
-              onClose={closeGraph}
-              onOpenNote={(id) => {
-                select(id);
-                setView('notes');
-              }}
-            />
-          </Suspense>
-        ) : (
-          <main className="bg-canvas text-text flex h-full w-full gap-2 overflow-hidden p-2">
-            {showSidebarPane && (
-              <Pane
-                label={t('pane.sidebar')}
-                width={widths.sidebarWidth}
-                // Not a card: in Soft Depth the sidebar dissolves into the ground and
-                // only the panes holding content float. Its `--bear-sidebar` equals
-                // `--bear-canvas` in the indigo themes for the same reason.
-                elevated={false}
-                className="bg-sidebar flex flex-col overflow-hidden"
-              >
-                <SidebarContent
-                  scope={scope}
-                  onScopeChange={setScope}
-                  counts={counts}
-                  nodes={tree.nodes}
-                  isCollapsed={tree.isCollapsed}
-                  onToggle={tree.toggle}
-                />
-              </Pane>
-            )}
+        <SyncProvider>
+          <WelcomeSeeder />
+          {view === 'graph' ? (
+            <Suspense fallback={<div className="bg-canvas h-full w-full" aria-busy="true" />}>
+              <GraphView
+                activeId={selectedNoteId}
+                onClose={closeGraph}
+                onOpenNote={(id) => {
+                  select(id);
+                  setView('notes');
+                }}
+              />
+            </Suspense>
+          ) : (
+            <main className="bg-canvas text-text flex h-full w-full gap-2 overflow-hidden p-2">
+              {showSidebarPane && (
+                <Pane
+                  label={t('pane.sidebar')}
+                  width={widths.sidebarWidth}
+                  // Not a card: in Soft Depth the sidebar dissolves into the ground and
+                  // only the panes holding content float. Its `--bear-sidebar` equals
+                  // `--bear-canvas` in the indigo themes for the same reason.
+                  elevated={false}
+                  className="bg-sidebar flex flex-col overflow-hidden"
+                >
+                  <SidebarContent
+                    scope={scope}
+                    onScopeChange={setScope}
+                    counts={counts}
+                    nodes={tree.nodes}
+                    isCollapsed={tree.isCollapsed}
+                    onToggle={tree.toggle}
+                  />
+                </Pane>
+              )}
 
-            {/*
+              {/*
             Not RENDERED below desktop, not hidden. `Resizer` is a focusable
             `separator` carrying `aria-valuenow`; `display: none` would take it
             off the screen while leaving it in the tab order and in the
@@ -554,84 +555,84 @@ export function AppShell(): ReactElement {
             panes dragged wide in a 1024px window left the editor a NEGATIVE
             width.
           */}
-            {showSidebarPane && (
-              <Resizer
-                label={t('resizer.sidebar')}
-                width={widths.sidebarWidth}
-                min={MIN_PANE_WIDTH}
-                max={maxPaneWidth(window.innerWidth, widths.noteListWidth)}
-                onResize={widths.onSidebarResize}
-                onCommit={widths.onSidebarCommit}
-              />
-            )}
-
-            {showNoteListPane && (
-              <Pane
-                label={t('pane.noteList')}
-                // `undefined` makes a Pane `flex-1`. On a phone the list IS the
-                // screen, so it fills. On a tablet it keeps its stored width and
-                // only the editor flexes — two `flex-1` panes would split the
-                // screen in half and give a 400px list beside a 400px editor.
-                width={mode === 'phone' ? undefined : widths.noteListWidth}
-                className="bg-surface"
-              >
-                <NoteList
-                  scope={scope}
-                  items={visibleItems}
-                  selectedNoteId={selectedNoteId}
-                  onSelect={select}
-                  onCreate={() => void handleCreate()}
-                  onTrash={(id) => void handleTrash(id)}
-                  onRestore={(id) => void handleRestore(id)}
-                  onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
-                  onPurge={(id) => setPending({ kind: 'purge', id })}
-                  onDuplicate={(id) => void handleDuplicate(id)}
-                  onEmptyTrash={() => setPending({ kind: 'empty' })}
-                  // Gated on the UNFILTERED `items`, not `visibleItems`: a query that
-                  // matches nothing in a full trash must not disable the button that
-                  // empties it. Emptying always empties every trashed note regardless
-                  // of the query — the dialog copy already says so — so what it
-                  // needs to know is whether the trash itself is empty, not whether
-                  // the current search happens to show anything.
-                  emptyTrashDisabled={items === undefined || items.length === 0}
-                  // Same reasoning, same source (the UNFILTERED `items`): whether the
-                  // no-results empty state may override a scope's own special-cased
-                  // empty copy (Locked, Trash) depends on whether the scope had
-                  // anything before the query narrowed it, not on the narrowed view.
-                  hasUnfilteredItems={items !== undefined && items.length > 0}
-                  count={items?.length ?? 0}
-                  scopeQuery={scopeQuery}
-                  previewSize={previewSize}
-                  onOrderChange={setOrder}
-                  onPreviewSizeChange={setPreviewSize}
-                  // The menu reports the new `includeDescendants`; the setting stores
-                  // its inverse, so exactly one place does the flip.
-                  onIncludeDescendantsChange={(next) => setHideSubTagNotes(!next)}
-                  onScopeChange={setScope}
-                  mode={mode}
-                  onOpenDrawer={() => setDrawerOpen(true)}
-                  onOpenGraph={toggleGraph}
-                  query={query}
-                  onQueryChange={setQuery}
-                  searchInputRef={searchRef}
+              {showSidebarPane && (
+                <Resizer
+                  label={t('resizer.sidebar')}
+                  width={widths.sidebarWidth}
+                  min={MIN_PANE_WIDTH}
+                  max={maxPaneWidth(window.innerWidth, widths.noteListWidth)}
+                  onResize={widths.onSidebarResize}
+                  onCommit={widths.onSidebarCommit}
                 />
-              </Pane>
-            )}
+              )}
 
-            {showSidebarPane && (
-              <Resizer
-                label={t('resizer.noteList')}
-                width={widths.noteListWidth}
-                min={MIN_PANE_WIDTH}
-                max={maxPaneWidth(window.innerWidth, widths.sidebarWidth)}
-                onResize={widths.onNoteListResize}
-                onCommit={widths.onNoteListCommit}
-              />
-            )}
+              {showNoteListPane && (
+                <Pane
+                  label={t('pane.noteList')}
+                  // `undefined` makes a Pane `flex-1`. On a phone the list IS the
+                  // screen, so it fills. On a tablet it keeps its stored width and
+                  // only the editor flexes — two `flex-1` panes would split the
+                  // screen in half and give a 400px list beside a 400px editor.
+                  width={mode === 'phone' ? undefined : widths.noteListWidth}
+                  className="bg-surface"
+                >
+                  <NoteList
+                    scope={scope}
+                    items={visibleItems}
+                    selectedNoteId={selectedNoteId}
+                    onSelect={select}
+                    onCreate={() => void handleCreate()}
+                    onTrash={(id) => void handleTrash(id)}
+                    onRestore={(id) => void handleRestore(id)}
+                    onTogglePin={(id, pinned) => void handleTogglePin(id, pinned)}
+                    onPurge={(id) => setPending({ kind: 'purge', id })}
+                    onDuplicate={(id) => void handleDuplicate(id)}
+                    onEmptyTrash={() => setPending({ kind: 'empty' })}
+                    // Gated on the UNFILTERED `items`, not `visibleItems`: a query that
+                    // matches nothing in a full trash must not disable the button that
+                    // empties it. Emptying always empties every trashed note regardless
+                    // of the query — the dialog copy already says so — so what it
+                    // needs to know is whether the trash itself is empty, not whether
+                    // the current search happens to show anything.
+                    emptyTrashDisabled={items === undefined || items.length === 0}
+                    // Same reasoning, same source (the UNFILTERED `items`): whether the
+                    // no-results empty state may override a scope's own special-cased
+                    // empty copy (Locked, Trash) depends on whether the scope had
+                    // anything before the query narrowed it, not on the narrowed view.
+                    hasUnfilteredItems={items !== undefined && items.length > 0}
+                    count={items?.length ?? 0}
+                    scopeQuery={scopeQuery}
+                    previewSize={previewSize}
+                    onOrderChange={setOrder}
+                    onPreviewSizeChange={setPreviewSize}
+                    // The menu reports the new `includeDescendants`; the setting stores
+                    // its inverse, so exactly one place does the flip.
+                    onIncludeDescendantsChange={(next) => setHideSubTagNotes(!next)}
+                    onScopeChange={setScope}
+                    mode={mode}
+                    onOpenDrawer={() => setDrawerOpen(true)}
+                    onOpenGraph={toggleGraph}
+                    query={query}
+                    onQueryChange={setQuery}
+                    searchInputRef={searchRef}
+                  />
+                </Pane>
+              )}
 
-            {showEditorPane && (
-              <Pane label={t('pane.editor')} className="bg-bg flex flex-col">
-                {/*
+              {showSidebarPane && (
+                <Resizer
+                  label={t('resizer.noteList')}
+                  width={widths.noteListWidth}
+                  min={MIN_PANE_WIDTH}
+                  max={maxPaneWidth(window.innerWidth, widths.sidebarWidth)}
+                  onResize={widths.onNoteListResize}
+                  onCommit={widths.onNoteListCommit}
+                />
+              )}
+
+              {showEditorPane && (
+                <Pane label={t('pane.editor')} className="bg-bg flex flex-col">
+                  {/*
                 The phone's only route back to the list. On desktop and tablet
                 the list is still on screen, so there is nothing to go back to
                 and a back control would be a lie.
@@ -641,102 +642,103 @@ export function AppShell(): ReactElement {
                 control here a screen-reader user is left parked on a row that
                 is no longer rendered.
               */}
-                {mode === 'phone' && selectedNote != null && (
-                  <div className="flex h-14 shrink-0 items-center px-2">
-                    <Button
-                      variant="soft"
-                      size="touch"
-                      onClick={backToList}
-                      label={t('nav.backToList')}
-                    >
-                      <Icon glyph={ChevronLeft} />
-                    </Button>
-                  </div>
-                )}
-                {selectedNote === undefined ? null : selectedNote === null ? (
-                  <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
-                ) : (
-                  // `key` is load-bearing, not an optimisation: it remounts the editor
-                  // on every switch, so an instance only ever writes to one note and
-                  // its unmount cleanup is the flush-on-switch.
-                  <NoteEditor
-                    key={selectedNote.id}
-                    note={selectedNote}
-                    seedText={seed?.id === selectedNote.id ? seed.text : undefined}
-                    autoFocus={justCreatedId === selectedNote.id}
-                    onActivateTag={handleActivateTag}
-                    onActivateLink={handleActivateLink}
-                    onOpenNote={select}
-                    exportRef={exportRef}
-                  />
-                )}
-              </Pane>
-            )}
+                  {mode === 'phone' && selectedNote != null && (
+                    <div className="flex h-14 shrink-0 items-center px-2">
+                      <Button
+                        variant="soft"
+                        size="touch"
+                        onClick={backToList}
+                        label={t('nav.backToList')}
+                      >
+                        <Icon glyph={ChevronLeft} />
+                      </Button>
+                    </div>
+                  )}
+                  {selectedNote === undefined ? null : selectedNote === null ? (
+                    <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
+                  ) : (
+                    // `key` is load-bearing, not an optimisation: it remounts the editor
+                    // on every switch, so an instance only ever writes to one note and
+                    // its unmount cleanup is the flush-on-switch.
+                    <NoteEditor
+                      key={selectedNote.id}
+                      note={selectedNote}
+                      seedText={seed?.id === selectedNote.id ? seed.text : undefined}
+                      autoFocus={justCreatedId === selectedNote.id}
+                      onActivateTag={handleActivateTag}
+                      onActivateLink={handleActivateLink}
+                      onOpenNote={select}
+                      exportRef={exportRef}
+                    />
+                  )}
+                </Pane>
+              )}
 
-            {mode !== 'desktop' && (
-              <SidebarDrawer
-                open={drawerOpen}
-                onClose={closeDrawer}
-                scope={scope}
-                onScopeChange={setScope}
-                counts={counts}
-                nodes={tree.nodes}
-                isCollapsed={tree.isCollapsed}
-                onToggle={tree.toggle}
+              {mode !== 'desktop' && (
+                <SidebarDrawer
+                  open={drawerOpen}
+                  onClose={closeDrawer}
+                  scope={scope}
+                  onScopeChange={setScope}
+                  counts={counts}
+                  nodes={tree.nodes}
+                  isCollapsed={tree.isCollapsed}
+                  onToggle={tree.toggle}
+                />
+              )}
+
+              <CommandPaletteHost
+                open={paletteOpen}
+                onClose={() => setPaletteOpen(false)}
+                onOpenNote={(id) => {
+                  select(id);
+                  setView('notes');
+                }}
+                onCreateNote={(title) => void createNoteTitled(title)}
+                baseDeps={paletteBaseDeps}
+                onRequestSignOut={() => setPending({ kind: 'signOut' })}
+                signOutRef={signOutRef}
               />
-            )}
 
-            <CommandPaletteHost
-              open={paletteOpen}
-              onClose={() => setPaletteOpen(false)}
-              onOpenNote={(id) => {
-                select(id);
-                setView('notes');
-              }}
-              onCreateNote={(title) => void createNoteTitled(title)}
-              baseDeps={paletteBaseDeps}
-              onRequestSignOut={() => setPending({ kind: 'signOut' })}
-              signOutRef={signOutRef}
-            />
-
-            <ConfirmDialog
-              open={pending !== null}
-              destructive
-              title={
-                pending?.kind === 'empty'
-                  ? t('confirm.emptyTrash.title')
-                  : pending?.kind === 'trash'
-                    ? t('confirm.trashNote.title')
-                    : pending?.kind === 'signOut'
-                      ? t('account.signOut.title')
-                      : t('confirm.deleteForever.title')
-              }
-              body={
-                pending?.kind === 'empty'
-                  ? t('confirm.emptyTrash.body')
-                  : pending?.kind === 'trash'
-                    ? t('confirm.trashNote.body')
-                    : pending?.kind === 'signOut'
-                      ? t('account.signOut.body')
-                      : t('confirm.deleteForever.body')
-              }
-              confirmLabel={
-                pending?.kind === 'empty'
-                  ? t('noteList.emptyTrash')
-                  : pending?.kind === 'trash'
-                    ? t('noteList.trash')
-                    : pending?.kind === 'signOut'
-                      ? t('account.signOut.confirm')
-                      : t('noteList.deleteForever')
-              }
-              cancelLabel={
-                pending?.kind === 'signOut' ? t('account.signOut.cancel') : t('confirm.cancel')
-              }
-              onConfirm={() => void confirmPending()}
-              onCancel={() => setPending(null)}
-            />
-          </main>
-        )}
+              <ConfirmDialog
+                open={pending !== null}
+                destructive
+                title={
+                  pending?.kind === 'empty'
+                    ? t('confirm.emptyTrash.title')
+                    : pending?.kind === 'trash'
+                      ? t('confirm.trashNote.title')
+                      : pending?.kind === 'signOut'
+                        ? t('account.signOut.title')
+                        : t('confirm.deleteForever.title')
+                }
+                body={
+                  pending?.kind === 'empty'
+                    ? t('confirm.emptyTrash.body')
+                    : pending?.kind === 'trash'
+                      ? t('confirm.trashNote.body')
+                      : pending?.kind === 'signOut'
+                        ? t('account.signOut.body')
+                        : t('confirm.deleteForever.body')
+                }
+                confirmLabel={
+                  pending?.kind === 'empty'
+                    ? t('noteList.emptyTrash')
+                    : pending?.kind === 'trash'
+                      ? t('noteList.trash')
+                      : pending?.kind === 'signOut'
+                        ? t('account.signOut.confirm')
+                        : t('noteList.deleteForever')
+                }
+                cancelLabel={
+                  pending?.kind === 'signOut' ? t('account.signOut.cancel') : t('confirm.cancel')
+                }
+                onConfirm={() => void confirmPending()}
+                onCancel={() => setPending(null)}
+              />
+            </main>
+          )}
+        </SyncProvider>
       </SessionProvider>
     </ExportProgressProvider>
   );
@@ -789,7 +791,7 @@ function CommandPaletteHost({
   signOutRef,
 }: CommandPaletteHostProps): ReactElement | null {
   const session = useSessionValue();
-  const sync = useSync(session.state);
+  const sync = useSyncValue();
   const signedIn = session.state.status === 'signedIn';
 
   // Assigned during render, not in an effect: the ref only needs to hold the

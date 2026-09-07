@@ -6,7 +6,20 @@ import { I18nProvider } from '@/i18n';
 
 import { AccountMenu } from './AccountMenu';
 import { SessionProvider } from './SessionContext';
+import { SyncProvider } from './SyncContext';
 import { SESSION_HINT_KEY } from './useSession';
+
+// The real `SyncProvider`, with its engine replaced. Wrapping in the provider
+// is what the component now requires; letting its engine run would put a
+// pull and a push through the `fetch` stub below, which answers every URL
+// with this file's `/me` payload — so the sync would either parse nonsense or
+// reject, in tests that assert nothing about syncing.
+vi.mock('@/data', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/data')>()),
+  createEngine: () => ({
+    syncOnce: vi.fn(async () => ({ pulled: 0, pushed: 0, conflicts: 0, rev: 0 })),
+  }),
+}));
 
 function mount(handler: (url: string) => Response) {
   vi.stubGlobal(
@@ -16,7 +29,9 @@ function mount(handler: (url: string) => Response) {
   return render(
     <I18nProvider>
       <SessionProvider>
-        <AccountMenu />
+        <SyncProvider>
+          <AccountMenu />
+        </SyncProvider>
       </SessionProvider>
     </I18nProvider>,
   );
@@ -94,7 +109,9 @@ describe('AccountMenu', () => {
     render(
       <I18nProvider>
         <SessionProvider>
-          <AccountMenu />
+          <SyncProvider>
+            <AccountMenu />
+          </SyncProvider>
         </SessionProvider>
       </I18nProvider>,
     );
