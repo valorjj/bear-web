@@ -1,5 +1,5 @@
 export const en = {
-  'app.name': 'bear-web',
+  'app.name': 'markflowing',
 
   'pane.sidebar': 'Sidebar',
   'pane.noteList': 'Note list',
@@ -79,10 +79,10 @@ export const en = {
   'confirm.cancel': 'Cancel',
   'confirm.deleteForever.title': 'Delete this note forever?',
   'confirm.deleteForever.body':
-    'This note will be removed permanently. bear-web keeps no copy anywhere else, so this cannot be undone.',
+    'This note will be removed permanently. markflowing keeps no copy anywhere else, so this cannot be undone.',
   'confirm.emptyTrash.title': 'Empty the trash?',
   'confirm.emptyTrash.body':
-    'Every note in the trash will be removed permanently. bear-web keeps no copy anywhere else, so this cannot be undone.',
+    'Every note in the trash will be removed permanently. markflowing keeps no copy anywhere else, so this cannot be undone.',
   'confirm.trashNote.title': 'Move this note to the trash?',
   'confirm.trashNote.body': 'You can restore it from the trash later.',
 
@@ -92,7 +92,7 @@ export const en = {
   'editor.image.missing': 'Image not on this device yet',
   'editor.image.tooLarge': 'That image is too large (25 MB maximum).',
   'editor.textarea': 'Note text',
-  'editor.saveFailed': 'This note could not be saved. Keep typing — bear-web will keep trying.',
+  'editor.saveFailed': 'This note could not be saved. Keep typing — markflowing will keep trying.',
   'editor.serializeFailed':
     'This note could not be converted for saving. Your text is still here — nothing has been overwritten.',
 
@@ -101,7 +101,7 @@ export const en = {
 
   'database.memory.title': 'Notes are not being saved',
   'database.memory.body':
-    'This browser will not let bear-web store data, so anything you write is kept only until you close this tab. Private browsing is the usual cause.',
+    'This browser will not let markflowing store data, so anything you write is kept only until you close this tab. Private browsing is the usual cause.',
 
   // Always "switch to the OTHER language", so the active bundle is what makes
   // the direction right. Two keys would let the bundles disagree about which
