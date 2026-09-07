@@ -38,6 +38,7 @@ import { EmptyState } from '@/ui/EmptyState';
 import { ChevronLeft, Icon } from '@/ui/Icon';
 import { SessionProvider, useSessionValue, useSync } from '@/features/account';
 import { ExportProgressProvider, useExportProgress, type ExportFormat } from '@/features/export';
+import { WelcomeSeeder } from '@/features/landing';
 import type { CommandDeps } from '@/features/palette/commands';
 import { Pane } from '@/ui/Pane';
 import { ProgressBar } from '@/ui/ProgressBar';
@@ -506,6 +507,7 @@ export function AppShell(): ReactElement {
     <ExportProgressProvider>
       <ExportProgressBar />
       <SessionProvider>
+        <WelcomeSeeder />
         {view === 'graph' ? (
           <Suspense fallback={<div className="bg-canvas h-full w-full" aria-busy="true" />}>
             <GraphView
