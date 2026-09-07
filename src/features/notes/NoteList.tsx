@@ -1,4 +1,4 @@
-import { type ReactElement, type RefObject, useCallback, useState } from 'react';
+import { type ReactElement, type RefObject, useCallback, useRef, useState } from 'react';
 
 import type { Note, NoteOrder } from '@/data';
 import { useExportRunner } from '@/features/export';
@@ -153,6 +153,8 @@ export function NoteList({
   const t = useT();
   const compact = mode !== 'desktop';
   const [menuOpen, setMenuOpen] = useState(false);
+  // Holds the scope button and its popover together — see `triggerRef` below.
+  const menuAnchorRef = useRef<HTMLDivElement>(null);
   const [rowMenu, setRowMenu] = useState<NoteRowMenuRequest | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
   const exportRunner = useExportRunner();
@@ -278,7 +280,10 @@ export function NoteList({
 
           Title left, controls right — the reading order of Bear's own header.
         */}
-        <div className={compact ? 'relative flex min-w-0 justify-center' : 'relative'}>
+        <div
+          ref={menuAnchorRef}
+          className={compact ? 'relative flex min-w-0 justify-center' : 'relative'}
+        >
           <Button
             variant="ghost"
             size={compact ? 'md' : 'md'}
@@ -305,6 +310,12 @@ export function NoteList({
             onClose={() => setMenuOpen(false)}
             label={t('noteList.menu.label')}
             className="absolute top-full left-0 z-10 mt-1"
+            // The WRAPPER, not the button: `Button` forwards no ref, and this
+            // element holds the trigger and the surface together, which is
+            // exactly the region a pointerdown must not dismiss. Without it
+            // the trigger's own pointerdown closes the menu and its click
+            // reopens it, so the button appears not to work.
+            triggerRef={menuAnchorRef}
           >
             <ScopeMenu
               scope={scope}

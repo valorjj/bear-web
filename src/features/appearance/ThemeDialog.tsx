@@ -109,7 +109,18 @@ export function ThemeDialog({ choice, onChoose, onDismiss }: ThemeDialogProps): 
          * — and so `e2e/contrast.spec.ts` can read the frame colour straight
          * off `borderColor` instead of parsing it out of a box-shadow.
          */
-        className={`ease-bear block rounded-md border text-left transition-shadow duration-[var(--bear-duration-fast)] ${
+        /*
+         * Hover feedback is a LIFT, not just a shadow, and it sits in the
+         * shared classes so the selected card responds too.
+         *
+         * `--bear-shadow-popover` is 0.05/0.07 alpha, which against a card
+         * already sitting on the dialog's own surface is close to invisible —
+         * and High Contrast sets its shadows to `none` outright, so a
+         * shadow-only hover would give that theme no feedback at all. A
+         * transform reads in every theme and costs no layout, since the grid
+         * is sized by the untransformed box.
+         */
+        className={`ease-bear block rounded-md border text-left transition-[transform,box-shadow,border-color] duration-[var(--bear-duration-fast)] hover:-translate-y-0.5 hover:shadow-popover ${
           active
             ? 'border-accent ring-accent shadow-popover ring-1'
             : 'border-faint hover:border-muted'
