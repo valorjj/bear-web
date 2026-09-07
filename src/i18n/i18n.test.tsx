@@ -59,6 +59,7 @@ describe('translation bundles', () => {
       'app.name',
       'export.html',
       'export.pdf',
+      'landing.wordmark',
       'typography.unit.px',
       'typography.unit.em',
       ...Object.keys(en).filter((key) => key.startsWith('theme.')),
