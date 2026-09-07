@@ -29,10 +29,19 @@ describe('TagRowMenu', () => {
     ]);
   });
 
-  it('reports the action and closes', async () => {
+  it.each([
+    ['Rename tag', 'rename'],
+    ['Delete tag', 'delete'],
+  ] as const)('reports %s as %s and closes', async (label, action) => {
     const { onAction, onClose } = mount();
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete tag' }));
-    expect(onAction).toHaveBeenCalledWith('delete');
+    await userEvent.click(screen.getByRole('menuitem', { name: label }));
+    expect(onAction).toHaveBeenCalledWith(action);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('colours only the destructive item', () => {
+    mount();
+    expect(screen.getByRole('menuitem', { name: 'Delete tag' })).toHaveClass('text-danger');
+    expect(screen.getByRole('menuitem', { name: 'Rename tag' })).not.toHaveClass('text-danger');
   });
 });
