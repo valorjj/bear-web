@@ -40,6 +40,8 @@ describe('translation bundles', () => {
     // identical would mean someone pasted the English bundle.
     //
     // - `app.name` is a proper noun.
+    // - `landing.wordmark` is the product's brand name, for the same reason
+    //   `app.name` is: a name is not translated.
     // - `export.html` and `export.pdf` are acronyms that Korean uses verbatim;
     //   `HTML` is not written `에이치티엠엘`. `export.markdown` is NOT here,
     //   because Korean does render that as 마크다운 — so the list stays a list of

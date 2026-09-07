@@ -34,5 +34,6 @@ describe('the landing gate', () => {
     localStorage.setItem(LANDING_SEEN_KEY, '1');
     render(<App status="ready" />);
     expect(screen.queryByRole('heading', { name: 'markflowing' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('region')).toHaveLength(3);
   });
 });
