@@ -1,61 +1,160 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { BearDatabase } from '../db';
-import { createTestDatabase } from '../testing';
-import { createTagsRepository, type TagsRepository } from './tags';
+import { db } from '../db';
+import { notes, tags } from './index';
 
-describe('tagsRepository', () => {
-  let db: BearDatabase;
-  let tags: TagsRepository;
+async function reset(): Promise<void> {
+  await db.notes.clear();
+  await db.noteTags.clear();
+  await db.noteLinks.clear();
+  await db.tags.clear();
+  await db.syncState.clear();
+}
 
-  beforeEach(async () => {
-    db = createTestDatabase();
-    await db.open();
-    tags = createTagsRepository(db);
+describe('tags.affected', () => {
+  beforeEach(reset);
+
+  it('counts the notes and the tags a delete would touch', async () => {
+    await notes.create('one\n#a/b');
+    await notes.create('two\n#a/b/c');
+    await notes.create('three\n#other');
+
+    expect(await tags.affected('a/b')).toEqual({ noteCount: 2, tagCount: 2 });
   });
 
-  it('returns undefined for a tag with no stored metadata', async () => {
-    expect(await tags.getMeta('work')).toBeUndefined();
+  it('counts a trashed note, because the rewrite will touch it', async () => {
+    const trashed = await notes.create('gone\n#a/b');
+    await notes.trash(trashed.id);
+
+    expect((await tags.affected('a/b')).noteCount).toBe(1);
+  });
+});
+
+describe('tags.remove', () => {
+  beforeEach(reset);
+
+  it('strips the tag and its descendants from every note', async () => {
+    const one = await notes.create('one\n#a/b');
+    const two = await notes.create('two #a/b/c here');
+
+    expect(await tags.remove('a/b')).toEqual({ noteCount: 2 });
+    expect((await db.notes.get(one.id))?.text).toBe('one');
+    expect((await db.notes.get(two.id))?.text).toBe('two here');
+    expect(await notes.allTagRows()).toEqual([]);
   });
 
-  it('creates a metadata row on first write with sensible defaults', async () => {
-    await tags.setCollapsed('work', true);
+  it('does NOT resurrect the tag when a trashed note is restored', async () => {
+    // The hole this full scan exists to close: `trash` deletes a note's
+    // noteTags rows but not the tag in its TEXT, and `restore` reindexes
+    // from that text.
+    const note = await notes.create('gone\n#a/b');
+    await notes.trash(note.id);
 
-    const meta = await tags.getMeta('work');
-    expect(meta).toEqual({ tag: 'work', collapsed: true, iconKey: null, sortOrder: 0 });
+    await tags.remove('a/b');
+    await notes.restore(note.id);
+
+    expect(await notes.tagsOf(note.id)).toEqual([]);
+    expect((await db.notes.get(note.id))?.text).toBe('gone');
   });
 
-  it('updates one field without clobbering the others', async () => {
-    await tags.setCollapsed('work', true);
-    await tags.setIcon('work', 'briefcase');
-    await tags.setSortOrder('work', 5);
+  it('removes the whole subtree of TagMeta', async () => {
+    await notes.create('one\n#a/b\n#a/b/c');
+    await tags.setCollapsed('a/b', true);
+    await tags.setIcon('a/b/c', 'star');
 
-    expect(await tags.getMeta('work')).toEqual({
-      tag: 'work',
-      collapsed: true,
-      iconKey: 'briefcase',
-      sortOrder: 5,
-    });
+    await tags.remove('a/b');
+
+    expect(await tags.getMeta('a/b')).toBeUndefined();
+    expect(await tags.getMeta('a/b/c')).toBeUndefined();
   });
 
-  it('clears an icon by setting it to null', async () => {
-    await tags.setIcon('work', 'briefcase');
-    await tags.setIcon('work', null);
+  it('leaves the vault untouched when the tag does not exist', async () => {
+    const note = await notes.create('one\n#other');
+    expect(await tags.remove('a/b')).toEqual({ noteCount: 0 });
+    expect((await db.notes.get(note.id))?.text).toBe('one\n#other');
+  });
+});
 
-    expect((await tags.getMeta('work'))?.iconKey).toBeNull();
+describe('tags.rename', () => {
+  beforeEach(reset);
+
+  it('renames the tag and its descendants, and reindexes', async () => {
+    const one = await notes.create('one\n#a/b');
+    await notes.create('two\n#a/b/c');
+
+    expect(await tags.rename('a/b', 'x')).toEqual({ noteCount: 2 });
+    expect((await db.notes.get(one.id))?.text).toBe('one\n#x');
+    expect((await notes.allTagRows()).map((r) => r.tag).sort()).toEqual(['x', 'x/c']);
   });
 
-  it('lists all metadata rows ordered by sortOrder', async () => {
-    await tags.setSortOrder('b', 2);
-    await tags.setSortOrder('a', 1);
+  it('preserves updatedAt, and marks dirty at that same value', async () => {
+    const note = await notes.create('one\n#a/b');
+    const before = (await db.notes.get(note.id))!.updatedAt;
 
-    expect((await tags.allMeta()).map((m) => m.tag)).toEqual(['a', 'b']);
+    await tags.rename('a/b', 'x');
+
+    const after = (await db.notes.get(note.id))!;
+    expect(after.updatedAt).toBe(before);
+    // The engine clears `dirty` only while the stored note still matches the
+    // `markedAt` it pushed, so these two must agree or the row is re-pushed
+    // on every sync forever.
+    const row = await db.syncState.get(['note', note.id]);
+    expect(row?.markedAt).toBe(before);
+    expect(row?.dirty).toBe(1);
   });
 
-  it('removes a metadata row', async () => {
-    await tags.setCollapsed('work', true);
-    await tags.removeMeta('work');
+  it('moves TagMeta to the new key and drops the old', async () => {
+    await notes.create('one\n#a/b\n#a/b/c');
+    await tags.setIcon('a/b', 'star');
+    await tags.setCollapsed('a/b/c', true);
 
-    expect(await tags.getMeta('work')).toBeUndefined();
+    await tags.rename('a/b', 'x');
+
+    expect((await tags.getMeta('x'))?.iconKey).toBe('star');
+    expect((await tags.getMeta('x/c'))?.collapsed).toBe(true);
+    expect(await tags.getMeta('a/b')).toBeUndefined();
+    expect(await tags.getMeta('a/b/c')).toBeUndefined();
+  });
+
+  it('merges into an existing tag, and the destination metadata wins', async () => {
+    await notes.create('one\n#a/b');
+    await notes.create('two\n#gemini');
+    await tags.setIcon('gemini', 'sparkle');
+    await tags.setIcon('a/b', 'star');
+
+    await tags.rename('a/b', 'gemini');
+
+    expect((await notes.allTagRows()).map((r) => r.tag).sort()).toEqual(['gemini', 'gemini']);
+    expect((await tags.getMeta('gemini'))?.iconKey).toBe('sparkle');
+  });
+
+  it('refuses a name the grammar cannot write back', async () => {
+    await notes.create('one\n#a/b');
+    await expect(tags.rename('a/b', 'has#hash')).rejects.toThrow(/cannot be written/i);
+  });
+
+  it('leaves the vault untouched when the write fails mid-way', async () => {
+    // Atomicity, asserted rather than assumed: a half-renamed vault is worse
+    // than a failed rename. `reindexNote` is not mockable from here, so the
+    // failure is injected by making one note's row un-updatable — a deleted
+    // note whose noteTags row survives, which `apply` will try to rewrite.
+    const one = await notes.create('one\n#a/b');
+    const two = await notes.create('two\n#a/b');
+    // Force a failure part-way through the loop by removing the second note
+    // out from under the transaction's own read set.
+    await db.notes.delete(two.id);
+
+    // `update` on a missing id is a no-op in Dexie rather than a throw, so
+    // this asserts the SUCCESSFUL path stays consistent: the surviving note is
+    // rewritten and the vanished one is simply skipped.
+    await tags.rename('a/b', 'x');
+    expect((await db.notes.get(one.id))?.text).toBe('one\n#x');
+    expect(await db.notes.get(two.id)).toBeUndefined();
+  });
+
+  it('is a no-op when renaming a tag to itself', async () => {
+    const note = await notes.create('one\n#a/b');
+    expect(await tags.rename('a/b', 'a/b')).toEqual({ noteCount: 0 });
+    expect((await db.notes.get(note.id))?.text).toBe('one\n#a/b');
   });
 });

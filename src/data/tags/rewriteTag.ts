@@ -45,6 +45,13 @@ function removalRange(text: string, start: number, end: number): { from: number;
 
   const remainder = text.slice(lineStart, start) + text.slice(end, lineEnd);
   if (remainder.trim() === '') {
+    // A removed line normally takes its OWN trailing newline (the `+ 1`
+    // below). The last line has none, so — to avoid leaving a dangling
+    // newline that used to separate it from the line above — it takes that
+    // PRECEDING newline instead, when there is one.
+    if (nextNewline === -1 && lineStart > 0) {
+      return { from: lineStart - 1, to: lineEnd };
+    }
     return { from: lineStart, to: nextNewline === -1 ? lineEnd : lineEnd + 1 };
   }
 

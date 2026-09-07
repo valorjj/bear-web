@@ -74,6 +74,13 @@ describe('rewriteTag — deleting', () => {
     expect(rewriteTag('one\n#a/b\ntwo\n', 'a/b', null)).toBe('one\ntwo\n');
   });
 
+  it('removes a tag-only LAST line, taking the preceding newline too', () => {
+    // The removed line has no trailing newline of its own to take (it is the
+    // last line), so leaving the one before it would dangle a newline that
+    // used to separate it from the line above.
+    expect(rewriteTag('one\n#a/b', 'a/b', null)).toBe('one');
+  });
+
   it('keeps a line that still has another tag on it', () => {
     expect(rewriteTag('#a/b #other', 'a/b', null)).toBe('#other');
   });
