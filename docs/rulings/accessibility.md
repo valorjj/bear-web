@@ -11,7 +11,9 @@ route into it) and `src/features/editor/HighlightPalette.tsx`; `src/ui/Icon.tsx`
 `lucide-react` importer, which stamps `aria-hidden` on every glyph);
 `src/ui/SidebarRow.tsx`'s explicit `{' '}` before the count;
 `src/features/notes/NoteListItem.tsx`'s `label` string and its two sibling
-buttons; `src/ui/Button.tsx`'s `VARIANTS` map (`default` / `ghost` / `danger`);
+buttons; `src/ui/Button.tsx`'s `VARIANTS` map (`default` / `primary` / `danger` /
+`ghost` / `quiet` / `soft` — all six, and the list is only useful if it stays
+complete);
 `src/features/notes/NoteList.tsx`'s header strip and its scope-header button;
 `src/features/notes/ScopeMenu.tsx`'s `role` attributes and disabled-group copy;
 `src/features/editor/LinkAutocomplete.ts`'s `view()` lifecycle (the
@@ -99,7 +101,11 @@ and `e2e/publish.spec.ts`.
   no affordance at all — see the pointer rule above.) `--color-hover` was absent
   from the theme block for two milestones, so every `hover:bg-hover` compiled to
   nothing with no warning. A `ghost` control whose hover does not compile is
-  invisible in every state — strictly worse than the M6 defect. `e2e/appearance.spec.ts`
+  invisible in every state — strictly worse than the M6 defect. That last
+  claim is specific to `ghost`, the only one of the six that rests at
+  `text-muted` with no fill: `quiet` carries the same `hover:bg-hover` and
+  would lose the same affordance, but rests at `text-text` and so stays
+  legible. `e2e/appearance.spec.ts`
   asserts the rendered hover background, that it differs from the pane, and that
   the control is still quiet at rest so an undone reversal is noticed.
 
