@@ -1,6 +1,6 @@
-import type { ReactElement, ReactNode } from 'react';
+import { type ReactElement, type ReactNode, useMemo } from 'react';
 
-import { useLongPress } from '@/lib/useLongPress';
+import { type LongPressHandlers, useLongPress } from '@/lib/useLongPress';
 import { ChevronRight, Icon } from '@/ui/Icon';
 
 export interface SidebarRowDisclosure {
@@ -77,10 +77,42 @@ export function SidebarRow({
   const longPress = useLongPress({
     onPress: (point) => onContextMenu?.(new DOMRect(point.x, point.y, 0, 0)),
   });
-  const pressHandlers = onContextMenu === undefined ? {} : longPress;
+  // `SidebarRow` nests: `children` puts a descendant row's `<li>` inside this
+  // one (the real tag tree does exactly this), and every native event
+  // `useLongPress` listens for — `pointerdown`, `contextmenu` — bubbles. The
+  // hook itself only calls `preventDefault` on `contextmenu`, never
+  // `stopPropagation`, because `NoteListItem`'s rows are flat siblings and
+  // have never needed it. Left alone here, a press on a leaf tag row would
+  // also reach every ancestor's OWN `useLongPress` instance — each with its
+  // own `firedAt` ref blind to the others — and fire twice. Stopping
+  // propagation here, one row at a time, keeps that fix local to the caller
+  // that has the problem rather than changing shared hook behaviour
+  // `NoteListItem` also depends on.
+  const pressHandlers = useMemo<Partial<LongPressHandlers>>(() => {
+    if (onContextMenu === undefined) return {};
+    const stop = <E extends { stopPropagation: () => void }>(
+      handler: (event: E) => void,
+    ): ((event: E) => void) => {
+      return (event) => {
+        // The hook's own handler runs first, so its dedupe window and press
+        // timer still see the real event; stopping propagation only keeps
+        // the event from also reaching an ancestor row's listeners.
+        handler(event);
+        event.stopPropagation();
+      };
+    };
+    return {
+      onPointerDown: stop(longPress.onPointerDown),
+      onPointerMove: stop(longPress.onPointerMove),
+      onPointerUp: stop(longPress.onPointerUp),
+      onPointerCancel: stop(longPress.onPointerCancel),
+      onContextMenu: stop(longPress.onContextMenu),
+      onClickCapture: stop(longPress.onClickCapture),
+    };
+  }, [longPress, onContextMenu]);
 
   return (
-    <li {...pressHandlers}>
+    <li {...pressHandlers} className={onContextMenu === undefined ? undefined : 'touch-press'}>
       <div className="flex items-center gap-1">
         {disclosure === undefined ? (
           // A spacer, not nothing: without it a leaf row's label sits one

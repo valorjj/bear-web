@@ -333,6 +333,40 @@ describe('SidebarRow', () => {
     });
     expect(notPrevented).toBe(true);
   });
+
+  it('does not let a nested row press reach its ancestor row', () => {
+    // The real tag tree nests rows exactly this way (`TagSidebar`), and every
+    // native event `useLongPress` listens for bubbles through the parent
+    // `<li>` unless something stops it. A count that changes with the
+    // behaviour: without the propagation guard the parent's handler ALSO
+    // fires, so asserting only the child's call would pass against that
+    // broken shape too.
+    const onParentContextMenu = vi.fn();
+    const onChildContextMenu = vi.fn();
+    renderRow({
+      onContextMenu: onParentContextMenu,
+      children: (
+        <ul>
+          <SidebarRow
+            label="Child"
+            selected={false}
+            onSelect={vi.fn()}
+            onContextMenu={onChildContextMenu}
+          />
+        </ul>
+      ),
+    });
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Child/ }), {
+      clientX: 40,
+      clientY: 90,
+    });
+
+    expect(onChildContextMenu).toHaveBeenCalledTimes(1);
+    const rect = onChildContextMenu.mock.calls[0]![0] as DOMRect;
+    expect([rect.left, rect.top, rect.width, rect.height]).toEqual([40, 90, 0, 0]);
+    expect(onParentContextMenu).not.toHaveBeenCalled();
+  });
 });
 
 describe('ConfirmDialog', () => {
