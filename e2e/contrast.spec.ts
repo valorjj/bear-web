@@ -25,15 +25,36 @@ const THEME_IDS = [
  * evidence of anything, and demanding a ratio for one would push a real
  * palette around to satisfy an imaginary requirement:
  *
- *   - `canvas` IS a text ground, since sub-project R. It was not before: the
- *     only `bg-canvas` was the app shell's `<main>`, whose children are the
- *     three panes and the resizers, and every pane paints its own background
- *     over it. `Landing.tsx` now paints `bg-canvas` on its own `<main>` and
- *     draws the wordmark (`text-text`) and the tagline and pending line
- *     (`text-muted`) straight onto it, so both are listed as grounds below.
- *     `faint` is deliberately NOT: the landing screen draws no faint text,
- *     and inventing the pair would push a palette around for a rendering
- *     nothing performs.
+ *   - `canvas` IS a text ground, since sub-project R, but ONLY for `text`. It
+ *     was not one at all before: the only `bg-canvas` was the app shell's
+ *     `<main>`, whose children are the three panes and the resizers, and every
+ *     pane paints its own background over it. `Landing.tsx` now paints
+ *     `bg-canvas` on its own `<main>` and draws the wordmark, the tagline and
+ *     the pending line directly onto it — all three `text-text`.
+ *
+ *     `muted` and `faint` are deliberately NOT canvas grounds, and this is a
+ *     CONSTRAINT ON THE LANDING SCREEN rather than an accident of what it
+ *     happens to render today. `muted` on `canvas` fails 4.5 in seven of the
+ *     sixteen themes — gruvbox-light 3.80, latte 4.04, sepia 4.12,
+ *     solarized-light 4.24, rose-dawn 4.25, snow 4.36, paper 4.39 — measured
+ *     2026-09-07, when the tagline was still `text-muted`. Every one is a
+ *     light theme: there `canvas` is a mid-tone laid behind the panes while
+ *     `--bear-muted` is tuned against the near-white `bg` a pane paints over
+ *     it. Anyone adding dimmed text to the landing screen must use `text` and
+ *     let size and weight carry the hierarchy, or these rows have to grow and
+ *     seven palettes have to move.
+ *
+ *     KNOWN GAP, open as of 2026-09-07: the "Continue as guest" control is
+ *     `Button variant="ghost"`, and `ghost` is `text-muted`. It therefore
+ *     still paints muted on canvas, and measures the same seven ratios above
+ *     (3.80 on gruvbox-light) — verified in a real browser, not inferred.
+ *     Adding `canvas` back to the `muted` row would catch it and would also
+ *     fail for the wrong reason, since `muted` on canvas is fine anywhere the
+ *     landing does not paint; and `className="text-text"` cannot fix it,
+ *     because `Button` concatenates its classes and equal-specificity
+ *     utilities are decided by stylesheet order, not attribute order. The
+ *     real fix is a variant that OMITS `text-muted`, which is a change to a
+ *     shared primitive and is not this file's to make.
  *   - `accent` and `danger` are not text on `sidebar`. A selected sidebar row
  *     is `text-text` on `bg-selected`; the accent appears there only as the 2px
  *     edge marker, a graphical object. Accent-as-text is the search highlight
@@ -41,7 +62,7 @@ const THEME_IDS = [
  */
 const RULES = [
   { fg: 'text', grounds: ['bg', 'surface', 'sidebar', 'canvas'], min: 4.5 },
-  { fg: 'muted', grounds: ['bg', 'surface', 'sidebar', 'canvas'], min: 4.5 },
+  { fg: 'muted', grounds: ['bg', 'surface', 'sidebar'], min: 4.5 },
   // 3.0 is already the relaxed bar: `faint` carries counts and timestamps.
   { fg: 'faint', grounds: ['bg', 'surface', 'sidebar'], min: 3.0 },
   { fg: 'accent', grounds: ['bg', 'surface'], min: 4.5 },

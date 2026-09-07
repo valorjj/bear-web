@@ -60,11 +60,23 @@ function LandingScreen({ onEnter }: LandingProps): ReactElement {
           <h1 className="text-text text-3xl font-semibold tracking-tight">
             {t('landing.wordmark')}
           </h1>
-          <p className="text-muted text-ui text-balance">{t('landing.tagline')}</p>
+          {/*
+            `text-text`, not `text-muted`, and that is a constraint rather than
+            a preference: this screen paints on `canvas`, and `muted` on
+            `canvas` fails AA in seven of the sixteen light themes (gruvbox-
+            light measured 3.80:1). `text` clears 4.5 on canvas in all sixteen.
+            Nothing is lost — hierarchy here is size and weight, a 30px
+            semibold wordmark against 14px regular, not colour.
+            `e2e/contrast.spec.ts` holds the rule; see its RULES comment,
+            which also records the one string on this screen still painting
+            muted on canvas — the ghost-variant "Continue as guest" button.
+          */}
+          <p className="text-text text-ui text-balance">{t('landing.tagline')}</p>
         </div>
 
         {resolving ? (
-          <p className="text-muted text-ui" role="status">
+          // `text-text` for the same reason as the tagline above.
+          <p className="text-text text-ui" role="status">
             {t('landing.pending')}
           </p>
         ) : (
