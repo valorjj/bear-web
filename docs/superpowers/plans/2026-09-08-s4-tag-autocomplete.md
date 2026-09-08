@@ -368,7 +368,7 @@ import { Editor } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
 import { buildEditorExtensions } from './extensions';
-import { parseMarkdown, serializeMarkdown } from './markdown';
+import { parseMarkdown } from './markdown';
 import { matchingTags, tagAutocompleteMatchAt } from './TagAutocomplete';
 
 const KEYS = ['a', 'a/b', 'a/c', 'bear', 'bear/welcome', 'work', 'assets/sap'];
