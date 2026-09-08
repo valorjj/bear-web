@@ -25,6 +25,8 @@ import type { LinkPillOptions } from './LinkPill';
 import { LinkPill } from './LinkPill';
 import type { LinkAutocompleteOptions } from './LinkAutocomplete';
 import { LinkAutocomplete } from './LinkAutocomplete';
+import type { TagAutocompleteOptions } from './TagAutocomplete';
+import { TagAutocomplete } from './TagAutocomplete';
 import { MarkdownTable } from './tableMarkdown';
 import { TaskItemPromotion } from './taskItemPromotion';
 
@@ -42,6 +44,7 @@ function buildSupportedExtensions(
     TagPillOptions &
       LinkPillOptions &
       LinkAutocompleteOptions &
+      TagAutocompleteOptions &
       HeadingFoldOptions &
       TableHandlesOptions &
       ContextMenuOptions &
@@ -147,6 +150,11 @@ function buildSupportedExtensions(
     // click) before anything is inserted. See `LinkAutocomplete.ts` and
     // `linkAutocomplete.test.ts`.
     LinkAutocomplete.configure(options),
+    // A sibling of `LinkAutocomplete` right above it: it registers nothing in
+    // the schema and offers matching tags while `#` is being typed, but the
+    // user still has to accept a row before anything changes. See
+    // `TagAutocomplete.ts` and `tagAutocomplete.test.ts`.
+    TagAutocomplete.configure(options),
     // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
     // schema — `computeRecognizedHtmlTags()` and every round-trip suite are
     // unaffected. It contributes one plugin that decorates folded sections;
@@ -230,6 +238,7 @@ export function buildEditorExtensions(
     TagPillOptions &
       LinkPillOptions &
       LinkAutocompleteOptions &
+      TagAutocompleteOptions &
       HeadingFoldOptions &
       TableHandlesOptions &
       ContextMenuOptions &

@@ -82,6 +82,8 @@ export interface RichEditorProps {
    * contract as `onActivateTag`.
    */
   onActivateLink?: (title: string) => boolean;
+  /** Normalized tag keys the editor's autocomplete suggests from. */
+  tagKeys?: string[];
   /**
    * Called with the chosen destination when the user picks one from the export
    * menu. Omit it and no export control is rendered at all.
@@ -165,6 +167,7 @@ export function RichEditor({
   updatedAt,
   onActivateTag,
   onActivateLink,
+  tagKeys,
   onExport,
   onPublish,
   onImage,
@@ -388,6 +391,11 @@ export function RichEditor({
         listLabel: t('editor.linkAutocomplete.listLabel'),
         empty: t('editor.linkAutocomplete.empty'),
       },
+      // Same shape as `linkAutocompleteLabels` right above it: the labels
+      // half of the contract only, read once at mount. The suggested KEYS
+      // ride plugin state via `setTagAutocompleteKeys`, pushed by the effect
+      // below.
+      tagAutocompleteLabels: { listLabel: t('editor.tagAutocomplete.listLabel') },
     }),
   );
 
@@ -484,6 +492,15 @@ export function RichEditor({
     // the two never drift out of sync with each other.
     editor.commands.setLinkAutocompleteTitles(noteTitles);
   }, [editor, noteTitles]);
+
+  // Rides a command rather than an option for the same reason the note-title
+  // list does: options are read once at mount, and this list changes while
+  // the editor is alive. `undefined` means the live query has not resolved —
+  // never pushed as an empty list, which would read as "no tags exist".
+  useEffect(() => {
+    if (editor === null || tagKeys === undefined) return;
+    editor.commands.setTagAutocompleteKeys(tagKeys);
+  }, [editor, tagKeys]);
 
   // CONTROLLER RULING R12: move the selection when the menu OPENS, not
   // before each command. Reassigned every render (like every other ref-held

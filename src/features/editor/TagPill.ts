@@ -22,8 +22,14 @@ export interface TagHit {
  * The single place the offset arithmetic lives: `maskedBlockText` emits one
  * character per document position, so the character at index `i` inside a
  * block starting at `blockPos` sits at `blockPos + 1 + i`.
+ *
+ * Three consumers share it — `tagRangeAt`, `tagDecorations`, and
+ * `TagAutocomplete`'s live-document key union. That sharing is the point:
+ * activation, the pills and the suggestion list must agree about where a tag
+ * is, and a second implementation of this arithmetic is how they would stop
+ * agreeing.
  */
-function tagHitsIn(node: Node, blockPos: number): TagHit[] {
+export function tagHitsIn(node: Node, blockPos: number): TagHit[] {
   return findTagRanges(maskedBlockText(node)).map((range) => ({
     tag: range.tag,
     from: blockPos + 1 + range.start,

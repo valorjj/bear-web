@@ -399,6 +399,26 @@ export function AppShell(): ReactElement {
     return tree.nodes === undefined ? [] : walk(tree.nodes);
   }, [tree.nodes]);
 
+  // The suggestion source for the editor's tag autocomplete. Flattened from
+  // the tree rather than read from `notes.allTagRows()` directly, because the
+  // tree is where ANCESTORS exist: `parseTags` writes one row per exact tag,
+  // so `a` is a node `buildTagTree` synthesizes from `a/b` and a list built
+  // from rows alone could never suggest `#a`.
+  //
+  // `undefined` while the live query is unresolved, never coerced to `[]`.
+  const tagKeys = useMemo(() => {
+    if (tree.nodes === undefined) return undefined;
+    const keys: string[] = [];
+    const walk = (nodes: TagNode[]): void => {
+      for (const node of nodes) {
+        keys.push(node.tag);
+        walk(node.children);
+      }
+    };
+    walk(tree.nodes);
+    return keys;
+  }, [tree.nodes]);
+
   /**
    * Renames a tag and follows it with the scope, via `pendingRenameRef` —
    * see the vanished-tag effect above for why the re-scope cannot happen
@@ -822,6 +842,7 @@ export function AppShell(): ReactElement {
                       onActivateLink={handleActivateLink}
                       onOpenNote={select}
                       exportRef={exportRef}
+                      tagKeys={tagKeys}
                     />
                   )}
                 </Pane>

@@ -77,6 +77,8 @@ export interface NoteEditorProps {
    * behave like a plain click — same contract as `onActivateTag`.
    */
   onActivateLink?: (title: string) => boolean;
+  /** Normalized tag keys the editor's autocomplete suggests from. */
+  tagKeys?: string[];
   /**
    * Called with a note's id when a row in the backlinks panel is clicked.
    * The panel itself is not rendered at all when this is omitted — kept
@@ -128,6 +130,7 @@ export function NoteEditor({
   autoFocus = false,
   onActivateTag,
   onActivateLink,
+  tagKeys,
   onOpenNote,
   handleRef: externalHandleRef,
   exportRef,
@@ -499,6 +502,7 @@ export function NoteEditor({
         updatedAt={note.updatedAt}
         onActivateTag={onActivateTag}
         onActivateLink={onActivateLink}
+        tagKeys={tagKeys}
         onExport={handleExport}
         onPublish={() => setPublishOpen(true)}
         onImage={handleImage}

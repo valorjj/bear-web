@@ -215,6 +215,7 @@ export const ko: Record<TranslationKey, string> = {
 
   'editor.linkAutocomplete.listLabel': '노트 링크',
   'editor.linkAutocomplete.empty': '일치하는 노트가 없습니다',
+  'editor.tagAutocomplete.listLabel': '태그',
 
   'theme.indigoLight': 'Indigo Light',
   'theme.indigoDark': 'Indigo Dark',

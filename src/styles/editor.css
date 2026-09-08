@@ -1453,12 +1453,14 @@
  * "closed" appearance, only "not rendered at all", because the query IS the
  * document text the user is typing, not a separate filter field.
  */
-.bear-link-autocomplete {
+.bear-link-autocomplete,
+.bear-tag-autocomplete {
   position: relative;
   display: inline-block;
 }
 
-.bear-link-autocomplete-popover {
+.bear-link-autocomplete-popover,
+.bear-tag-autocomplete-popover {
   position: absolute;
   top: calc(100% + 0.25rem);
   left: 0;
@@ -1477,7 +1479,8 @@
 /* Same specificity reasoning as `.ProseMirror .bear-code-language-list`
  * above: `.ProseMirror ul` otherwise wins on `list-style`/`padding-left`
  * with no warning anywhere. */
-.ProseMirror .bear-link-autocomplete-list {
+.ProseMirror .bear-link-autocomplete-list,
+.ProseMirror .bear-tag-autocomplete-list {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
@@ -1491,7 +1494,8 @@
   display: none;
 }
 
-.bear-link-autocomplete-list [role='option'] {
+.bear-link-autocomplete-list [role='option'],
+.bear-tag-autocomplete-list [role='option'] {
   margin: 0;
   padding: 0.125rem 0.375rem;
   border-radius: var(--bear-radius-sm);
@@ -1501,14 +1505,16 @@
   cursor: pointer;
 }
 
-.bear-link-autocomplete-list [role='option']:hover {
+.bear-link-autocomplete-list [role='option']:hover,
+.bear-tag-autocomplete-list [role='option']:hover {
   background: var(--bear-hover);
 }
 
 /* The keyboard-active row, same ring-not-wash treatment
  * `.bear-code-language-list [role='option'].is-active` uses and for the same
  * reason: a background wash measured indistinguishable from `:hover`'s. */
-.bear-link-autocomplete-list [role='option'].is-active {
+.bear-link-autocomplete-list [role='option'].is-active,
+.bear-tag-autocomplete-list [role='option'].is-active {
   box-shadow: inset 0 0 0 1px var(--bear-focus);
 }
 
@@ -1517,6 +1523,26 @@
   color: var(--bear-faint);
   font-family: var(--bear-font-sans);
   font-size: var(--bear-text-ui-xs);
+}
+
+/* The row's tag glyph, drawn by `renderIconMarkup` because a ProseMirror
+ * widget cannot render React. Sized to the row's own text rather than to a
+ * fixed pixel value so it tracks the UI type scale. */
+.bear-tag-autocomplete-list [role='option'] {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.bear-tag-autocomplete-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--bear-faint);
+}
+
+.bear-tag-autocomplete-icon svg {
+  width: 0.875em;
+  height: 0.875em;
 }
 
 /*

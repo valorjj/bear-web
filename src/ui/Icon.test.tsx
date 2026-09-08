@@ -5,6 +5,7 @@ import {
   ChevronRight,
   GripHorizontal,
   GripVertical,
+  Hash,
   Heading1,
   Heading2,
   Heading3,
@@ -140,6 +141,9 @@ describe('renderIconMarkup', () => {
     // verbatim like every entry above it and needing the same drift guard.
     ['GripHorizontal', GripHorizontal],
     ['GripVertical', GripVertical],
+    // The tag-autocomplete popover's row glyph (`TagAutocomplete.ts`), copied
+    // verbatim like every entry above it and needing the same drift guard.
+    ['Hash', Hash],
   ])('matches the real %s glyph', (_name, glyph) => {
     const { container: real } = render(<Icon glyph={glyph} />);
 
