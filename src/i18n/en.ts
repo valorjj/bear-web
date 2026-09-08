@@ -417,6 +417,7 @@ export const en = {
   'tags.rename.invalid': 'That name cannot be used for a tag.',
   'tags.rename.merge': 'A tag named {name} already exists. Renaming will merge them.',
   'confirm.deleteTag.title': 'Delete this tag?',
+  'confirm.deleteTag.body.none': 'No notes carry this tag any more. Only the sidebar row will go.',
   'confirm.deleteTag.body.flatOne':
     'It will be removed from 1 note. The notes themselves are kept.',
   'confirm.deleteTag.body.flatMany':

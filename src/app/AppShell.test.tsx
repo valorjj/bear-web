@@ -767,6 +767,39 @@ describe('tag row menu', () => {
       expect(await screen.findByText(body)).toBeInTheDocument();
     });
 
+    it('a SYNTHETIC parent counts its children (no note carries the bare tag)', async () => {
+      // `buildTagTree` renders a `project` row because children exist, not
+      // because any note writes `#project`. Counting only the names literally
+      // present read this as a FLAT tag — the sentence that never mentions a
+      // sub-tag is going at all — while a sub-tag was in fact being deleted.
+      await notes.create('one #project/sub');
+
+      renderShell();
+      const row = await screen.findByRole('button', { name: /^project\b/ });
+      fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+      await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+
+      expect(await screen.findByText(en['confirm.deleteTag.body.oneSubOne'])).toBeInTheDocument();
+    });
+
+    it('no notes at all, when the row outlives its carriers', async () => {
+      // The race made deterministic: `db.notes.delete` removes the note
+      // without touching its `noteTags` row, which is exactly the state a
+      // purge or a sync pull landing between the menu action and `affected`
+      // resolving leaves behind. The tree still renders the row; the scan
+      // finds nothing. Without its own sentence this read "removed from 1
+      // note".
+      const orphan = await notes.create('one #ghost');
+      await db.notes.delete(orphan.id);
+
+      renderShell();
+      const row = await screen.findByRole('button', { name: /^ghost\b/ });
+      fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+      await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+
+      expect(await screen.findByText(en['confirm.deleteTag.body.none'])).toBeInTheDocument();
+    });
+
     it('many sub-tags, many notes', async () => {
       await notes.create('one #project');
       await notes.create('two #project/a');

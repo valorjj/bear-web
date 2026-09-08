@@ -359,6 +359,7 @@ export const ko: Record<TranslationKey, string> = {
   'tags.rename.invalid': '태그 이름으로 쓸 수 없습니다.',
   'tags.rename.merge': '{name} 태그가 이미 있습니다. 이름을 바꾸면 두 태그가 합쳐집니다.',
   'confirm.deleteTag.title': '이 태그를 삭제할까요?',
+  'confirm.deleteTag.body.none': '이 태그를 쓰는 메모가 이제 없습니다. 사이드바 항목만 사라집니다.',
   'confirm.deleteTag.body.flatOne': '메모 1개에서 태그가 지워집니다. 메모 자체는 그대로 남습니다.',
   'confirm.deleteTag.body.flatMany':
     '메모 {count}개에서 태그가 지워집니다. 메모 자체는 그대로 남습니다.',

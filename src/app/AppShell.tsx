@@ -612,11 +612,23 @@ export function AppShell(): ReactElement {
    * does not survive a bare count spliced into a plural noun (a single
    * sub-tag interpolated into "{tags} sub-tags" reads "1 sub-tags"). The
    * one-sub-tag sentences spell out "one sub-tag" rather than interpolating
-   * `{tags}` for exactly this reason. `tagCount` includes the tag itself, so
-   * the sub-tag count is `tagCount - 1`.
+   * `{tags}` for exactly this reason. `tagCount` ALWAYS includes the tag
+   * itself — `affected` seeds its set with the queried name, so a synthetic
+   * parent row (one no note writes literally, but `buildTagTree` renders
+   * because children exist) still counts itself — so the sub-tag count is
+   * `tagCount - 1` and is never negative.
+   *
+   * A seventh sentence covers zero carriers. It is reachable only by a race —
+   * a tag row exists because `noteTags` names it, and those rows are written
+   * from the same `parseTags` that `affected` scans — but a purge or a sync
+   * pull landing between the menu action and the lookup resolving produces
+   * it, and without the branch it fell through to "removed from 1 note". With
+   * no carriers there are no descendant names either, so `tagCount` is
+   * exactly 1 there and this is the only zero-note shape.
    */
   const deleteTagBody = useCallback(
     (entry: { noteCount: number; tagCount: number }): string => {
+      if (entry.noteCount === 0) return t('confirm.deleteTag.body.none');
       const subtagCount = entry.tagCount - 1;
       const manyNotes = entry.noteCount > 1;
       const key =

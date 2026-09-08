@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '../db';
+import { parseLinks } from '../links';
+import { parseTags } from '../tags';
 import { notes, tags } from './index';
+import { createTagsRepository } from './tags';
 
 async function reset(): Promise<void> {
   await db.notes.clear();
@@ -10,6 +13,65 @@ async function reset(): Promise<void> {
   await db.tags.clear();
   await db.syncState.clear();
 }
+
+describe('tagsRepository metadata', () => {
+  // Restored after the S1 rewrite dropped them along with the old
+  // `createTagsRepository(db)` construction. Nothing about the factory's new
+  // deps object required deleting these: `removeMeta` and `allMeta`'s
+  // sortOrder ordering (which `useTagTree` reads) were left untested
+  // anywhere. They exercise the shared singleton now, like every other block
+  // in this file.
+  beforeEach(reset);
+
+  it('returns undefined for a tag with no stored metadata', async () => {
+    expect(await tags.getMeta('work')).toBeUndefined();
+  });
+
+  it('creates a metadata row on first write with sensible defaults', async () => {
+    await tags.setCollapsed('work', true);
+
+    expect(await tags.getMeta('work')).toEqual({
+      tag: 'work',
+      collapsed: true,
+      iconKey: null,
+      sortOrder: 0,
+    });
+  });
+
+  it('updates one field without clobbering the others', async () => {
+    await tags.setCollapsed('work', true);
+    await tags.setIcon('work', 'briefcase');
+    await tags.setSortOrder('work', 5);
+
+    expect(await tags.getMeta('work')).toEqual({
+      tag: 'work',
+      collapsed: true,
+      iconKey: 'briefcase',
+      sortOrder: 5,
+    });
+  });
+
+  it('clears an icon by setting it to null', async () => {
+    await tags.setIcon('work', 'briefcase');
+    await tags.setIcon('work', null);
+
+    expect((await tags.getMeta('work'))?.iconKey).toBeNull();
+  });
+
+  it('lists all metadata rows ordered by sortOrder', async () => {
+    await tags.setSortOrder('b', 2);
+    await tags.setSortOrder('a', 1);
+
+    expect((await tags.allMeta()).map((m) => m.tag)).toEqual(['a', 'b']);
+  });
+
+  it('removes a metadata row', async () => {
+    await tags.setCollapsed('work', true);
+    await tags.removeMeta('work');
+
+    expect(await tags.getMeta('work')).toBeUndefined();
+  });
+});
 
 describe('tags.affected', () => {
   beforeEach(reset);
@@ -20,6 +82,17 @@ describe('tags.affected', () => {
     await notes.create('three\n#other');
 
     expect(await tags.affected('a/b')).toEqual({ noteCount: 2, tagCount: 2 });
+  });
+
+  it('counts the queried tag itself when no note text carries it', async () => {
+    // A SYNTHETIC parent: `buildTagTree` renders a `project` row because
+    // children exist, but no note writes `#project`. Counting only literal
+    // names reported 2 here and the confirm read it as ONE sub-tag while two
+    // were going.
+    await notes.create('one\n#project/a');
+    await notes.create('two\n#project/b');
+
+    expect(await tags.affected('project')).toEqual({ noteCount: 2, tagCount: 3 });
   });
 
   it('counts a trashed note, because the rewrite will touch it', async () => {
@@ -160,6 +233,47 @@ describe('tags.rename', () => {
     await tags.rename('a/b', 'x');
     expect((await db.notes.get(one.id))?.text).toBe('one\n#x');
     expect(await db.notes.get(two.id)).toBeUndefined();
+  });
+
+  it('counts the notes WRITTEN, not the notes selected', async () => {
+    // `apply` skips a selected note whose rewrite changes nothing, and that
+    // cannot arise through the real `parseTags` — a note is selected only
+    // because it carries the tag. So this drives the branch through the seam
+    // the factory already exposes, with a parser that over-selects. What is
+    // pinned is that `noteCount` reports WRITES: `AppShell.renameTag`'s
+    // self-limiting ref clear keys on `noteCount === 0` meaning "no
+    // `tree.nodes` emission is coming", and a candidate count would be wrong
+    // in exactly that direction.
+    const carrier = await notes.create('one #a/b');
+    const bystander = await notes.create('two, no tags at all');
+
+    const overSelecting = createTagsRepository({
+      db,
+      parseTags: (text) => [...new Set([...parseTags(text), 'a/b'])],
+      parseLinks,
+    });
+
+    expect(await overSelecting.rename('a/b', 'x')).toEqual({ noteCount: 1 });
+    expect((await db.notes.get(carrier.id))?.text).toBe('one #x');
+    expect((await db.notes.get(bystander.id))?.text).toBe('two, no tags at all');
+  });
+
+  it('renaming a tag into its own descendant keeps every metadata row', async () => {
+    // Previously only hand-traced, and the trace was wrong. Processing `a`
+    // first finds `a/b` still occupied, skips the put as a merge, deletes `a`,
+    // and only then moves `a/b` to `a/b/b` — leaving the destination `a/b`
+    // with no metadata at all. Deepest-first vacates `a/b` before `a` lands
+    // on it.
+    await notes.create('one #a #a/b');
+    await tags.setIcon('a', 'star');
+    await tags.setIcon('a/b', 'flag');
+
+    await tags.rename('a', 'a/b');
+
+    expect((await db.notes.get((await db.notes.toArray())[0]!.id))?.text).toBe('one #a/b #a/b/b');
+    expect((await tags.getMeta('a/b'))?.iconKey).toBe('star');
+    expect((await tags.getMeta('a/b/b'))?.iconKey).toBe('flag');
+    expect(await tags.getMeta('a')).toBeUndefined();
   });
 
   it('is a no-op when renaming a tag to itself', async () => {

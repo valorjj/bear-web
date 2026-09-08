@@ -2,7 +2,7 @@
 
 How a `#tag` is recognized, normalized and bounded in a note's Markdown — the single grammar that `src/data/tags/parseTags.ts` implements and that both the tag index and the editor's tag pills read through.
 
-**Trigger:** any change under `src/data/tags/` — `parseTags.ts`, `parseTags.test.ts`, `tagRanges.test.ts`, `rewriteTag.ts` — or under `src/data/markdown/mask.ts`, or to the symbols in either: `findTagRanges`, `parseTags`, `normalizeTag`, `trimTrailing`, `MASK`, `LEADING_REJECT`, `BACKTICK_OPENER`, `TILDE_OPENER`, `closesFence`, `maskCode`, `maskInlineCode`, `canStart`, `isBoundary`, `rewriteTag`, `canWriteTag`, `tagToken`. Also `notes.rebuildTagIndex` and `TAG_INDEX_VERSION` in `src/data/repositories/notes.ts` and `src/data/migrations.ts`, and any prose or code introducing the literal escape sequence for the mask character.
+**Trigger:** any change under `src/data/tags/` — `parseTags.ts`, `parseTags.test.ts`, `tagRanges.test.ts`, `rewriteTag.ts` — or under `src/data/markdown/mask.ts`, or to the symbols in either: `findTagRanges`, `parseTags`, `normalizeTag`, `trimTrailing`, `MASK`, `LEADING_REJECT`, `BACKTICK_OPENER`, `TILDE_OPENER`, `closesFence`, `maskCode`, `maskInlineCode`, `canStart`, `isBoundary`, `rewriteTag`, `canWriteTag`, `canRenameTo`, `tagToken`, `needsClosingHash`. Also `notes.rebuildTagIndex` and `TAG_INDEX_VERSION` in `src/data/repositories/notes.ts` and `src/data/migrations.ts`, and any prose or code introducing the literal escape sequence for the mask character.
 
 - **Tags are keyed lowercase, and that is what makes `rebuildTagIndex`
   deterministic.** `#Work` and `#work` are one tag. Bear preserves first-seen
@@ -108,3 +108,23 @@ How a `#tag` is recognized, normalized and bounded in a note's Markdown — the 
   `from` or starts with `${from}/` — made all four pass again. Do not "fix" a
   rewrite bug by widening the match; widening a substring match is how this
   defect comes back.
+
+- **A rename TARGET may not contain whitespace, and `canWriteTag` is NOT the
+  predicate that decides it.** `canWriteTag` round-trips a token IN ISOLATION;
+  a rename inserts it into text that already exists around it, and the two are
+  not the same question. `parseTags` accepts the multi-word form's closing `#`
+  only when the next character is a boundary (`isBoundary(text[close + 1])`),
+  and `range.end` for the simple form deliberately excludes trailing
+  punctuation — so renaming `work` to `my plan` in `done #work. next` writes
+  `done #my plan#. next`, which re-parses as the tag `my` and strands a
+  literal `plan#.` in the user's prose. One rename splits the tag in two and no
+  second rename can undo it. Verified by execution, not by reading, during
+  S1's final review. `canRenameTo` = `canWriteTag` minus the names that need a
+  closer, and BOTH `TagRenamePopover` and `tags.rename` refuse through it — the
+  repository does not delegate this to the UI. Emitting a separating space
+  instead was rejected: it only helps the punctuation-adjacent case and leaves
+  a floating `#my plan# . next`, which is its own corruption. **This restricts
+  renaming TO a multi-word name only.** `tagToken`'s multi-word branch and
+  `canWriteTag`'s meaning are unchanged, and a multi-word tag a user types into
+  a note is still fully supported — do not "simplify" the two predicates back
+  into one.

@@ -23,9 +23,11 @@ sites; `src/features/graph/useGraphSnapshot.ts`; and
 - **A SECOND derived index, `noteLinks`, now rides `reindexNote` alongside
   `noteTags` (L2)** — `reindexNote(db, noteId, text, parseTags, parseLinks,
   noteTitle?)` replaces both tables' rows for one note from its current text
-  in a single call, and it has **four call sites**: `notes.create`,
-  `notes.save`, `notes.restore` (all in `src/data/repositories/notes.ts`) and
-  `src/data/sync/engine.ts`'s apply path. The sync one matters most: a note
+  in a single call, and it has **five call sites**: `notes.create`,
+  `notes.save`, `notes.restore` (all in `src/data/repositories/notes.ts`),
+  `src/data/sync/engine.ts`'s apply path, and — since S1 —
+  `src/data/repositories/tags.ts`'s `apply`, the shared body of `tags.rename`
+  and `tags.remove`. The sync one matters most: a note
   arriving from another device that only got `noteTags` rows (not
   `noteLinks`) would make backlinks silently incomplete on exactly that
   device — the hardest kind of gap to reproduce, because the OTHER device
@@ -41,6 +43,25 @@ sites; `src/features/graph/useGraphSnapshot.ts`; and
   `rebuildTagIndex` had already been wired — same shape of gap as the
   sync-engine one above, one table over, and worth checking again the next
   time a THIRD derived index is added here.
+
+- **KNOWN GAP (S1): an open `NoteEditor` can write a tag rewrite back out.**
+  `NoteEditor` freezes `initialMarkdown` at mount and is deliberately "the
+  sole writer of this note's text while it is open"
+  (`NoteEditor.tsx:111-113,167`). Rename or delete a tag while a carrying note
+  is on screen, type one character, and autosave writes the PRE-rewrite text
+  back — resurrecting the tag on that one note, with the tag index dutifully
+  rebuilt from it. The hazard class predates S1 (sync's apply path has exactly
+  the same shape: it can write a note the editor is holding), but S1 is what
+  makes it reachable by two deliberate clicks with the note visible. **Not
+  fixed, deliberately, and not to be discovered again as if it were news.**
+  The cheap mitigation is the one this file already documents for a different
+  reason: remount or re-seed the editor for any note the rewrite touched —
+  `AppShell` already keys `NoteEditor` by `note.id`, so a rewrite-generation
+  suffix on that key would do it, at the cost of dropping the caret. Whoever
+  takes it should also decide whether the sync path deserves the same
+  treatment, because half a fix here would be worse than none: it would make
+  the failure rarer without making it impossible, which is the state this
+  repo treats as the worst of the three.
 
 - **`NoteEditor`'s `seedText` is scoped to the just-created note, and `AppShell`
   must clear it when the selection leaves that note.** A note created inside a

@@ -328,9 +328,18 @@ describe('SidebarRow', () => {
     renderRow({ onContextMenu });
 
     const row = screen.getByRole('button', { name: /Work/ });
+    // A SENTINEL rect, because jsdom has no layout engine and every real rect
+    // is zeros — which is byte-identical to the zero-size rect the pointer
+    // route builds, so a call-count assertion alone could not tell the two
+    // apart and this test's name claimed something it never checked. With the
+    // sentinel, reading the pointer instead (or constructing
+    // `new DOMRect(0, 0, 0, 0)`) can no longer produce this value.
+    row.getBoundingClientRect = () => new DOMRect(11, 22, 33, 44);
     fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
 
     expect(onContextMenu).toHaveBeenCalledTimes(1);
+    const rect = onContextMenu.mock.calls[0]![0] as DOMRect;
+    expect([rect.left, rect.top, rect.width, rect.height]).toEqual([11, 22, 33, 44]);
   });
 
   it('does not intercept contextmenu when no handler is given', () => {
