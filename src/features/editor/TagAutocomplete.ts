@@ -168,6 +168,34 @@ interface TagAutocompleteState {
    * tag is edited and reopens the moment the document changes.
    */
   dismissedFrom: number | null;
+  /**
+   * The `from` of the match that last OPENED the list on a document change,
+   * or `null`. `openRows` requires this to equal the current match's `from`
+   * before it will show anything, which is what stops a caret-only move from
+   * ever opening (or keeping open) a list keyed to wherever the caret used to
+   * be.
+   *
+   * Without this, `tagAutocompleteMatchAt` alone decided whether the list was
+   * open — and that function is deliberately POSITIONAL, with no memory of
+   * whether the caret arrived by typing or by merely moving there. Two
+   * `ArrowDown`s to select row 2 on one tag, followed by a caret-only move to
+   * the END of an unrelated, already-complete tag elsewhere in the note,
+   * would still see `match !== null` there (the caret rests right after a
+   * tag) and would render THAT tag's own row 2 as "active" — so `Tab` there
+   * replaced the second tag with row 2's suggestion, silently rewriting text
+   * the user never touched. Reported as Critical in Task 3's review: two
+   * arrow keys and a Tab, with no typing at all, rewrote `#work` to
+   * `#workshop`.
+   *
+   * Set on `tr.docChanged` (to the new match's `from`, or `null` if none) and
+   * cleared on `tr.selectionSet` with no doc change — a caret move alone
+   * closes the list; only typing (or `undo`, which is itself a document
+   * change) opens it. `insertTag`'s post-insert selection lands inside a doc
+   * CHANGE, so descend-and-stay-open still works: the same transaction that
+   * moves the caret is the one that sets `openFrom` to the reopened match's
+   * `from`.
+   */
+  openFrom: number | null;
 }
 
 type Meta =
@@ -319,6 +347,12 @@ function openRows(
   const pluginState = tagAutocompleteKey.getState(state);
   if (pluginState === undefined) return null;
   if (pluginState.dismissedFrom === match.from) return null;
+  // The list only ever opens on a document change, at the `from` that change
+  // produced. A caret-only move to a DIFFERENT tag's boundary would otherwise
+  // still satisfy `tagAutocompleteMatchAt` there — this is what stops that
+  // from rendering (and `handleKeyDown` from acting on) a stale row carried
+  // over from wherever the caret used to be. See `openFrom`'s docblock.
+  if (pluginState.openFrom !== match.from) return null;
 
   const rows = matchingTags(allKeys(pluginState), match.query);
   return { match, rows, activeIndex: clampedActiveIndex(pluginState.activeIndex, rows.length) };
@@ -382,6 +416,7 @@ export const TagAutocomplete = Extension.create<TagAutocompleteOptions>({
             docKeysFrom: null,
             activeIndex: 0,
             dismissedFrom: null,
+            openFrom: null,
           }),
 
           apply(tr, value, _oldState, newState) {
@@ -428,7 +463,25 @@ export const TagAutocomplete = Extension.create<TagAutocompleteOptions>({
             // A fresh keystroke lands on row 0 — the typed text — never on a
             // stale index left over from before the list narrowed, and any
             // dismissal is forgotten so continuing to type reopens the list.
-            if (tr.docChanged) next = { ...next, activeIndex: 0, dismissedFrom: null };
+            //
+            // `openFrom` moves in lockstep: a document change is the only
+            // thing allowed to OPEN the list (or keep it open on a different
+            // tag), set to wherever the match now sits, or `null` if there is
+            // none. A caret-only move — no doc change, but the selection did
+            // move — CLOSES it, which is what stops a stale `activeIndex`
+            // from a completely different tag being rendered as "active" the
+            // instant the caret happens to land after this one. See
+            // `openFrom`'s own docblock for the bug this closes.
+            if (tr.docChanged) {
+              next = {
+                ...next,
+                activeIndex: 0,
+                dismissedFrom: null,
+                openFrom: match?.from ?? null,
+              };
+            } else if (tr.selectionSet) {
+              next = { ...next, openFrom: null };
+            }
 
             return next;
           },

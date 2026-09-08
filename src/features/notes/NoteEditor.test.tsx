@@ -604,27 +604,20 @@ describe('seeded notes', () => {
     // above keeps it honest: if the insert never landed, undo would have
     // nothing to reverse and this test would pass vacuously.
     await userEvent.click(el);
-    // S4's tag autocomplete opens the moment the caret rests directly after
-    // ANY complete tag — including a click that (per the jsdom caret note
-    // above) lands the caret at the note's end with no typing at all. Its
-    // suggestion row is real DOM text inside the editable host, which jsdom's
-    // synthetic typing does not wall off the way a real browser's
-    // `contentEditable="false"` does: the very next keystroke can land in
-    // the popover's transient DOM instead of the document, discarding it on
-    // the popover's next rebuild. Escape dismisses it before typing 'x', so
-    // the insert is unambiguously a real document edit.
-    await userEvent.keyboard('{Escape}');
     await userEvent.type(el, 'x');
     await waitFor(() => expect(el.textContent).not.toBe('#work'));
 
     act(() => {
       handleRef.current?.editor?.commands.undo();
     });
-    // Undo leaves the caret back at the tag's end, which reopens the same
-    // popover — its suggestion row ("work") is a real DOM descendant of the
-    // editable host, so raw `textContent` below would read "#workwork" while
-    // it is open even though the document itself is exactly "#work". Escape
-    // closes it before the read.
+    // Undo is a DOCUMENT CHANGE — the only kind of transaction that can open
+    // S4's tag autocomplete (`openFrom` in `TagAutocomplete.ts` gates it to
+    // exactly that; a caret-only move, such as the click above, no longer
+    // opens it at all) — and it leaves the caret back at the tag's end, so it
+    // reopens the popover here. Its suggestion row ("work") is a real DOM
+    // descendant of the editable host, so raw `textContent` below would read
+    // "#workwork" while it is open even though the document itself is
+    // exactly "#work". Escape closes it before the read.
     await userEvent.keyboard('{Escape}');
     // Fails HERE, naming the text it found, rather than surfacing five seconds
     // later as an unexplained timeout on an assertion about `purge`.

@@ -22,6 +22,24 @@ function caretAtEnd(editor: Editor): void {
   editor.commands.setTextSelection(editor.state.doc.content.size - 1);
 }
 
+/**
+ * A caret-only move that cannot ALSO trip `TrailingNode.appendTransaction`
+ * into inserting a spurious paragraph — `TrailingNode` runs on EVERY
+ * dispatched transaction, not only ones that changed the document (see the
+ * trailing-node hazard describe block below), so a plain
+ * `editor.commands.setTextSelection` on a note ending in a LIST is not
+ * actually caret-only by the time it reaches this plugin: the append is a
+ * SECOND, genuine document-changing transaction chained onto it, which is
+ * indistinguishable from real typing as far as `openFrom` is concerned.
+ * `skipTrailingNodeMeta` keeps this one truly caret-only.
+ */
+function quietlySelect(editor: Editor, pos: number): void {
+  const tr = editor.state.tr
+    .setSelection(TextSelection.create(editor.state.doc, pos))
+    .setMeta(skipTrailingNodeMeta, true);
+  editor.view.dispatch(tr);
+}
+
 describe('tagAutocompleteMatchAt', () => {
   it('finds the tag being typed before the caret', () => {
     const editor = editorWith('see #wo');
@@ -443,6 +461,88 @@ describe('the widget key', () => {
   });
 });
 
+describe('a caret-only move', () => {
+  /**
+   * The Critical bug from Task 3's review, reproduced end to end.
+   * `tagAutocompleteMatchAt` is purely POSITIONAL — it has no memory of
+   * whether the caret arrived by typing or by merely moving there — so
+   * without `openFrom` gating `openRows`, TWO ArrowDowns to select row 2 on
+   * `#a`, followed by a caret-only move to the end of an unrelated,
+   * already-complete `#work` elsewhere in the same note, would still see a
+   * match there (the caret rests right after a tag) and would render row 2
+   * of `#work`'s OWN candidate list as "active". `Tab` there then replaced
+   * `#work` with that row, silently rewriting text the user never touched:
+   * measured by the reviewer as `#a and #work end` -> `#a and #workshop end`
+   * from two arrow keys and a Tab, with no typing at all.
+   */
+  it('does not carry the active row from one tag onto a different tag it never touched', () => {
+    const editor = pluginEditorWith('zzz and #work end', LABELS, [
+      'a',
+      'a/b',
+      'a/c',
+      'work',
+      'workshop',
+    ]);
+    // Replaces the 'zzz' placeholder, then types 'see #a' in its place —
+    // ending with the list OPEN on `#a` (query 'a', caret right before the
+    // space that follows), a genuine document change all the way through.
+    editor.view.dispatch(editor.state.tr.delete(1, 4));
+    editor.commands.setTextSelection(1);
+    type(editor, 'see #a');
+    expect(popover(editor)).not.toBeNull();
+
+    expect(keydown(editor, 'ArrowDown')).toBe(true);
+    expect(keydown(editor, 'ArrowDown')).toBe(true);
+    expect(activeOption(editor)).toBe('a/c');
+
+    // A CARET-ONLY move — no typing — to the end of the unrelated, already-
+    // complete `#work` later in the same note. Document reads exactly
+    // 'see #a and #work end' at this point: the position right after 'k' is
+    // 17.
+    expect(markdownOf(editor)).toContain('see #a and #work end');
+    editor.commands.setTextSelection(17);
+
+    const before = markdownOf(editor);
+    expect(keydown(editor, 'Tab')).toBe(false);
+    expect(markdownOf(editor)).toBe(before);
+    expect(markdownOf(editor)).toContain('#work end');
+    expect(markdownOf(editor)).not.toContain('#workshop');
+    editor.destroy();
+  });
+
+  it('does not consume ArrowDown when the caret merely rests after a tag with no typing', () => {
+    const editor = pluginEditorWith('#work\n\nsecond line');
+    // A caret-only move to right after the already-complete `#work` — no
+    // typing at all.
+    editor.commands.setTextSelection(6);
+    expect(popover(editor)).toBeNull();
+
+    expect(keydown(editor, 'ArrowDown')).toBe(false);
+    expect(popover(editor)).toBeNull();
+    editor.destroy();
+  });
+
+  it('still lets Tab indent a list item when the caret rests after a tag with no typing', () => {
+    const editor = pluginEditorWith('- one\n- two #work');
+    // Caret-only move to the end of the document — right after the already-
+    // complete `#work` in the second item — no typing. `quietlySelect`, not
+    // `caretAtEnd`: this note ends in a list, so an ordinary, untagged
+    // `setTextSelection` would ALSO trip `TrailingNode.appendTransaction`
+    // into inserting a real trailing paragraph — a genuine document change
+    // chained onto it — which is exactly the confound this test exists to
+    // rule out.
+    quietlySelect(editor, editor.state.doc.content.size - 3);
+    expect(popover(editor)).toBeNull();
+
+    const before = editor.state.doc.firstChild?.childCount;
+    expect(keydown(editor, 'Tab')).toBe(true);
+    // 'two #work' nested under 'one' rather than remaining a second
+    // top-level item — the list keymap actually ran.
+    expect(editor.state.doc.firstChild?.childCount).toBe((before ?? 0) - 1);
+    editor.destroy();
+  });
+});
+
 describe('the trailing-node hazard', () => {
   /**
    * `TrailingNode.appendTransaction` runs on EVERY dispatched transaction,
@@ -455,12 +555,26 @@ describe('the trailing-node hazard', () => {
    * INCLUDING one a test uses only to set up its own fixture. So this fixture
    * reaches the dispatch under test using only TAGGED transactions from the
    * very first one; L2's first version of this test typed its setup and
-   * passed with the fix removed.
+   * passed with the fix removed. `quietlySelect` is defined at module scope,
+   * above, for the same reason `a caret-only move` needs it too.
    */
-  function quietlySelect(editor: Editor, pos: number): void {
-    const tr = editor.state.tr
-      .setSelection(TextSelection.create(editor.state.doc, pos))
-      .setMeta(skipTrailingNodeMeta, true);
+
+  /** Same tagging discipline as `quietlySelect`, but a document CHANGE: the
+   * only kind of transaction `openFrom` accepts to open the list. Used where
+   * a fixture needs the list genuinely open before the dispatch under test,
+   * without ever letting an untagged transaction burn the vulnerability flag
+   * this whole describe block depends on staying armed. */
+  function quietlyType(editor: Editor, pos: number, text: string): void {
+    const tr = editor.state.tr.insertText(text, pos);
+    // `insertText` alone does not move the selection to follow the insert —
+    // it only maps whatever selection already existed, which for a freshly
+    // constructed `Editor` is the document start. Set it explicitly, the way
+    // a real keystroke's selection would land, or `match` below sees a caret
+    // nowhere near what was just typed.
+    tr.setSelection(TextSelection.create(tr.doc, pos + text.length)).setMeta(
+      skipTrailingNodeMeta,
+      true,
+    );
     editor.view.dispatch(tr);
   }
 
@@ -483,7 +597,11 @@ describe('the trailing-node hazard', () => {
       content: parseMarkdown('#a here\n\n- one\n- two'),
     });
     editor.commands.setTagAutocompleteKeys(KEYS);
-    quietlySelect(editor, 3);
+    // `openFrom` only opens the list on a document change, so `quietlySelect`
+    // alone (caret-only) no longer opens it here — `quietlyType` is the
+    // tagged, doc-changing move that does, keeping ArrowDown's 'move' meta
+    // dispatch the only thing under test.
+    quietlyType(editor, 3, 'x');
     const before = markdownOf(editor);
 
     keydown(editor, 'ArrowDown');

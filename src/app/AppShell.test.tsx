@@ -635,19 +635,6 @@ describe('tag scopes', () => {
     // it and stop it parsing as a tag at all, which is not what this test is
     // about.
     await userEvent.click(created);
-    // S4's tag autocomplete opens the moment the caret rests directly after
-    // ANY complete tag, including a click that lands it there with no typing
-    // at all (the caret-placement note above this block already documents
-    // why a click lands ambiguously in jsdom). Its suggestion row is real DOM
-    // text inside the editable host, and jsdom's synthetic typing does not
-    // wall it off the way a real browser's `contentEditable="false"` does:
-    // without dismissing it first, the very next keystroke can land in the
-    // popover's transient DOM instead of the document, and is discarded on
-    // the popover's next rebuild — losing ' urgent' entirely and leaving
-    // `read()` seeing only the seed text at the switch-away below, which is
-    // indistinguishable from an untouched note and re-arms exactly the purge
-    // this test exists to rule out. Escape closes it before typing.
-    await userEvent.keyboard('{Escape}');
     await userEvent.type(created, ' urgent');
 
     // Switch away — this note now holds real content, so it is saved, not
