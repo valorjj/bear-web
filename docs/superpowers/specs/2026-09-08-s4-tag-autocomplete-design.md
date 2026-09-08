@@ -159,13 +159,22 @@ thing the user clicked has vanished from under the cursor. Consequences:
 Both are rare and the alternative reintroduces the failure the existing ruling
 was written about.
 
-**The phone Back gesture will not return to the note.**
-`useOverlayHistory(mode === 'phone' && phoneScreen === 'editor', backToList,
-'editor')` treats the editor as the overlay, so leaving it pops that history
-entry. Accepted rather than fixed, because the note the user came from
-**cannot** be filtered out of the list they land on — it contains the tag they
-tapped — so it is one visible tap away, still selected. Pushing a second
-history entry to make Back work is more machinery than the gap deserves.
+**`phoneScreen` is derived, not state**, so "navigate to the list" is one
+existing call. `AppShell.tsx:575` reads `const phoneScreen = selectedNoteId
+=== null ? 'list' : 'editor'` and `:581` defines `backToList` as
+`() => select(null)`. Landing on the list therefore means DESELECTING the
+note — there is no screen variable to set.
+
+Two consequences, both accepted. The note is no longer selected when the list
+appears, though it is guaranteed to be IN that list, because it carries the
+tag that was just tapped; it is one visible tap away. And the phone Back
+gesture will not return to it: `useOverlayHistory(mode === 'phone' &&
+phoneScreen === 'editor', backToList, 'editor')` treats the editor as the
+overlay, and its effect cleanup consumes its own history entry with
+`history.back()` when `isOpen` flips false — so a programmatic `select(null)`
+leaves the history stack correct, not desynced, but also leaves nothing for
+Back to return to. Pushing a second entry to make Back work is more machinery
+than the gap deserves.
 
 **Bundle headroom is 1,884 B gzipped.** CLAUDE.md records this after L3, with
 the guard's ceiling at 340,000 B and `scripts/bundleSize.test.ts` summing the
@@ -275,6 +284,12 @@ without a mounted editor.
 - Deduped against row 0, so an exact existing key never appears twice.
 - Capped at 8 rows total, `MAX_RESULTS` as in `LinkAutocomplete`.
 - Both sides normalized, so `#Work` finds `work`.
+- **A query ending in `/` narrows to that tag's subtree.** `normalizeTag`
+  strips trailing slashes, so `#a/` normalizes to `a` and would otherwise
+  behave identically to `#a` — offering `assets/sap` and `bear` again rather
+  than `a/b` and `a/c`. Matching therefore runs against the slash-terminated
+  path when the query ends in one. This is what makes decision 4's
+  descend-and-stay-open actually show descendants.
 
 ### Task 3 — the plugin, and the popover
 
@@ -311,9 +326,11 @@ Rendering follows `LinkAutocomplete` exactly:
 - Rows draw the hash glyph through `renderIconMarkup`, because a ProseMirror
   widget cannot render React. A new glyph, if one is needed, is a verbatim
   entry in `ICON_NODES` plus a row in `Icon.test.tsx`'s `it.each`.
-- New `.bear-tag-autocomplete-*` classes sharing a `.bear-autocomplete` base
-  in `editor.css`, so the popover's shell styling is not duplicated. A
-  CSS-level share with no JS coupling.
+- New `.bear-tag-autocomplete-*` classes, shared with the link popover's rules
+  by adding them to those rules' SELECTOR LISTS rather than by introducing a
+  common base class. Both express the same intent, but a selector list needs
+  no change to `LinkAutocomplete.ts`'s emitted markup, which keeps this
+  sub-project's promise that the file is not touched.
 - One i18n key, `editor.tagAutocomplete.listLabel`, in `en.ts` and `ko.ts`.
   No `empty` key: decision 2 makes an empty list unreachable.
 
