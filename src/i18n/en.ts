@@ -417,8 +417,13 @@ export const en = {
   'tags.rename.invalid': 'That name cannot be used for a tag.',
   'tags.rename.merge': 'A tag named {name} already exists. Renaming will merge them.',
   'confirm.deleteTag.title': 'Delete this tag?',
-  'confirm.deleteTag.body.one': 'It will be removed from 1 note. The notes themselves are kept.',
-  'confirm.deleteTag.body.other':
+  'confirm.deleteTag.body.flatOne':
+    'It will be removed from 1 note. The notes themselves are kept.',
+  'confirm.deleteTag.body.flatMany':
+    'It will be removed from {count} notes. The notes themselves are kept.',
+  'confirm.deleteTag.body.subOne':
+    'It and {tags} sub-tags will be removed from 1 note. The notes themselves are kept.',
+  'confirm.deleteTag.body.subMany':
     'It and {tags} sub-tags will be removed from {count} notes. The notes themselves are kept.',
   'confirm.deleteTag.confirm': 'Delete tag',
   'confirm.mergeTag.title': 'Merge these tags?',

@@ -7,7 +7,12 @@ import { MENU_GAP, useAnchoredMenu } from '@/lib/useAnchoredMenu';
 export interface TagRenamePopoverProps {
   /** The tag being renamed. Seeds the field. */
   tag: string;
-  /** Viewport rect to anchor against — the row's own rect. */
+  /**
+   * Viewport rect to anchor against — whatever rect opened the menu this
+   * popover follows: a zero-size rect at the pointer for a right-click or
+   * long press, the row's own rect for the `Shift+F10` keyboard route. Same
+   * shape, and the same reason, as `TagRowMenuRequest.rect`.
+   */
   rect: DOMRect;
   /** Every tag currently in the tree, for the merge warning. */
   existingTags: readonly string[];

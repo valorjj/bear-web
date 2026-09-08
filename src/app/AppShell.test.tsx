@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { StrictMode, useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { db, notes } from '@/data';
+import { db, notes, tags } from '@/data';
 import { I18nProvider } from '@/i18n';
 import { en } from '@/i18n/en';
 import type { NoteEditorProps } from '@/features/notes';
@@ -677,8 +677,12 @@ describe('tag row menu', () => {
 
     // `tagCount` includes the tag itself, so the body counts ONE sub-tag
     // (`project/sub`) even though `affected` reports 2 — the confirm copy
-    // already subtracts it.
-    const body = en['confirm.deleteTag.body.other'].replace('{count}', '2').replace('{tags}', '1');
+    // already subtracts it. Two notes AND a sub-tag present picks the
+    // `subMany` sentence specifically — the four-key split exists so this
+    // never falls back to a grammatically wrong combination.
+    const body = en['confirm.deleteTag.body.subMany']
+      .replace('{count}', '2')
+      .replace('{tags}', '1');
     expect(await screen.findByText(body)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: en['confirm.deleteTag.confirm'] }));
@@ -694,12 +698,30 @@ describe('tag row menu', () => {
     );
   });
 
-  it('shows the merge confirm when renaming into an existing tag, and merges on confirm', async () => {
+  // The other three of the four real body combinations the `subMany` case
+  // above does not cover: no sub-tags, exactly one note. A flat tag with
+  // `tagCount === 1` must never reach the `sub*` keys, and one note must
+  // never read "1 notes".
+  it('states the flat, single-note body for a tag with no sub-tags', async () => {
+    await notes.create('alone #solo');
+
+    renderShell();
+    const row = await screen.findByRole('button', { name: /^solo\b/ });
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+    await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+
+    expect(await screen.findByText(en['confirm.deleteTag.body.flatOne'])).toBeInTheDocument();
+  });
+
+  it('shows the merge confirm when renaming into an existing tag, follows the scope on confirm', async () => {
     await notes.create('one #work');
     await notes.create('two #gemini');
 
     renderShell();
     const row = await screen.findByRole('button', { name: /^work\b/ });
+    await userEvent.click(row);
+    expect(row).toHaveAttribute('aria-current', 'page');
+
     fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
     await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.rename'] }));
 
@@ -721,9 +743,141 @@ describe('tag row menu', () => {
 
     await userEvent.click(screen.getByRole('button', { name: en['confirm.mergeTag.confirm'] }));
 
-    // Both notes now carry the surviving tag, and the old name is gone.
+    // Both notes now carry the surviving tag, the old name is gone, AND the
+    // scope followed the merge onto the destination tag — the one re-scope
+    // path (an ALREADY-present target) the race test below does not exercise,
+    // since there the target tag never previously existed.
     await waitFor(() => expect(screen.queryByRole('button', { name: /^work\b/ })).toBeNull());
-    expect(screen.getByRole('button', { name: /^gemini\b/ })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^gemini\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
+  });
+
+  // The Critical fix: submitting the rename field UNCHANGED must not treat it
+  // as a merge into itself. Before the `next === from` guard, this reached
+  // `renameTag('work', 'work')`, which resolves with `noteCount: 0` (`tags.ts`
+  // short-circuits an identical from/to) — a write that touches nothing,
+  // produces no `tree.nodes` emission, and left `pendingRenameRef` permanently
+  // set for this scope. The very next action that changes the tag (here,
+  // deleting it) then hit the vanished-tag effect with the ref still armed:
+  // stood down forever, `work` disappears, and NOTHING resets the scope —
+  // the exact permanent strand the ref exists to prevent, reached through a
+  // different door than the one the ref's own race test drives.
+  it('renaming a tag to its own unchanged name is a no-op, and a later delete still resets the scope', async () => {
+    await notes.create('alpha #work');
+
+    renderShell();
+    const row = await screen.findByRole('button', { name: /^work\b/ });
+    await userEvent.click(row);
+    expect(row).toHaveAttribute('aria-current', 'page');
+
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+    await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.rename'] }));
+    // Submit with the field UNTOUCHED — the popover seeds it with the current
+    // name and does not disable submit for an unedited value.
+    await userEvent.click(await screen.findByRole('button', { name: en['tags.rename.submit'] }));
+
+    // No merge confirm, no dialog at all: the popover closes and nothing else
+    // opens.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(row).toHaveAttribute('aria-current', 'page');
+
+    // Now delete the tag the rename was a no-op on. If `pendingRenameRef`
+    // were left armed by the no-op above, this delete's own tree update would
+    // be swallowed by the "still waiting on a rename" branch instead of
+    // running the ordinary vanished-tag reset.
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+    await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: en['confirm.deleteTag.confirm'] }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^work\b/ })).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
+  });
+
+  // Important 1: two renames of the same tag racing each other, with no
+  // same-name step involved — so the `next === from` guard above cannot
+  // help here, and this is the test that actually depends on the SECOND
+  // half of the Critical fix, `renameTag`'s self-limiting clear. The first
+  // rename's own write is held open with a controlled promise so the second
+  // can fire while it is still in flight — real IndexedDB timing is too fast
+  // to coerce into this ordering on demand, but the interleaving itself is
+  // exactly what a slow first write plus an impatient second click produces.
+  it('a rename racing another to a no-op does not strand the ref for a later delete', async () => {
+    await notes.create('alpha #work');
+
+    renderShell();
+    const row = await screen.findByRole('button', { name: /^work\b/ });
+    await userEvent.click(row);
+
+    let resolveFirst!: (value: { noteCount: number }) => void;
+    const firstWrite = new Promise<{ noteCount: number }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const renameSpy = vi
+      .spyOn(tags, 'rename')
+      .mockImplementationOnce(() => firstWrite)
+      // The second rename physically cannot touch `work` once the first
+      // write lands — which is exactly what makes it a no-op in the real
+      // world: `apply` finds no carriers and resolves with `noteCount: 0`
+      // without ever opening a transaction, so nothing about it ever
+      // reaches `tree.nodes`.
+      .mockImplementationOnce(async () => ({ noteCount: 0 }));
+
+    // First rename: work -> urgent. Its write is mocked to hang.
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+    await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.rename'] }));
+    let field = await screen.findByLabelText(en['tags.rename.field']);
+    await userEvent.clear(field);
+    await userEvent.type(field, 'urgent');
+    await userEvent.click(screen.getByRole('button', { name: en['tags.rename.submit'] }));
+
+    // Second rename, fired before the first resolves: work -> foo.
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+    await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.rename'] }));
+    field = await screen.findByLabelText(en['tags.rename.field']);
+    await userEvent.clear(field);
+    await userEvent.type(field, 'foo');
+    await userEvent.click(screen.getByRole('button', { name: en['tags.rename.submit'] }));
+
+    // Now let the first (real, in this fixture merely delayed) write land.
+    await act(async () => {
+      resolveFirst({ noteCount: 1 });
+    });
+
+    renameSpy.mockRestore();
+
+    // Neither mocked call touched the real database, so `work` is still the
+    // real tag on disk — delete it for real. If the ref were left stuck on
+    // `foo` (the no-op's target, which can now never arrive), the vanished-
+    // tag effect would swallow this delete's own tree update instead of
+    // resetting the scope.
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+    await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: en['confirm.deleteTag.confirm'] }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^work\b/ })).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
   });
 });
 

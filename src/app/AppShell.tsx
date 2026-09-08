@@ -403,16 +403,41 @@ export function AppShell(): ReactElement {
    * Renames a tag and follows it with the scope, via `pendingRenameRef` —
    * see the vanished-tag effect above for why the re-scope cannot happen
    * synchronously here.
+   *
+   * Self-limiting: a rename that writes NOTHING (`from === to`, or a second
+   * rename racing a first that already moved the tag away) produces no
+   * `tree.nodes` emission for the vanished-tag effect to ever catch, so the
+   * ref would otherwise wait forever for something that will never arrive.
+   * `noteCount === 0` is exactly that signal, checked here rather than
+   * assumed away — `onSubmit` below already refuses a same-name rename, but
+   * this is the second, independent half of that fix: a no-op reachable any
+   * OTHER way (not only same-name) must not leave the ref stuck either.
+   *
+   * The identity check (`pendingRenameRef.current === entry`) is what keeps
+   * two overlapping renames from corrupting each other: whichever call's
+   * `finally` runs, it only clears the ref if nothing newer has since
+   * replaced it. A second rename fired before the first settles is NOT
+   * queued or refused — it simply overwrites `pendingRenameRef` with its own
+   * target, and whichever write actually lands (typically the first, since
+   * the second targets a tag the first already renamed away and so is
+   * itself a no-op) is what the effect ultimately follows.
    */
   const renameTag = useCallback(
     async (from: string, to: string) => {
+      let entry: { fromKey: string; target: string } | null = null;
       if (scope.kind === 'tag' && (scope.tag === from || scope.tag.startsWith(`${from}/`))) {
-        pendingRenameRef.current = {
-          fromKey: scopeKey(scope),
-          target: to + scope.tag.slice(from.length),
-        };
+        entry = { fromKey: scopeKey(scope), target: to + scope.tag.slice(from.length) };
+        pendingRenameRef.current = entry;
       }
-      await tags.rename(from, to);
+      try {
+        const { noteCount } = await tags.rename(from, to);
+        if (noteCount === 0 && entry !== null && pendingRenameRef.current === entry) {
+          pendingRenameRef.current = null;
+        }
+      } catch (error) {
+        if (entry !== null && pendingRenameRef.current === entry) pendingRenameRef.current = null;
+        throw error;
+      }
     },
     [scope],
   );
@@ -577,6 +602,32 @@ export function AppShell(): ReactElement {
     // direct call, is what reaches it from here.
     else await signOutRef.current();
   }, [pending, renameTag]);
+
+  /**
+   * The delete-tag confirm body, chosen from FOUR whole sentences rather than
+   * assembled from a base sentence plus a clause: a flat tag on many notes,
+   * one note, or a tag with descendants on many notes or one, are four
+   * genuinely different sentences, and Korean word order does not survive a
+   * sub-tag clause bolted onto a base one at runtime. `tagCount` includes the
+   * tag itself, so the sub-tag count shown is `tagCount - 1`.
+   */
+  const deleteTagBody = useCallback(
+    (entry: { noteCount: number; tagCount: number }): string => {
+      const hasSubtags = entry.tagCount > 1;
+      const manyNotes = entry.noteCount > 1;
+      const key = hasSubtags
+        ? manyNotes
+          ? 'confirm.deleteTag.body.subMany'
+          : 'confirm.deleteTag.body.subOne'
+        : manyNotes
+          ? 'confirm.deleteTag.body.flatMany'
+          : 'confirm.deleteTag.body.flatOne';
+      return t(key)
+        .replace('{count}', String(entry.noteCount))
+        .replace('{tags}', String(entry.tagCount - 1));
+    },
+    [t],
+  );
 
   return (
     // Outermost: the loader is global chrome, unrelated to the session
@@ -792,9 +843,17 @@ export function AppShell(): ReactElement {
                       setTagRename(request);
                       return;
                     }
-                    void tags.affected(request.tag).then(({ noteCount, tagCount }) => {
-                      setPending({ kind: 'deleteTag', tag: request.tag, noteCount, tagCount });
-                    });
+                    void tags
+                      .affected(request.tag)
+                      .then(({ noteCount, tagCount }) => {
+                        setPending({ kind: 'deleteTag', tag: request.tag, noteCount, tagCount });
+                      })
+                      .catch((error: unknown) => {
+                        // The menu is already closed by the time this rejects, so
+                        // a silent failure here would just mean the confirm never
+                        // appears with no trace of why.
+                        console.error('bear-web: tag delete lookup failed', error);
+                      });
                   }}
                 />
               )}
@@ -808,13 +867,26 @@ export function AppShell(): ReactElement {
                   onSubmit={(next) => {
                     const from = tagRename.tag;
                     setTagRename(null);
+                    // An unedited submit is a no-op, not a merge — `next` is
+                    // already normalized, so an exact match means the field was
+                    // submitted unchanged. Without this, `allTagNames.includes(next)`
+                    // is trivially true (the tag is its own tree entry) and opens a
+                    // merge confirm for renaming a tag into itself.
+                    if (next === from) return;
                     if (allTagNames.includes(next)) {
-                      void tags.affected(from).then(({ noteCount }) => {
-                        setPending({ kind: 'mergeTag', from, to: next, noteCount });
-                      });
+                      void tags
+                        .affected(from)
+                        .then(({ noteCount }) => {
+                          setPending({ kind: 'mergeTag', from, to: next, noteCount });
+                        })
+                        .catch((error: unknown) => {
+                          console.error('bear-web: tag merge lookup failed', error);
+                        });
                       return;
                     }
-                    void renameTag(from, next);
+                    void renameTag(from, next).catch((error: unknown) => {
+                      console.error('bear-web: tag rename failed', error);
+                    });
                   }}
                 />
               )}
@@ -843,11 +915,7 @@ export function AppShell(): ReactElement {
                       : pending?.kind === 'signOut'
                         ? t('account.signOut.body')
                         : pending?.kind === 'deleteTag'
-                          ? pending.noteCount === 1 && pending.tagCount === 1
-                            ? t('confirm.deleteTag.body.one')
-                            : t('confirm.deleteTag.body.other')
-                                .replace('{count}', String(pending.noteCount))
-                                .replace('{tags}', String(pending.tagCount - 1))
+                          ? deleteTagBody(pending)
                           : pending?.kind === 'mergeTag'
                             ? t('confirm.mergeTag.body')
                                 .replace('{count}', String(pending.noteCount))
