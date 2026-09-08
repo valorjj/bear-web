@@ -421,9 +421,13 @@ export const en = {
     'It will be removed from 1 note. The notes themselves are kept.',
   'confirm.deleteTag.body.flatMany':
     'It will be removed from {count} notes. The notes themselves are kept.',
-  'confirm.deleteTag.body.subOne':
+  'confirm.deleteTag.body.oneSubOne':
+    'It and one sub-tag will be removed from 1 note. The notes themselves are kept.',
+  'confirm.deleteTag.body.oneSubMany':
+    'It and one sub-tag will be removed from {count} notes. The notes themselves are kept.',
+  'confirm.deleteTag.body.manySubOne':
     'It and {tags} sub-tags will be removed from 1 note. The notes themselves are kept.',
-  'confirm.deleteTag.body.subMany':
+  'confirm.deleteTag.body.manySubMany':
     'It and {tags} sub-tags will be removed from {count} notes. The notes themselves are kept.',
   'confirm.deleteTag.confirm': 'Delete tag',
   'confirm.mergeTag.title': 'Merge these tags?',

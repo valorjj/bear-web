@@ -604,27 +604,36 @@ export function AppShell(): ReactElement {
   }, [pending, renameTag]);
 
   /**
-   * The delete-tag confirm body, chosen from FOUR whole sentences rather than
-   * assembled from a base sentence plus a clause: a flat tag on many notes,
-   * one note, or a tag with descendants on many notes or one, are four
-   * genuinely different sentences, and Korean word order does not survive a
-   * sub-tag clause bolted onto a base one at runtime. `tagCount` includes the
-   * tag itself, so the sub-tag count shown is `tagCount - 1`.
+   * The delete-tag confirm body, chosen from SIX whole sentences rather than
+   * assembled from a base sentence plus a clause: a flat tag, a tag with
+   * exactly one sub-tag, and a tag with several, crossed with one note or
+   * many, are six genuinely different sentences — Korean word order does not
+   * survive a sub-tag clause bolted onto a base one at runtime, and English
+   * does not survive a bare count spliced into a plural noun (a single
+   * sub-tag interpolated into "{tags} sub-tags" reads "1 sub-tags"). The
+   * one-sub-tag sentences spell out "one sub-tag" rather than interpolating
+   * `{tags}` for exactly this reason. `tagCount` includes the tag itself, so
+   * the sub-tag count is `tagCount - 1`.
    */
   const deleteTagBody = useCallback(
     (entry: { noteCount: number; tagCount: number }): string => {
-      const hasSubtags = entry.tagCount > 1;
+      const subtagCount = entry.tagCount - 1;
       const manyNotes = entry.noteCount > 1;
-      const key = hasSubtags
-        ? manyNotes
-          ? 'confirm.deleteTag.body.subMany'
-          : 'confirm.deleteTag.body.subOne'
-        : manyNotes
-          ? 'confirm.deleteTag.body.flatMany'
-          : 'confirm.deleteTag.body.flatOne';
+      const key =
+        subtagCount === 0
+          ? manyNotes
+            ? 'confirm.deleteTag.body.flatMany'
+            : 'confirm.deleteTag.body.flatOne'
+          : subtagCount === 1
+            ? manyNotes
+              ? 'confirm.deleteTag.body.oneSubMany'
+              : 'confirm.deleteTag.body.oneSubOne'
+            : manyNotes
+              ? 'confirm.deleteTag.body.manySubMany'
+              : 'confirm.deleteTag.body.manySubOne';
       return t(key)
         .replace('{count}', String(entry.noteCount))
-        .replace('{tags}', String(entry.tagCount - 1));
+        .replace('{tags}', String(subtagCount));
     },
     [t],
   );

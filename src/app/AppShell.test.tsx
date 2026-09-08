@@ -677,12 +677,11 @@ describe('tag row menu', () => {
 
     // `tagCount` includes the tag itself, so the body counts ONE sub-tag
     // (`project/sub`) even though `affected` reports 2 — the confirm copy
-    // already subtracts it. Two notes AND a sub-tag present picks the
-    // `subMany` sentence specifically — the four-key split exists so this
-    // never falls back to a grammatically wrong combination.
-    const body = en['confirm.deleteTag.body.subMany']
-      .replace('{count}', '2')
-      .replace('{tags}', '1');
+    // already subtracts it. Exactly one sub-tag picks the `oneSubMany`
+    // sentence, which spells out "one sub-tag" rather than interpolating a
+    // count into a plural noun — see the six-combination block below for the
+    // rest of the split this belongs to.
+    const body = en['confirm.deleteTag.body.oneSubMany'].replace('{count}', '2');
     expect(await screen.findByText(body)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: en['confirm.deleteTag.confirm'] }));
@@ -698,19 +697,91 @@ describe('tag row menu', () => {
     );
   });
 
-  // The other three of the four real body combinations the `subMany` case
-  // above does not cover: no sub-tags, exactly one note. A flat tag with
-  // `tagCount === 1` must never reach the `sub*` keys, and one note must
-  // never read "1 notes".
-  it('states the flat, single-note body for a tag with no sub-tags', async () => {
-    await notes.create('alone #solo');
+  // The remaining five of the six real body combinations the test above does
+  // not cover, each asserted on its fully-substituted string: a flat tag
+  // (`tagCount === 1`) must never reach a `*Sub*` key, exactly one sub-tag
+  // must never interpolate a count into a plural noun ("1 sub-tags"), and one
+  // note must never read "1 notes". All six are reachable through the real
+  // UI — `affected` counts distinct literal tags covering the deleted one and
+  // distinct carrying notes, so a single note can carry several literal
+  // descendant tags at once (one note, several sub-tags) just as readily as
+  // several notes can each carry one.
+  describe('the six delete-body combinations', () => {
+    it('flat tag, one note', async () => {
+      await notes.create('alone #solo');
 
-    renderShell();
-    const row = await screen.findByRole('button', { name: /^solo\b/ });
-    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
-    await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+      renderShell();
+      const row = await screen.findByRole('button', { name: /^solo\b/ });
+      fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+      await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
 
-    expect(await screen.findByText(en['confirm.deleteTag.body.flatOne'])).toBeInTheDocument();
+      expect(await screen.findByText(en['confirm.deleteTag.body.flatOne'])).toBeInTheDocument();
+    });
+
+    it('flat tag, many notes', async () => {
+      await notes.create('one #solo');
+      await notes.create('two #solo');
+
+      renderShell();
+      const row = await screen.findByRole('button', { name: /^solo\b/ });
+      fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+      await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+
+      const body = en['confirm.deleteTag.body.flatMany'].replace('{count}', '2');
+      expect(await screen.findByText(body)).toBeInTheDocument();
+    });
+
+    it('one sub-tag, one note (both literal tags on the SAME note)', async () => {
+      await notes.create('one #project #project/sub');
+
+      renderShell();
+      const row = await screen.findByRole('button', { name: /^project\b/ });
+      fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+      await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+
+      expect(await screen.findByText(en['confirm.deleteTag.body.oneSubOne'])).toBeInTheDocument();
+    });
+
+    it('one sub-tag, many notes', async () => {
+      await notes.create('one #project');
+      await notes.create('two #project/sub');
+
+      renderShell();
+      const row = await screen.findByRole('button', { name: /^project\b/ });
+      fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+      await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+
+      const body = en['confirm.deleteTag.body.oneSubMany'].replace('{count}', '2');
+      expect(await screen.findByText(body)).toBeInTheDocument();
+    });
+
+    it('many sub-tags, one note (three literal tags on the SAME note)', async () => {
+      await notes.create('one #project #project/a #project/b');
+
+      renderShell();
+      const row = await screen.findByRole('button', { name: /^project\b/ });
+      fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+      await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+
+      const body = en['confirm.deleteTag.body.manySubOne'].replace('{tags}', '2');
+      expect(await screen.findByText(body)).toBeInTheDocument();
+    });
+
+    it('many sub-tags, many notes', async () => {
+      await notes.create('one #project');
+      await notes.create('two #project/a');
+      await notes.create('three #project/b');
+
+      renderShell();
+      const row = await screen.findByRole('button', { name: /^project\b/ });
+      fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+      await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+
+      const body = en['confirm.deleteTag.body.manySubMany']
+        .replace('{count}', '3')
+        .replace('{tags}', '2');
+      expect(await screen.findByText(body)).toBeInTheDocument();
+    });
   });
 
   it('shows the merge confirm when renaming into an existing tag, follows the scope on confirm', async () => {

@@ -362,9 +362,13 @@ export const ko: Record<TranslationKey, string> = {
   'confirm.deleteTag.body.flatOne': '메모 1개에서 태그가 지워집니다. 메모 자체는 그대로 남습니다.',
   'confirm.deleteTag.body.flatMany':
     '메모 {count}개에서 태그가 지워집니다. 메모 자체는 그대로 남습니다.',
-  'confirm.deleteTag.body.subOne':
+  'confirm.deleteTag.body.oneSubOne':
+    '이 태그와 하위 태그 1개가 메모 1개에서 지워집니다. 메모 자체는 그대로 남습니다.',
+  'confirm.deleteTag.body.oneSubMany':
+    '이 태그와 하위 태그 1개가 메모 {count}개에서 지워집니다. 메모 자체는 그대로 남습니다.',
+  'confirm.deleteTag.body.manySubOne':
     '이 태그와 하위 태그 {tags}개가 메모 1개에서 지워집니다. 메모 자체는 그대로 남습니다.',
-  'confirm.deleteTag.body.subMany':
+  'confirm.deleteTag.body.manySubMany':
     '이 태그와 하위 태그 {tags}개가 메모 {count}개에서 지워집니다. 메모 자체는 그대로 남습니다.',
   'confirm.deleteTag.confirm': '태그 삭제',
   'confirm.mergeTag.title': '태그를 합칠까요?',
