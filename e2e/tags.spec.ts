@@ -104,7 +104,7 @@ test('the menu is reachable by keyboard alone', async ({ page }) => {
 test.describe('on a touch device', () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
 
-  test('a long press opens the tag menu', async ({ page }) => {
+  test('a long press opens the tag menu, and Rename through it lands', async ({ page }) => {
     // The sidebar is a drawer at this width; open it the way `e2e/mobile.spec.ts`
     // does — its control's accessible name is "Show tags", not "Sidebar".
     await page.getByRole('button', { name: 'Show tags' }).click();
@@ -116,5 +116,23 @@ test.describe('on a touch device', () => {
     await longPress(page, box.x + box.width / 2, box.y + box.height / 2);
 
     await expect(page.getByRole('menu', { name: 'Tag actions' })).toBeVisible();
+
+    // The assertion above is NOT enough on its own, and this test shipped with
+    // only that one. `toBeVisible()` checks the bounding box and `visibility`
+    // and never OCCLUSION: below desktop the tag tree lives inside
+    // `SidebarDrawer`'s `Dialog` (`fixed inset-0 z-50`) while both overlays are
+    // rendered as siblings of it, so at `z-20` the menu painted UNDERNEATH the
+    // drawer and its backdrop — visible to Playwright, unreachable by a finger,
+    // and the first tap landed on the backdrop and closed everything. The whole
+    // touch route was dead while this test was green. Only OPERATING the menu
+    // can tell the two apart, so it now drives Rename end to end.
+    await page.getByRole('menuitem', { name: 'Rename tag' }).click();
+
+    const field = page.getByRole('textbox', { name: 'New tag name' });
+    await field.fill('devops');
+    await page.getByRole('button', { name: 'Rename' }).click();
+
+    await expect(drawer.getByRole('button', { name: /^devops/ })).toBeVisible();
+    await expect(drawer.getByText('dev', { exact: true })).toHaveCount(0);
   });
 });

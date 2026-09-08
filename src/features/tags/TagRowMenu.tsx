@@ -87,7 +87,23 @@ export function TagRowMenu({ request, onAction, onClose }: TagRowMenuProps): Rea
         // chrome, so a menu clamped against it can still run off-screen.
         maxHeight: `calc(100dvh - ${MENU_GAP * 2}px)`,
       }}
-      className="bg-surface border-border shadow-popover fixed z-20 min-w-48 overflow-y-auto rounded-md border p-1"
+      // `z-[60]`, above `Dialog`'s `z-50` — not the `z-20` every other
+      // anchored menu in this app uses, and the difference is load-bearing.
+      // Below desktop the tag tree lives inside `SidebarDrawer`, i.e. inside a
+      // `Dialog` whose wrapper is `fixed inset-0 z-50`, while this menu is
+      // rendered by `AppShell` as a SIBLING of that drawer inside a `<main>`
+      // that creates no stacking context. At `z-20` it therefore painted
+      // underneath the drawer panel and its backdrop: the long press opened a
+      // menu the user could not see, and the first tap hit the backdrop and
+      // closed everything, so the entire touch route was dead. `NoteRowMenu`'s
+      // `z-20` is fine only because the note list is never inside a dialog, and
+      // `AccountMenu`'s because it renders INSIDE the panel's own stacking
+      // context. Raising the index was chosen over re-parenting these two
+      // overlays into the drawer: they are `position: fixed` and anchored to a
+      // viewport rect, so the DOM parent buys them nothing, while moving them
+      // would thread menu state through `SidebarDrawer` and `SidebarContent`
+      // and leave the desktop pane rendering a second copy.
+      className="bg-surface border-border shadow-popover fixed z-[60] min-w-48 overflow-y-auto rounded-md border p-1"
     >
       <Item glyph={SquarePen} label={t('tags.menu.rename')} onSelect={() => act('rename')} />
       <Item glyph={Trash2} label={t('tags.menu.delete')} onSelect={() => act('delete')} danger />
