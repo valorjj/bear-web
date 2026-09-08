@@ -19,7 +19,10 @@ wrong", so keep using them for self-comparison and regression — but **a
 measurement that diverges from Bear is no longer a defect on its own**, and
 "Bear does it this way" is not by itself an argument.
 
-**Live:** https://valorjj.github.io/bear-web/
+**Live:** https://markflowing.com/ — the Pages URL
+(https://valorjj.github.io/bear-web/) still works but 301-redirects there, so
+anything that fetches the site and does not follow redirects gets 162 bytes of
+redirect stub instead of the app.
 **Spec:** `docs/superpowers/specs/2026-08-06-bear-web-design.md`
 **Plans:** `docs/superpowers/plans/`
 
@@ -1033,3 +1036,13 @@ found only that way.
   Consequence for CI: `ci.yml` triggers on `pull_request` and on `push` to
   `main` only, so with no PR the only way to get CI to verify a branch is to
   merge it — which deploys at the same time rather than before.
+- **`gh run list --commit` needs the FULL 40-character SHA, and a short one
+  returns an empty list with exit 0.** Not an error, not a warning — nothing.
+  A watcher built on `--commit <short-sha>` therefore polls forever, sees an
+  empty array every time, never reaches its own "all finished" condition, and
+  emits nothing at all; its silence is indistinguishable from "still running"
+  and from "everything passed". This is the same shape as `parseColour`'s
+  `NaN` and a text assertion passing over a page of tofu: the check does not
+  fail, it just stops being a check. Use `$(git rev-parse HEAD)`, or filter
+  on `--branch` and match the title. Verified 2026-09-09: with the short SHA
+  the command prints nothing while the full SHA lists both workflows.
