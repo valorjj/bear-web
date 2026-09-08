@@ -12,7 +12,7 @@ import {
 
 import { useLiveQuery } from 'dexie-react-hooks';
 
-import { DEFAULT_NOTE_ORDER, isNoteOrder, type NoteOrder, notes } from '@/data';
+import { DEFAULT_NOTE_ORDER, isNoteOrder, type NoteOrder, notes, tags } from '@/data';
 import {
   ACTIVE_SCOPE,
   acceptsNewNote,
@@ -23,12 +23,20 @@ import {
   NoteEditor,
   NoteList,
   type NoteScope,
+  scopeKey,
   seedTagFor,
   tagScope,
   useNotes,
   useSmartListCounts,
 } from '@/features/notes';
-import { hasTag, useTagTree } from '@/features/tags';
+import {
+  hasTag,
+  type TagNode,
+  TagRenamePopover,
+  TagRowMenu,
+  type TagRowMenuRequest,
+  useTagTree,
+} from '@/features/tags';
 import { useT } from '@/i18n';
 import { useLayoutMode } from '@/lib/useLayoutMode';
 import { useOverlayHistory } from '@/lib/useOverlayHistory';
@@ -236,7 +244,41 @@ export function AppShell(): ReactElement {
   // from their own filter. Not falsifiable by an app-level test today; see
   // the "selecting a tag does not bounce back to Notes" test in
   // `AppShell.test.tsx`, which documents why.
+  //
+  // A rename in flight is the one case this effect must NOT apply to as-is.
+  // `tags.rename` rewrites every note's text and the tag tree only catches up
+  // once `tree.nodes`' `useLiveQuery` re-emits — asynchronously, after the
+  // write settles. If the currently-scoped tag is the one being renamed, this
+  // effect would otherwise see the OLD `tree.nodes` (still missing the new
+  // name, because nothing has re-scoped yet) or a stale mix mid-rewrite, find
+  // `scope.tag` — the new name, if something had already re-scoped to it —
+  // absent, and reset to All Notes; once `tree.nodes` finally settles the
+  // scope is `smart` by then, so this effect returns early and never
+  // recovers. `pendingRenameRef` below defers the re-scope itself until
+  // `tree.nodes` genuinely contains the new tag, and while it holds a target
+  // for the scope currently on screen, this effect stands down entirely
+  // rather than risking that reset against a `tree.nodes` that has not
+  // caught up yet.
+  const pendingRenameRef = useRef<{ fromKey: string; target: string } | null>(null);
+
   useEffect(() => {
+    const pending = pendingRenameRef.current;
+    if (pending !== null && scopeKey(scope) === pending.fromKey) {
+      // Still on the tag being renamed. Wait for the new name to actually
+      // land in the tree before moving the scope — never derive it from the
+      // scope we just set, because nothing has been set yet.
+      if (tree.nodes !== undefined && hasTag(tree.nodes, pending.target)) {
+        pendingRenameRef.current = null;
+        setScope(tagScope(pending.target));
+      }
+      return;
+    }
+    if (pending !== null) {
+      // The user navigated away from the tag being renamed before it
+      // resolved. Drop the stale intent rather than let it clobber whatever
+      // scope they chose instead once `tree.nodes` next settles.
+      pendingRenameRef.current = null;
+    }
     if (scope.kind !== 'tag' || tree.nodes === undefined) return;
     if (!hasTag(tree.nodes, scope.tag)) setScope(ACTIVE_SCOPE);
   }, [scope, tree.nodes]);
@@ -336,8 +378,69 @@ export function AppShell(): ReactElement {
     | { kind: 'empty' }
     | { kind: 'trash'; id: string }
     | { kind: 'signOut' }
+    | { kind: 'deleteTag'; tag: string; noteCount: number; tagCount: number }
+    | { kind: 'mergeTag'; from: string; to: string; noteCount: number }
     | null
   >(null);
+
+  // The tag row menu (rename/delete) and the rename popover it can open.
+  // Separate from `pending`: both are transient anchored overlays that open
+  // and close on their own, well before either destructive action they can
+  // lead to reaches a confirm.
+  const [tagMenu, setTagMenu] = useState<TagRowMenuRequest | null>(null);
+  const [tagRename, setTagRename] = useState<TagRowMenuRequest | null>(null);
+
+  // Every tag currently in the tree, flattened. Feeds the rename popover's
+  // merge warning — it must be the tree's own keys (normalized by
+  // construction, see `parseTags`), never a display string.
+  const allTagNames = useMemo(() => {
+    const walk = (nodes: TagNode[]): string[] =>
+      nodes.flatMap((node) => [node.tag, ...walk(node.children)]);
+    return tree.nodes === undefined ? [] : walk(tree.nodes);
+  }, [tree.nodes]);
+
+  /**
+   * Renames a tag and follows it with the scope, via `pendingRenameRef` —
+   * see the vanished-tag effect above for why the re-scope cannot happen
+   * synchronously here.
+   *
+   * Self-limiting: a rename that writes NOTHING (`from === to`, or a second
+   * rename racing a first that already moved the tag away) produces no
+   * `tree.nodes` emission for the vanished-tag effect to ever catch, so the
+   * ref would otherwise wait forever for something that will never arrive.
+   * `noteCount === 0` is exactly that signal, checked here rather than
+   * assumed away — `onSubmit` below already refuses a same-name rename, but
+   * this is the second, independent half of that fix: a no-op reachable any
+   * OTHER way (not only same-name) must not leave the ref stuck either.
+   *
+   * The identity check (`pendingRenameRef.current === entry`) is what keeps
+   * two overlapping renames from corrupting each other: whichever call's
+   * `finally` runs, it only clears the ref if nothing newer has since
+   * replaced it. A second rename fired before the first settles is NOT
+   * queued or refused — it simply overwrites `pendingRenameRef` with its own
+   * target, and whichever write actually lands (typically the first, since
+   * the second targets a tag the first already renamed away and so is
+   * itself a no-op) is what the effect ultimately follows.
+   */
+  const renameTag = useCallback(
+    async (from: string, to: string) => {
+      let entry: { fromKey: string; target: string } | null = null;
+      if (scope.kind === 'tag' && (scope.tag === from || scope.tag.startsWith(`${from}/`))) {
+        entry = { fromKey: scopeKey(scope), target: to + scope.tag.slice(from.length) };
+        pendingRenameRef.current = entry;
+      }
+      try {
+        const { noteCount } = await tags.rename(from, to);
+        if (noteCount === 0 && entry !== null && pendingRenameRef.current === entry) {
+          pendingRenameRef.current = null;
+        }
+      } catch (error) {
+        if (entry !== null && pendingRenameRef.current === entry) pendingRenameRef.current = null;
+        throw error;
+      }
+    },
+    [scope],
+  );
 
   // Shared by the search shortcut and the palette's "Search notes" command —
   // both mean exactly the same thing: focus the app's own search field. The
@@ -492,11 +595,60 @@ export function AppShell(): ReactElement {
     if (current.kind === 'purge') await notes.purge(current.id);
     else if (current.kind === 'empty') await notes.emptyTrash();
     else if (current.kind === 'trash') await notes.trash(current.id);
+    else if (current.kind === 'deleteTag') await tags.remove(current.tag);
+    else if (current.kind === 'mergeTag') await renameTag(current.from, current.to);
     // `signOutRef.current` is `session.signOut`, kept live by
     // `CommandPaletteHost` — see its declaration above for why a ref, not a
     // direct call, is what reaches it from here.
     else await signOutRef.current();
-  }, [pending]);
+  }, [pending, renameTag]);
+
+  /**
+   * The delete-tag confirm body, chosen from SIX whole sentences rather than
+   * assembled from a base sentence plus a clause: a flat tag, a tag with
+   * exactly one sub-tag, and a tag with several, crossed with one note or
+   * many, are six genuinely different sentences — Korean word order does not
+   * survive a sub-tag clause bolted onto a base one at runtime, and English
+   * does not survive a bare count spliced into a plural noun (a single
+   * sub-tag interpolated into "{tags} sub-tags" reads "1 sub-tags"). The
+   * one-sub-tag sentences spell out "one sub-tag" rather than interpolating
+   * `{tags}` for exactly this reason. `tagCount` ALWAYS includes the tag
+   * itself — `affected` seeds its set with the queried name, so a synthetic
+   * parent row (one no note writes literally, but `buildTagTree` renders
+   * because children exist) still counts itself — so the sub-tag count is
+   * `tagCount - 1` and is never negative.
+   *
+   * A seventh sentence covers zero carriers. It is reachable only by a race —
+   * a tag row exists because `noteTags` names it, and those rows are written
+   * from the same `parseTags` that `affected` scans — but a purge or a sync
+   * pull landing between the menu action and the lookup resolving produces
+   * it, and without the branch it fell through to "removed from 1 note". With
+   * no carriers there are no descendant names either, so `tagCount` is
+   * exactly 1 there and this is the only zero-note shape.
+   */
+  const deleteTagBody = useCallback(
+    (entry: { noteCount: number; tagCount: number }): string => {
+      if (entry.noteCount === 0) return t('confirm.deleteTag.body.none');
+      const subtagCount = entry.tagCount - 1;
+      const manyNotes = entry.noteCount > 1;
+      const key =
+        subtagCount === 0
+          ? manyNotes
+            ? 'confirm.deleteTag.body.flatMany'
+            : 'confirm.deleteTag.body.flatOne'
+          : subtagCount === 1
+            ? manyNotes
+              ? 'confirm.deleteTag.body.oneSubMany'
+              : 'confirm.deleteTag.body.oneSubOne'
+            : manyNotes
+              ? 'confirm.deleteTag.body.manySubMany'
+              : 'confirm.deleteTag.body.manySubOne';
+      return t(key)
+        .replace('{count}', String(entry.noteCount))
+        .replace('{tags}', String(subtagCount));
+    },
+    [t],
+  );
 
   return (
     // Outermost: the loader is global chrome, unrelated to the session
@@ -539,6 +691,7 @@ export function AppShell(): ReactElement {
                     nodes={tree.nodes}
                     isCollapsed={tree.isCollapsed}
                     onToggle={tree.toggle}
+                    onOpenMenu={setTagMenu}
                   />
                 </Pane>
               )}
@@ -684,6 +837,7 @@ export function AppShell(): ReactElement {
                   nodes={tree.nodes}
                   isCollapsed={tree.isCollapsed}
                   onToggle={tree.toggle}
+                  onOpenMenu={setTagMenu}
                 />
               )}
 
@@ -700,6 +854,64 @@ export function AppShell(): ReactElement {
                 signOutRef={signOutRef}
               />
 
+              {tagMenu !== null && (
+                <TagRowMenu
+                  request={tagMenu}
+                  onClose={() => setTagMenu(null)}
+                  onAction={(action) => {
+                    const request = tagMenu;
+                    if (action === 'rename') {
+                      setTagRename(request);
+                      return;
+                    }
+                    void tags
+                      .affected(request.tag)
+                      .then(({ noteCount, tagCount }) => {
+                        setPending({ kind: 'deleteTag', tag: request.tag, noteCount, tagCount });
+                      })
+                      .catch((error: unknown) => {
+                        // The menu is already closed by the time this rejects, so
+                        // a silent failure here would just mean the confirm never
+                        // appears with no trace of why.
+                        console.error('bear-web: tag delete lookup failed', error);
+                      });
+                  }}
+                />
+              )}
+
+              {tagRename !== null && (
+                <TagRenamePopover
+                  tag={tagRename.tag}
+                  rect={tagRename.rect}
+                  existingTags={allTagNames}
+                  onClose={() => setTagRename(null)}
+                  onSubmit={(next) => {
+                    const from = tagRename.tag;
+                    setTagRename(null);
+                    // An unedited submit is a no-op, not a merge — `next` is
+                    // already normalized, so an exact match means the field was
+                    // submitted unchanged. Without this, `allTagNames.includes(next)`
+                    // is trivially true (the tag is its own tree entry) and opens a
+                    // merge confirm for renaming a tag into itself.
+                    if (next === from) return;
+                    if (allTagNames.includes(next)) {
+                      void tags
+                        .affected(from)
+                        .then(({ noteCount }) => {
+                          setPending({ kind: 'mergeTag', from, to: next, noteCount });
+                        })
+                        .catch((error: unknown) => {
+                          console.error('bear-web: tag merge lookup failed', error);
+                        });
+                      return;
+                    }
+                    void renameTag(from, next).catch((error: unknown) => {
+                      console.error('bear-web: tag rename failed', error);
+                    });
+                  }}
+                />
+              )}
+
               <ConfirmDialog
                 open={pending !== null}
                 destructive
@@ -710,7 +922,11 @@ export function AppShell(): ReactElement {
                       ? t('confirm.trashNote.title')
                       : pending?.kind === 'signOut'
                         ? t('account.signOut.title')
-                        : t('confirm.deleteForever.title')
+                        : pending?.kind === 'deleteTag'
+                          ? t('confirm.deleteTag.title')
+                          : pending?.kind === 'mergeTag'
+                            ? t('confirm.mergeTag.title')
+                            : t('confirm.deleteForever.title')
                 }
                 body={
                   pending?.kind === 'empty'
@@ -719,7 +935,13 @@ export function AppShell(): ReactElement {
                       ? t('confirm.trashNote.body')
                       : pending?.kind === 'signOut'
                         ? t('account.signOut.body')
-                        : t('confirm.deleteForever.body')
+                        : pending?.kind === 'deleteTag'
+                          ? deleteTagBody(pending)
+                          : pending?.kind === 'mergeTag'
+                            ? t('confirm.mergeTag.body')
+                                .replace('{count}', String(pending.noteCount))
+                                .replace('{name}', pending.to)
+                            : t('confirm.deleteForever.body')
                 }
                 confirmLabel={
                   pending?.kind === 'empty'
@@ -728,7 +950,11 @@ export function AppShell(): ReactElement {
                       ? t('noteList.trash')
                       : pending?.kind === 'signOut'
                         ? t('account.signOut.confirm')
-                        : t('noteList.deleteForever')
+                        : pending?.kind === 'deleteTag'
+                          ? t('confirm.deleteTag.confirm')
+                          : pending?.kind === 'mergeTag'
+                            ? t('confirm.mergeTag.confirm')
+                            : t('noteList.deleteForever')
                 }
                 cancelLabel={
                   pending?.kind === 'signOut' ? t('account.signOut.cancel') : t('confirm.cancel')

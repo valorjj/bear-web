@@ -349,4 +349,30 @@ export const ko: Record<TranslationKey, string> = {
   'typography.done': '완료',
   'typography.unit.px': 'px',
   'typography.unit.em': 'em',
+  'tags.menu.label': '태그 작업',
+  'tags.menu.rename': '태그 이름 변경',
+  'tags.menu.delete': '태그 삭제',
+  'tags.rename.title': '태그 이름 변경',
+  'tags.rename.field': '새 태그 이름',
+  'tags.rename.submit': '이름 변경',
+  'tags.rename.cancel': '취소',
+  'tags.rename.invalid': '태그 이름으로 쓸 수 없습니다.',
+  'tags.rename.merge': '{name} 태그가 이미 있습니다. 이름을 바꾸면 두 태그가 합쳐집니다.',
+  'confirm.deleteTag.title': '이 태그를 삭제할까요?',
+  'confirm.deleteTag.body.none': '이 태그를 쓰는 메모가 이제 없습니다. 사이드바 항목만 사라집니다.',
+  'confirm.deleteTag.body.flatOne': '메모 1개에서 태그가 지워집니다. 메모 자체는 그대로 남습니다.',
+  'confirm.deleteTag.body.flatMany':
+    '메모 {count}개에서 태그가 지워집니다. 메모 자체는 그대로 남습니다.',
+  'confirm.deleteTag.body.oneSubOne':
+    '이 태그와 하위 태그 1개가 메모 1개에서 지워집니다. 메모 자체는 그대로 남습니다.',
+  'confirm.deleteTag.body.oneSubMany':
+    '이 태그와 하위 태그 1개가 메모 {count}개에서 지워집니다. 메모 자체는 그대로 남습니다.',
+  'confirm.deleteTag.body.manySubOne':
+    '이 태그와 하위 태그 {tags}개가 메모 1개에서 지워집니다. 메모 자체는 그대로 남습니다.',
+  'confirm.deleteTag.body.manySubMany':
+    '이 태그와 하위 태그 {tags}개가 메모 {count}개에서 지워집니다. 메모 자체는 그대로 남습니다.',
+  'confirm.deleteTag.confirm': '태그 삭제',
+  'confirm.mergeTag.title': '태그를 합칠까요?',
+  'confirm.mergeTag.body': '이름을 바꾸면 메모 {count}개가 이미 있는 {name} 태그로 옮겨집니다.',
+  'confirm.mergeTag.confirm': '합치기',
 };

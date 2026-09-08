@@ -38,7 +38,10 @@ TableHandleMenu.tsx`; and the hover/name tests in `e2e/appearance.spec.ts`,
 `e2e/palette.spec.ts`; `src/features/export/ExportMenu.tsx`'s `publish` choice
 and its `disabledWhenSignedOut` reason span; `src/features/publish/
 PublishDialog.tsx`'s local `Modal` (its Tab-wrap and Escape-stack handling);
-and `e2e/publish.spec.ts`.
+and `e2e/publish.spec.ts`; `src/ui/SidebarRow.tsx`'s `pressHandlers` (the
+`stop()` wrapper, and which of `useLongPress`'s handlers it does or does not
+wrap); `src/features/tags/TagRowMenu.tsx` and `TagRenamePopover.tsx`'s roles;
+and `src/lib/useLongPress.ts`.
 
 - **Never rely on a CSS `gap` to separate text for assistive tech.**
   Accessible-name computation concatenates text content and ignores gaps. M5.5
@@ -50,6 +53,34 @@ and `e2e/publish.spec.ts`.
 
 - **The pin button is a sibling of the row button, never nested.** A `<button>`
   inside a `<button>` is invalid HTML and unclickable in some browsers.
+
+- **`SidebarRow`'s press-isolation wrapper (S1) must stop propagation on
+  `useLongPress`'s pointer and `contextmenu` handlers, but never on
+  `onClickCapture`.** The tag tree nests: a leaf row's `<li>` sits inside its
+  ancestors' `<li>`s, and `pointerdown`/`pointermove`/`pointerup`/
+  `pointercancel`/`contextmenu` all genuinely bubble from a leaf row up through
+  every parent row's IDENTICAL `useLongPress` instance — each blind to the
+  others' `firedAt` ref — so a press on a leaf without isolation double-fires
+  the menu once per ancestor. Wrapping those five in `stopPropagation` after
+  the hook's own handler runs is correct and safe: it only keeps the event
+  from ALSO reaching an ancestor's listeners, it does not affect the row's own
+  behaviour. `onClickCapture` is not in the same shape and was wrapped the
+  same way the first time this shipped, which was the bug: `longPress.
+onClickCapture` is CAPTURE-phase on the `<li>`, so a `stopPropagation` there
+  halts the DOM walk before it ever reaches the row's own
+  `<button onClick={onSelect}>` — the target/bubble phases never run at all.
+  Every row wired with `onContextMenu` (which is every tag row, once the
+  context menu was wired up) silently stopped being selectable by a plain
+  click. `longPress.onClickCapture` already gates its own action
+  (`preventDefault`/`stopPropagation`) on THIS row's own `suppressClick.current`
+  and is a no-op the rest of the time, so it needs no additional isolation —
+  wrapping it added a `stopPropagation` unconditionally, on every click,
+  regardless of that gate. This shipped through a review and a re-review and
+  was caught only once a caller finally passed `onContextMenu` to a row that
+  also needed `onSelect` to keep working; `ui.test.tsx` had covered the menu
+  opening but never a plain click alongside it. The regression test asserts
+  both: a click still selects a row wired with `onContextMenu`, and a long
+  press on a nested leaf does not also open the ancestor's menu.
 
 - **`NoteListItem` carries an explicit `aria-label`.** Its three sibling
   spans concatenate with no separator and accessible-name computation ignores

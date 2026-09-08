@@ -1,5 +1,6 @@
-import type { ReactElement, ReactNode } from 'react';
+import { type ReactElement, type ReactNode, useMemo } from 'react';
 
+import { type LongPressHandlers, useLongPress } from '@/lib/useLongPress';
 import { ChevronRight, Icon } from '@/ui/Icon';
 
 export interface SidebarRowDisclosure {
@@ -35,6 +36,16 @@ export interface SidebarRowProps {
    * rather than importing the pane-width constants.
    */
   touch?: boolean;
+  /**
+   * Opens the row's action menu — right-click, long-press, or `Shift+F10`
+   * with the row focused. Receives the viewport rect to anchor against: a
+   * zero-size rect at the pointer for a press, the row's own rect for the
+   * keyboard route.
+   *
+   * A callback, so this primitive stays ignorant of tags, scopes and menus —
+   * the same reason `disclosure` is a prop rather than a scope import.
+   */
+  onContextMenu?: (rect: DOMRect) => void;
 }
 
 const INDENT_REM = 0.75;
@@ -57,9 +68,69 @@ export function SidebarRow({
   current = 'page',
   children,
   touch = false,
+  onContextMenu,
 }: SidebarRowProps): ReactElement {
+  // `useLongPress` owns `contextmenu` as well as the touch timer, because the
+  // two have to be deduplicated: Android Chrome raises `contextmenu` from a
+  // long press at nearly the same moment the timer fires, and iOS Safari
+  // raises none at all. `NoteListItem` learned this first.
+  const longPress = useLongPress({
+    onPress: (point) => onContextMenu?.(new DOMRect(point.x, point.y, 0, 0)),
+  });
+  // `SidebarRow` nests: `children` puts a descendant row's `<li>` inside this
+  // one (the real tag tree does exactly this), and every native event
+  // `useLongPress` listens for — `pointerdown`, `contextmenu` — bubbles. The
+  // hook itself only calls `preventDefault` on `contextmenu`, never
+  // `stopPropagation`, because `NoteListItem`'s rows are flat siblings and
+  // have never needed it. Left alone here, a press on a leaf tag row would
+  // also reach every ancestor's OWN `useLongPress` instance — each with its
+  // own `firedAt` ref blind to the others — and fire twice. Stopping
+  // propagation here, one row at a time, keeps that fix local to the caller
+  // that has the problem rather than changing shared hook behaviour
+  // `NoteListItem` also depends on.
+  const pressHandlers = useMemo<Partial<LongPressHandlers>>(() => {
+    if (onContextMenu === undefined) return {};
+    const stop = <E extends { stopPropagation: () => void }>(
+      handler: (event: E) => void,
+    ): ((event: E) => void) => {
+      return (event) => {
+        // The hook's own handler runs first, so its dedupe window and press
+        // timer still see the real event; stopping propagation only keeps
+        // the event from also reaching an ancestor row's listeners.
+        handler(event);
+        event.stopPropagation();
+      };
+    };
+    return {
+      onPointerDown: stop(longPress.onPointerDown),
+      onPointerMove: stop(longPress.onPointerMove),
+      onPointerUp: stop(longPress.onPointerUp),
+      onPointerCancel: stop(longPress.onPointerCancel),
+      onContextMenu: stop(longPress.onContextMenu),
+      // NOT wrapped in `stop()`, unlike every sibling above. Those five all
+      // isolate ONE ROW'S OWN gesture recognition from a nested ancestor's —
+      // pointer and contextmenu events genuinely bubble from a leaf tag row up
+      // through every parent row's identical listeners, each blind to the
+      // others' `firedAt` ref, and would otherwise double-fire. `onClickCapture`
+      // has no such hazard: `longPress.onClickCapture` already only acts
+      // (`preventDefault`/`stopPropagation`) when THIS row's own press just
+      // fired (`suppressClick.current`), gated on this row's own ref — a
+      // no-op the rest of the time. Wrapping it here called
+      // `event.stopPropagation()` on EVERY click regardless of that gate,
+      // which halts the DOM event before it ever reaches this row's own
+      // `<button onClick={onSelect}>` (a capture-phase `stopPropagation`
+      // stops the walk before the target/bubble phases run at all) — so
+      // clicking any row wired with `onContextMenu` silently stopped
+      // selecting it. Caught only once a caller finally passed
+      // `onContextMenu` to a row that also needs `onSelect` to keep working;
+      // `ui.test.tsx` had covered the menu opening but never a plain click
+      // alongside it.
+      onClickCapture: longPress.onClickCapture,
+    };
+  }, [longPress, onContextMenu]);
+
   return (
-    <li>
+    <li {...pressHandlers} className={onContextMenu === undefined ? undefined : 'touch-press'}>
       <div className="flex items-center gap-1">
         {disclosure === undefined ? (
           // A spacer, not nothing: without it a leaf row's label sits one
@@ -85,6 +156,11 @@ export function SidebarRow({
         <button
           type="button"
           onClick={onSelect}
+          onKeyDown={(event) => {
+            if (event.key !== 'F10' || !event.shiftKey) return;
+            event.preventDefault();
+            onContextMenu?.(event.currentTarget.getBoundingClientRect());
+          }}
           aria-current={selected ? current : undefined}
           aria-expanded={disclosure === undefined ? undefined : disclosure.expanded}
           style={{ paddingLeft: `${0.5 + depth * INDENT_REM}rem` }}

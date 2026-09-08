@@ -405,8 +405,70 @@ import { describe, expect, it } from 'vitest';
  * in line with what the last three raises actually left (455 B, 233 B,
  * 775 B), so the standing observation holds: the eager closure is still
  * functionally spent, and the durable fix is still not another raise.
+ *
+ * ### S1 (tag rename and delete): the ceiling moves to 355,000, decided by
+ * the user on 2026-09-08
+ *
+ * `main`, the branch point, measures **350,514 B** — only **486 B** of
+ * headroom under the 351,000 ceiling before this sub-project touched
+ * anything. Tasks 1-2 (the pure `rewriteTag`/`canWriteTag` engine plus the
+ * `tags.rename`/`tags.remove`/`tags.affected` repository methods) measure
+ * **351,120 B** — **606 B** of real growth, 120 B over the ceiling in
+ * force. This is the first task to pull any of S1's code into the eager
+ * boot closure (`src/data/repositories/index.ts` is imported at app root);
+ * Task 1 alone added nothing eager.
+ *
+ * **Going lazier was tried and measured WORSE, and that is worth recording
+ * in full because it is counter-intuitive and otherwise gets tried again.**
+ * Moving `rewriteTag`/`removalRange` behind `await import('../tags/
+ * rewriteTagEngine')` inside `apply()`, with `canWriteTag`/`tagToken` left
+ * eager (Task 5's rename popover calls `canWriteTag` during render, so it
+ * cannot move), measured **351,157 B — 37 B WORSE** than the 351,120 B
+ * before the split, not better. The dynamic `rewriteTagEngine.ts` still
+ * imports `findTagRanges` from `parseTags.ts`, which the eager
+ * `canWriteTag`/`tagToken` also still reach — so the engine and the eager
+ * code end up sharing a dependency across the eager/dynamic boundary, and
+ * Rolldown extracts that shared code into its own chunk rather than
+ * inlining it at either call site. That extraction produced a new **919 B**
+ * eager chunk (`rewriteTag-*.js`), while the split genuinely removed only
+ * ~884 B from `EmptyState-*` — a net loss once the new chunk's own
+ * extraction and standalone-gzip overhead is counted. The split's code (a
+ * `rewriteTagEngine.ts` file and a dynamic import in `apply()`) was
+ * reverted rather than kept half-effective; `rewriteTag` stays exactly
+ * where Task 1 put it, statically re-exported from `src/data/tags/
+ * index.ts` and `src/data/index.ts`.
+ *
+ * Why 355,000 rather than a tighter figure sized to Tasks 1-2 alone: four
+ * tasks of eager UI remain in this plan — a tag context menu, a rename
+ * popover, the shell wiring, and the i18n keys those need — so a raise
+ * measured only against 606 B of growth would need to be re-asked three
+ * more times before the branch is done.
+ *
+ * So `CEILING_BYTES` moves to **355,000**, decided BY THE USER on
+ * 2026-09-08. The ceiling remains FROZEN under the same rule as every raise
+ * before it; this does not reopen routine ratcheting. **When this branch
+ * finishes, this number comes DOWN to S1's measured closure plus about
+ * 3 KB rather than staying at the ask** — the same condition the 351,000
+ * raise carried, so the ceiling re-freezes at an honest figure instead of
+ * ratcheting upward. That ratchet is a later task's job, not this one's.
+ *
+ * **S1 finished, and the "comes down" condition did NOT fire — same shape as
+ * Q's, recorded the same way rather than quietly skipped.** Tasks 3-6 (the
+ * context menu, the rename popover, the shell wiring, and the six-key delete
+ * confirm copy in both locales) landed the finished branch at **353,263 B**
+ * eager (`themes-*` 232,744 + `index-*` 66,879 + `EmptyState-*` 41,104 +
+ * `i18n-*` 12,536), a true eager cost of **3,490 B** over the 349,773 B this
+ * ceiling was last measured against (Q's follow-up, above) — well inside the
+ * 355,000 B granted for the four remaining tasks the raise was sized for.
+ * Applying the condition literally — measured plus the ~3 KB practice — gives
+ * 356,263, which is HIGHER than the 355,000 already in force, so honouring it
+ * would mean raising the ceiling again on the strength of a branch that came
+ * in under its own budget. It stays at **355,000**. The **1,737 B** remaining
+ * is below this file's stated ~2.5-3 KB practice but in line with what recent
+ * raises actually left (1,640 B, 775 B, 233 B, 455 B): the eager closure is
+ * still functionally spent, and the fix is still not another raise.
  */
-const CEILING_BYTES = 351_000;
+const CEILING_BYTES = 355_000;
 
 interface ManifestChunk {
   file: string;

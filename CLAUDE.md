@@ -25,56 +25,57 @@ measurement that diverges from Bear is no longer a defect on its own**, and
 
 ## Status
 
-| Milestone                                                         | State    |
-| ----------------------------------------------------------------- | -------- |
-| M0 scaffold, CI, Pages deploy                                     | complete |
-| M1 data layer (Dexie)                                             | complete |
-| M2 application shell                                              | complete |
-| M3 notes CRUD, textarea editor                                    | complete |
-| M4 editor                                                         | complete |
-| M5 tags                                                           | complete |
-| M5.5 design language                                              | complete |
-| M6 smart lists, trash management                                  | complete |
-| M7 search                                                         | complete |
-| M7.5 visual design pass                                           | complete |
-| M7.6 tag pills                                                    | complete |
-| M7.7 tag pill activation                                          | complete |
-| M8 visual pass (chrome, density, prose)                           | complete |
-| M8b export: Markdown, HTML, PDF                                   | complete |
-| M8c tables as real nodes                                          | complete |
-| M9a visual system: themes, scale, picker                          | complete |
-| A note-list header (scope, sort, preview)                         | complete |
-| B collapsible headings + level badge                              | complete |
-| E editor affordances (heading icon, highlight colours, table bar) | complete |
-| F theme system: derivation, 16 themes, card picker                | complete |
-| B2 drag-to-reorder headings                                       | complete |
-| D1 server: hosting, accounts, Google login                        | complete |
-| D2 server: the sync protocol                                      | complete |
-| C code block language + highlighting                              | complete |
-| H editor interaction surfaces                                     | complete |
-| I note-list row redesign + row context menu                       | complete |
-| J1 responsive shell: phone, tablet, desktop                       | complete |
-| J2a phone header proportions and 44px targets                     | complete |
-| J2 touch parity                                                   | complete |
-| J3 the editor on a phone                                          | complete |
-| K1 image capture and display, locally                             | complete |
-| K2 image sync: the Mac Mini as an image store                     | complete |
-| K3 image resize, and images in every export                       | complete |
-| G export: PDF, rendered server-side                               | complete |
-| M9b callout blocks                                                | complete |
-| L1 code copy button, image quota meter                            | complete |
-| L2 backlinks: `[[wikilink]]`, index, pill, panel, autocomplete    | complete |
-| L3 relationship graph: force layout, pan/zoom, worker offload     | complete |
-| L4 command palette: `⌘K`, fuzzy match, commands + notes           | complete |
-| L5 server-rendered Mermaid diagrams                               | complete |
-| M publish: a public read-only URL for one note                    | complete |
-| N paste Markdown as Markdown                                      | complete |
-| Q typography settings: the reader's five prose controls           | complete |
-| R landing page: first-visit gate, guest mode, welcome note        | complete |
+| Milestone                                                          | State    |
+| ------------------------------------------------------------------ | -------- |
+| M0 scaffold, CI, Pages deploy                                      | complete |
+| M1 data layer (Dexie)                                              | complete |
+| M2 application shell                                               | complete |
+| M3 notes CRUD, textarea editor                                     | complete |
+| M4 editor                                                          | complete |
+| M5 tags                                                            | complete |
+| M5.5 design language                                               | complete |
+| M6 smart lists, trash management                                   | complete |
+| M7 search                                                          | complete |
+| M7.5 visual design pass                                            | complete |
+| M7.6 tag pills                                                     | complete |
+| M7.7 tag pill activation                                           | complete |
+| M8 visual pass (chrome, density, prose)                            | complete |
+| M8b export: Markdown, HTML, PDF                                    | complete |
+| M8c tables as real nodes                                           | complete |
+| M9a visual system: themes, scale, picker                           | complete |
+| A note-list header (scope, sort, preview)                          | complete |
+| B collapsible headings + level badge                               | complete |
+| E editor affordances (heading icon, highlight colours, table bar)  | complete |
+| F theme system: derivation, 16 themes, card picker                 | complete |
+| B2 drag-to-reorder headings                                        | complete |
+| D1 server: hosting, accounts, Google login                         | complete |
+| D2 server: the sync protocol                                       | complete |
+| C code block language + highlighting                               | complete |
+| H editor interaction surfaces                                      | complete |
+| I note-list row redesign + row context menu                        | complete |
+| J1 responsive shell: phone, tablet, desktop                        | complete |
+| J2a phone header proportions and 44px targets                      | complete |
+| J2 touch parity                                                    | complete |
+| J3 the editor on a phone                                           | complete |
+| K1 image capture and display, locally                              | complete |
+| K2 image sync: the Mac Mini as an image store                      | complete |
+| K3 image resize, and images in every export                        | complete |
+| G export: PDF, rendered server-side                                | complete |
+| M9b callout blocks                                                 | complete |
+| L1 code copy button, image quota meter                             | complete |
+| L2 backlinks: `[[wikilink]]`, index, pill, panel, autocomplete     | complete |
+| L3 relationship graph: force layout, pan/zoom, worker offload      | complete |
+| L4 command palette: `⌘K`, fuzzy match, commands + notes            | complete |
+| L5 server-rendered Mermaid diagrams                                | complete |
+| M publish: a public read-only URL for one note                     | complete |
+| N paste Markdown as Markdown                                       | complete |
+| Q typography settings: the reader's five prose controls            | complete |
+| R landing page: first-visit gate, guest mode, welcome note         | complete |
+| S1 tag rename and delete, across every note, trashed ones included | complete |
 
-2822 unit tests pass and 112 skip (the server integration tests, which skip
+2880 unit tests pass and 112 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
-`npm run test:pdf`), 250 end-to-end tests pass and 1 skips. `main` is always green and
+`npm run test:pdf`), 254 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**
@@ -930,7 +931,7 @@ user_id FROM identities WHERE email = ?`, which reads `user_id` without
 
 ## Rules that must not be silently reversed
 
-**The rulings live in `docs/rulings/`, not here.** 407 bullets across 13 files,
+**The rulings live in `docs/rulings/`, not here.** 506 bullets across 13 files,
 every one a live constraint. They are NOT loaded into context automatically —
 this index is. Its job is to tell you which file to open before you touch
 something, so read the row before you write the diff, not after.

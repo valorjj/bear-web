@@ -52,7 +52,10 @@ export type {
   RemoteTag,
   Transport,
 } from './sync/transport';
-export { findTagRanges, parseTags } from './tags';
+// `rewriteTag` is deliberately NOT here: it is the data layer's own
+// rewrite engine, reached through `tags.rename` / `tags.remove`, and no
+// consumer outside `src/data/` has any business calling it directly.
+export { canRenameTo, canWriteTag, findTagRanges, normalizeTag, parseTags } from './tags';
 export type { TagRange } from './tags';
 export { buildTitleIndex, findLinkRanges, normalizeTitle, parseLinks } from './links';
 export type { LinkRange, TitledNote } from './links';

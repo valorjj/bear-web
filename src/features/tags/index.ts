@@ -4,3 +4,7 @@ export { useTagTree } from './useTagTree';
 export type { TagTreeState } from './useTagTree';
 export { TagSidebar } from './TagSidebar';
 export type { TagSidebarProps } from './TagSidebar';
+export { TagRowMenu } from './TagRowMenu';
+export type { TagRowAction, TagRowMenuProps, TagRowMenuRequest } from './TagRowMenu';
+export { TagRenamePopover } from './TagRenamePopover';
+export type { TagRenamePopoverProps } from './TagRenamePopover';

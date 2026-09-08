@@ -407,6 +407,33 @@ export const en = {
   'typography.done': 'Done',
   'typography.unit.px': 'px',
   'typography.unit.em': 'em',
+  'tags.menu.label': 'Tag actions',
+  'tags.menu.rename': 'Rename tag',
+  'tags.menu.delete': 'Delete tag',
+  'tags.rename.title': 'Rename tag',
+  'tags.rename.field': 'New tag name',
+  'tags.rename.submit': 'Rename',
+  'tags.rename.cancel': 'Cancel',
+  'tags.rename.invalid': 'That name cannot be used for a tag.',
+  'tags.rename.merge': 'A tag named {name} already exists. Renaming will merge them.',
+  'confirm.deleteTag.title': 'Delete this tag?',
+  'confirm.deleteTag.body.none': 'No notes carry this tag any more. Only the sidebar row will go.',
+  'confirm.deleteTag.body.flatOne':
+    'It will be removed from 1 note. The notes themselves are kept.',
+  'confirm.deleteTag.body.flatMany':
+    'It will be removed from {count} notes. The notes themselves are kept.',
+  'confirm.deleteTag.body.oneSubOne':
+    'It and one sub-tag will be removed from 1 note. The notes themselves are kept.',
+  'confirm.deleteTag.body.oneSubMany':
+    'It and one sub-tag will be removed from {count} notes. The notes themselves are kept.',
+  'confirm.deleteTag.body.manySubOne':
+    'It and {tags} sub-tags will be removed from 1 note. The notes themselves are kept.',
+  'confirm.deleteTag.body.manySubMany':
+    'It and {tags} sub-tags will be removed from {count} notes. The notes themselves are kept.',
+  'confirm.deleteTag.confirm': 'Delete tag',
+  'confirm.mergeTag.title': 'Merge these tags?',
+  'confirm.mergeTag.body': 'Renaming moves {count} notes into {name}, which already exists.',
+  'confirm.mergeTag.confirm': 'Merge',
 } as const;
 
 export type TranslationKey = keyof typeof en;

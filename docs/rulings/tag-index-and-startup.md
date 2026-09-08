@@ -11,9 +11,11 @@ storage — must behave so none of them can ever brick the app or destroy a note
 `src/data/backup.ts` (`importDatabase`, `assertBundle`), `src/data/db.ts`'s
 `stores({...})` index strings, the `noteTags` writes in
 `src/data/repositories/notes.ts` (`reindex`, `trash`, `restore`, `purge`,
-`emptyTrash`, `rebuildTagIndex`), or the boot sequence in `src/main.tsx`
-(`BOOT_AT`, the `openDatabase().then` body). Also: a new `db.version(n)` with
-an `.upgrade()` hook, a new `.where('pinned')` or `.above(0)` on `trashedAt`,
+`emptyTrash`, `rebuildTagIndex`), `src/data/repositories/tags.ts` (`apply`,
+`carriers`, `rename`, `remove`, `affected`), or the boot sequence in
+`src/main.tsx` (`BOOT_AT`, the `openDatabase().then` body). Also: a new
+`db.version(n)` with an `.upgrade()` hook, a new `.where('pinned')` or
+`.above(0)` on `trashedAt`,
 or an `onError` callback losing its `try`/`catch`.
 
 - **The tag-index rebuild is a settings marker, never a Dexie `upgrade()`
@@ -75,7 +77,67 @@ or an `onError` callback losing its `try`/`catch`.
   Both write inside transactions over `notes`; sequencing removes the question
   of what a rebuild sees mid-purge.
 
+- **`tags.rename` / `tags.remove` (S1) rewrite every carrying note through
+  `reindexNote`, inside ONE transaction over `notes`, `noteTags`, `noteLinks`,
+  `tags` and `syncState` together** (`createTagsRepository`'s `apply`, in
+  `src/data/repositories/tags.ts`) — a partial rewrite across a tag's notes
+  would be worse than a failed one, so every carrier's text update, its
+  `reindexNote` and its `markDirty` land in the same `db.transaction` call, and
+  so does the tag-metadata move/delete for the tag itself and every descendant.
+  `apply` computes its carrier list and the affected metadata rows BEFORE
+  opening the transaction and returns early if both are empty, so a no-op
+  rename never opens one at all.
 
+  **`updatedAt` is deliberately NOT moved, and `markDirty` is stamped with that
+  same unchanged value.** A rename must not reshuffle a note list sorted by
+  Date Modified — the user renamed a tag, not the note — and the sync engine's
+  accept guard clears a row's dirty flag only while the stored note still
+  matches the `markedAt` it pushed (see `sync.md`). Stamping `markDirty` with
+  `target.updatedAt` (the note's OWN pre-rewrite value) rather than
+  `Date.now()` is what keeps that guard able to clear the row once the rewrite
+  syncs; stamping "now" here would desynchronize the two and leave the note
+  permanently dirty from the sync engine's point of view even though nothing
+  about its edit time changed.
+
+  **Selecting which notes a tag touches is a full scan of `db.notes` filtered
+  by `parseTags`, not a `noteTags` index query** — the same `carriers` helper
+  backs `rename`, `remove` and `affected`, so the confirm dialog's count and
+  the rewrite are computed by the same RULE. They are still two separate scans
+  at two different times, and the earlier claim here that they "can never
+  disagree" was too strong: anything landing between them (a purge, a sync
+  pull) moves the real number, and `affected` reports CANDIDATES while `apply`
+  reports notes actually WRITTEN. Sharing the helper removes the class of
+  disagreement worth removing — one side counting the index and the other
+  counting the text — not the passage of time. The zero-carrier case that
+  falls out of this is a real confirm-dialog branch
+  (`confirm.deleteTag.body.none`), not a theoretical one.
+  This mirrors `notes.rebuildTagIndex`'s own justification for a full scan:
+  `trash` deletes a trashed note's `noteTags` rows while its TEXT keeps the
+  tag, and `restore` reindexes from that text — so an index query would miss
+  exactly the notes that `restore` would later resurrect the tag from, which
+  is precisely the set a delete or rename must not silently skip.
+
+  **Consequence, deliberate and worth stating because the two numbers on
+  screen differ: the delete confirm's note count INCLUDES trashed notes,
+  while the tag row's own sidebar count does not.** The row counts what the
+  user can currently see (`noteTags`, active notes only); the confirm counts
+  what the rewrite will touch, which must include the trash or the tag comes
+  back on the next restore. A user deleting a tag on 2 visible notes can
+  therefore read "removed from 3 notes". That is the honest number for the
+  operation being confirmed, and the alternative — quoting the visible count
+  and then rewriting more than it — is the lie.
+
+  **Cost of choosing carriers BEFORE the transaction opens: a write landing in
+  that window.** `apply` re-reads each note with `db.notes.get(id)` INSIDE the
+  transaction and rewrites from that, rather than from the snapshot `carriers`
+  took, precisely so an autosave flush or a sync apply arriving in the gap is
+  not silently reverted; the note's `markDirty` is stamped with the re-read
+  `updatedAt` for the same reason. What remains is only selection: a note that
+  ACQUIRED the tag in that window is not in `targets` and is skipped until the
+  next rewrite. That is the acceptable half — a missed note keeps a tag the
+  user wanted gone, where the reverted half would have destroyed an edit. The
+  editor-side companion to this (an open `NoteEditor` writing pre-rewrite text
+  back out) is a known, unfixed gap recorded in `notes-lifecycle.md`.
 
 - **`db.version(4)` is IndexedDB version 40, and `e2e/fixtures/seed.ts` moved
   with it in the same commit.** K1 added image metadata to `files`. No

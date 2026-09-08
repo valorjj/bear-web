@@ -54,8 +54,9 @@ count is already descendant-inclusive (`tagTree.ts`), so clicking a row
 showing 9 and having 3 notes change is a lie the UI told.
 
 **A rename onto an existing tag MERGES into it.** `a/b` renamed to `gemini`
-when `gemini` exists joins the two subtrees, and the confirm dialog says so
-with both counts. Refusing was rejected: a merge is a legitimate thing to
+when `gemini` exists joins the two subtrees, and the confirm dialog says so —
+with the MOVING side's note count only, not both (corrected to match what
+shipped; see the `pending` union below). Refusing was rejected: a merge is a legitimate thing to
 want, and refusing forces a pointless two-step (rename to a temporary name,
 then merge anyway) while offering no way to merge at all. Note this is also
 the case-collision path — tags key lowercase, so renaming to `Gemini` when
@@ -145,6 +146,21 @@ For a match, `newTag = to + range.tag.slice(from.length)`, so `a/b/c` under
 re-parses to `newTag`: `#newTag`, or `#newTag#` when the name contains a space
 or anything else that would terminate the simple form.
 
+**Corrected after the final review: a rename TARGET containing whitespace is
+refused.** `canWriteTag` round-trips a token in ISOLATION, and that is not the
+context a rename inserts it into. `parseTags` accepts the multi-word form's
+closing `#` only when the character after it is a boundary, and `range.end`
+for the simple form deliberately excludes trailing punctuation — so renaming
+`work` to `my plan` in `done #work. next` writes `done #my plan#. next`, which
+re-parses as the tag `my` and strands a literal `plan#.` in the user's prose,
+unfixable by another rename. `canRenameTo` (`rewriteTag.ts`) is `canWriteTag`
+minus the names that need a closer, and BOTH the popover and `tags.rename`
+refuse through it — the repository does not delegate this to the UI. Emitting
+a separating space instead was rejected: it only helps the
+punctuation-adjacent case and leaves a floating `#my plan# . next`, which is
+its own corruption. Multi-word tags remain fully supported when a user types
+one into a note; `tagToken`'s multi-word branch is unchanged.
+
 Three properties fall out of reusing `findTagRanges`, and are the whole reason
 this function exists rather than a replace:
 
@@ -216,7 +232,13 @@ remove(tag: string): Promise<{ noteCount: number }>
 - **Confirms route through `AppShell`'s existing `pending` union**, which
   today holds `purge | empty | trash | signOut`, adding
   `{ kind: 'deleteTag'; tag; noteCount; tagCount }` and
-  `{ kind: 'mergeTag'; from; to; noteCount; intoCount }`. Every destructive
+  `{ kind: 'mergeTag'; from; to; noteCount }`. **`intoCount` was specified and
+  deliberately not shipped**, and this text is corrected to match the code
+  rather than the reverse: the merge sentence reads "Renaming moves {count}
+  notes into {name}, which already exists", where `{count}` is the moving
+  side. The destination's own note count adds a second number to a
+  one-sentence confirm without changing the decision the user is making, and
+  it would need a second `affected` call to obtain. One count is what shipped. Every destructive
   confirm in the app stays on one mechanism instead of the sidebar growing a
   second one.
 - **Rename re-scopes explicitly** to the new tag when the current scope is the
@@ -246,7 +268,12 @@ left alone; `#done.` keeping its full stop, since `range.end` deliberately
 excludes punctuation `normalizeTag` trimmed; a `to` containing a space forcing
 the `#new name#` form; the three whitespace cases; several occurrences in one
 note. Every case also asserts the invariant that `parseTags(result)` contains
-`to` (or its descendants) and does NOT contain `from`.
+`to` (or its descendants) and does NOT contain `from` — **which holds only for
+the targets the rename path now accepts**: `rewriteTag` itself will still emit
+`#my plan#` before a full stop, and the final review's execution proved that
+string re-parses as `my`. That is why the refusal lives in `canRenameTo`
+rather than in `rewriteTag`, and why one test asserts the corrupting output
+explicitly, as evidence for the refusal rather than as approved behaviour.
 
 A property test renames `from -> to -> from` and asserts `parseTags` returns
 to the original set — the weaker invariant deliberately, because whitespace

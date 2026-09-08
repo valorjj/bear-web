@@ -6,6 +6,7 @@ import { EmptyState } from '@/ui/EmptyState';
 import { Hash, Icon } from '@/ui/Icon';
 import { SidebarRow } from '@/ui/SidebarRow';
 
+import type { TagRowMenuRequest } from './TagRowMenu';
 import type { TagNode } from './tagTree';
 
 export interface TagSidebarProps {
@@ -17,6 +18,8 @@ export interface TagSidebarProps {
   onToggle: (tag: string) => void;
   /** Sizes rows for a finger. True wherever the sidebar is a drawer. */
   touch?: boolean;
+  /** Opens a tag row's action menu. Omit to render rows with no menu. */
+  onOpenMenu?: (request: TagRowMenuRequest) => void;
 }
 
 interface RowProps extends Omit<TagSidebarProps, 'nodes'> {
@@ -24,7 +27,16 @@ interface RowProps extends Omit<TagSidebarProps, 'nodes'> {
   depth: number;
 }
 
-function TagRow({ node, depth, scope, onScopeChange, isCollapsed, onToggle, touch }: RowProps) {
+function TagRow({
+  node,
+  depth,
+  scope,
+  onScopeChange,
+  isCollapsed,
+  onToggle,
+  touch,
+  onOpenMenu,
+}: RowProps) {
   const t = useT();
   const hasChildren = node.children.length > 0;
   const collapsed = isCollapsed(node.tag);
@@ -39,6 +51,9 @@ function TagRow({ node, depth, scope, onScopeChange, isCollapsed, onToggle, touc
       touch={touch}
       selected={selected}
       onSelect={() => onScopeChange(tagScope(node.tag))}
+      onContextMenu={
+        onOpenMenu === undefined ? undefined : (rect) => onOpenMenu({ tag: node.tag, rect })
+      }
       disclosure={
         hasChildren
           ? { expanded: !collapsed, onToggle: () => onToggle(node.tag), label: t('tags.toggle') }
@@ -57,6 +72,7 @@ function TagRow({ node, depth, scope, onScopeChange, isCollapsed, onToggle, touc
               isCollapsed={isCollapsed}
               onToggle={onToggle}
               touch={touch}
+              onOpenMenu={onOpenMenu}
             />
           ))}
         </ul>
@@ -72,6 +88,7 @@ export function TagSidebar({
   isCollapsed,
   onToggle,
   touch = false,
+  onOpenMenu,
 }: TagSidebarProps): ReactElement | null {
   const t = useT();
 
@@ -96,6 +113,7 @@ export function TagSidebar({
             isCollapsed={isCollapsed}
             onToggle={onToggle}
             touch={touch}
+            onOpenMenu={onOpenMenu}
           />
         ))}
       </ul>

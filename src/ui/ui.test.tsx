@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { type ReactElement, useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -214,6 +214,21 @@ describe('SidebarRow', () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
+  // Regression: `onContextMenu` wires `useLongPress`'s handlers onto the row,
+  // and one of them used to be wrapped in a helper that called
+  // `event.stopPropagation()` on EVERY click, not only the ones the press
+  // gesture actually meant to suppress — which halts a capture-phase click
+  // before it ever reaches this row's own `onClick`. A row with a menu could
+  // therefore never be selected by a plain click, and every other test in
+  // this block exercises the menu itself, never a click alongside it.
+  it('still selects on a plain click when a context menu handler is present', async () => {
+    const onSelect = vi.fn();
+    renderRow({ onSelect, onContextMenu: vi.fn() });
+
+    await userEvent.click(screen.getByRole('button', { name: /Work/ }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
   it('marks the selected row with aria-current', () => {
     renderRow({ selected: true });
     expect(screen.getByRole('button', { name: /Work/ })).toHaveAttribute('aria-current', 'page');
@@ -289,6 +304,92 @@ describe('SidebarRow', () => {
     });
 
     expect(screen.getByRole('button', { name: /Urgent/ })).toBeInTheDocument();
+  });
+
+  it('raises a context-menu request at the pointer on right-click', () => {
+    const onContextMenu = vi.fn();
+    renderRow({ onContextMenu });
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Work/ }), {
+      clientX: 40,
+      clientY: 90,
+    });
+
+    // A VALUE, not merely "it was called": a zero-size rect AT the pointer is
+    // what anchors the menu, and asserting only the call count would pass
+    // against a handler that anchored on the row instead.
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+    const rect = onContextMenu.mock.calls[0]![0] as DOMRect;
+    expect([rect.left, rect.top, rect.width, rect.height]).toEqual([40, 90, 0, 0]);
+  });
+
+  it('raises it from Shift+F10 anchored on the row, not the pointer', () => {
+    const onContextMenu = vi.fn();
+    renderRow({ onContextMenu });
+
+    const row = screen.getByRole('button', { name: /Work/ });
+    // A SENTINEL rect, because jsdom has no layout engine and every real rect
+    // is zeros — which is byte-identical to the zero-size rect the pointer
+    // route builds, so a call-count assertion alone could not tell the two
+    // apart and this test's name claimed something it never checked. With the
+    // sentinel, reading the pointer instead (or constructing
+    // `new DOMRect(0, 0, 0, 0)`) can no longer produce this value.
+    row.getBoundingClientRect = () => new DOMRect(11, 22, 33, 44);
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+    const rect = onContextMenu.mock.calls[0]![0] as DOMRect;
+    expect([rect.left, rect.top, rect.width, rect.height]).toEqual([11, 22, 33, 44]);
+  });
+
+  it('does not intercept contextmenu when no handler is given', () => {
+    renderRow();
+
+    // With no handler, nothing wires a `contextmenu` listener onto the row at
+    // all, so the native menu is left free to open — `fireEvent` reports that
+    // as `true` (not prevented). This is a value that actually changes with
+    // the behaviour: a handler wired unconditionally would call
+    // `preventDefault` even with `onContextMenu` undefined, and this
+    // assertion would catch that, unlike a bare "did not throw" check.
+    const notPrevented = fireEvent.contextMenu(screen.getByRole('button', { name: /Work/ }), {
+      clientX: 40,
+      clientY: 90,
+    });
+    expect(notPrevented).toBe(true);
+  });
+
+  it('does not let a nested row press reach its ancestor row', () => {
+    // The real tag tree nests rows exactly this way (`TagSidebar`), and every
+    // native event `useLongPress` listens for bubbles through the parent
+    // `<li>` unless something stops it. A count that changes with the
+    // behaviour: without the propagation guard the parent's handler ALSO
+    // fires, so asserting only the child's call would pass against that
+    // broken shape too.
+    const onParentContextMenu = vi.fn();
+    const onChildContextMenu = vi.fn();
+    renderRow({
+      onContextMenu: onParentContextMenu,
+      children: (
+        <ul>
+          <SidebarRow
+            label="Child"
+            selected={false}
+            onSelect={vi.fn()}
+            onContextMenu={onChildContextMenu}
+          />
+        </ul>
+      ),
+    });
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Child/ }), {
+      clientX: 40,
+      clientY: 90,
+    });
+
+    expect(onChildContextMenu).toHaveBeenCalledTimes(1);
+    const rect = onChildContextMenu.mock.calls[0]![0] as DOMRect;
+    expect([rect.left, rect.top, rect.width, rect.height]).toEqual([40, 90, 0, 0]);
+    expect(onParentContextMenu).not.toHaveBeenCalled();
   });
 });
 
