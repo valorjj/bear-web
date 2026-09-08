@@ -198,11 +198,18 @@ deleted.
 the review's own execution ledger is git-ignored and gone once this branch
 integrates:**
 
-1. **`openFrom` and `dismissedFrom` in `TagAutocomplete.ts` are fully
-   redundant, not merely overlapping.** The review MEASURED this: replacing
-   the `dismiss` meta branch with `openFrom: null` leaves all 41 tests green.
-   About a four-line deletion, deliberately deferred rather than done inside
-   a reviewed fix round — worth doing next time that file is opened.
+1. ~~**`openFrom` and `dismissedFrom` in `TagAutocomplete.ts` are fully
+   redundant.**~~ **DONE 2026-09-09 (`388477e`).** The review had measured
+   that replacing the `dismiss` meta branch with `openFrom: null` leaves all
+   41 tests green; the deletion took that further and removed the field, its
+   two resets and `commitTypedText`'s now-unused `match` parameter. Escape
+   and an accepted row 0 clear `openFrom` instead, so "closed until you type
+   again" has ONE representation. Two injections rather than a green run,
+   because removing a field is how coverage disappears quietly: Escape made a
+   no-op fails 1 test, so the dismissal is still covered; and removing the
+   `openFrom` guard now fails **5** where it used to fail 3, the two
+   dismissal tests having joined the three Critical-regression ones — the
+   single field is a strictly STRONGER guard than the pair was.
 2. **Bundle headroom is 410 B** against the frozen 355,000 B ceiling. The
    next eager-code addition needs the ceiling raised deliberately, with
    measured numbers, never from Vite's build-log estimate (see the
