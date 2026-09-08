@@ -451,6 +451,22 @@ import { describe, expect, it } from 'vitest';
  * 3 KB rather than staying at the ask** — the same condition the 351,000
  * raise carried, so the ceiling re-freezes at an honest figure instead of
  * ratcheting upward. That ratchet is a later task's job, not this one's.
+ *
+ * **S1 finished, and the "comes down" condition did NOT fire — same shape as
+ * Q's, recorded the same way rather than quietly skipped.** Tasks 3-6 (the
+ * context menu, the rename popover, the shell wiring, and the six-key delete
+ * confirm copy in both locales) landed the finished branch at **353,263 B**
+ * eager (`themes-*` 232,744 + `index-*` 66,879 + `EmptyState-*` 41,104 +
+ * `i18n-*` 12,536), a true eager cost of **3,490 B** over the 349,773 B this
+ * ceiling was last measured against (Q's follow-up, above) — well inside the
+ * 355,000 B granted for the four remaining tasks the raise was sized for.
+ * Applying the condition literally — measured plus the ~3 KB practice — gives
+ * 356,263, which is HIGHER than the 355,000 already in force, so honouring it
+ * would mean raising the ceiling again on the strength of a branch that came
+ * in under its own budget. It stays at **355,000**. The **1,737 B** remaining
+ * is below this file's stated ~2.5-3 KB practice but in line with what recent
+ * raises actually left (1,640 B, 775 B, 233 B, 455 B): the eager closure is
+ * still functionally spent, and the fix is still not another raise.
  */
 const CEILING_BYTES = 355_000;
 

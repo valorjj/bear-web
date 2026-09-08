@@ -11,9 +11,11 @@ storage — must behave so none of them can ever brick the app or destroy a note
 `src/data/backup.ts` (`importDatabase`, `assertBundle`), `src/data/db.ts`'s
 `stores({...})` index strings, the `noteTags` writes in
 `src/data/repositories/notes.ts` (`reindex`, `trash`, `restore`, `purge`,
-`emptyTrash`, `rebuildTagIndex`), or the boot sequence in `src/main.tsx`
-(`BOOT_AT`, the `openDatabase().then` body). Also: a new `db.version(n)` with
-an `.upgrade()` hook, a new `.where('pinned')` or `.above(0)` on `trashedAt`,
+`emptyTrash`, `rebuildTagIndex`), `src/data/repositories/tags.ts` (`apply`,
+`carriers`, `rename`, `remove`, `affected`), or the boot sequence in
+`src/main.tsx` (`BOOT_AT`, the `openDatabase().then` body). Also: a new
+`db.version(n)` with an `.upgrade()` hook, a new `.where('pinned')` or
+`.above(0)` on `trashedAt`,
 or an `onError` callback losing its `try`/`catch`.
 
 - **The tag-index rebuild is a settings marker, never a Dexie `upgrade()`
@@ -74,6 +76,38 @@ or an `onError` callback losing its `try`/`catch`.
 - **The sweep runs after the tag-index rebuild resolves, not concurrently.**
   Both write inside transactions over `notes`; sequencing removes the question
   of what a rebuild sees mid-purge.
+
+- **`tags.rename` / `tags.remove` (S1) rewrite every carrying note through
+  `reindexNote`, inside ONE transaction over `notes`, `noteTags`, `noteLinks`,
+  `tags` and `syncState` together** (`createTagsRepository`'s `apply`, in
+  `src/data/repositories/tags.ts`) — a partial rewrite across a tag's notes
+  would be worse than a failed one, so every carrier's text update, its
+  `reindexNote` and its `markDirty` land in the same `db.transaction` call, and
+  so does the tag-metadata move/delete for the tag itself and every descendant.
+  `apply` computes its carrier list and the affected metadata rows BEFORE
+  opening the transaction and returns early if both are empty, so a no-op
+  rename never opens one at all.
+
+  **`updatedAt` is deliberately NOT moved, and `markDirty` is stamped with that
+  same unchanged value.** A rename must not reshuffle a note list sorted by
+  Date Modified — the user renamed a tag, not the note — and the sync engine's
+  accept guard clears a row's dirty flag only while the stored note still
+  matches the `markedAt` it pushed (see `sync.md`). Stamping `markDirty` with
+  `target.updatedAt` (the note's OWN pre-rewrite value) rather than
+  `Date.now()` is what keeps that guard able to clear the row once the rewrite
+  syncs; stamping "now" here would desynchronize the two and leave the note
+  permanently dirty from the sync engine's point of view even though nothing
+  about its edit time changed.
+
+  **Selecting which notes a tag touches is a full scan of `db.notes` filtered
+  by `parseTags`, not a `noteTags` index query** — the same `carriers` helper
+  backs `rename`, `remove` and `affected`, so the confirm dialog's counts and
+  the actual rewrite can never disagree about which notes are in scope. This
+  mirrors `notes.rebuildTagIndex`'s own justification for a full scan: `trash`
+  deletes a trashed note's `noteTags` rows while its TEXT keeps the tag, and
+  `restore` reindexes from that text — so an index query would miss exactly
+  the notes that `restore` would later resurrect the tag from, which is
+  precisely the set a delete or rename must not silently skip.
 
 
 

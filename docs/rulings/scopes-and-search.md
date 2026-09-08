@@ -12,8 +12,9 @@ that list without ever becoming part of the query itself.
 `SMART_LIST_PREDICATES`), `useNotes.ts`, `useSmartListCounts.ts`, `search.ts`
 (`findMatchRanges`, `filterByQuery`, `normalizeForSearch`), `HighlightedText.tsx`,
 `NoteList.tsx`'s `emptyTrashDisabled`/`hasUnfilteredItems` props,
-`src/ui/ConfirmDialog.tsx`, or the `scope`/`query`/`seed` state and the
-vanished-tag effect in `src/app/AppShell.tsx`.
+`src/ui/ConfirmDialog.tsx`, or the `scope`/`query`/`seed` state, the
+vanished-tag effect, `pendingRenameRef`, or `renameTag` in
+`src/app/AppShell.tsx`.
 
 - **`NoteScope` is an object union, so every `useLiveQuery` keyed on it uses
   `scopeKey`, never the object.** An object literal has a fresh identity every
@@ -46,6 +47,40 @@ vanished-tag effect in `src/app/AppShell.tsx`.
   scope, not because it is load-bearing today; it has no falsifying app-level
   test. `AppShell.handleActivateTag` makes the same `undefined` ruling for the
   same reason.
+
+- **A tag rename (S1) re-scopes explicitly, via `pendingRenameRef` in
+  `AppShell.renameTag`, and the vanished-tag effect above is NOT sufficient on
+  its own to make the scope follow.** `tags.rename` rewrites every carrying
+  note's Markdown inside one transaction and returns before `tree.nodes`'
+  `useLiveQuery` re-emits — asynchronously, once the write actually lands. A
+  naive `setScope(tagScope(to))` issued synchronously right after `await
+  tags.rename(...)` resolves races that emission: it can run against the OLD
+  `tree.nodes` (still missing the new name), trip the vanished-tag effect
+  against a tree that has not caught up, and get bounced to All Notes — and
+  once `tree.nodes` finally does settle, the scope is `smart` by then, so the
+  vanished-tag effect returns early and never recovers. Falsified by reverting
+  to the naive form and re-running the e2e scope-follow assertion (`e2e/
+tags.spec.ts`): FAIL on `aria-current`, restored to PASS.
+
+  The shipped design arms `pendingRenameRef` with `{ fromKey, target }` BEFORE
+  the `await`, and the vanished-tag effect stands down entirely whenever the
+  ref is armed for the CURRENT scope — it does not run its own fallback logic
+  against a tree it knows is mid-catch-up. Once the effect observes
+  `tree.nodes !== undefined && hasTag(tree.nodes, pending.target)`, it clears
+  the ref and calls `setScope` itself; `renameTag` never calls `setScope`
+  directly.
+
+  **The ref must be SELF-LIMITING, identity-checked, and cleared on a rename
+  that writes nothing — this is not an edge case, it is the exact failure the
+  ref exists to prevent, reached through a second door.** A rename with
+  `noteCount: 0` (a same-name submit, or a second rename racing a first that
+  already moved the tag away) produces no `tree.nodes` emission for the
+  vanished-tag effect to ever catch, so a ref left armed for it would wait
+  forever — permanently disabling the guard the DELETE path also depends on,
+  since the same effect governs both. `renameTag` therefore clears its own
+  entry in a `finally`, but only when `pendingRenameRef.current === entry`
+  (the identity it itself set), so a second overlapping rename cannot have its
+  ref cleared out from under it by the first one's cleanup.
 
 - **`NoteScope` has two arms permanently, and every behavioural question is a
   named capability function.** Adding a smart list is a row in

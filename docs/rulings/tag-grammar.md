@@ -2,7 +2,7 @@
 
 How a `#tag` is recognized, normalized and bounded in a note's Markdown — the single grammar that `src/data/tags/parseTags.ts` implements and that both the tag index and the editor's tag pills read through.
 
-**Trigger:** any change under `src/data/tags/` — `parseTags.ts`, `parseTags.test.ts`, `tagRanges.test.ts` — or under `src/data/markdown/mask.ts`, or to the symbols in either: `findTagRanges`, `parseTags`, `normalizeTag`, `trimTrailing`, `MASK`, `LEADING_REJECT`, `BACKTICK_OPENER`, `TILDE_OPENER`, `closesFence`, `maskCode`, `maskInlineCode`, `canStart`, `isBoundary`. Also `notes.rebuildTagIndex` and `TAG_INDEX_VERSION` in `src/data/repositories/notes.ts` and `src/data/migrations.ts`, and any prose or code introducing the literal escape sequence for the mask character.
+**Trigger:** any change under `src/data/tags/` — `parseTags.ts`, `parseTags.test.ts`, `tagRanges.test.ts`, `rewriteTag.ts` — or under `src/data/markdown/mask.ts`, or to the symbols in either: `findTagRanges`, `parseTags`, `normalizeTag`, `trimTrailing`, `MASK`, `LEADING_REJECT`, `BACKTICK_OPENER`, `TILDE_OPENER`, `closesFence`, `maskCode`, `maskInlineCode`, `canStart`, `isBoundary`, `rewriteTag`, `canWriteTag`, `tagToken`. Also `notes.rebuildTagIndex` and `TAG_INDEX_VERSION` in `src/data/repositories/notes.ts` and `src/data/migrations.ts`, and any prose or code introducing the literal escape sequence for the mask character.
 
 - **Tags are keyed lowercase, and that is what makes `rebuildTagIndex`
   deterministic.** `#Work` and `#work` are one tag. Bear preserves first-seen
@@ -91,3 +91,20 @@ How a `#tag` is recognized, normalized and bounded in a note's Markdown — the 
   ```
   python3 -c "import sys;print(open(sys.argv[1],'rb').read().count(b'\0'))" <file>
   ```
+
+- **A tag rewrite (`rewriteTag`, S1) MUST go through `findTagRanges` rather
+  than a string replace over the raw text.** `rewriteTag`'s body was
+  temporarily swapped for `markdown.replaceAll('#'+from, ...)` as a
+  falsification (Task 1, Step 6), and it broke four of the grammar's own
+  guarantees at once: it rewrote a tag sitting inside a fenced code block, one
+  inside inline code, one inside a URL fragment (`https://x/#work`) — all
+  three exist only because `parseTags` masks code and requires a boundary
+  before `#`, neither of which a substring replace knows about — and it wrongly
+  matched `#a/bc` when renaming `a/b`, because a plain substring match has no
+  notion of a tag boundary and `a/bc` is not a descendant of `a/b` (the real
+  prefix test is `${from}/`, checked against the tag `findTagRanges` already
+  parsed, for exactly this reason). Restoring the real implementation — walk
+  `findTagRanges`' ranges and rewrite only the ones whose parsed tag equals
+  `from` or starts with `${from}/` — made all four pass again. Do not "fix" a
+  rewrite bug by widening the match; widening a substring match is how this
+  defect comes back.
