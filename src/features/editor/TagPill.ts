@@ -225,20 +225,31 @@ export const TagPill = Extension.create<TagPillOptions>({
           },
 
           handleDOMEvents: {
-            // `mousedown`, not `handleClick`. ProseMirror does not place the
-            // caret itself on a plain click — the browser moves the DOM
-            // selection natively during mousedown and ProseMirror reads it
-            // back. By `handleClick` (which runs on mouseup) the caret has
-            // already moved, suppression has already lifted the pill, and
-            // the thing the user clicked has vanished under the cursor.
+            // A PLAIN left click filters, as Bear's does. `mousedown`, not
+            // `handleClick`: ProseMirror does not place the caret itself on a
+            // plain click — the browser moves the DOM selection natively
+            // during mousedown and ProseMirror reads it back. By
+            // `handleClick` (which runs on mouseup) the caret has already
+            // moved, suppression has already lifted the pill, and the thing
+            // the user clicked has vanished under the cursor.
             // `preventDefault()` here is the only point that stops it.
+            //
+            // Two gestures regress as a result, both accepted: a selection
+            // drag that STARTS inside a pill filters instead of selecting,
+            // and a double-click on a tag filters on its first mousedown so
+            // no word selection happens. Deferring to mouseup to rescue them
+            // reintroduces exactly the failure described above.
             mousedown(view, event) {
               if (onActivate === null) return false;
               if (event.button !== 0) return false;
-              // Ctrl-click on macOS is the context-menu gesture, and must
-              // not also change scope. Cmd there, Ctrl everywhere else — the
-              // same "Mod" every keyboard shortcut in this app uses.
-              if (!(isMacOS() ? event.metaKey : event.ctrlKey)) return false;
+              // The modifier REQUIREMENT is gone — a plain click filters now —
+              // but half of the old rule survives, and deleting it outright
+              // would regress a gesture this app already got right once:
+              // Ctrl-click on macOS IS the context-menu gesture, and it
+              // arrives as `button === 0` with `ctrlKey` set, not as
+              // `button === 2`. Without this, one gesture would open the
+              // context menu AND change the scope.
+              if (isMacOS() && event.ctrlKey) return false;
 
               const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
               if (at === null) return false;
@@ -246,12 +257,11 @@ export const TagPill = Extension.create<TagPillOptions>({
               const hit = tagRangeAt(view.state, at.pos);
               if (hit === null) return false;
 
-              // Ask first, consume second. A Mod-click either filters, or
-              // behaves exactly like a plain click — never nothing. When the
-              // app declines, falling through with no `preventDefault()` and
-              // `false` leaves ProseMirror's own mousedown handling to place
-              // the caret, which is the honest answer for a pill that cannot
-              // do what its tooltip promises.
+              // Ask first, consume second. A decline costs the user a filter
+              // but never the caret — falling through with no
+              // `preventDefault()` and `false` leaves ProseMirror's own
+              // mousedown handling to place it, which is the honest answer
+              // for a pill that cannot do what it promises.
               if (!onActivate(hit.tag)) return false;
 
               event.preventDefault();

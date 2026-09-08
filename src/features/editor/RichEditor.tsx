@@ -282,7 +282,7 @@ export function RichEditor({
       // difference through a `posAtCoords` spy rather than through an outcome
       // the two now share.
       onActivate: onActivateTag === undefined ? null : (tag) => activateRef.current?.(tag) === true,
-      activateHint: t(isMacOS() ? 'editor.tagPill.hint.mac' : 'editor.tagPill.hint.other'),
+      activateHint: t('editor.tagPill.hint'),
       // Same `null`-when-nobody-listening contract as `onActivate` above, and
       // the same boolean-propagation requirement: the plugin gates
       // `preventDefault()` on this return value, so a wrapper collapsing

@@ -283,7 +283,9 @@ export function AppShell(): ReactElement {
     if (!hasTag(tree.nodes, scope.tag)) setScope(ACTIVE_SCOPE);
   }, [scope, tree.nodes]);
 
-  // Answers a Mod-click on a tag pill in the editor. Deliberately a plain
+  const mode = useLayoutMode();
+
+  // Answers a plain click on a tag pill in the editor. Deliberately a plain
   // function, not `useCallback`: `useTagTree` returns a fresh `tree` object
   // every render (see its own comment on why `nodes` is memoized but the
   // returned object as a whole is not), so a `[tree]` dependency array would
@@ -292,8 +294,8 @@ export function AppShell(): ReactElement {
   //
   // Returns whether it acted. That answer is what the plugin gates
   // `preventDefault()` on, so declining here costs the user a filter but not
-  // the caret: a Mod-click either filters, or behaves exactly like a plain
-  // click. Never nothing.
+  // the caret: a click either filters, or behaves exactly like it never
+  // touched a pill. Never nothing.
   const handleActivateTag = (tag: string): boolean => {
     // `undefined` means the live query has not resolved. Treating it as "no
     // tags" would make activation silently fail on a slow first paint — the
@@ -315,6 +317,19 @@ export function AppShell(): ReactElement {
 
     setScope(tagScope(tag));
     tree.reveal(tag);
+
+    // On a phone the list and the editor are separate screens and
+    // `phoneScreen` is DERIVED from the selection, so showing the filtered
+    // list means deselecting — there is no screen variable to set. The note
+    // just left cannot be filtered out of the list that appears, because it
+    // carries the tag that was tapped, so it is one visible tap away.
+    //
+    // `useOverlayHistory`'s cleanup calls `history.back()` when `isOpen`
+    // flips false, consuming its own entry, so this leaves the history stack
+    // correct rather than desynced. It also means the platform Back gesture
+    // has nothing to return to; accepted, per the spec.
+    if (mode === 'phone') select(null);
+
     return true;
   };
 
@@ -576,7 +591,6 @@ export function AppShell(): ReactElement {
     [select],
   );
 
-  const mode = useLayoutMode();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 

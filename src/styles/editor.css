@@ -910,16 +910,15 @@
 }
 
 /*
- * While Mod is held, pills read as controls. Someone holding Cmd on the way to
- * Cmd-B sees every pill in the note answer, which teaches the gesture without
- * a word of copy — and it is the only affordance there is, since plain click
- * deliberately still edits. `--bear-tag-fill-strong` sits at an alpha above
+ * A tag pill lights up on hover because a plain click FILTERS by it — the
+ * affordance is unconditional now, where it used to require the modifier the
+ * gesture no longer needs. `--bear-tag-fill-strong` sits at an alpha above
  * `--bear-tag-fill` in both themes; `--bear-selected` was rejected here
  * because it is FAINTER than a resting pill in Paper and identical to it in
- * Ink, which would make holding the modifier look like the pill fading
- * rather than lighting up.
+ * Ink, which would make hovering look like the pill fading rather than
+ * lighting up.
  */
-[data-mod-held='true'] .ProseMirror .bear-tag:not(.bear-tag__hash) {
+.ProseMirror .bear-tag:not(.bear-tag__hash):hover {
   cursor: pointer;
   background-color: var(--bear-tag-fill-strong);
 }

@@ -208,8 +208,7 @@ export const ko: Record<TranslationKey, string> = {
   'editor.info.created': '만든 날짜',
   'editor.info.modified': '수정한 날짜',
   'editor.link.prompt': '링크 주소',
-  'editor.tagPill.hint.mac': 'Cmd-클릭하면 이 태그로 필터링됩니다',
-  'editor.tagPill.hint.other': 'Ctrl-클릭하면 이 태그로 필터링됩니다',
+  'editor.tagPill.hint': '이 태그로 필터링',
   'editor.linkPill.hint.mac': 'Cmd-클릭하면 이 노트가 열립니다',
   'editor.linkPill.hint.other': 'Ctrl-클릭하면 이 노트가 열립니다',
 

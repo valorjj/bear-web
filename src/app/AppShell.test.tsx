@@ -1628,6 +1628,33 @@ describe('phone screens', () => {
     expect(await screen.findByRole('textbox', { name: 'Note text' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Groceries/ })).toBeInTheDocument();
   });
+
+  it('shows the filtered list when a tag is activated on a phone', async () => {
+    globalThis.__setViewportWidth(390);
+    const user = userEvent.setup();
+    await notes.create('alpha #work');
+    await notes.create('beta');
+    renderShell();
+
+    // Select the note so `NoteEditor` (and the `onActivateTag` prop) mounts —
+    // on a phone this replaces the list with the editor, same as the sibling
+    // test above.
+    await user.click(await screen.findByRole('button', { name: /^alpha\b/ }));
+    expect(await screen.findByRole('textbox', { name: 'Note text' })).toBeInTheDocument();
+
+    // `handleActivateTag` lives deep inside `AppShell`; `activateTag` invokes
+    // the exact `onActivateTag` prop it supplied, captured by the mock above
+    // — the same escape hatch `describe('activating a tag from the editor')`
+    // uses, since a real click on the pill cannot be driven under jsdom.
+    expect(await activateTag('work')).toBe(true);
+
+    // The tap navigates: the editor screen is gone and the list screen is
+    // back, scoped to the tag the pill named — the note just left is not
+    // filtered out, since it carries the tag that was tapped.
+    expect(await screen.findByRole('button', { name: /^alpha\b/ })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Note text' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^beta\b/ })).not.toBeInTheDocument();
+  });
 });
 
 describe('command palette', () => {

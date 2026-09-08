@@ -453,21 +453,6 @@ describe('tag activation', () => {
     editor.destroy();
   });
 
-  it('does nothing on a plain click, so the caret still moves', () => {
-    const activated: string[] = [];
-    const editor = new Editor({
-      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
-      content: '<p>a #work b</p>',
-    });
-
-    const result = mousedownAt(editor, 5, {});
-
-    expect(activated).toEqual([]);
-    expect(result.handled).toBe(false);
-    expect(result.defaultPrevented).toBe(false);
-    editor.destroy();
-  });
-
   it('does nothing on a modifier click outside any tag', () => {
     const activated: string[] = [];
     const editor = new Editor({
@@ -503,7 +488,7 @@ describe('tag activation', () => {
   // ever exercises the non-Apple arm: the Apple branch was dead code, guarded
   // by nothing. Each test below stubs `navigator.platform` explicitly and
   // restores it afterwards, so both arms are actually driven.
-  it('on an Apple platform, Cmd activates and Ctrl does not', () => {
+  it('on an Apple platform, a plain click filters and Ctrl-click does not', () => {
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
     try {
@@ -513,11 +498,13 @@ describe('tag activation', () => {
         content: '<p>a #work b</p>',
       });
 
+      // Ctrl-click on macOS is the context-menu gesture. It must not ALSO
+      // filter, or one gesture opens a menu and changes scope at once.
       const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
-      const meta = mousedownAt(editor, 5, { metaKey: true });
+      const plain = mousedownAt(editor, 5, {});
 
       expect(ctrl.handled).toBe(false);
-      expect(meta.handled).toBe(true);
+      expect(plain.handled).toBe(true);
       expect(activated).toEqual(['work']);
       editor.destroy();
     } finally {
@@ -528,7 +515,7 @@ describe('tag activation', () => {
     }
   });
 
-  it('off Apple platforms, Ctrl activates and Cmd does not', () => {
+  it('off Apple platforms, Ctrl-click filters, because Ctrl is not the menu gesture there', () => {
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
     try {
@@ -538,11 +525,7 @@ describe('tag activation', () => {
         content: '<p>a #work b</p>',
       });
 
-      const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
-      const meta = mousedownAt(editor, 5, { metaKey: true });
-
-      expect(ctrl.handled).toBe(true);
-      expect(meta.handled).toBe(false);
+      expect(mousedownAt(editor, 5, { ctrlKey: true }).handled).toBe(true);
       expect(activated).toEqual(['work']);
       editor.destroy();
     } finally {
@@ -551,6 +534,56 @@ describe('tag activation', () => {
         configurable: true,
       });
     }
+  });
+
+  it('filters on a plain left click, with no modifier', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, {});
+
+    expect(activated).toEqual(['work']);
+    expect(result.handled).toBe(true);
+    expect(result.defaultPrevented).toBe(true);
+    editor.destroy();
+  });
+
+  it('places the caret instead when the app declines', () => {
+    // Ask first, consume second. A decline costs the user a filter but never
+    // the caret — falling through with no preventDefault leaves ProseMirror's
+    // own mousedown handling to place it, which is the honest answer for a
+    // pill that cannot do what it promises. A tag typed within the last few
+    // hundred milliseconds reaches this path, and so do M7.6's two documented
+    // classes of pill whose tag is not in the index.
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated, false) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, {});
+
+    expect(activated).toEqual(['work']);
+    expect(result.handled).toBe(false);
+    expect(result.defaultPrevented).toBe(false);
+    editor.destroy();
+  });
+
+  it('ignores a non-left button, so right-click still reaches the context menu', () => {
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+      content: '<p>a #work b</p>',
+    });
+
+    const result = mousedownAt(editor, 5, { button: 2 });
+
+    expect(result.handled).toBe(false);
+    expect(activated).toEqual([]);
+    editor.destroy();
   });
 
   // Independence from invisible state, end to end through the real plugin.
