@@ -194,6 +194,30 @@ moment the full e2e suite ran — Task 4's commit never touched `notes.spec.ts`
 at all. Rewritten to assert the current contract rather than left broken or
 deleted.
 
+**Known follow-ups, carried here from the final whole-branch review because
+the review's own execution ledger is git-ignored and gone once this branch
+integrates:**
+
+1. **`openFrom` and `dismissedFrom` in `TagAutocomplete.ts` are fully
+   redundant, not merely overlapping.** The review MEASURED this: replacing
+   the `dismiss` meta branch with `openFrom: null` leaves all 41 tests green.
+   About a four-line deletion, deliberately deferred rather than done inside
+   a reviewed fix round — worth doing next time that file is opened.
+2. **Bundle headroom is 410 B** against the frozen 355,000 B ceiling. The
+   next eager-code addition needs the ceiling raised deliberately, with
+   measured numbers, never from Vite's build-log estimate (see the
+   Toolchain-surprises bullet in `CLAUDE.md` on why that estimate reads
+   worse than reality).
+3. **This file has no S1 section**, and sub-project R's historical paragraph
+   carries a stale e2e count of 264 (accurate when written; the live count is
+   257).
+
+One more thing worth a line here because it will surprise someone later: the
+editable host's `role` attribute flips from `textbox` to `combobox` while the
+autocomplete popover is open, so a future `getByRole('textbox', { name: 'Note
+text' })` assertion can read 0 for a reason that has nothing to do with what
+it is actually testing.
+
 ### Q. Typography settings — SHIPPED 2026-09-03
 
 Spec: `docs/superpowers/specs/2026-09-03-q-typography-settings-design.md`.

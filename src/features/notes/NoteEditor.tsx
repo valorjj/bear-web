@@ -67,8 +67,9 @@ export interface NoteEditorProps {
    */
   autoFocus?: boolean;
   /**
-   * Called with a tag name when the user Mod-clicks its pill. Returns whether
-   * the app acted on it; `false` makes the gesture behave like a plain click.
+   * Called with a tag name when the user clicks its pill. Returns whether
+   * the app acted on it; `false` falls through to placing the caret instead
+   * of filtering.
    */
   onActivateTag?: (tag: string) => boolean;
   /**

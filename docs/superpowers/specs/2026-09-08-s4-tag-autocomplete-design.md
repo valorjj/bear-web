@@ -98,8 +98,12 @@ to test, not the case to forbid.
 **4. Accepting an existing tag descends and stays open.** The tag text is
 replaced with `#<key>`, the caret lands at the end, and **no trailing space is
 inserted** — so the match rule immediately re-evaluates and the popover
-reopens showing what lives under the tag just accepted. `Tab` again descends
-another level. A space commits and closes at any depth.
+reopens showing what lives under the tag just accepted, with row 0 the just-
+accepted tag itself: a document change always resets `activeIndex` to 0, and
+that keeps the pre-selected row the safe one after an accept, same as after
+any other edit. Accepting row 0 again therefore commits and closes rather
+than descending further — descending needs an ArrowDown first to move off
+row 0, or typing `/`. A space commits and closes at any depth.
 
 Accepting row 0 instead commits and closes, because there is nothing to
 insert; it sets `dismissedFrom` so the list does not immediately reopen on the
@@ -350,7 +354,11 @@ raise the ceiling with the reason in the commit message.
 
 ### Task 4 — plain click, and the phone
 
-`TagPill.ts` loses the modifier gate and the `isMacOS` import. Everything else
+`TagPill.ts` loses the Mod-activates modifier gate. `isMacOS` stays imported
+and in use: the macOS Ctrl-click refusal is a different piece of platform
+knowledge (a macOS Ctrl-click is the context-menu gesture and arrives as
+`button === 0` with `ctrlKey` set, not `button === 2`) and this design keeps
+it — see "What diverged from the plan" in `NEXT.md`. Everything else
 in the `mousedown` handler stays, including left-button-only (so right-click
 still reaches the context menu) and the ask-first-consume-second contract,
 which now matters more: when `handleActivateTag` declines — a tag typed within
@@ -419,7 +427,10 @@ accepting row 0 closes it. And the assertion most likely to rot: **`Enter` and
 `{ state, posAtCoords: () => ({ pos, inside: pos }) }` — drives `mousedown`
 with no layout engine. A plain left mousedown filters; a declined activation
 returns `false` without `preventDefault`; `button !== 0` is untouched. The two
-platform-branch tests are DELETED, not adjusted.
+platform-branch tests survive, REWRITTEN rather than deleted: each stubs
+`navigator.platform` (with a `finally` restore) to drive its own arm, because
+the macOS Ctrl-click refusal above needs coverage on both platforms and jsdom
+reports `navigator.platform` as `''`.
 
 **Three traps this repo has already paid for, carried in explicitly:**
 

@@ -75,7 +75,7 @@ export function tagRangeAt(state: EditorState, pos: number): TagHit | null {
 
 export interface TagPillOptions {
   /**
-   * Called with the tag name when the user Mod-clicks a tag. `null` when
+   * Called with the tag name when the user clicks a tag. `null` when
    * nobody is listening, which is the state of the schema-only
    * `editorExtensions` constant.
    *

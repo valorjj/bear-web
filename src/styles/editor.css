@@ -1493,8 +1493,7 @@
   display: none;
 }
 
-.bear-link-autocomplete-list [role='option'],
-.bear-tag-autocomplete-list [role='option'] {
+.bear-link-autocomplete-list [role='option'] {
   margin: 0;
   padding: 0.125rem 0.375rem;
   border-radius: var(--bear-radius-sm);
@@ -1526,8 +1525,21 @@
 
 /* The row's tag glyph, drawn by `renderIconMarkup` because a ProseMirror
  * widget cannot render React. Sized to the row's own text rather than to a
- * fixed pixel value so it tracks the UI type scale. */
+ * fixed pixel value so it tracks the UI type scale. Merged with what used to
+ * be a separate `.bear-tag-autocomplete-list [role='option']` rule shared
+ * with the link list's base styling — the two lists diverge here because
+ * only tag rows carry a leading icon, so this rule now carries every
+ * property for a tag row's option in one place rather than splitting the
+ * base styling from the flex layout across two declarations of the same
+ * selector. */
 .bear-tag-autocomplete-list [role='option'] {
+  margin: 0;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--bear-radius-sm);
+  color: var(--bear-text);
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-xs);
+  cursor: pointer;
   display: flex;
   align-items: center;
   gap: 0.375rem;

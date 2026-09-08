@@ -210,8 +210,10 @@ ruling below rests on.
   `LinkPill`) read "if autocomplete ever ships, revisit this ruling" and S4 is
   that revisit: with `TagAutocomplete.ts` in place, the repair path for a
   mistyped tag no longer depends on a plain click landing a caret inside the
-  pill, so the divergence's premise is gone and the modifier gate is deleted
-  outright — `isMacOS` is no longer imported by `TagPill.ts` at all.
+  pill, so the divergence's premise is gone and the Mod-activates requirement
+  is deleted outright. The macOS Ctrl-click refusal is a different piece of
+  platform knowledge and survives — `isMacOS` is still imported and used by
+  `TagPill.ts`; see the bullet three below for why.
 
   Two gestures regress as a direct consequence, and both are accepted rather
   than worked around. **A selection drag that STARTS inside a pill filters

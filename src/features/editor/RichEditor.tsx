@@ -70,9 +70,9 @@ export interface RichEditorProps {
   createdAt: number;
   updatedAt: number;
   /**
-   * Called with a tag name when the user Mod-clicks its pill. Returns whether
-   * the app acted on it; `false` makes the gesture behave exactly like a plain
-   * click, caret placement and all.
+   * Called with a tag name when the user clicks its pill. Returns whether
+   * the app acted on it; `false` falls through to placing the caret instead
+   * of filtering, caret placement and all.
    */
   onActivateTag?: (tag: string) => boolean;
   /**
@@ -266,7 +266,7 @@ export function RichEditor({
       // whether the callback fires — it gates `preventDefault()` on the
       // mousedown handler too. Passing a non-null wrapper unconditionally
       // meant a `RichEditor` rendered with no `onActivateTag` still swallowed
-      // a Mod-click and suppressed the caret placement a plain click would
+      // a click and suppressed the caret placement a declined click would
       // have given, while its tooltip kept promising a filter that never
       // happened. Checked once, at the same mount boundary the plugin itself
       // reads once — a later prop change cannot flip whether listening is

@@ -306,8 +306,13 @@ function renderPopover(
 /**
  * Replaces the typed tag with `#<key>` and leaves the caret at its end,
  * WITHOUT a trailing space — so `tagAutocompleteMatchAt` immediately matches
- * again and the popover reopens on that tag's descendants. Tab descends
- * another level; a space commits and closes at any depth.
+ * again and the popover reopens on that tag's descendants, with row 0 the
+ * literal (the just-accepted tag) rather than a child — the document just
+ * changed, and a document change always resets `activeIndex` to 0 so the
+ * pre-selected row stays the safe one. Accepting THAT row again (a second
+ * Tab) therefore commits and closes rather than descending; descending
+ * another level needs an ArrowDown first, or typing `/`. A space commits
+ * and closes at any depth.
  */
 function insertTag(view: EditorView, match: TagAutocompleteMatch, key: string): void {
   const text = `#${key}`;

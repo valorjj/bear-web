@@ -56,7 +56,7 @@ export function useTagTree(): TagTreeState {
   // lag the database it is deciding about. When it lagged, `reveal` wrote
   // NOTHING and the ancestor stayed shut: the row the caller asked to reveal
   // never rendered at all, silently and permanently, rather than late. That is
-  // a real user-facing failure (Mod-click a nested tag pill within a frame of
+  // a real user-facing failure (click a nested tag pill within a frame of
   // collapsing its parent and nothing happens) and it is what made
   // `AppShell.test.tsx`'s "reveals a collapsed ancestor" test flake on loaded
   // CI runners three times, each previously mis-diagnosed as a slow wait and

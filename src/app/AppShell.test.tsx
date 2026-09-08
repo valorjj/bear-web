@@ -39,7 +39,7 @@ const capturedActivateTag = vi.hoisted(() => ({
 const scopeHistory = vi.hoisted(() => [] as Array<import('@/features/notes').NoteScope>);
 
 // `handleActivateTag` lives deep inside `AppShell`, past `NoteEditor` and
-// `RichEditor`, and the real gesture it answers to (a Mod-click on a tag
+// `RichEditor`, and the real gesture it answers to (a click on a tag
 // pill) is driven, everywhere else in this project, by faking
 // `EditorView.posAtCoords` — jsdom has no layout engine, so the real method
 // never resolves a screen coordinate to a document position (see
@@ -110,8 +110,8 @@ vi.mock('@/features/tags', async (importOriginal) => {
  * `NoteEditor` is mounted.
  *
  * The returned boolean is not incidental: it is what the tag-pill plugin gates
- * `event.preventDefault()` on, so it decides whether a declined Mod-click
- * still places the caret like a plain click. An assertion on the DOM alone
+ * `event.preventDefault()` on, so it decides whether a declined click
+ * still places the caret. An assertion on the DOM alone
  * cannot see it — "declined and returned false" and "declined and returned
  * true" render identically here and differ only in the browser.
  */
@@ -1072,7 +1072,7 @@ describe('activating a tag from the editor', () => {
     // `scopeHistory` above for why this asserts against the full render
     // history instead.
     // Reporting the refusal is the whole point: the plugin gates
-    // `preventDefault()` on this, so `false` is what turns a Mod-click on a
+    // `preventDefault()` on this, so `false` is what turns a click on a
     // lying pill into an ordinary caret-placing click instead of a gesture
     // that does nothing at all. `undefined` here — a handler that forgets to
     // return — reads as declined too, but only by accident, so the assertion
