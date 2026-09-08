@@ -1762,7 +1762,59 @@ Claude-Session: https://claude.ai/code/session_01UNmYbueB3JR5WYock4Aaod"
 
 - [ ] **Step 1: Write the failing tests**
 
-In `src/features/editor/tagPill.test.ts`, find the two tests asserting the platform branches of the modifier (they exercise `metaKey` on macOS and `ctrlKey` elsewhere via `isMacOS`). **Delete them** — they assert a gesture that no longer exists. Then add, using the file's existing faked-view helper at `:386-400`:
+In `src/features/editor/tagPill.test.ts`, **REWRITE** the two platform tests rather than deleting them. They currently assert that on macOS Cmd-click activates and Ctrl-click does not, each stubbing `navigator.platform` explicitly (jsdom reports `''`, so a test that merely branches on `isMacOS()` exercises only the non-Apple arm — the file's own comment records that this pair used to be one test with the Apple branch as dead code). The MODIFIER half of what they assert is obsolete, but the **macOS Ctrl-click refusal is not** — see Step 3. Rewrite them as:
+
+```ts
+  it('on an Apple platform, a plain click filters and Ctrl-click does not', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    try {
+      const activated: string[] = [];
+      const editor = new Editor({
+        extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+        content: '<p>a #work b</p>',
+      });
+
+      // Ctrl-click on macOS is the context-menu gesture. It must not ALSO
+      // filter, or one gesture opens a menu and changes scope at once.
+      const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
+      const plain = mousedownAt(editor, 5, {});
+
+      expect(ctrl.handled).toBe(false);
+      expect(plain.handled).toBe(true);
+      expect(activated).toEqual(['work']);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  it('off Apple platforms, Ctrl-click filters, because Ctrl is not the menu gesture there', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+    try {
+      const activated: string[] = [];
+      const editor = new Editor({
+        extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+        content: '<p>a #work b</p>',
+      });
+
+      expect(mousedownAt(editor, 5, { ctrlKey: true }).handled).toBe(true);
+      expect(activated).toEqual(['work']);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+```
+
+Keep each test's `navigator.platform` stub and its `finally` restore — that is what drives both arms. Then add, using the file's existing faked-view helper:
 
 These use the file's REAL helpers, verified: `mousedownAt(editor, pos, init)` returns `{ handled, defaultPrevented }`, and `recording(into, answer)` builds an `onActivate` that records the tags it is asked about. There is no `editorWith` — the existing tests construct the `Editor` inline.
 
@@ -1850,7 +1902,7 @@ Expected: FAIL — the plain click is currently ignored, so `onActivate` is neve
 
 - [ ] **Step 3: Drop the modifier gate**
 
-In `src/features/editor/TagPill.ts`, delete these lines from the `mousedown` handler:
+In `src/features/editor/TagPill.ts`, REPLACE these lines in the `mousedown` handler:
 
 ```ts
               // Ctrl-click on macOS is the context-menu gesture, and must
@@ -1859,7 +1911,20 @@ In `src/features/editor/TagPill.ts`, delete these lines from the `mousedown` han
               if (!(isMacOS() ? event.metaKey : event.ctrlKey)) return false;
 ```
 
-Change line 1 to `import { Extension } from '@tiptap/core';`, and update the handler's own docblock:
+with this:
+
+```ts
+              // The modifier REQUIREMENT is gone — a plain click filters now —
+              // but half of the old rule survives, and deleting it outright
+              // would regress a gesture this app already got right once:
+              // Ctrl-click on macOS IS the context-menu gesture, and it
+              // arrives as `button === 0` with `ctrlKey` set, not as
+              // `button === 2`. Without this, one gesture would open the
+              // context menu AND change the scope.
+              if (isMacOS() && event.ctrlKey) return false;
+```
+
+**Keep the `isMacOS` import** — it is still used, by that line. Update the handler's own docblock:
 
 ```ts
             // A PLAIN left click filters, as Bear's does. `mousedown`, not
@@ -1898,7 +1963,7 @@ Change line 1 to `import { Extension } from '@tiptap/core';`, and update the han
       activateHint: t('editor.tagPill.hint'),
 ```
 
-Leave `editor.linkPill.hint.mac` / `.other` and the `isMacOS()` call that reads them exactly as they are — `[[links]]` keep Mod-click.
+Leave `editor.linkPill.hint.mac` / `.other` and the `isMacOS()` call that reads them exactly as they are — `[[links]]` keep Mod-click. Note that `RichEditor.tsx` therefore still imports `isMacOS` for the link hint, and `TagPill.ts` still imports it for the macOS Ctrl-click refusal; neither import is removed by this task.
 
 - [ ] **Step 5: Navigate on a phone**
 
