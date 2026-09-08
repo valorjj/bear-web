@@ -20,6 +20,7 @@ import {
   normalizeMarkdown,
   RichEditor,
   type RichEditorHandle,
+  tagRangeAt,
 } from '@/features/editor';
 import type { PublishedInfo } from '@/features/publish';
 import { useLocale, useT } from '@/i18n';
@@ -304,6 +305,20 @@ export function NoteEditor({
     isEmpty: (text) =>
       text === EMPTY_DOCUMENT_MARKDOWN ||
       (normalizedSeedText !== undefined && text === normalizedSeedText),
+    // Holds the DEBOUNCED write while the caret sits inside a tag, so
+    // descending `#a` -> `#a/b` -> `#a/b/c` through the autocomplete does not
+    // persist `a` and `a/b` as real tags on the way. Every explicit flush —
+    // blur included — writes through this, so leaving the tag commits it.
+    //
+    // `tagRangeAt` hit-tests the GRAMMAR rather than the decoration set,
+    // which is what makes it correct here: a tag the caret sits inside has no
+    // pill at all, and that is exactly the state being detected.
+    defer: () => {
+      const editor = handleRef.current?.editor ?? null;
+      if (editor === null) return false;
+      const { state } = editor;
+      return tagRangeAt(state, state.selection.from) !== null;
+    },
   });
 
   // Guard (b). `initialMarkdown` above is what the MANAGER produces from the
