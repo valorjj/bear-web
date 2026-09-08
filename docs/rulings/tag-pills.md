@@ -1,8 +1,9 @@
 # Tag pills and activation
 
 Governs how `#tag` is rendered inside the editor as a decoration, how the pill's
-extent is kept in agreement with the tag index, and how Mod-click activates a
-tag into a scope.
+extent is kept in agreement with the tag index, and how a plain click
+activates a tag into a scope (S4; `LinkPill` still reserves that gesture for
+Mod-click — see below).
 
 **Trigger:** any change to `src/features/editor/TagPill.ts` (`tagDecorations`,
 `tagRangeAt`, `tagHitsIn`, `TagPillOptions`, the `handleDOMEvents.mousedown`
@@ -19,7 +20,10 @@ tokens or the `.bear-tag` rules in `src/styles/editor.css`, and the suites
 file's contract, not an independent design. Also `tagSyntaxDecorations` and
 `linkSyntaxDecorations`, the `bear-tag__hash` / `bear-link__bracket` classes,
 the `--bear-tag-icon` token, and any selector anywhere that counts
-`.bear-tag` or `.bear-link` elements.
+`.bear-tag` or `.bear-link` elements. Also `src/features/editor/TagAutocomplete.ts`
+(`tagAutocompleteMatchAt`, `matchingTags`, `insertTag`, `openRows`, `openFrom`)
+and `tagAutocomplete.test.ts` — S4's autocomplete is the premise the plain-click
+ruling below rests on.
 
 - **`LinkPill`'s activation matches `TagPill`'s exactly: `Mod`-click
   activates, a plain click places the caret, and `onActivateLink === null`
@@ -201,19 +205,53 @@ the `--bear-tag-icon` token, and any selector anywhere that counts
   A negative inline margin was considered and rejected: it hides the gap by
   letting the pill overlap its neighbouring characters.
 
-- **Plain click on a tag pill edits; Mod-click activates.** Bear filters on a
-  plain click, and this is a deliberate divergence: Bear can afford it because
-  its tag autocomplete makes mistyped tags rare, while this app has none, so
-  editing a tag in place is the normal repair path and a pill that defended
-  itself against being edited would be worse than an inert one. **If
-  autocomplete ever ships, revisit this ruling** — it is the premise the
-  divergence rests on.
+- **A plain click on a tag pill filters, matching Bear, since S4.** The
+  previous ruling here (no modifier gesture at all; Mod-click reserved for
+  `LinkPill`) read "if autocomplete ever ships, revisit this ruling" and S4 is
+  that revisit: with `TagAutocomplete.ts` in place, the repair path for a
+  mistyped tag no longer depends on a plain click landing a caret inside the
+  pill, so the divergence's premise is gone and the Mod-activates requirement
+  is deleted outright. The macOS Ctrl-click refusal is a different piece of
+  platform knowledge and survives — `isMacOS` is still imported and used by
+  `TagPill.ts`; see the bullet three below for why.
+
+  Two gestures regress as a direct consequence, and both are accepted rather
+  than worked around. **A selection drag that STARTS inside a pill filters
+  instead of selecting** — starting from the space before the tag still
+  works. **A double-click on a tag filters on the first `mousedown`, so no
+  word selection ever happens** — the second click of the pair lands on
+  whatever note the filter just switched to. Deferring the decision to
+  `mouseup` (`handleClick`) cannot rescue either case: by `mouseup` the caret
+  has already moved, the pill's suppression-while-caret-inside has already
+  lifted it, and the thing the pointer went down on has already changed
+  underneath it — this is the same ordering argument the `mousedown`-not-
+  `handleClick` bullet below makes for activation generally, and it applies
+  identically to a drag's `mousedown` and a double-click's first `mousedown`.
+  `mousedown` remains the only interception point that can stop the caret
+  moving at all, which is exactly what makes it the only workable point for
+  this gesture too — there is no later point in the sequence that still has
+  the information filtering needs.
 
 - **Mod is Cmd on Apple platforms and Ctrl elsewhere, never `metaKey ||
-  ctrlKey`.** Ctrl-click on macOS is the context-menu gesture; accepting both
-  means one gesture opens a menu AND changes scope. `isMacOS` from
-  `@tiptap/core` decides. Getting this wrong is invisible on Linux CI, so
-  `tagPill.test.ts` asserts both branches.
+  ctrlKey` — this now governs `LinkPill` only.** `TagPill` has no modifier
+  gate to get right or wrong since the bullet above. Ctrl-click on macOS is
+  the context-menu gesture; accepting both `metaKey` and `ctrlKey` on
+  `LinkPill` would mean one gesture both opens a menu and navigates.
+  `isMacOS` from `@tiptap/core` decides. Getting this wrong is invisible on
+  Linux CI, so `linkPill.test.ts` asserts both branches — struck here for
+  `tagPill.test.ts`, which no longer has a modifier branch to assert.
+
+  `TagPill.ts` keeps one narrower piece of this platform knowledge, though,
+  and its `isMacOS` import from `@tiptap/core` survives for exactly this
+  reason: the mousedown handler still refuses a **macOS Ctrl-click**
+  specifically (`isMacOS() && event.ctrlKey` returns `false`, declining to
+  filter), because on macOS a Ctrl-click is the context-menu gesture and
+  arrives as `button === 0` with `ctrlKey` set, NOT as `button === 2` — so
+  `event.button !== 0` alone does not exclude it, and without the explicit
+  refusal a Ctrl-click would both open the context menu AND re-scope the note
+  list. No Linux CI run can see this: jsdom reports `navigator.platform` as
+  `''`, so a unit test exercising this branch must stub the platform
+  explicitly, or only the non-Apple arm ever runs.
 
 - **Activation is handled in `handleDOMEvents.mousedown`, not `handleClick`.**
   ProseMirror does not place the caret itself on a plain click — the browser

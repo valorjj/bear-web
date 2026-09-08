@@ -1,8 +1,8 @@
 # Next up
 
 Written 2026-08-20 after M8 + M9a shipped; last reconciled against
-`CLAUDE.md` on **2026-09-07**, when sub-project R (the first-visit landing
-page) shipped.
+`CLAUDE.md` on **2026-09-09**, when sub-project S4 (tag autocomplete +
+plain-click filtering, absorbing S2) shipped.
 
 This file exists so a fresh session can resume without re-deriving decisions
 already made. Delete a section once its sub-project has a real spec in
@@ -20,10 +20,18 @@ believe the table and fix this file.
 
 - `main` carries everything in `CLAUDE.md`'s status table marked complete —
   through **R (first-visit landing page), 2026-09-07**. Live on Pages.
-- 2794 unit tests, 264 end-to-end. All six gates green.
-- Every sub-project branch named in this file is merged and deleted.
+  **S1 (tag rename/delete) and S4 (tag autocomplete + plain-click filtering,
+  below) are complete on their own branches** as of this write-up; the
+  controller merges after a whole-branch review, per this repo's working
+  style, so treat `CLAUDE.md`'s status table as the up-to-the-minute truth
+  when it and this paragraph's "on `main`" claim disagree.
+- 2947 unit tests, 257 end-to-end, measured on `s4-tag-autocomplete` at the
+  end of S4. All six gates green, plus `measure:check` and the frozen
+  355,000 B bundle ceiling (410 B headroom — see S4's own section).
+- Every sub-project branch named in this file THROUGH R is merged and
+  deleted; S1 and S4 are not yet merged as of this reconciliation.
 
-**What is actually left, as of 2026-09-07:**
+**What is actually left, as of 2026-09-09:**
 
 | Open | State |
 | --- | --- |
@@ -106,6 +114,109 @@ surface but alters no existing geometry, so nothing in the committed
 - `npm run shots` grows from 256 to 272 files (17 shots × 16 themes); the
   landing shot needs its own `storageState` opt-out, the same way the e2e
   spec does.
+
+### S4. Tag autocomplete + plain-click filtering — SHIPPED 2026-09-09 (absorbs S2)
+
+Spec and plan: `docs/superpowers/specs/2026-09-08-s4-tag-autocomplete-design.md`,
+`docs/superpowers/plans/2026-09-08-s4-tag-autocomplete.md`. Ledger:
+`.superpowers/sdd/2026-09-08-s4-tag-autocomplete/`.
+
+Typing `#a` in the editor now opens a suggestion list (row 0 always the
+literal text just typed, so `Tab` never silently rewrites it to an unrelated
+existing tag); `Tab` accepts and, on an existing tag, DESCENDS and keeps the
+popover open on that tag's subtree, with a trailing `/` narrowing to it. A
+plain click on a tag pill now filters the note list by that tag, matching
+Bear, collecting on the promise `docs/rulings/tag-pills.md:204` made when it
+recorded the previous "plain click edits" divergence: "if autocomplete ever
+ships, revisit this ruling." It has, and the ruling is replaced outright
+rather than caveated.
+
+**S2 (the autosave hold) is ABSORBED into this sub-project's Task 1, not
+merely adjacent to it, and should be crossed off any list that still carries
+it as a separate pending item.** The reason is mechanical, not scheduling
+convenience: decision 4's descend-and-stay-open deliberately PARKS the caret
+inside a half-typed tag (`#economy/`) while the user reads the reopened
+popover for the next segment, and `AUTOSAVE_DELAY_MS` is 300 ms — so without
+a hold, nearly every pause to read the list writes the half-formed tag into
+the permanent index, where it then shows up in the sidebar and in every
+future suggestion list. The autocomplete makes the pre-existing autosave
+timing worse rather than better, because pausing to read the popover is the
+NORMAL way to use it. `useAutosave` gained `defer`/`maxDeferMs`
+(`AUTOSAVE_MAX_DEFER_MS = 4000`, measured from the FIRST deferral and never
+reset by a re-arm); only the debounced write defers, every explicit `flush()`
+(blur, `visibilitychange`, `beforeunload`, unmount-on-switch) writes through
+regardless. See `docs/rulings/notes-lifecycle.md`'s new section for the full
+account.
+
+**What diverged from the plan, and why — worth recording honestly:**
+
+- **The plan's Task 4 said `TagPill.ts` would lose its `isMacOS` import
+  entirely.** It does not: the macOS Ctrl-click refusal survives on its own,
+  because a macOS Ctrl-click arrives as `button === 0` with `ctrlKey` set
+  (the context-menu gesture), not as `button === 2` — so deleting the check
+  would have made a Ctrl-click both open the context menu AND re-scope the
+  note list. Only the Mod-activates gate was deleted; the platform check for
+  the context-menu collision is a different piece of platform knowledge that
+  the plan conflated with it.
+- **The plan's Task 3 review found a Critical defect the plan's own design
+  had not anticipated**, not merely one implementation missed: two
+  `ArrowDown`s while typing one tag, a caret-only move to a different,
+  already-complete tag elsewhere in the note, then `Tab` — no typing at all —
+  silently rewrote that second tag using the first tag's stale highlighted
+  row (`#work` became `#workshop`). `tagAutocompleteMatchAt` is deliberately
+  positional and has no memory of how the caret arrived, so a second signal
+  (`openFrom`, opened only on a document change, closed on a caret-only move)
+  had to be added and is now load-bearing; see
+  `docs/rulings/markdown-and-schema.md`'s "Tag autocomplete (S4)" section for
+  the mechanism.
+- **Two of the plan's test sketches were unfalsifiable as written**, in the
+  shape CLAUDE.md already names for this repo: an `Enter`/`Tab`-not-consumed
+  assertion that read `someProp('handleKeyDown', ...) === false`, which
+  passes with NO tag plugin registered at all because other plugins already
+  consume both keys — and an instruction to delete `tagPill.test.ts`'s two
+  platform-branch tests, which (per the Ctrl-click finding above) were still
+  the only coverage of a real, live gesture and had to stay.
+- **One instruction the plan gave was itself wrong**, not merely a sketch
+  needing sharpening: it claimed a `Hash` glyph was already registered in
+  `ICON_NODES` for `renderIconMarkup`. It was not; Task 3 added it as part of
+  the popover work rather than discovering existing coverage.
+
+`npm run measure:check` passed unchanged — no committed geometry moved. The
+bundle: measured eager closure **354,590 B** against the frozen **355,000 B**
+ceiling, leaving **410 B** — the ceiling was NOT raised, because S4's new
+extension fit inside the headroom S1 left. The next sub-project adding eager
+code will very likely need to raise it deliberately; 410 B is not real
+working room. Task 5's e2e coverage (`e2e/tags.spec.ts`, `e2e/phoneEditor.spec.ts`)
+also found and fixed one casualty of Task 4 that neither Task 4 nor its
+review caught: `e2e/notes.spec.ts`'s own pre-existing "plain click … does not
+filter" test still asserted the OLD edit-on-click contract and went red the
+moment the full e2e suite ran — Task 4's commit never touched `notes.spec.ts`
+at all. Rewritten to assert the current contract rather than left broken or
+deleted.
+
+**Known follow-ups, carried here from the final whole-branch review because
+the review's own execution ledger is git-ignored and gone once this branch
+integrates:**
+
+1. **`openFrom` and `dismissedFrom` in `TagAutocomplete.ts` are fully
+   redundant, not merely overlapping.** The review MEASURED this: replacing
+   the `dismiss` meta branch with `openFrom: null` leaves all 41 tests green.
+   About a four-line deletion, deliberately deferred rather than done inside
+   a reviewed fix round — worth doing next time that file is opened.
+2. **Bundle headroom is 410 B** against the frozen 355,000 B ceiling. The
+   next eager-code addition needs the ceiling raised deliberately, with
+   measured numbers, never from Vite's build-log estimate (see the
+   Toolchain-surprises bullet in `CLAUDE.md` on why that estimate reads
+   worse than reality).
+3. **This file has no S1 section**, and sub-project R's historical paragraph
+   carries a stale e2e count of 264 (accurate when written; the live count is
+   257).
+
+One more thing worth a line here because it will surprise someone later: the
+editable host's `role` attribute flips from `textbox` to `combobox` while the
+autocomplete popover is open, so a future `getByRole('textbox', { name: 'Note
+text' })` assertion can read 0 for a reason that has nothing to do with what
+it is actually testing.
 
 ### Q. Typography settings — SHIPPED 2026-09-03
 

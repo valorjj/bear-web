@@ -70,9 +70,9 @@ export interface RichEditorProps {
   createdAt: number;
   updatedAt: number;
   /**
-   * Called with a tag name when the user Mod-clicks its pill. Returns whether
-   * the app acted on it; `false` makes the gesture behave exactly like a plain
-   * click, caret placement and all.
+   * Called with a tag name when the user clicks its pill. Returns whether
+   * the app acted on it; `false` falls through to placing the caret instead
+   * of filtering, caret placement and all.
    */
   onActivateTag?: (tag: string) => boolean;
   /**
@@ -82,6 +82,8 @@ export interface RichEditorProps {
    * contract as `onActivateTag`.
    */
   onActivateLink?: (title: string) => boolean;
+  /** Normalized tag keys the editor's autocomplete suggests from. */
+  tagKeys?: string[];
   /**
    * Called with the chosen destination when the user picks one from the export
    * menu. Omit it and no export control is rendered at all.
@@ -165,6 +167,7 @@ export function RichEditor({
   updatedAt,
   onActivateTag,
   onActivateLink,
+  tagKeys,
   onExport,
   onPublish,
   onImage,
@@ -263,7 +266,7 @@ export function RichEditor({
       // whether the callback fires — it gates `preventDefault()` on the
       // mousedown handler too. Passing a non-null wrapper unconditionally
       // meant a `RichEditor` rendered with no `onActivateTag` still swallowed
-      // a Mod-click and suppressed the caret placement a plain click would
+      // a click and suppressed the caret placement a declined click would
       // have given, while its tooltip kept promising a filter that never
       // happened. Checked once, at the same mount boundary the plugin itself
       // reads once — a later prop change cannot flip whether listening is
@@ -279,7 +282,7 @@ export function RichEditor({
       // difference through a `posAtCoords` spy rather than through an outcome
       // the two now share.
       onActivate: onActivateTag === undefined ? null : (tag) => activateRef.current?.(tag) === true,
-      activateHint: t(isMacOS() ? 'editor.tagPill.hint.mac' : 'editor.tagPill.hint.other'),
+      activateHint: t('editor.tagPill.hint'),
       // Same `null`-when-nobody-listening contract as `onActivate` above, and
       // the same boolean-propagation requirement: the plugin gates
       // `preventDefault()` on this return value, so a wrapper collapsing
@@ -388,6 +391,11 @@ export function RichEditor({
         listLabel: t('editor.linkAutocomplete.listLabel'),
         empty: t('editor.linkAutocomplete.empty'),
       },
+      // Same shape as `linkAutocompleteLabels` right above it: the labels
+      // half of the contract only, read once at mount. The suggested KEYS
+      // ride plugin state via `setTagAutocompleteKeys`, pushed by the effect
+      // below.
+      tagAutocompleteLabels: { listLabel: t('editor.tagAutocomplete.listLabel') },
     }),
   );
 
@@ -484,6 +492,15 @@ export function RichEditor({
     // the two never drift out of sync with each other.
     editor.commands.setLinkAutocompleteTitles(noteTitles);
   }, [editor, noteTitles]);
+
+  // Rides a command rather than an option for the same reason the note-title
+  // list does: options are read once at mount, and this list changes while
+  // the editor is alive. `undefined` means the live query has not resolved —
+  // never pushed as an empty list, which would read as "no tags exist".
+  useEffect(() => {
+    if (editor === null || tagKeys === undefined) return;
+    editor.commands.setTagAutocompleteKeys(tagKeys);
+  }, [editor, tagKeys]);
 
   // CONTROLLER RULING R12: move the selection when the menu OPENS, not
   // before each command. Reassigned every render (like every other ref-held

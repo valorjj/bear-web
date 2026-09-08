@@ -610,6 +610,15 @@ describe('seeded notes', () => {
     act(() => {
       handleRef.current?.editor?.commands.undo();
     });
+    // Undo is a DOCUMENT CHANGE — the only kind of transaction that can open
+    // S4's tag autocomplete (`openFrom` in `TagAutocomplete.ts` gates it to
+    // exactly that; a caret-only move, such as the click above, no longer
+    // opens it at all) — and it leaves the caret back at the tag's end, so it
+    // reopens the popover here. Its suggestion row ("work") is a real DOM
+    // descendant of the editable host, so raw `textContent` below would read
+    // "#workwork" while it is open even though the document itself is
+    // exactly "#work". Escape closes it before the read.
+    await userEvent.keyboard('{Escape}');
     // Fails HERE, naming the text it found, rather than surfacing five seconds
     // later as an unexplained timeout on an assertion about `purge`.
     await waitFor(() => expect(el.textContent).toBe('#work'));

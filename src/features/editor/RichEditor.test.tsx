@@ -558,7 +558,10 @@ describe('RichEditor tag pill tooltip', () => {
   // `renderWithI18n` is called, not merely before the assertion. Stubbing
   // afterward would leave `RichEditor` reading whatever `navigator.platform`
   // was at mount, silently passing for the wrong reason.
-  it('shows the Mac hint on an Apple platform', () => {
+  // A plain click filters now, on every platform, so the hint no longer
+  // branches on `isMacOS()` the way the link pill's still does — one key,
+  // one string, regardless of `navigator.platform`.
+  it('shows the same filter hint on every platform', () => {
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
     try {
@@ -566,21 +569,7 @@ describe('RichEditor tag pill tooltip', () => {
       renderWithI18n(
         <RichEditor {...makeBaseProps()} handleRef={handleRef} onActivateTag={vi.fn(() => true)} />,
       );
-      expect(firstPillTitle(handleRef.current!.editor!)).toBe('Cmd-click to filter by this tag');
-    } finally {
-      Object.defineProperty(navigator, 'platform', { value: originalPlatform, configurable: true });
-    }
-  });
-
-  it('shows the Ctrl hint off an Apple platform', () => {
-    const originalPlatform = navigator.platform;
-    Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
-    try {
-      const handleRef: RefObject<RichEditorHandle | null> = { current: null };
-      renderWithI18n(
-        <RichEditor {...makeBaseProps()} handleRef={handleRef} onActivateTag={vi.fn(() => true)} />,
-      );
-      expect(firstPillTitle(handleRef.current!.editor!)).toBe('Ctrl-click to filter by this tag');
+      expect(firstPillTitle(handleRef.current!.editor!)).toBe('Filter by this tag');
     } finally {
       Object.defineProperty(navigator, 'platform', { value: originalPlatform, configurable: true });
     }

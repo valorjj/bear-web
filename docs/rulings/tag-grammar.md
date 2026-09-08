@@ -2,7 +2,7 @@
 
 How a `#tag` is recognized, normalized and bounded in a note's Markdown — the single grammar that `src/data/tags/parseTags.ts` implements and that both the tag index and the editor's tag pills read through.
 
-**Trigger:** any change under `src/data/tags/` — `parseTags.ts`, `parseTags.test.ts`, `tagRanges.test.ts`, `rewriteTag.ts` — or under `src/data/markdown/mask.ts`, or to the symbols in either: `findTagRanges`, `parseTags`, `normalizeTag`, `trimTrailing`, `MASK`, `LEADING_REJECT`, `BACKTICK_OPENER`, `TILDE_OPENER`, `closesFence`, `maskCode`, `maskInlineCode`, `canStart`, `isBoundary`, `rewriteTag`, `canWriteTag`, `canRenameTo`, `tagToken`, `needsClosingHash`. Also `notes.rebuildTagIndex` and `TAG_INDEX_VERSION` in `src/data/repositories/notes.ts` and `src/data/migrations.ts`, and any prose or code introducing the literal escape sequence for the mask character.
+**Trigger:** any change under `src/data/tags/` — `parseTags.ts`, `parseTags.test.ts`, `tagRanges.test.ts`, `rewriteTag.ts` — or under `src/data/markdown/mask.ts`, or to the symbols in either: `findTagRanges`, `parseTags`, `normalizeTag`, `trimTrailing`, `MASK`, `LEADING_REJECT`, `BACKTICK_OPENER`, `TILDE_OPENER`, `closesFence`, `maskCode`, `maskInlineCode`, `canStart`, `isBoundary`, `rewriteTag`, `canWriteTag`, `canRenameTo`, `tagToken`, `needsClosingHash`. Also `notes.rebuildTagIndex` and `TAG_INDEX_VERSION` in `src/data/repositories/notes.ts` and `src/data/migrations.ts`, and any prose or code introducing the literal escape sequence for the mask character. Also `src/features/editor/TagAutocomplete.ts`'s `tagAutocompleteMatchAt` and `matchingTags` (S4) — the popover's grammar is a consumer of this one, not a second one.
 
 - **Tags are keyed lowercase, and that is what makes `rebuildTagIndex`
   deterministic.** `#Work` and `#work` are one tag. Bear preserves first-seen
@@ -128,3 +128,30 @@ How a `#tag` is recognized, normalized and bounded in a note's Markdown — the 
   `canWriteTag`'s meaning are unchanged, and a multi-word tag a user types into
   a note is still fully supported — do not "simplify" the two predicates back
   into one.
+
+- **The tag autocomplete requires a boundary immediately AFTER the caret, and
+  that single rule is what excludes the multi-word form `#a b#` from
+  autocomplete by construction, not by a guard written against it.**
+  `tagAutocompleteMatchAt` (`TagAutocomplete.ts`) walks the same masked-text
+  grammar `findTagRanges` does, but adds one condition beyond what the parser
+  itself requires: the caret must sit at the tag's END, with whitespace,
+  `MASK`, or the block edge immediately after it. Whitespace is a boundary,
+  so the instant a space is typed after `#a` — which is what starts the
+  multi-word form's first word — the match rule stops matching and the
+  popover closes. There is no separate check anywhere that says "refuse the
+  multi-word form"; nothing in the autocomplete's code even names it. The
+  same rule also refuses `#wo|rk` (accepting a suggestion there would replace
+  `#wo` and strand `rk`) and keeps the ordinary repair path open, because
+  deleting forward to the end of a mistyped tag is exactly how a typo is
+  fixed today.
+
+- **A query ending in `/` narrows suggestions to that tag's subtree, and the
+  reason is that `normalizeTag` strips trailing slashes.** `matchingTags`
+  would otherwise treat `#a/` identically to `#a` — `normalizeTag('a/')` is
+  `'a'` — and offer every tag containing `a` anywhere, including unrelated
+  ones, rather than `a`'s own children. So when the query itself ends in
+  `/`, matching runs against the slash-terminated string (`` `${normalized}/`
+  ``) instead of the normalized form it would otherwise trim to. This is what
+  makes descend-and-stay-open (accepting a tag leaves the caret at its end,
+  no trailing space, and the popover reopens on the same match) actually show
+  descendants once the user types the next `/`.

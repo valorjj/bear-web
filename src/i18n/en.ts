@@ -224,13 +224,13 @@ export const en = {
   'editor.info.created': 'Created',
   'editor.info.modified': 'Modified',
   'editor.link.prompt': 'Link address',
-  'editor.tagPill.hint.mac': 'Cmd-click to filter by this tag',
-  'editor.tagPill.hint.other': 'Ctrl-click to filter by this tag',
+  'editor.tagPill.hint': 'Filter by this tag',
   'editor.linkPill.hint.mac': 'Cmd-click to open this note',
   'editor.linkPill.hint.other': 'Ctrl-click to open this note',
 
   'editor.linkAutocomplete.listLabel': 'Link to note',
   'editor.linkAutocomplete.empty': 'No matching note',
+  'editor.tagAutocomplete.listLabel': 'Tag',
 
   'theme.indigoLight': 'Indigo Light',
   'theme.indigoDark': 'Indigo Dark',

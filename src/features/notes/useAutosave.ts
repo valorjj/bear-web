@@ -4,6 +4,16 @@ import { useFlushTriggers } from '@/lib/useFlushTriggers';
 
 export const AUTOSAVE_DELAY_MS = 300;
 
+/**
+ * How long the debounced write may be held before it happens anyway.
+ *
+ * Measured from the FIRST deferral of the current hold, never reset by a
+ * re-arm: a user typing slowly inside a long tag would otherwise defer
+ * indefinitely, and losing work is never the trade this hold is willing to
+ * make.
+ */
+export const AUTOSAVE_MAX_DEFER_MS = 4000;
+
 export interface AutosaveOptions {
   /** The text as last persisted. Read once, at mount. */
   initial: string;
@@ -15,6 +25,15 @@ export interface AutosaveOptions {
   /** Defaults to `text === ''`. */
   isEmpty?: (text: string) => boolean;
   delayMs?: number;
+  /**
+   * Consulted when the DEBOUNCED timer fires. Returning `true` re-arms the
+   * timer instead of writing, up to `maxDeferMs` from the first deferral.
+   *
+   * Never consulted by `flush()` — blur, `visibilitychange`, `beforeunload`
+   * and the unmount flush-on-switch all write through a hold.
+   */
+  defer?: () => boolean;
+  maxDeferMs?: number;
 }
 
 export interface Autosave {
@@ -52,6 +71,8 @@ export function useAutosave({
   discard,
   isEmpty,
   delayMs = AUTOSAVE_DELAY_MS,
+  defer,
+  maxDeferMs = AUTOSAVE_MAX_DEFER_MS,
 }: AutosaveOptions): Autosave {
   const [failed, setFailed] = useState(false);
 
@@ -80,12 +101,18 @@ export function useAutosave({
   const saveRef = useRef(save);
   const discardRef = useRef(discard);
   const isEmptyRef = useRef(isEmpty);
+  const deferRef = useRef(defer);
   useEffect(() => {
     readRef.current = read;
     saveRef.current = save;
     discardRef.current = discard;
     isEmptyRef.current = isEmpty;
+    deferRef.current = defer;
   });
+
+  // When the current hold began, or `null` when nothing is being held. The
+  // cap is measured from here rather than from the latest re-arm.
+  const deferSinceRef = useRef<number | null>(null);
 
   const cancelTimer = useCallback(() => {
     if (timerRef.current === null) return;
@@ -95,6 +122,7 @@ export function useAutosave({
 
   const flush = useCallback(() => {
     cancelTimer();
+    deferSinceRef.current = null;
 
     const pending = readRef.current();
     if (pending === attemptedRef.current) return;
@@ -132,12 +160,30 @@ export function useAutosave({
   }, [cancelTimer]);
 
   const schedule = useCallback(() => {
-    cancelTimer();
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
-      flush();
-    }, delayMs);
-  }, [cancelTimer, delayMs, flush]);
+    // `arm` is a local function declaration rather than a `useCallback`
+    // because it re-arms ITSELF while the hold is on, and a `useCallback`
+    // cannot reference its own binding.
+    const arm = (): void => {
+      cancelTimer();
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+
+        if (deferRef.current?.() === true) {
+          const since = deferSinceRef.current ?? Date.now();
+          deferSinceRef.current = since;
+          if (Date.now() - since < maxDeferMs) {
+            arm();
+            return;
+          }
+        }
+
+        deferSinceRef.current = null;
+        flush();
+      }, delayMs);
+    };
+
+    arm();
+  }, [cancelTimer, delayMs, flush, maxDeferMs]);
 
   // Both markers move together, exactly as they are initialised: the caller is
   // asserting "this text is what is already stored", not reporting a write.

@@ -463,7 +463,7 @@ test('search narrows the list against real stored notes, and creating a note cle
   await expect(noteList.getByRole('button', { name: /Untitled/ })).toBeVisible();
 });
 
-test('a modifier click on a tag pill filters by that tag, and does not move the caret', async ({
+test('a click on a tag pill filters by that tag, excludes untagged notes, updates aria-current, and does not move the caret', async ({
   page,
 }) => {
   await page.goto('/');
@@ -490,6 +490,11 @@ test('a modifier click on a tag pill filters by that tag, and does not move the 
   const pill = editor.locator('.bear-tag:not(.bear-tag__hash)');
   await expect(pill).toHaveText('work');
 
+  // `ControlOrMeta` is held deliberately, not because it is required: since
+  // S4 the click filters with or without it. Playwright resolves
+  // `ControlOrMeta` to `Meta` on this machine, not `Ctrl`, so it does not
+  // exercise `TagPill`'s macOS-Ctrl refusal either — it simply proves the
+  // modifier is now irrelevant to the outcome.
   await pill.click({ modifiers: ['ControlOrMeta'] });
 
   // The user-visible half of the feature: the untagged note leaves the list
@@ -527,18 +532,20 @@ test('a modifier click on a tag pill filters by that tag, and does not move the 
   expect(activeAfterModClick).toBe(false);
 });
 
-// The invariant Task 6 established: a Mod-click either filters, or behaves
-// exactly like a plain click. Never nothing. The app declines whenever the tag
-// is absent from the index, and the plugin gates `preventDefault()` on that
+// The invariant this file established: a click on a tag pill either filters,
+// or places the caret. Never nothing. The app declines whenever the tag is
+// absent from the index, and the plugin gates `preventDefault()` on that
 // answer — so a declined gesture must still place the caret.
 //
 // A trashed note is the deterministic way to reach a declining pill from the
 // UI alone: `noteTags` reflects active notes only, so the editor paints the
 // pill (it knows nothing about trash) while the tag is genuinely not in the
 // tree. The other two declining cases are a lying pill (needs Markdown the
-// serializer will not produce from typing) and a tag typed inside the 300 ms
-// autosave debounce (a race, not an assertion).
-test('a modifier click on a tag the app declines places the caret instead of doing nothing', async ({
+// serializer will not produce from typing) and a tag typed inside the
+// autosave hold — up to roughly 4.3s while the caret sits inside a tag
+// (`AUTOSAVE_MAX_DEFER_MS`), not the plain 300ms debounce — which is a race,
+// not an assertion.
+test('a click on a tag the app declines places the caret instead of doing nothing', async ({
   page,
 }) => {
   await page.goto('/');
@@ -579,7 +586,13 @@ test('a modifier click on a tag the app declines places the caret instead of doi
   );
 });
 
-test('a plain click on a tag pill places the caret and does not filter', async ({ page }) => {
+// Rewritten for S4, not merely adjusted: `docs/rulings/tag-pills.md`'s
+// "plain click edits" ruling was REPLACED outright once the tag autocomplete
+// shipped, so a plain click no longer places the caret at all — it filters,
+// the same gesture `e2e/tags.spec.ts`'s own plain-click test exercises
+// against the corpus. This one stays here because it is the pairing this
+// file already has for the modifier-click tests just above.
+test('a plain click on a tag pill filters the note list, since S4', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'New note' }).click();
 
@@ -590,13 +603,12 @@ test('a plain click on a tag pill places the caret and does not filter', async (
 
   await editor.locator('.bear-tag:not(.bear-tag__hash)').click();
 
-  // The caret landed in the tag, so its pill is suppressed — that is the
-  // observable proof the click was an edit rather than an activation.
-  await expect(editor.locator('.bear-tag:not(.bear-tag__hash)')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
-    'aria-current',
-    'page',
-  );
+  // The caret did NOT land in the tag — `mousedown` filtered instead of
+  // placing it, so the pill is still painted rather than suppressed.
+  await expect(editor.locator('.bear-tag:not(.bear-tag__hash)')).toHaveCount(1);
+  // And the note list re-scoped to the tag: the scope header's visible text
+  // and accessible name both name it.
+  await expect(page.getByRole('button', { name: 'List options: work' })).toBeVisible();
 });
 
 test('typing "- [ ] " produces a real checkbox, not a literal bullet', async ({ page }) => {

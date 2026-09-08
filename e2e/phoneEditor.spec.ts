@@ -16,7 +16,7 @@ const CORPUS: Corpus = {
     {
       id: 'j3',
       title: 'Phone editor',
-      text: 'Phone editor\n\n## Section\n\nA paragraph.\n\n| column one | column two | column three | column four |\n| --- | --- | --- | --- |\n| alpha | beta | gamma | delta |\n',
+      text: 'Phone editor\n\n## Section\n\nA paragraph.\n\n| column one | column two | column three | column four |\n| --- | --- | --- | --- |\n| alpha | beta | gamma | delta |\n\nTagged #work/urgent\n',
       createdAt: FIXED_NOW,
       updatedAt: FIXED_NOW,
       pinned: false,
@@ -237,5 +237,36 @@ test.describe('the editor on a phone', () => {
     // Without the wrapper's scroll listener this measures ~120 — the handle
     // left behind over the prose while its column moved away underneath.
     expect(drift).toBeLessThan(4);
+  });
+
+  test('tapping a tag pill shows the filtered list', async ({ page }) => {
+    await openNote(page);
+
+    const pill = page.locator('.bear-tag', { hasText: 'work/urgent' });
+    await expect(pill).toBeVisible();
+    const box = (await pill.boundingBox())!;
+
+    // `page.touchscreen.tap` is what the scrolled-table test above already
+    // uses to place a real caret via a real touch gesture — the browser's
+    // own compatibility mouse events are what `TagPill.ts`'s
+    // `handleDOMEvents.mousedown` actually sees. `S4`'s design spec (decision
+    // 6) is explicit that a phone tap and a desktop click share one gesture
+    // rather than diverging, so the same `mousedown` interception this file's
+    // other tests exercise indirectly applies here too.
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+
+    // `phoneScreen` is DERIVED from `selectedNoteId`
+    // (`AppShell.handleActivateTag` calls `select(null)` on `mode ===
+    // 'phone'`), so landing on the list means the editor pane is gone and the
+    // note-list region has taken its place.
+    await expect(page.getByRole('region', { name: 'Note list' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveCount(0);
+
+    // And it is SCOPED to the tapped tag, not merely "some list appeared" —
+    // the scope header's visible text and accessible name both name the tag.
+    const scopeButton = page.getByRole('button', { name: 'List options: work/urgent' });
+    await expect(scopeButton).toBeVisible();
+    await expect(scopeButton).toHaveText('work/urgent');
+    await expect(page.getByRole('button', { name: /Phone editor/ })).toBeVisible();
   });
 });

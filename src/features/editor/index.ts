@@ -14,3 +14,4 @@ export { headingSections } from './headingSections';
 export { BottomToolbar } from './BottomToolbar';
 export { TopControls } from './TopControls';
 export { InfoPanel, countWords } from './InfoPanel';
+export { tagRangeAt } from './TagPill';

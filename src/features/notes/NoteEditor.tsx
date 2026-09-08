@@ -20,6 +20,7 @@ import {
   normalizeMarkdown,
   RichEditor,
   type RichEditorHandle,
+  tagRangeAt,
 } from '@/features/editor';
 import type { PublishedInfo } from '@/features/publish';
 import { useLocale, useT } from '@/i18n';
@@ -66,8 +67,9 @@ export interface NoteEditorProps {
    */
   autoFocus?: boolean;
   /**
-   * Called with a tag name when the user Mod-clicks its pill. Returns whether
-   * the app acted on it; `false` makes the gesture behave like a plain click.
+   * Called with a tag name when the user clicks its pill. Returns whether
+   * the app acted on it; `false` falls through to placing the caret instead
+   * of filtering.
    */
   onActivateTag?: (tag: string) => boolean;
   /**
@@ -76,6 +78,8 @@ export interface NoteEditorProps {
    * behave like a plain click — same contract as `onActivateTag`.
    */
   onActivateLink?: (title: string) => boolean;
+  /** Normalized tag keys the editor's autocomplete suggests from. */
+  tagKeys?: string[];
   /**
    * Called with a note's id when a row in the backlinks panel is clicked.
    * The panel itself is not rendered at all when this is omitted — kept
@@ -127,6 +131,7 @@ export function NoteEditor({
   autoFocus = false,
   onActivateTag,
   onActivateLink,
+  tagKeys,
   onOpenNote,
   handleRef: externalHandleRef,
   exportRef,
@@ -304,6 +309,20 @@ export function NoteEditor({
     isEmpty: (text) =>
       text === EMPTY_DOCUMENT_MARKDOWN ||
       (normalizedSeedText !== undefined && text === normalizedSeedText),
+    // Holds the DEBOUNCED write while the caret sits inside a tag, so
+    // descending `#a` -> `#a/b` -> `#a/b/c` through the autocomplete does not
+    // persist `a` and `a/b` as real tags on the way. Every explicit flush —
+    // blur included — writes through this, so leaving the tag commits it.
+    //
+    // `tagRangeAt` hit-tests the GRAMMAR rather than the decoration set,
+    // which is what makes it correct here: a tag the caret sits inside has no
+    // pill at all, and that is exactly the state being detected.
+    defer: () => {
+      const editor = handleRef.current?.editor ?? null;
+      if (editor === null) return false;
+      const { state } = editor;
+      return tagRangeAt(state, state.selection.from) !== null;
+    },
   });
 
   // Guard (b). `initialMarkdown` above is what the MANAGER produces from the
@@ -484,6 +503,7 @@ export function NoteEditor({
         updatedAt={note.updatedAt}
         onActivateTag={onActivateTag}
         onActivateLink={onActivateLink}
+        tagKeys={tagKeys}
         onExport={handleExport}
         onPublish={() => setPublishOpen(true)}
         onImage={handleImage}

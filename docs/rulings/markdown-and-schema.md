@@ -33,7 +33,11 @@ dispatch anywhere in `src/features/editor/`. Also `MarkdownPaste.ts`
 `pastedMarkdown.ts` (`htmlCarriesStructure`, `STRUCTURAL_HTML`,
 `decodeEntities`, `PARSER_HANDLED`, `unwrapMarkdownFence`, `FENCE_LINE`,
 `containsFence`, `FENCE_ANYWHERE`); any edit to `importCycle.test.ts`, or to
-the `geminiAnswer.*.txt` fixtures.
+the `geminiAnswer.*.txt` fixtures. Also `src/features/editor/TagAutocomplete.ts`
+(`tagAutocompleteMatchAt`, `matchingTags`, `insertTag`, `commitTypedText`,
+`openRows`, `openFrom`, `docKeysFrom`, `widgetKey`, `setTagAutocompleteKeys`)
+and `tagAutocomplete.test.ts` — a new extension and a new keyboard binding
+(`Tab`), both squarely inside this file's trigger.
 
 - **`markdown.ts` is the only importer of `@tiptap/markdown`.** The round-trip
   suite drives `MarkdownManager` standalone, with no `Editor` and no DOM, which
@@ -905,3 +909,65 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   `parsePastedMarkdown`, not `parseMarkdown`, because `buildEditorExtensions`
   spreads every extension's options into ONE object and a colliding bare name
   silently loses.
+
+## Tag autocomplete (S4)
+
+`TagAutocomplete.ts` is a sibling of `LinkAutocomplete.ts`, not a refactor
+onto a shared core — see that spec's "Approach" for why a shared popover was
+rejected on a measured bundle number rather than on taste.
+
+- **`Enter` and `space` are deliberately NOT intercepted, and that is the
+  opposite of `LinkAutocomplete`'s own `Enter`-accepts contract.** Row 0 is
+  always the literal text the user just typed (never the highest-ranked
+  existing tag — matching is substring-anywhere, so `#a` matches `bear`), and
+  accepting row 0 is a no-op. With the literal pre-selected, `Enter` on it has
+  nothing to insert, so intercepting it would only swallow a keystroke that
+  means "new paragraph" in every other context. `space` is what commits and
+  closes the popover at any depth, exactly like typing it anywhere else in
+  the document — it is ordinary typing that happens to also close a menu, not
+  a menu keybinding that happens to be a space. Only `Tab` (accept) and the
+  arrow keys (move) are intercepted.
+
+- **The `Tab` collision with `@tiptap/extension-list-keymap` (which binds
+  `Tab` to indent a list item) is resolved by the popover's OPEN STATE alone,
+  never by checking which extension "owns" the key first.** While the
+  popover is open, `TagAutocomplete`'s `handleKeyDown` consumes `Tab` and the
+  list keymap never sees it; while it is closed, the handler returns `false`
+  on its very first guard (`openRows(state) === null`) and indentation
+  behaves exactly as it does with no tag plugin registered at all. A tag
+  typed inside a list item is therefore the case this needs to be tested
+  against, not a case to forbid — the popover must still open and `Tab` must
+  still mean "accept the row", not "indent", while it is showing.
+
+- **The `openFrom` gate exists because a caret MOVE and a caret ARRIVING BY
+  TYPING look identical to `tagAutocompleteMatchAt` alone, and only one of
+  them should open the list.** That function is deliberately positional: it
+  answers "is the caret at the end of a live tag right now", with no memory
+  of how it got there. Without a second signal, this sequence silently
+  rewrites text the user never touched: two `ArrowDown`s while typing `#a`
+  (highlighting its own row 2), then a caret-only move — no typing — to the
+  end of an already-complete, unrelated tag `#work` elsewhere in the note,
+  then `Tab`. The caret's new position still satisfies
+  `tagAutocompleteMatchAt` (it sits right after a live tag), so the popover
+  would render `#a`'s row 2 as "active" over `#work` and `Tab` would replace
+  `#work` with that suggestion — reported Critical in Task 3's review as
+  exactly this: two arrow keys and a `Tab`, no typing at all, `#work` became
+  `#workshop`.
+
+  The fix is `openFrom`, a plugin-state field recording the `from` of the
+  match that most recently OPENED the list on a document change. `openRows`
+  — the one place all three "is it open" conditions live, so `decorations`,
+  `handleKeyDown`, `mousedown` and the aria mirror cannot drift apart — checks
+  `pluginState.openFrom === match.from` before showing anything. It is set on
+  `tr.docChanged` (to the new match's `from`, or `null` if there is none) and
+  cleared on `tr.selectionSet` with no doc change, so a caret-only move closes
+  the list and only typing (or `undo`, itself a document change) opens it.
+  Critically, **the gate lives in the shared `openRows` helper, not merely in
+  `decorations`** — the keystroke hijack this bug produces is in
+  `handleKeyDown`, so a version of this gate that only hid the rendered list
+  while still letting `Tab` act on the stale `activeIndex` would look fixed
+  and still corrupt text. `insertTag`'s own post-insert selection change is
+  itself a document change, which is what lets decision 4's
+  descend-and-stay-open keep working: the same transaction that moves the
+  caret onto the accepted tag's end is the one that sets `openFrom` to the
+  reopened match's `from`.

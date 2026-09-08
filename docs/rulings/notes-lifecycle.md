@@ -18,7 +18,10 @@ symbols `autoFocus`, `seedText`,
 `src/features/editor/HeadingFold.ts`'s `handleKeyDown`; `notes.purge` /
 `notes.save` call sites; `src/data/reindex.ts`'s `reindexNote` and its call
 sites; `src/features/graph/useGraphSnapshot.ts`; and
-`src/features/landing/WelcomeSeeder.tsx` / `seedWelcomeNote.ts`.
+`src/features/landing/WelcomeSeeder.tsx` / `seedWelcomeNote.ts`. Also
+`useAutosave.ts`'s `defer`, `maxDeferMs`, `AUTOSAVE_MAX_DEFER_MS` and
+`deferSinceRef` (S4/S2), and the `defer` predicate `NoteEditor.tsx` builds
+from `TagPill.ts`'s `tagRangeAt`.
 
 - **A SECOND derived index, `noteLinks`, now rides `reindexNote` alongside
   `noteTags` (L2)** — `reindexNote(db, noteId, text, parseTags, parseLinks,
@@ -413,3 +416,39 @@ sites; `src/features/graph/useGraphSnapshot.ts`; and
   reactive would re-run the whole seed decision on every note count change,
   including the seed's own write, for no behavioural gain — the same shape
   the graph snapshot section above rejects for a different reason.
+
+## The autosave hold (S4, absorbing S2)
+
+`useAutosave` gains an optional `defer: () => boolean` and `maxDeferMs`
+(default `AUTOSAVE_MAX_DEFER_MS = 4000`). It exists so a tag mid-typing
+(`#economy/us-mar|`) never materialises the intermediate tag `#economy` or
+`#economy/us` into the tag index just because the user paused inside it —
+S4's descend-and-stay-open autocomplete makes pausing to read the popover the
+NORMAL way to use it, which is what turns this from a nice-to-have into
+load-bearing: without the hold, `AUTOSAVE_DELAY_MS` (300 ms) writes the
+half-typed tag on nearly every keystroke pause, and the sidebar and every
+future suggestion list then carry a tag the user never meant to create,
+removable only through S1's rename/delete.
+
+- **Only the DEBOUNCED write defers. Every explicit `flush()` writes through
+  the hold, unconditionally** — blur, `visibilitychange`, `beforeunload`, and
+  the unmount flush-on-switch never consult `defer` at all. Deferring those
+  would trade a real risk of data loss for a cosmetic index benefit, and
+  "blur commits the tag" is also simply correct: the user has left the note.
+- **The cap is measured from the FIRST deferral of the current hold, and is
+  NEVER reset by a re-arm.** `deferSinceRef` is set once when a hold begins
+  and cleared only when the hold ends (by `flush()` or by the predicate
+  finally returning `false`); each re-arm inside `schedule`'s `arm()` checks
+  `Date.now() - since < maxDeferMs` against that original timestamp, not
+  against the moment of the re-arm. A cap reset per re-arm would let a user
+  who keeps typing slowly inside one long tag defer indefinitely — the whole
+  point of the cap is to bound that, not merely to slow it down. The
+  regression test for this must fail against an implementation that resets
+  the cap on re-arm, not merely assert the cap exists.
+- **`NoteEditor` supplies the predicate through `tagRangeAt`, not through the
+  decoration set.** `defer: () => tagRangeAt(state, state.selection.from) !==
+  null` reuses `TagPill.ts`'s existing grammar hit-test rather than checking
+  whether a pill is currently painted — a tag the caret sits inside has NO
+  pill (`docs/rulings/tag-pills.md`'s suppression rule), which is exactly the
+  case this predicate must detect. Checking decorations instead would defer
+  nothing, ever, for the one case that matters.

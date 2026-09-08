@@ -124,7 +124,12 @@ describe('the debounced-write hold', () => {
     );
 
     act(() => result.current.schedule());
-    act(() => void vi.advanceTimersByTime(AUTOSAVE_MAX_DEFER_MS - AUTOSAVE_DELAY_MS));
+    // Ticks land on multiples of AUTOSAVE_DELAY_MS, and each re-arm checks
+    // `Date.now() - since >= maxDeferMs` where `since` is the FIRST tick
+    // (t=300). So the last tick that still re-arms is t=4200 (3900 elapsed)
+    // and the one that writes is t=4500. Advancing to exactly the cap is
+    // therefore still short of the write.
+    act(() => void vi.advanceTimersByTime(AUTOSAVE_MAX_DEFER_MS));
     expect(save).not.toHaveBeenCalled();
 
     act(() => void vi.advanceTimersByTime(AUTOSAVE_DELAY_MS * 2));
@@ -269,7 +274,7 @@ Expected: PASS, including the pre-existing tests — the default `defer` is `und
 Temporarily change `const since = deferSinceRef.current ?? Date.now();` to `const since = Date.now();` — the reset-per-re-arm bug the fourth test exists to catch.
 
 Run: `npx vitest run src/features/notes/useAutosave.test.ts`
-Expected: FAIL on "measures the cap from the first deferral, not from each re-arm", and PASS on "writes anyway once the cap has elapsed" (which is why the fourth test is needed at all).
+Expected: FAIL on BOTH "writes anyway once the cap has elapsed" and "measures the cap from the first deferral, not from each re-arm" — with the reset, no tick ever accumulates elapsed time, so the write never happens at all. The two tests are still distinct: the third holds one `schedule()` open, the fourth re-schedules on every tick the way real typing does, which is the path where a reset is actually reachable.
 
 Revert the injection. Re-run: all four PASS.
 
@@ -800,7 +805,10 @@ function type(editor: Editor, text: string): void {
 }
 
 function markdownOf(editor: Editor): string {
-  return editor.storage.markdown.getMarkdown();
+  // `serializeMarkdown` from `./markdown`, not a `storage.markdown` accessor:
+  // `RichEditorHandle.getMarkdown` is the app's route and a bare `Editor` has
+  // no handle. Add `serializeMarkdown` to this file's `./markdown` import.
+  return serializeMarkdown(editor.getJSON());
 }
 ```
 
@@ -1566,7 +1574,7 @@ declare module '@tiptap/core' {
 }
 ```
 
-If `renderIconMarkup('Hash')` fails because no `Hash` glyph is registered, add lucide's `Hash` `__iconNode` array verbatim to `ICON_NODES` in `src/ui/Icon.tsx` and a row to `Icon.test.tsx`'s `it.each`. Check the real export list first — do not guess a glyph name.
+`Hash` is already registered in `ICON_NODES` (`src/ui/Icon.tsx:105`) and `renderIconMarkup(glyph, size)` takes an optional size — verified, so no `Icon.tsx` change is needed. Do not add one.
 
 - [ ] **Step 6: Register the extension**
 
@@ -1754,19 +1762,75 @@ Claude-Session: https://claude.ai/code/session_01UNmYbueB3JR5WYock4Aaod"
 
 - [ ] **Step 1: Write the failing tests**
 
-In `src/features/editor/tagPill.test.ts`, find the two tests asserting the platform branches of the modifier (they exercise `metaKey` on macOS and `ctrlKey` elsewhere via `isMacOS`). **Delete them** — they assert a gesture that no longer exists. Then add, using the file's existing faked-view helper at `:386-400`:
+In `src/features/editor/tagPill.test.ts`, **REWRITE** the two platform tests rather than deleting them. They currently assert that on macOS Cmd-click activates and Ctrl-click does not, each stubbing `navigator.platform` explicitly (jsdom reports `''`, so a test that merely branches on `isMacOS()` exercises only the non-Apple arm — the file's own comment records that this pair used to be one test with the Apple branch as dead code). The MODIFIER half of what they assert is obsolete, but the **macOS Ctrl-click refusal is not** — see Step 3. Rewrite them as:
+
+```ts
+  it('on an Apple platform, a plain click filters and Ctrl-click does not', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    try {
+      const activated: string[] = [];
+      const editor = new Editor({
+        extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+        content: '<p>a #work b</p>',
+      });
+
+      // Ctrl-click on macOS is the context-menu gesture. It must not ALSO
+      // filter, or one gesture opens a menu and changes scope at once.
+      const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
+      const plain = mousedownAt(editor, 5, {});
+
+      expect(ctrl.handled).toBe(false);
+      expect(plain.handled).toBe(true);
+      expect(activated).toEqual(['work']);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  it('off Apple platforms, Ctrl-click filters, because Ctrl is not the menu gesture there', () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+    try {
+      const activated: string[] = [];
+      const editor = new Editor({
+        extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+        content: '<p>a #work b</p>',
+      });
+
+      expect(mousedownAt(editor, 5, { ctrlKey: true }).handled).toBe(true);
+      expect(activated).toEqual(['work']);
+      editor.destroy();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+```
+
+Keep each test's `navigator.platform` stub and its `finally` restore — that is what drives both arms. Then add, using the file's existing faked-view helper:
+
+These use the file's REAL helpers, verified: `mousedownAt(editor, pos, init)` returns `{ handled, defaultPrevented }`, and `recording(into, answer)` builds an `onActivate` that records the tags it is asked about. There is no `editorWith` — the existing tests construct the `Editor` inline.
 
 ```ts
   it('filters on a plain left click, with no modifier', () => {
-    const onActivate = vi.fn().mockReturnValue(true);
-    const editor = editorWith('#work here', { onActivate });
-    const event = new MouseEvent('mousedown', { button: 0, cancelable: true });
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+      content: '<p>a #work b</p>',
+    });
 
-    const consumed = fireMousedown(editor, 2, event);
+    const result = mousedownAt(editor, 5, {});
 
-    expect(onActivate).toHaveBeenCalledWith('work');
-    expect(consumed).toBe(true);
-    expect(event.defaultPrevented).toBe(true);
+    expect(activated).toEqual(['work']);
+    expect(result.handled).toBe(true);
+    expect(result.defaultPrevented).toBe(true);
     editor.destroy();
   });
 
@@ -1777,30 +1841,36 @@ In `src/features/editor/tagPill.test.ts`, find the two tests asserting the platf
     // pill that cannot do what it promises. A tag typed within the last few
     // hundred milliseconds reaches this path, and so do M7.6's two documented
     // classes of pill whose tag is not in the index.
-    const onActivate = vi.fn().mockReturnValue(false);
-    const editor = editorWith('#work here', { onActivate });
-    const event = new MouseEvent('mousedown', { button: 0, cancelable: true });
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated, false) }),
+      content: '<p>a #work b</p>',
+    });
 
-    const consumed = fireMousedown(editor, 2, event);
+    const result = mousedownAt(editor, 5, {});
 
-    expect(onActivate).toHaveBeenCalledWith('work');
-    expect(consumed).toBe(false);
-    expect(event.defaultPrevented).toBe(false);
+    expect(activated).toEqual(['work']);
+    expect(result.handled).toBe(false);
+    expect(result.defaultPrevented).toBe(false);
     editor.destroy();
   });
 
   it('ignores a non-left button, so right-click still reaches the context menu', () => {
-    const onActivate = vi.fn().mockReturnValue(true);
-    const editor = editorWith('#work here', { onActivate });
-    const event = new MouseEvent('mousedown', { button: 2, cancelable: true });
+    const activated: string[] = [];
+    const editor = new Editor({
+      extensions: buildEditorExtensions({ onActivate: recording(activated) }),
+      content: '<p>a #work b</p>',
+    });
 
-    expect(fireMousedown(editor, 2, event)).toBe(false);
-    expect(onActivate).not.toHaveBeenCalled();
+    const result = mousedownAt(editor, 5, { button: 2 });
+
+    expect(result.handled).toBe(false);
+    expect(activated).toEqual([]);
     editor.destroy();
   });
 ```
 
-Adapt the helper names to whatever the file actually calls them — read `:380-400` first rather than assuming `editorWith`/`fireMousedown`.
+`mousedownAt` defaults `button: 0`, so `{}` is a plain left click and `{ button: 2 }` overrides it. Remove the now-unused `isMacOS` import from the test file if deleting the platform tests leaves it unreferenced.
 
 **One trap in that helper, already documented at `tagPill.test.ts:593`:**
 `EditorView.someProp` SHORT-CIRCUITS on the first handler that returns a
@@ -1832,7 +1902,7 @@ Expected: FAIL — the plain click is currently ignored, so `onActivate` is neve
 
 - [ ] **Step 3: Drop the modifier gate**
 
-In `src/features/editor/TagPill.ts`, delete these lines from the `mousedown` handler:
+In `src/features/editor/TagPill.ts`, REPLACE these lines in the `mousedown` handler:
 
 ```ts
               // Ctrl-click on macOS is the context-menu gesture, and must
@@ -1841,7 +1911,20 @@ In `src/features/editor/TagPill.ts`, delete these lines from the `mousedown` han
               if (!(isMacOS() ? event.metaKey : event.ctrlKey)) return false;
 ```
 
-Change line 1 to `import { Extension } from '@tiptap/core';`, and update the handler's own docblock:
+with this:
+
+```ts
+              // The modifier REQUIREMENT is gone — a plain click filters now —
+              // but half of the old rule survives, and deleting it outright
+              // would regress a gesture this app already got right once:
+              // Ctrl-click on macOS IS the context-menu gesture, and it
+              // arrives as `button === 0` with `ctrlKey` set, not as
+              // `button === 2`. Without this, one gesture would open the
+              // context menu AND change the scope.
+              if (isMacOS() && event.ctrlKey) return false;
+```
+
+**Keep the `isMacOS` import** — it is still used, by that line. Update the handler's own docblock:
 
 ```ts
             // A PLAIN left click filters, as Bear's does. `mousedown`, not
@@ -1880,7 +1963,7 @@ Change line 1 to `import { Extension } from '@tiptap/core';`, and update the han
       activateHint: t('editor.tagPill.hint'),
 ```
 
-Leave `editor.linkPill.hint.mac` / `.other` and the `isMacOS()` call that reads them exactly as they are — `[[links]]` keep Mod-click.
+Leave `editor.linkPill.hint.mac` / `.other` and the `isMacOS()` call that reads them exactly as they are — `[[links]]` keep Mod-click. Note that `RichEditor.tsx` therefore still imports `isMacOS` for the link hint, and `TagPill.ts` still imports it for the macOS Ctrl-click refusal; neither import is removed by this task.
 
 - [ ] **Step 5: Navigate on a phone**
 

@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AUTOSAVE_DELAY_MS, useAutosave } from './useAutosave';
+import { AUTOSAVE_DELAY_MS, AUTOSAVE_MAX_DEFER_MS, useAutosave } from './useAutosave';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -430,5 +430,84 @@ describe('the empty predicate', () => {
 
     expect(discard).toHaveBeenCalledTimes(1);
     expect(save).not.toHaveBeenCalled();
+  });
+});
+
+describe('the debounced-write hold', () => {
+  it('holds the debounced write while defer() returns true', () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    let held = true;
+    const { result } = renderHook(() =>
+      useAutosave({ initial: '', read: () => 'typed', save, defer: () => held }),
+    );
+
+    act(() => result.current.schedule());
+    act(() => void vi.advanceTimersByTime(AUTOSAVE_DELAY_MS * 3));
+    expect(save).not.toHaveBeenCalled();
+
+    held = false;
+    act(() => void vi.advanceTimersByTime(AUTOSAVE_DELAY_MS));
+    expect(save).toHaveBeenCalledWith('typed');
+  });
+
+  it('writes through the hold on an explicit flush', () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      useAutosave({ initial: '', read: () => 'typed', save, defer: () => true }),
+    );
+
+    act(() => result.current.schedule());
+    act(() => void vi.advanceTimersByTime(AUTOSAVE_DELAY_MS));
+    expect(save).not.toHaveBeenCalled();
+
+    // Blur, visibilitychange, beforeunload and the unmount flush-on-switch
+    // all arrive through `flush`. Deferring those would risk real data loss
+    // for a cosmetic index benefit.
+    act(() => result.current.flush());
+    expect(save).toHaveBeenCalledWith('typed');
+  });
+
+  it('writes anyway once the cap has elapsed', () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      useAutosave({ initial: '', read: () => 'typed', save, defer: () => true }),
+    );
+
+    act(() => result.current.schedule());
+    // Ticks land on multiples of AUTOSAVE_DELAY_MS, and each re-arm checks
+    // `Date.now() - since >= maxDeferMs` where `since` is the FIRST tick
+    // (t=300). So the last tick that still re-arms is t=4200 (3900 elapsed)
+    // and the one that writes is t=4500. Advancing to exactly the cap is
+    // therefore still short of the write.
+    act(() => void vi.advanceTimersByTime(AUTOSAVE_MAX_DEFER_MS));
+    expect(save).not.toHaveBeenCalled();
+
+    act(() => void vi.advanceTimersByTime(AUTOSAVE_DELAY_MS * 2));
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The cap runs from the FIRST deferral, never from the latest re-arm.
+   * Resetting it per re-arm would let a user typing slowly inside a long tag
+   * defer forever, which is the failure the cap exists to prevent — and an
+   * implementation that resets it passes the test above, because that test
+   * never re-arms after the cap is reached.
+   */
+  it('measures the cap from the first deferral, not from each re-arm', () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    let text = 'a';
+    const { result } = renderHook(() =>
+      useAutosave({ initial: '', read: () => text, save, defer: () => true }),
+    );
+
+    // Re-schedule repeatedly, as typing does, straight through the cap.
+    for (let elapsed = 0; elapsed < AUTOSAVE_MAX_DEFER_MS; elapsed += AUTOSAVE_DELAY_MS) {
+      text = `${text}a`;
+      act(() => result.current.schedule());
+      act(() => void vi.advanceTimersByTime(AUTOSAVE_DELAY_MS));
+    }
+
+    act(() => void vi.advanceTimersByTime(AUTOSAVE_DELAY_MS));
+    expect(save).toHaveBeenCalled();
   });
 });
