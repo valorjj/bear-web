@@ -545,6 +545,44 @@ describe('tag scopes', () => {
     expect(screen.getByRole('button', { name: /^Notes\b/ })).not.toHaveAttribute('aria-current');
   });
 
+  // The race the vanished-tag effect's naive form does not survive: `scope`
+  // moving to the renamed tag ahead of `tree.nodes` catching up would see
+  // stale nodes, find the new name absent, and bounce to All Notes — and once
+  // `tree.nodes` finally settles the scope is `smart` by then, so the effect
+  // returns early and never recovers. Renaming the tag currently on screen is
+  // exactly the scenario that exercises the ordering, because the whole
+  // rewrite — and the tag tree's asynchronous catch-up behind it — runs while
+  // this scope is still pointed at the OLD name.
+  it('renaming the tag currently in view follows the scope to the new name', async () => {
+    await notes.create('alpha #work');
+
+    renderShell();
+    const workRow = await screen.findByRole('button', { name: /^work\b/ });
+    await userEvent.click(workRow);
+    expect(workRow).toHaveAttribute('aria-current', 'page');
+
+    fireEvent.keyDown(workRow, { key: 'F10', shiftKey: true });
+    await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.rename'] }));
+
+    const field = await screen.findByLabelText(en['tags.rename.field']);
+    await userEvent.clear(field);
+    await userEvent.type(field, 'urgent');
+    await userEvent.click(screen.getByRole('button', { name: en['tags.rename.submit'] }));
+
+    // The old row is gone and the new one carries the scope — not merely
+    // "eventually present": `aria-current` is what proves the scope actually
+    // followed the rename, rather than the row existing while All Notes (or
+    // nothing) stayed selected.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^urgent\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+    });
+    expect(screen.queryByRole('button', { name: /^work\b/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Notes\b/ })).not.toHaveAttribute('aria-current');
+  });
+
   // The seed is keyed by id, so re-selecting the same just-created note keeps
   // handing `NoteEditor` the same `seedText` unless something clears it. That
   // makes the note vulnerable to the guard `NoteEditorProps` says was
@@ -621,6 +659,71 @@ describe('tag scopes', () => {
     await userEvent.click(keeperRow);
 
     await waitFor(() => expect(purge).not.toHaveBeenCalled());
+  });
+});
+
+describe('tag row menu', () => {
+  it('deletes a tag after a confirm stating real counts, and bounces to Notes', async () => {
+    await notes.create('one #project');
+    await notes.create('two #project/sub');
+
+    renderShell();
+    const row = await screen.findByRole('button', { name: /^project\b/ });
+    await userEvent.click(row);
+    expect(row).toHaveAttribute('aria-current', 'page');
+
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+    await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.delete'] }));
+
+    // `tagCount` includes the tag itself, so the body counts ONE sub-tag
+    // (`project/sub`) even though `affected` reports 2 — the confirm copy
+    // already subtracts it.
+    const body = en['confirm.deleteTag.body.other'].replace('{count}', '2').replace('{tags}', '1');
+    expect(await screen.findByText(body)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: en['confirm.deleteTag.confirm'] }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^project\b/ })).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
+  });
+
+  it('shows the merge confirm when renaming into an existing tag, and merges on confirm', async () => {
+    await notes.create('one #work');
+    await notes.create('two #gemini');
+
+    renderShell();
+    const row = await screen.findByRole('button', { name: /^work\b/ });
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+    await userEvent.click(await screen.findByRole('menuitem', { name: en['tags.menu.rename'] }));
+
+    const field = await screen.findByLabelText(en['tags.rename.field']);
+    await userEvent.clear(field);
+    await userEvent.type(field, 'gemini');
+
+    // The popover's own inline warning, before any confirm is involved.
+    expect(
+      await screen.findByText(en['tags.rename.merge'].replace('{name}', 'gemini')),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: en['tags.rename.submit'] }));
+
+    const mergeBody = en['confirm.mergeTag.body']
+      .replace('{count}', '1')
+      .replace('{name}', 'gemini');
+    expect(await screen.findByText(mergeBody)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: en['confirm.mergeTag.confirm'] }));
+
+    // Both notes now carry the surviving tag, and the old name is gone.
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^work\b/ })).toBeNull());
+    expect(screen.getByRole('button', { name: /^gemini\b/ })).toBeInTheDocument();
   });
 });
 

@@ -107,7 +107,25 @@ export function SidebarRow({
       onPointerUp: stop(longPress.onPointerUp),
       onPointerCancel: stop(longPress.onPointerCancel),
       onContextMenu: stop(longPress.onContextMenu),
-      onClickCapture: stop(longPress.onClickCapture),
+      // NOT wrapped in `stop()`, unlike every sibling above. Those five all
+      // isolate ONE ROW'S OWN gesture recognition from a nested ancestor's —
+      // pointer and contextmenu events genuinely bubble from a leaf tag row up
+      // through every parent row's identical listeners, each blind to the
+      // others' `firedAt` ref, and would otherwise double-fire. `onClickCapture`
+      // has no such hazard: `longPress.onClickCapture` already only acts
+      // (`preventDefault`/`stopPropagation`) when THIS row's own press just
+      // fired (`suppressClick.current`), gated on this row's own ref — a
+      // no-op the rest of the time. Wrapping it here called
+      // `event.stopPropagation()` on EVERY click regardless of that gate,
+      // which halts the DOM event before it ever reaches this row's own
+      // `<button onClick={onSelect}>` (a capture-phase `stopPropagation`
+      // stops the walk before the target/bubble phases run at all) — so
+      // clicking any row wired with `onContextMenu` silently stopped
+      // selecting it. Caught only once a caller finally passed
+      // `onContextMenu` to a row that also needs `onSelect` to keep working;
+      // `ui.test.tsx` had covered the menu opening but never a plain click
+      // alongside it.
+      onClickCapture: longPress.onClickCapture,
     };
   }, [longPress, onContextMenu]);
 

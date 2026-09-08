@@ -214,6 +214,21 @@ describe('SidebarRow', () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
+  // Regression: `onContextMenu` wires `useLongPress`'s handlers onto the row,
+  // and one of them used to be wrapped in a helper that called
+  // `event.stopPropagation()` on EVERY click, not only the ones the press
+  // gesture actually meant to suppress — which halts a capture-phase click
+  // before it ever reaches this row's own `onClick`. A row with a menu could
+  // therefore never be selected by a plain click, and every other test in
+  // this block exercises the menu itself, never a click alongside it.
+  it('still selects on a plain click when a context menu handler is present', async () => {
+    const onSelect = vi.fn();
+    renderRow({ onSelect, onContextMenu: vi.fn() });
+
+    await userEvent.click(screen.getByRole('button', { name: /Work/ }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
   it('marks the selected row with aria-current', () => {
     renderRow({ selected: true });
     expect(screen.getByRole('button', { name: /Work/ })).toHaveAttribute('aria-current', 'page');

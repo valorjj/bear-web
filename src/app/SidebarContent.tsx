@@ -8,7 +8,7 @@ import type { NoteScope } from '@/features/notes';
 import { SmartListSidebar } from '@/features/notes';
 import type { SmartListCounts } from '@/features/notes';
 import { TagSidebar } from '@/features/tags';
-import type { TagNode } from '@/features/tags';
+import type { TagNode, TagRowMenuRequest } from '@/features/tags';
 
 export interface SidebarContentProps {
   scope: NoteScope;
@@ -21,6 +21,8 @@ export interface SidebarContentProps {
   onToggle: (tag: string) => void;
   /** Sizes rows for a finger. True in the drawer, false in the desktop pane. */
   touch?: boolean;
+  /** Opens a tag row's action menu. Omit to render rows with no menu. */
+  onOpenMenu?: (request: TagRowMenuRequest) => void;
 }
 
 /**
@@ -40,6 +42,7 @@ export function SidebarContent({
   isCollapsed,
   onToggle,
   touch = false,
+  onOpenMenu,
 }: SidebarContentProps): ReactElement {
   return (
     <>
@@ -61,6 +64,7 @@ export function SidebarContent({
           isCollapsed={isCollapsed}
           onToggle={onToggle}
           touch={touch}
+          onOpenMenu={onOpenMenu}
         />
       </div>
 
