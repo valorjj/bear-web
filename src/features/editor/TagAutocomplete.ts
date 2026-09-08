@@ -162,13 +162,6 @@ interface TagAutocompleteState {
   /** The keyboard-highlighted row, before clamping to the row count. */
   activeIndex: number;
   /**
-   * The `from` of the match most recently dismissed, or `null`. Compared
-   * against the CURRENT match's `from` — the position of the `#`, which stays
-   * fixed while the same tag is typed — so the list stays closed while that
-   * tag is edited and reopens the moment the document changes.
-   */
-  dismissedFrom: number | null;
-  /**
    * The `from` of the match that last OPENED the list on a document change,
    * or `null`. `openRows` requires this to equal the current match's `from`
    * before it will show anything, which is what stops a caret-only move from
@@ -194,6 +187,18 @@ interface TagAutocompleteState {
    * CHANGE, so descend-and-stay-open still works: the same transaction that
    * moves the caret is the one that sets `openFrom` to the reopened match's
    * `from`.
+   *
+   * It carries the DISMISSAL too, and there is deliberately no second field
+   * for that. A `dismissedFrom` shipped alongside this one and was fully
+   * redundant: it recorded the `from` Escape had closed, was compared against
+   * the current match's `from`, and was cleared on every `docChanged` — which
+   * is exactly what clearing `openFrom` and re-setting it on the next
+   * document change already does. Escape and an accepted row 0 both clear
+   * this instead, so "closed until you type again" has ONE representation
+   * rather than two that must be kept in step. Verified by measurement, not
+   * by reading: with the `dismiss` branch rewritten to clear `openFrom`, the
+   * whole suite stayed green, and the Escape tests still fail when Escape is
+   * made a no-op.
    */
   openFrom: number | null;
 }
@@ -201,7 +206,7 @@ interface TagAutocompleteState {
 type Meta =
   | { type: 'keys'; keys: readonly string[] }
   | { type: 'move'; direction: 'next' | 'prev' | 'first' | 'last' }
-  | { type: 'dismiss'; from: number };
+  | { type: 'dismiss' };
 
 /**
  * Every tag in the document, plus every ancestor of each.
@@ -325,12 +330,13 @@ function insertTag(view: EditorView, match: TagAutocompleteMatch, key: string): 
 }
 
 /** Accepting row 0 changes no text — it means "keep what I typed" — so all it
- * does is close the list, and remember that it closed, so it does not
- * immediately reopen on the tag the user just settled on. */
-function commitTypedText(view: EditorView, match: TagAutocompleteMatch): void {
+ * does is close the list by clearing `openFrom`, which keeps it closed until
+ * the next document change rather than reopening on the tag the user just
+ * settled on. Escape takes the same path. */
+function commitTypedText(view: EditorView): void {
   view.dispatch(
     view.state.tr
-      .setMeta(tagAutocompleteKey, { type: 'dismiss', from: match.from })
+      .setMeta(tagAutocompleteKey, { type: 'dismiss' })
       .setMeta(skipTrailingNodeMeta, true),
   );
 }
@@ -351,7 +357,6 @@ function openRows(
 
   const pluginState = tagAutocompleteKey.getState(state);
   if (pluginState === undefined) return null;
-  if (pluginState.dismissedFrom === match.from) return null;
   // The list only ever opens on a document change, at the `from` that change
   // produced. A caret-only move to a DIFFERENT tag's boundary would otherwise
   // still satisfy `tagAutocompleteMatchAt` there — this is what stops that
@@ -420,7 +425,6 @@ export const TagAutocomplete = Extension.create<TagAutocompleteOptions>({
             docKeys: [],
             docKeysFrom: null,
             activeIndex: 0,
-            dismissedFrom: null,
             openFrom: null,
           }),
 
@@ -428,7 +432,7 @@ export const TagAutocomplete = Extension.create<TagAutocompleteOptions>({
             const meta = tr.getMeta(tagAutocompleteKey) as Meta | undefined;
 
             if (meta?.type === 'keys') return { ...value, indexed: meta.keys };
-            if (meta?.type === 'dismiss') return { ...value, dismissedFrom: meta.from };
+            if (meta?.type === 'dismiss') return { ...value, openFrom: null };
 
             if (meta?.type === 'move') {
               const match = tagAutocompleteMatchAt(newState);
@@ -481,7 +485,6 @@ export const TagAutocomplete = Extension.create<TagAutocompleteOptions>({
               next = {
                 ...next,
                 activeIndex: 0,
-                dismissedFrom: null,
                 openFrom: match?.from ?? null,
               };
             } else if (tr.selectionSet) {
@@ -516,7 +519,7 @@ export const TagAutocomplete = Extension.create<TagAutocompleteOptions>({
 
             switch (event.key) {
               case 'Escape':
-                commitTypedText(view, open.match);
+                commitTypedText(view);
                 return true;
 
               case 'ArrowDown':
@@ -546,7 +549,7 @@ export const TagAutocomplete = Extension.create<TagAutocompleteOptions>({
                 // Row 0 is the typed text, so accepting it changes nothing
                 // and only closes the list; any other row is an existing tag
                 // to insert and descend into.
-                if (open.activeIndex === 0) commitTypedText(view, open.match);
+                if (open.activeIndex === 0) commitTypedText(view);
                 else insertTag(view, open.match, chosen);
                 return true;
               }
@@ -577,7 +580,7 @@ export const TagAutocomplete = Extension.create<TagAutocompleteOptions>({
                 if (chosen === undefined) return true;
                 // Identical per-row behaviour to `Tab`, so a click and a
                 // keypress on the same row cannot diverge.
-                if (index === 0) commitTypedText(view, open.match);
+                if (index === 0) commitTypedText(view);
                 else insertTag(view, open.match, chosen);
                 return true;
               }
