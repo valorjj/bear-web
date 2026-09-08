@@ -579,7 +579,13 @@ test('a modifier click on a tag the app declines places the caret instead of doi
   );
 });
 
-test('a plain click on a tag pill places the caret and does not filter', async ({ page }) => {
+// Rewritten for S4, not merely adjusted: `docs/rulings/tag-pills.md`'s
+// "plain click edits" ruling was REPLACED outright once the tag autocomplete
+// shipped, so a plain click no longer places the caret at all — it filters,
+// the same gesture `e2e/tags.spec.ts`'s own plain-click test exercises
+// against the corpus. This one stays here because it is the pairing this
+// file already has for the modifier-click tests just above.
+test('a plain click on a tag pill filters the note list, since S4', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'New note' }).click();
 
@@ -590,13 +596,12 @@ test('a plain click on a tag pill places the caret and does not filter', async (
 
   await editor.locator('.bear-tag:not(.bear-tag__hash)').click();
 
-  // The caret landed in the tag, so its pill is suppressed — that is the
-  // observable proof the click was an edit rather than an activation.
-  await expect(editor.locator('.bear-tag:not(.bear-tag__hash)')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /^Notes\b/ })).toHaveAttribute(
-    'aria-current',
-    'page',
-  );
+  // The caret did NOT land in the tag — `mousedown` filtered instead of
+  // placing it, so the pill is still painted rather than suppressed.
+  await expect(editor.locator('.bear-tag:not(.bear-tag__hash)')).toHaveCount(1);
+  // And the note list re-scoped to the tag: the scope header's visible text
+  // and accessible name both name it.
+  await expect(page.getByRole('button', { name: 'List options: work' })).toBeVisible();
 });
 
 test('typing "- [ ] " produces a real checkbox, not a literal bullet', async ({ page }) => {

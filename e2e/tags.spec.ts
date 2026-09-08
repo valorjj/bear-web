@@ -30,6 +30,17 @@ async function longPress(
   await session.detach();
 }
 
+/**
+ * The editor's contenteditable, located by its stable class rather than its
+ * ARIA role — `role="textbox"` flips to `role="combobox"` for as long as the
+ * tag autocomplete popover is open (`TagAutocomplete.ts`'s editable-combobox
+ * pattern, the same one `LinkAutocomplete.ts` uses), which
+ * `e2e/backlinks.spec.ts`'s own `editorLocator` already documents.
+ */
+function editorLocator(page: import('@playwright/test').Page) {
+  return page.locator('.ProseMirror[contenteditable="true"]');
+}
+
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(FIXED_NOW);
   await seedDatabase(page, CORPUS);
@@ -99,6 +110,57 @@ test('the menu is reachable by keyboard alone', async ({ page }) => {
   await row.focus();
   await page.keyboard.press('Shift+F10');
   await expect(page.getByRole('menu', { name: 'Tag actions' })).toBeVisible();
+});
+
+test('the tag autocomplete completes and descends', async ({ page }) => {
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = editorLocator(page);
+  await editor.click();
+
+  // A real caret and a real Tab keypress — neither belongs in jsdom. The
+  // `openFrom` gate (`TagAutocomplete.ts`) only opens the list on a document
+  // change, so it must be TYPED open, never placed by a click.
+  await page.keyboard.type('Notes #eco');
+  const list = editor.getByRole('listbox', { name: 'Tag' });
+  await expect(list).toBeVisible();
+  // Row 0 is always the literal text just typed, not the highest-ranked
+  // existing tag — the corpus's `#economy/us-market` and `#economy/rates`
+  // rank below it.
+  await expect(list.getByRole('option').first()).toHaveText('eco');
+  await expect(list.getByRole('option')).toContainText(['eco', 'economy']);
+
+  // Move onto the existing `economy` row and accept it.
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Tab');
+
+  // Descended: the tag committed as `#economy`, the caret stayed parked at
+  // its end with no trailing space, and the popover reopened on that tag's
+  // own subtree rather than closing.
+  await expect(editor).toContainText('Notes #economy');
+  await expect(list).toBeVisible();
+  await expect(list.getByRole('option')).toContainText(['economy', 'economy/rates']);
+
+  // A space commits and closes at any depth.
+  await page.keyboard.type('/us-market');
+  await page.keyboard.press('Space');
+  await expect(list).toHaveCount(0);
+  await expect(editor).toContainText('Notes #economy/us-market');
+});
+
+test('a plain click on a tag pill re-scopes the note list', async ({ page }) => {
+  await page.getByRole('button', { name: /US market daily/ }).click();
+  const editor = editorLocator(page);
+  const pill = editor.locator('.bear-tag', { hasText: 'economy/rates' });
+  await expect(pill).toBeVisible();
+
+  await pill.click();
+
+  // The note-list scope header itself, not merely "some notes changed": its
+  // accessible name is `t('noteList.menu.open')` with the scope name
+  // substituted in, and its visible text is the bare tag key.
+  const scopeButton = page.getByRole('button', { name: 'List options: economy/rates' });
+  await expect(scopeButton).toBeVisible();
+  await expect(scopeButton).toHaveText('economy/rates');
 });
 
 test.describe('on a touch device', () => {

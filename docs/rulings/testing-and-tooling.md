@@ -21,7 +21,9 @@ and its `CEILING_BYTES`; `build.manifest` in `vite.config.ts`; any new
 `React.lazy` boundary, and any new runtime dependency reachable from
 `main.tsx`; `playwright.config.ts`'s `use.storageState`, `vitest.setup.ts`'s
 `beforeEach`, `scripts/harnessDefaults.test.ts`, and any e2e or
-component spec that opts out of the landing gate's pre-dismissed default.
+component spec that opts out of the landing gate's pre-dismissed default. Also
+`src/features/editor/tagAutocomplete.test.ts` and `e2e/tags.spec.ts`'s
+autocomplete tests (S4).
 
 - **The eager-JS ceiling is a FROZEN budget at 346,500 B gzipped, not a
   ratchet. Ruled 2026-08-31, before L5.** From K1 onward the ceiling was raised
@@ -426,3 +428,49 @@ origins: [] } })`. `scripts/harnessDefaults.test.ts` pins the
   photographs) the **app shell** instead of the landing screen, and passes —
   the same shape of false-green as `parseColour`'s `NaN`: a check that looks
   like coverage but is measuring the wrong screen entirely.
+
+## Three traps from the tag autocomplete (S4)
+
+Costly in real time during S4, and general enough to recur anywhere a
+ProseMirror widget popover is tested.
+
+- **A popover rendered as a ProseMirror WIDGET DECORATION lives INSIDE
+  `view.dom`, so a `textContent` (or `toContainText`) assertion on the editor
+  includes the popover's own row text.** A test asserting the document read
+  `#work` while the tag popover happened to be open instead read
+  `#workwork` — the widget's row text concatenated onto the real document
+  text with nothing to visually separate them in a plain string comparison.
+  `LinkAutocomplete` shipped this same shape first; nothing about it is
+  specific to tags. Close the popover (accept a row, `Esc`, or type past the
+  boundary) before asserting document text, or scope the assertion to a
+  locator that excludes `.bear-tag-autocomplete`/`.bear-link-autocomplete`.
+
+- **Asserting `editor.view.someProp('handleKeyDown', event) === false` for
+  `Enter` or `Tab` is VACUOUS on its own, in either direction.** Other
+  plugins already consume both keys regardless of whether the tag
+  autocomplete plugin is registered at all — StarterKit's own `Enter`
+  binding, `@tiptap/extension-list-keymap`'s `Tab` — so this was measured
+  with NO tag plugin present: `Enter` reported consumed `true`, `Tab`
+  reported consumed `true`, `space` reported consumed `false`. A test
+  asserting "`Enter` passes through" by checking `someProp(...) === false`
+  therefore passes whether or not the new plugin does anything at all, and
+  the CLAUDE.md-documented cure applies again here: assert the REAL effect
+  (the document gained a new paragraph after `Enter`; the list still
+  advertises `Tab`'s meaning while the list keymap is silent) rather than a
+  boolean any plugin combination can produce.
+
+- **jsdom does not honour `contentEditable="false"` on a widget's own DOM the
+  way a real browser does, so synthetic typing (`userEvent.type`,
+  `pressSequentially`) can land INSIDE the popover's transient markup instead
+  of the document, and is silently discarded the next time the widget
+  rebuilds (which happens on nearly every keystroke, per `widgetKey`'s
+  volatility above).** The symptom reads as "my keystrokes vanished" with no
+  error anywhere, because from jsdom's perspective the input landed
+  somewhere valid — just not where a real Chromium would have refused it.
+  Real Chromium honours `contentEditable="false"` correctly and is
+  unaffected; this is a unit-test-only hazard, and it is why the state
+  machine's own keyboard tests drive `handleKeyDown` directly
+  (`linkAutocomplete.test.ts`'s pattern, reused by `tagAutocomplete.test.ts`)
+  rather than simulating keystrokes through Testing Library into a mounted
+  popover, and why the descend-and-reopen sequence is additionally proven in
+  `e2e/tags.spec.ts` against a real browser.

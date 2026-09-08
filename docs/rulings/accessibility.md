@@ -18,7 +18,8 @@ complete);
 `src/features/notes/ScopeMenu.tsx`'s `role` attributes and disabled-group copy;
 `src/features/editor/LinkAutocomplete.ts`'s `view()` lifecycle (the
 `role`/`aria-expanded`/`aria-controls`/`aria-activedescendant` mirror,
-`optionId` and `listboxId`);
+`optionId` and `listboxId`); `src/features/editor/TagAutocomplete.ts`'s
+matching `view()` lifecycle, `widgetKey`, `listboxId` and `optionId` (S4);
 `src/features/notes/preview.ts`'s `snippetLines`;
 `src/features/editor/MermaidDiagram.ts`'s `diagramName`, `figure`'s `role="img"`
 and `aria-label`, and `editor.diagram.*` i18n keys;
@@ -554,6 +555,34 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   user nothing they lose by not hearing), but it is exactly what a future
   reader needs to know before disabling a third item whose reason is NOT
   self-evident.
+
+## The `#tag` autocomplete: the same editable-combobox trick, plus a listbox id split
+
+`TagAutocomplete.ts`'s popover (S4) is built to the same contract as
+`LinkAutocomplete.ts`'s — see the section below for the editable-combobox
+pattern itself, which applies here identically: `.ProseMirror`'s `role` swaps
+from `textbox` to `combobox` for as long as the tag popover is open, riding
+the already-focused editor surface because there is no dedicated `<input>` to
+hang the pattern on. What is new here is the id scheme, and it exists because
+this popover's content changes on every keystroke in a way `LinkAutocomplete`'s
+does not as sharply.
+
+- **Two different things are keyed on two different things, deliberately.**
+  The widget decoration's `key` (`widgetKey`) bakes in `match.from`,
+  `match.query` AND `activeIndex` — VOLATILE, changing on every keystroke and
+  every arrow press — because ProseMirror's `WidgetType.eq` matches two
+  widgets sharing an equal `key` WITHOUT re-invoking `toDOM`, so a key that
+  stayed constant across keystrokes would leave a stale row list rendered on
+  screen while the real matches underneath it had already changed.
+  `listboxId` and `optionId`, by contrast, are keyed on `match.from` ALONE —
+  STABLE across every keystroke typing the same tag. These feed
+  `aria-activedescendant`, which a screen reader is actively tracking; an id
+  that changed shape on every keystroke (the way the widget key deliberately
+  does) would point assistive tech at an element that stops existing mid
+  read-out. The split is the same one `LinkAutocomplete.ts` already
+  established — `optionId`/`listboxId` there are equally `from`-keyed against
+  an equally volatile widget key — so this is a second instance of an
+  existing rule, not a new design.
 
 ## The `[[` autocomplete swaps the editor's own role
 
