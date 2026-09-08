@@ -133,6 +133,16 @@ describe('tags.rename', () => {
     await expect(tags.rename('a/b', 'has#hash')).rejects.toThrow(/cannot be written/i);
   });
 
+  it('refuses a target containing whitespace, leaving the note untouched', async () => {
+    // Not a UI concern the repository may delegate: `#my plan#` parses only
+    // when the character after its closing `#` is a boundary, so writing it
+    // before a full stop re-reads as the tag `my` and strands `plan#.` in the
+    // user's prose. `canRenameTo` refuses it on both sides of the boundary.
+    const note = await notes.create('done #work. next');
+    await expect(tags.rename('work', 'my plan')).rejects.toThrow(/cannot be written/i);
+    expect((await db.notes.get(note.id))?.text).toBe('done #work. next');
+  });
+
   it('skips a note that vanished from the read set, and still rewrites the survivors', async () => {
     // NOT a rollback test — genuine mid-transaction rollback is not covered
     // by any test in this file. `reindexNote` is not injectable from the

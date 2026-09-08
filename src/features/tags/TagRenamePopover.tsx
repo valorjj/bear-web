@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from 'react';
 
-import { canWriteTag, normalizeTag } from '@/data';
+import { canRenameTo, normalizeTag } from '@/data';
 import { useT } from '@/i18n';
 import { MENU_GAP, useAnchoredMenu } from '@/lib/useAnchoredMenu';
 
@@ -42,7 +42,13 @@ export function TagRenamePopover({
   const { ref, position, onKeyDown } = useAnchoredMenu<HTMLDivElement>(rect, onClose);
 
   const normalized = normalizeTag(draft);
-  const valid = normalized !== null && canWriteTag(normalized);
+  // `canRenameTo`, not `canWriteTag`: the narrower of the two refuses a name
+  // that needs the multi-word form's closing `#`, which parses only when the
+  // character after it is a boundary — inserting one before punctuation
+  // rewrites `done #work. next` into `done #my plan#. next` and splits the
+  // tag in two. Multi-word tags remain fully supported when typed into a
+  // note; the restriction is on renaming TO one. See `canRenameTo`.
+  const valid = normalized !== null && canRenameTo(normalized);
   const merges = valid && normalized !== tag && existingTags.includes(normalized);
 
   function submit(): void {

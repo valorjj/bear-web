@@ -1,15 +1,21 @@
 import { findTagRanges, normalizeTag, parseTags } from './parseTags';
 
 /**
- * A tag name written as Markdown.
+ * Whether writing `tag` needs the multi-word form's closing `#`.
  *
- * The multi-word form is used only when the simple form could not read the
- * name back. `isBoundary` in `parseTags.ts` treats whitespace, the mask and
- * end-of-input as the only terminators of a simple tag, so whitespace is the
- * one thing that forces a closing `#`.
+ * `isBoundary` in `parseTags.ts` treats whitespace, the mask and end-of-input
+ * as the only terminators of a simple tag, so whitespace is the one thing that
+ * forces a closer. Named once and shared by `tagToken` and `canRenameTo`
+ * deliberately: the rename path refuses exactly the names that need a closer,
+ * and that coupling should be visible rather than two copies of `/\s/`.
  */
+function needsClosingHash(tag: string): boolean {
+  return /\s/.test(tag);
+}
+
+/** A tag name written as Markdown, in whichever form reads back as itself. */
 export function tagToken(tag: string): string {
-  return /\s/.test(tag) ? `#${tag}#` : `#${tag}`;
+  return needsClosingHash(tag) ? `#${tag}#` : `#${tag}`;
 }
 
 /**
@@ -24,6 +30,33 @@ export function tagToken(tag: string): string {
  */
 export function canWriteTag(tag: string): boolean {
   return normalizeTag(tag) === tag && parseTags(tagToken(tag)).includes(tag);
+}
+
+/**
+ * Whether `tag` is safe as the TARGET of a rename.
+ *
+ * Strictly narrower than `canWriteTag`, and the difference is the whole point:
+ * `canWriteTag` round-trips the token IN ISOLATION, but a rename inserts it
+ * into text that already exists around it, and the multi-word form only parses
+ * when the character after its closing `#` is a boundary. `parseTags` requires
+ * that (`isBoundary(text[close + 1])`), and `range.end` for the simple form
+ * deliberately excludes trailing punctuation — so renaming `work` to `my plan`
+ * in `done #work. next` writes `done #my plan#. next`, which re-parses as the
+ * tag `my` and leaves a literal `plan#.` in the user's prose. One rename splits
+ * the tag in two and no second rename can undo it.
+ *
+ * Refusing whitespace is the fix, rather than emitting a separating space: a
+ * space only helps the punctuation-adjacent case and leaves a floating
+ * `#my plan# . next` in the prose, which is its own corruption. Refusal is
+ * predictable and reuses the popover's existing invalid message.
+ *
+ * **This restricts renaming TO a multi-word name only.** Multi-word tags stay
+ * fully supported when a user types one into a note — `parseTags` reads
+ * `#my plan#` exactly as before, `tagToken` still writes that form, and
+ * renaming FROM such a tag is unaffected.
+ */
+export function canRenameTo(tag: string): boolean {
+  return canWriteTag(tag) && !needsClosingHash(tag);
 }
 
 /**

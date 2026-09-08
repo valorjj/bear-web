@@ -91,6 +91,21 @@ describe('TagRenamePopover', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it('blocks a name containing a space, which the rename path cannot write', async () => {
+    // `canWriteTag('my plan')` is TRUE — the token round-trips in isolation.
+    // The popover must use the narrower `canRenameTo`, because the token is
+    // inserted into surrounding text where a following full stop stops the
+    // closing `#` parsing at all.
+    const { onSubmit } = mountPopover();
+    const field = screen.getByRole('textbox', { name: 'New tag name' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'my plan');
+    expect(screen.getByRole('button', { name: 'Rename' })).toBeDisabled();
+    expect(screen.getByText(/cannot be used/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('warns about a merge without blocking it', async () => {
     const { onSubmit } = mountPopover();
     const field = screen.getByRole('textbox', { name: 'New tag name' });

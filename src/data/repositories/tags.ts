@@ -2,7 +2,7 @@ import type { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
 import { reindexNote } from '../reindex';
 import { markDeleted, markDirty } from '../sync/markDirty';
-import { canWriteTag, rewriteTag } from '../tags';
+import { canRenameTo, rewriteTag } from '../tags';
 import type { TagMeta } from '../types';
 import type { LinkParser, TagParser } from './notes';
 
@@ -159,8 +159,15 @@ export function createTagsRepository(deps: TagsRepositoryDeps): TagsRepository {
 
     async rename(from, to) {
       if (from === to) return { noteCount: 0 };
-      if (!canWriteTag(to)) {
-        throw new Error(`tag "${to}" cannot be written back by the tag grammar`);
+      // `canRenameTo`, not `canWriteTag`. The repository must not rely on the
+      // popover to enforce this: it already refuses a name the grammar cannot
+      // write at all (`has#hash`), and a name needing the multi-word form's
+      // closing `#` belongs beside it — such a token parses only when followed
+      // by a boundary, so inserting one before punctuation corrupts the note's
+      // prose. Renaming TO a multi-word name is what this refuses; a
+      // multi-word tag TYPED into a note is still fully supported.
+      if (!canRenameTo(to)) {
+        throw new Error(`tag "${to}" cannot be written back into a note's text`);
       }
       return apply(from, to);
     },

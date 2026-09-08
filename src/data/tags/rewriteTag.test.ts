@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseTags } from './parseTags';
-import { canWriteTag, rewriteTag } from './rewriteTag';
+import { canRenameTo, canWriteTag, rewriteTag } from './rewriteTag';
 
 describe('rewriteTag — renaming', () => {
   it('renames the exact tag', () => {
@@ -100,6 +100,39 @@ describe('canWriteTag', () => {
     ['has#hash', false],
   ])('%s -> %s', (tag, expected) => {
     expect(canWriteTag(tag)).toBe(expected);
+  });
+});
+
+describe('canRenameTo', () => {
+  // Strictly narrower than `canWriteTag`, and `my plan` is the whole
+  // difference: writable in ISOLATION, unsafe as a rename target.
+  it.each([
+    ['work', true],
+    ['a/b/c', true],
+    ['my plan', false],
+    ['has#hash', false],
+  ])('%s -> %s', (tag, expected) => {
+    expect(canRenameTo(tag)).toBe(expected);
+  });
+
+  it('refuses the name that would corrupt prose before punctuation', () => {
+    // Kept as executable evidence rather than a comment, because the rewrite
+    // itself is still perfectly capable of producing this string — only the
+    // refusal stands between a user and it. `range.end` excludes the full
+    // stop, so the closing `#` lands directly before it, and `parseTags`
+    // accepts a closer only when the next character is a boundary: the token
+    // re-reads as the tag `my` and leaves a literal `plan#.` in the prose.
+    expect(rewriteTag('done #work. next', 'work', 'my plan')).toBe('done #my plan#. next');
+    expect(parseTags('done #my plan#. next')).toEqual(['my']);
+
+    expect(canRenameTo('my plan')).toBe(false);
+  });
+
+  it('does not restrict a multi-word tag TYPED into a note', () => {
+    // The refusal is on renaming TO a spaced name, never on the grammar: a
+    // multi-word tag the user writes themselves parses exactly as before.
+    expect(parseTags('see #my plan# ok')).toEqual(['my plan']);
+    expect(canWriteTag('my plan')).toBe(true);
   });
 });
 
