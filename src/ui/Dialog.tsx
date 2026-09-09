@@ -126,7 +126,10 @@ export function Dialog({
   if (!open) return null;
 
   return (
-    <div className={`fixed inset-0 z-50 flex ${PLACEMENT[placement].wrapper}`}>
+    // `bear-app-palette` for the same reason `Popover` carries it: a dialog
+    // opened from the sidebar is a DOM descendant of it, and would otherwise
+    // inherit the dark sidebar's re-mapped tokens. See `tokens.css`.
+    <div className={`bear-app-palette fixed inset-0 z-50 flex ${PLACEMENT[placement].wrapper}`}>
       {/*
         The backdrop closes on click. It carries no accessible role: the panel
         is `aria-modal`, so assistive tech already treats everything outside it

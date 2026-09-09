@@ -2,7 +2,7 @@
   "paper": {
     "bg": "rgb(255, 255, 255)",
     "surface": "rgb(250, 249, 248)",
-    "sidebar": "rgb(241, 239, 236)",
+    "sidebar": "rgb(28, 27, 25)",
     "canvas": "rgb(232, 228, 222)",
     "text": "rgb(28, 27, 25)",
     "muted": "rgb(107, 104, 98)",

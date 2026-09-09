@@ -143,7 +143,14 @@ export function Popover({
       ref={ref}
       role="dialog"
       aria-label={label}
-      className={`border-border bg-surface shadow-popover rounded-lg border p-1 ${className}`}
+      // `bear-app-palette`: a floating panel paints in the APP palette, wherever
+      // it is mounted. Without it, a popover opened from the SIDEBAR inherits
+      // that container's re-mapped tokens — the light indigo themes and every
+      // other light theme paint a dark sidebar and re-map `text`, `muted`,
+      // `faint`, `border`, `hover`, `selected` and `scrollbar` on it — so its
+      // borders and secondary text would resolve light-on-light. See
+      // `tokens.css`.
+      className={`bear-app-palette border-border bg-surface shadow-popover rounded-lg border p-1 ${className}`}
       style={style}
     >
       {children}

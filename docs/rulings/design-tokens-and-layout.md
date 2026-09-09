@@ -244,6 +244,44 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   reproduce at any colour; what these values buy is a sidebar that reads as
   its own material.
 
+  **Extended to EVERY light theme on the same day, by one rule:
+  `--bear-sidebar` is that theme's own `--bear-text`.** So the panel is always
+  the theme's ink and stays on palette — Paper `#1c1b19`, Latte `#2d2f40`,
+  Snow `#2a2f3a`, and so on for Solarized Light, Rose Dawn, Gruvbox Light and
+  Sepia. The scope's values are one shared block of `color-mix` expressions in
+  terms of `--bear-bg` and `--bear-sidebar` rather than eight sets of
+  literals: `text` is `bg`, and `muted`/`faint`/`border` are `bg` mixed 78 /
+  58 / 18 percent toward the sidebar. Measured across all eight, the worst
+  case is Rose Dawn's `faint` at 4.45 against a 3.0 floor.
+
+  **The sidebar value must be a LITERAL hex, never `var(--bear-text)`.** It
+  reads as the obvious way to express "the theme's ink", and it silently
+  paints the panel WHITE: a custom property is resolved at its USE SITE, the
+  use site is the same element that carries the scope class, and the scope
+  re-maps `--bear-text` to `bg` there. Written down because the wrong version
+  looks more principled than the right one.
+
+  **A floating panel opened from the sidebar needs the app palette back, and
+  that was a live bug before it was a design question.** This app uses no
+  portals, so every popover and dialog from the sidebar's toolbar or its rows
+  is a DOM descendant of the scope and inherited its light-on-dark tokens onto
+  a light `bg-surface` panel. It shipped that way with Indigo Light and was
+  invisible only because the hand-picked `faint` happened to clear the floor;
+  the generalised formula pushed the theme picker's card frames to 2.95 and
+  `e2e/contrast.spec.ts`'s picker test failed. `src/ui/Popover.tsx` and
+  `src/ui/Dialog.tsx` now carry `bear-app-palette`, and `tokens.css`
+  reconstructs the palette on it from `--bear-sidebar` — possible precisely
+  BECAUSE that token is the theme's ink — mirroring the global percentages.
+  The reset is scoped to the same eight themes as the scope itself: applied
+  unconditionally it broke every DARK theme, where `--bear-sidebar` is a panel
+  colour rather than ink, and text resolved to it.
+
+  One accepted imprecision: a theme overriding `muted` or `faint` with a
+  literal (Indigo Light, Paper) gets the formula's value inside a sidebar
+  popover, a few units off. Exactness would need six tokens restated for eight
+  themes, or cascade layers plus `revert-layer`, which means restructuring how
+  every theme block is declared.
+
   High Contrast keeps `#000000` for both sidebar and canvas: its panes are
   separated by borders, which is that theme's premise.
 

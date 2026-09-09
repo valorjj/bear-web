@@ -682,7 +682,7 @@
   color-scheme: light;
   --bear-bg: #ffffff;
   --bear-surface: #faf9f8;
-  --bear-sidebar: #f1efec;
+  --bear-sidebar: #1c1b19;
   --bear-text: #1c1b19;
   --bear-muted: #6b6862;
   --bear-faint: #88857d;
@@ -785,7 +785,7 @@
   color-scheme: light;
   --bear-bg: #fdf6e3;
   --bear-surface: #f7f0d8;
-  --bear-sidebar: #eee8d5;
+  --bear-sidebar: #2b373b;
   --bear-canvas: #e4ddc8;
   /*
    * Between base01 (#586e75) and base02. Solarized Light's own emphasized
@@ -814,7 +814,7 @@
   color-scheme: light;
   --bear-bg: #faf4ed;
   --bear-surface: #fffaf3;
-  --bear-sidebar: #f2e9e1;
+  --bear-sidebar: #393551;
   --bear-canvas: #e9e0d6;
   /*
    * Darkened from Rosé Pine Dawn's own #575279 (24.8% toward black in
@@ -836,7 +836,7 @@
   color-scheme: light;
   --bear-bg: #eff1f5;
   --bear-surface: #e6e9ef;
-  --bear-sidebar: #dce0e8;
+  --bear-sidebar: #2d2f40;
   --bear-canvas: #ccd0da;
   /*
    * Darkened from Catppuccin Latte's own #4c4f69 (28.8% toward black in
@@ -858,7 +858,7 @@
   color-scheme: light;
   --bear-bg: #fbf1c7;
   --bear-surface: #f2e5bc;
-  --bear-sidebar: #ebdbb2;
+  --bear-sidebar: #2f2c2a;
   --bear-canvas: #d5c4a1;
   /*
    * Darkened from Gruvbox Light's own #3c3836 (14.4% toward black in
@@ -883,7 +883,7 @@
   color-scheme: light;
   --bear-bg: #eceff4;
   --bear-surface: #e5e9f0;
-  --bear-sidebar: #d8dee9;
+  --bear-sidebar: #2a2f3a;
   --bear-canvas: #cfd6e0;
   /*
    * Darkened from Nord's own #2e3440 (5.9% toward black in oklab) so the
@@ -906,7 +906,7 @@
   color-scheme: light;
   --bear-bg: #f4ecd8;
   --bear-surface: #efe6d0;
-  --bear-sidebar: #e8dcc0;
+  --bear-sidebar: #3a2f1e;
   --bear-canvas: #ded0b0;
   --bear-text: #3a2f1e;
   --bear-accent: #8b5a2b;
@@ -1295,20 +1295,119 @@
  */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) .bear-sidebar-scope {
-    --bear-text: #f0edf7;
-    --bear-muted: #bdb7cf;
-    --bear-faint: #948ea8;
-    --bear-border: #453e5c;
+    --bear-text: var(--bear-bg);
+    --bear-muted: color-mix(in oklab, var(--bear-bg) 78%, var(--bear-sidebar));
+    --bear-faint: color-mix(in oklab, var(--bear-bg) 58%, var(--bear-sidebar));
+    --bear-border: color-mix(in oklab, var(--bear-bg) 18%, var(--bear-sidebar));
     --bear-hover: rgb(255 255 255 / 0.06);
-    --bear-selected: rgb(155 140 255 / 0.2);
+    --bear-selected: color-mix(in srgb, var(--bear-accent) 28%, transparent);
   }
 }
 
-[data-theme='indigo-light'] .bear-sidebar-scope {
-  --bear-text: #f0edf7;
-  --bear-muted: #bdb7cf;
-  --bear-faint: #948ea8;
-  --bear-border: #453e5c;
+[data-theme='indigo-light'] .bear-sidebar-scope,
+[data-theme='paper'] .bear-sidebar-scope,
+[data-theme='solarized-light'] .bear-sidebar-scope,
+[data-theme='rose-dawn'] .bear-sidebar-scope,
+[data-theme='latte'] .bear-sidebar-scope,
+[data-theme='gruvbox-light'] .bear-sidebar-scope,
+[data-theme='snow'] .bear-sidebar-scope,
+[data-theme='sepia'] .bear-sidebar-scope {
+  --bear-text: var(--bear-bg);
+  --bear-muted: color-mix(in oklab, var(--bear-bg) 78%, var(--bear-sidebar));
+  --bear-faint: color-mix(in oklab, var(--bear-bg) 58%, var(--bear-sidebar));
+  --bear-border: color-mix(in oklab, var(--bear-bg) 18%, var(--bear-sidebar));
   --bear-hover: rgb(255 255 255 / 0.06);
-  --bear-selected: rgb(155 140 255 / 0.2);
+  --bear-selected: color-mix(in srgb, var(--bear-accent) 28%, transparent);
+}
+
+/*
+ * A floating panel paints in the APP palette, even inside the dark sidebar.
+ *
+ * The scope above re-maps `text` and its derivatives on the sidebar's own
+ * container, and every popover and dialog opened from the sidebar's toolbar or
+ * its rows is a DOM DESCENDANT of that container — this app uses no portals —
+ * so all of them inherited light-on-dark tokens onto a light `bg-surface`
+ * panel. It was already live for Indigo Light before the other light themes
+ * joined it: the theme picker's cards draw their frames from `--bear-faint`,
+ * and that measured 2.95 against the panel once the value came from a formula
+ * rather than from a hand-picked literal that happened to clear 3.0.
+ * `e2e/contrast.spec.ts`'s theme-picker test is what caught it.
+ *
+ * Reconstruction is possible at all because `--bear-sidebar` IS each of these
+ * themes' own ink — every one of the eight sets it to that theme's
+ * `--bear-text` value — so the app palette can be rebuilt from it plus `bg`
+ * and `accent`, neither of which the scope touches. The percentages below
+ * mirror the global definitions exactly; keep them in step.
+ *
+ * One known, accepted imprecision: a theme that overrides `muted` or `faint`
+ * with a LITERAL rather than taking the derived value (Indigo Light's
+ * `#605b78`/`#837e99`, Paper's `#88857d`) gets the formula's value inside a
+ * sidebar popover instead of its literal, a shift of a few units per channel.
+ * Reproducing the literals would mean restating six tokens for each of eight
+ * themes, and the alternative that would be exact — putting these
+ * declarations in a cascade layer and using `revert-layer` here — means
+ * restructuring how every theme block is declared, which is not a change to
+ * make for a few units.
+ */
+[data-theme='indigo-light'] .bear-sidebar-scope .bear-app-palette,
+[data-theme='paper'] .bear-sidebar-scope .bear-app-palette,
+[data-theme='solarized-light'] .bear-sidebar-scope .bear-app-palette,
+[data-theme='rose-dawn'] .bear-sidebar-scope .bear-app-palette,
+[data-theme='latte'] .bear-sidebar-scope .bear-app-palette,
+[data-theme='gruvbox-light'] .bear-sidebar-scope .bear-app-palette,
+[data-theme='snow'] .bear-sidebar-scope .bear-app-palette,
+[data-theme='sepia'] .bear-sidebar-scope .bear-app-palette {
+  --bear-text: var(--bear-sidebar);
+  --bear-muted: color-mix(in oklab, var(--bear-sidebar) 72%, var(--bear-bg));
+  --bear-faint: color-mix(in oklab, var(--bear-sidebar) 56%, var(--bear-bg));
+  --bear-border: color-mix(in oklab, var(--bear-sidebar) 13%, var(--bear-bg));
+  --bear-hover: color-mix(
+    in srgb,
+    var(--bear-sidebar) calc(var(--bear-hover-a) * 100%),
+    transparent
+  );
+  --bear-selected: color-mix(
+    in srgb,
+    var(--bear-accent) calc(var(--bear-tint) * 100%),
+    transparent
+  );
+  --bear-scrollbar: color-mix(
+    in srgb,
+    var(--bear-sidebar) calc(var(--bear-scroll-a) * 100%),
+    transparent
+  );
+  --bear-scrollbar-hover: color-mix(
+    in srgb,
+    var(--bear-sidebar) calc(var(--bear-scroll-hover-a) * 100%),
+    transparent
+  );
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .bear-sidebar-scope .bear-app-palette {
+    --bear-text: var(--bear-sidebar);
+    --bear-muted: color-mix(in oklab, var(--bear-sidebar) 72%, var(--bear-bg));
+    --bear-faint: color-mix(in oklab, var(--bear-sidebar) 56%, var(--bear-bg));
+    --bear-border: color-mix(in oklab, var(--bear-sidebar) 13%, var(--bear-bg));
+    --bear-hover: color-mix(
+      in srgb,
+      var(--bear-sidebar) calc(var(--bear-hover-a) * 100%),
+      transparent
+    );
+    --bear-selected: color-mix(
+      in srgb,
+      var(--bear-accent) calc(var(--bear-tint) * 100%),
+      transparent
+    );
+    --bear-scrollbar: color-mix(
+      in srgb,
+      var(--bear-sidebar) calc(var(--bear-scroll-a) * 100%),
+      transparent
+    );
+    --bear-scrollbar-hover: color-mix(
+      in srgb,
+      var(--bear-sidebar) calc(var(--bear-scroll-hover-a) * 100%),
+      transparent
+    );
+  }
 }

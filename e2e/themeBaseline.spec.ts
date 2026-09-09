@@ -48,10 +48,15 @@ import { readThemeTokens } from './fixtures/tokens.ts';
  * `faint` and `border` edits the second attempt needed were reverted with it,
  * because a dark panel with its own scoped tokens has no use for them.
  *
- * So this re-base can lean on the same evidence of intent the `tag-fill` one
- * above does — a single token moved per theme, `paper`, `ink` and
- * `high-contrast` untouched — and `e2e/contrast.spec.ts` checks the scoped
- * pairs through a probe mounted inside that scope. See
+ * **Extended to EVERY light theme later the same day**, on the same rule:
+ * `--bear-sidebar` becomes that theme's own `--bear-text`, so the panel is
+ * always the theme's ink. `paper` is the one baseline theme affected
+ * (`#f1efec` → `#1c1b19`); `ink` and `high-contrast` are dark and
+ * `high-contrast` keeps `#000000` regardless.
+ *
+ * So this re-base leans on the same evidence of intent the `tag-fill` one
+ * above does — a single token moved per theme — and `e2e/contrast.spec.ts`
+ * checks the scoped pairs through a probe mounted inside that scope. See
  * `docs/rulings/design-tokens-and-layout.md`.
  *
  * Comparison is by parsed RGBA, never by string. A value that reads `rgb(…)`
