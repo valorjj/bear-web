@@ -24,7 +24,7 @@
   "indigo-light": {
     "bg": "rgb(255, 255, 255)",
     "surface": "rgb(245, 244, 250)",
-    "sidebar": "rgb(230, 225, 245)",
+    "sidebar": "rgb(239, 236, 249)",
     "canvas": "rgb(230, 225, 245)",
     "text": "rgb(36, 31, 61)",
     "muted": "rgb(96, 91, 120)",
@@ -46,7 +46,7 @@
   "indigo-dark": {
     "bg": "rgb(27, 24, 37)",
     "surface": "rgb(37, 33, 49)",
-    "sidebar": "rgb(20, 18, 27)",
+    "sidebar": "rgb(30, 26, 42)",
     "canvas": "rgb(20, 18, 27)",
     "text": "rgb(240, 237, 247)",
     "muted": "rgb(169, 163, 189)",

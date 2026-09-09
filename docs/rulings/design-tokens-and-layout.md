@@ -188,9 +188,35 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   pass on the heading rule and prove nothing) and asserts the title is larger
   and heavier than the body AND that its gap exceeds the ordinary block rhythm.
 
-- **In Soft Depth the sidebar dissolves into the ground.** Its `--bear-sidebar`
-  equals `--bear-canvas` in both indigo themes, and it is `Pane`'s one
-  `elevated={false}` caller. Only the panes holding content float. That is a
+- **The sidebar is a panel of its own, and it is `Pane`'s one
+  `elevated={false}` caller.** The first half of that replaces a rule retired
+  on 2026-09-09 rather than caveated: "In Soft Depth the sidebar dissolves
+  into the ground", which held `--bear-sidebar` equal to `--bear-canvas` in
+  both indigo themes. It was reported as looking undifferentiated from the
+  other panes, and the indigo pair now steps off its canvas like the other
+  thirteen themes already did — `#efecf9` against `#e6e1f5` in Indigo Light,
+  `#1e1a2a` against `#14121b` in Indigo Dark, with the
+  `prefers-color-scheme: dark` block moved in step because
+  `scripts/sourceLint.test.ts` asserts it is token-for-token identical to
+  `SYSTEM_DARK_ID`'s theme.
+
+  **The step goes LIGHTER, and that direction is forced rather than chosen.**
+  Deeper is what the request asked for and it is unavailable in Indigo Light
+  at ANY size: `faint` on the old sidebar measured **3.042 against a 3.0
+  floor**, so even `#e3ddf3` — a three-unit darkening — drops it to 2.94, and
+  `#dcd6ef` failed BOTH `faint` (2.76) and `border` at once. Reaching Bear's
+  darker sidebar would need two literal overrides in that theme (`faint`
+  `#837e99` → `#7b7690`, which also lifts faint on white from 3.88 to 4.34,
+  plus a `border` override since border is derived globally at 13%) and was
+  declined as a bigger change than the complaint warranted. Going lighter
+  instead IMPROVES every ratio — faint 3.04 → 3.33, border 1.048 → 1.148 —
+  which is why the roster's other thirteen themes all step that way. Note
+  also that Bear's effect is macOS vibrancy sampling the desktop; a browser
+  has no desktop behind the window, so no colour choice here reproduces it.
+  High Contrast keeps `#000000` for both: its panes are separated by borders,
+  which is that theme's whole premise.
+
+  Only the panes holding content float. Only the panes holding content float. That is a
   PROP and not a `shadow-none` the caller appends, because two utilities in the
   same layer are resolved by stylesheet order rather than class-attribute
   order. The card test in `e2e/appearance.spec.ts` was narrowed from "every

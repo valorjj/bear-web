@@ -31,6 +31,18 @@ import { readThemeTokens } from './fixtures/tokens.ts';
  * token in the baseline is untouched, which is exactly what made the two
  * distinguishable here.
  *
+ * **`sidebar` was deliberately re-based on 2026-09-09, for the two indigo
+ * themes only.** It had been equal to `--bear-canvas` in both, so the sidebar
+ * dissolved into the ground and read as undifferentiated from the other
+ * panes; it now steps off the canvas the way the other thirteen themes
+ * already did (`#efecf9` in Indigo Light, `#1e1a2a` in Indigo Dark). Same
+ * shape of edit as the `tag-fill` re-base above, and distinguishable from
+ * drift by the same evidence: this file reported `--bear-sidebar` as the ONLY
+ * token that moved in either theme, and `paper`, `ink` and `high-contrast`
+ * are untouched. The step goes lighter rather than deeper because deeper is
+ * unavailable at any size — `faint` on the old sidebar measured 3.042 against
+ * a 3.0 floor. See `docs/rulings/design-tokens-and-layout.md`.
+ *
  * Comparison is by parsed RGBA, never by string. A value that reads `rgb(…)`
  * today may legitimately read `color(srgb …)` afterwards while denoting the
  * same colour — which is exactly why `parseColour` had to learn that format

@@ -640,7 +640,7 @@
   /* Indigo Light — see the named block below; the two must stay identical. */
   --bear-bg: #ffffff;
   --bear-surface: #f5f4fa;
-  --bear-sidebar: #e6e1f5;
+  --bear-sidebar: #efecf9;
   --bear-canvas: #e6e1f5;
   --bear-text: #241f3d;
   --bear-muted: #605b78;
@@ -737,7 +737,7 @@
    */
   --bear-bg: #ffffff;
   --bear-surface: #f5f4fa;
-  --bear-sidebar: #e6e1f5;
+  --bear-sidebar: #efecf9;
   --bear-canvas: #e6e1f5;
   --bear-text: #241f3d;
   --bear-muted: #605b78;
@@ -923,7 +923,7 @@
      theme, the way Ink's #201f1e steps off its #1a1a19. */
   --bear-bg: #1b1825;
   --bear-surface: #252131;
-  --bear-sidebar: #14121b;
+  --bear-sidebar: #1e1a2a;
   --bear-canvas: #14121b;
   --bear-text: #f0edf7;
   --bear-muted: #a9a3bd;
@@ -1176,7 +1176,7 @@
     color-scheme: dark;
     --bear-bg: #1b1825;
     --bear-surface: #252131;
-    --bear-sidebar: #14121b;
+    --bear-sidebar: #1e1a2a;
     --bear-canvas: #14121b;
     --bear-text: #f0edf7;
     --bear-muted: #a9a3bd;
