@@ -41,7 +41,10 @@ describe('EditorContextMenu', () => {
 
   it('shows the table section when the caret is in a table', () => {
     renderMenu({ flags: { ...EMPTY_FLAGS, table: true } });
-    expect(screen.getByRole('menuitem', { name: 'Insert row above' })).toBeVisible();
+    // A regex, because the row's accessible name now carries its shortcut
+    // hint as well as its label — the same shape `HeadingMenu` has shipped
+    // since B, and deliberate: a screen-reader user hears the chord too.
+    expect(screen.getByRole('menuitem', { name: /Insert row above/ })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Delete table' })).toBeVisible();
   });
 

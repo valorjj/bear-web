@@ -1,3 +1,4 @@
+import { isMacOS } from '@tiptap/core';
 import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
@@ -32,6 +33,7 @@ import type { ContextMenuRequest } from './ContextMenu';
 import type { EditorFlags } from './editorState';
 import type { HighlightChoiceResult } from './HighlightPalette';
 import { HIGHLIGHT_CHOICES } from './highlightChoices';
+import { tableShortcutHint } from './TableShortcuts';
 
 const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
 const HEADING_GLYPHS = [Heading1, Heading2, Heading3, Heading4, Heading5, Heading6] as const;
@@ -105,6 +107,10 @@ export function EditorContextMenu({
   onClose,
 }: EditorContextMenuProps): ReactElement {
   const t = useT();
+  // Read once per render, like `HeadingMenu`'s own modifier string. The
+  // hints and the keymap come from `TableShortcuts.ts`' single table, so a
+  // row can never advertise a chord the extension does not bind.
+  const mac = isMacOS();
   // Placement, initial focus, Escape/outside dismissal and the Tab trap all
   // come from `useAnchoredMenu`.
   //
@@ -378,6 +384,9 @@ export function EditorContextMenu({
             >
               <Icon glyph={Rows3} size="sm" />
               {t('editor.table.addRowBefore')}
+              <span className="text-faint ml-auto pl-4">
+                {tableShortcutHint('addRowBefore', mac)}
+              </span>
             </button>
             <button
               type="button"
@@ -387,6 +396,9 @@ export function EditorContextMenu({
             >
               <Icon glyph={Rows3} size="sm" />
               {t('editor.table.addRowAfter')}
+              <span className="text-faint ml-auto pl-4">
+                {tableShortcutHint('addRowAfter', mac)}
+              </span>
             </button>
             <button
               type="button"
@@ -396,6 +408,9 @@ export function EditorContextMenu({
             >
               <Icon glyph={Columns3} size="sm" />
               {t('editor.table.addColumnBefore')}
+              <span className="text-faint ml-auto pl-4">
+                {tableShortcutHint('addColumnBefore', mac)}
+              </span>
             </button>
             <button
               type="button"
@@ -405,6 +420,9 @@ export function EditorContextMenu({
             >
               <Icon glyph={Columns3} size="sm" />
               {t('editor.table.addColumnAfter')}
+              <span className="text-faint ml-auto pl-4">
+                {tableShortcutHint('addColumnAfter', mac)}
+              </span>
             </button>
             <button
               type="button"

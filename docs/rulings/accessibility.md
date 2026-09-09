@@ -509,6 +509,50 @@ editorAffordances.spec.ts`'s bar-button check, pre-dating this menu). Unlike
   distinct glyph as well as a hue, and the title text stays `--bear-text` so
   the block does not depend on hue for legibility either.
 
+- **The menu is opened by a STAND-ALONE button, not a chevron beside Quote —
+  changed 2026-09-09 on the user's report.** M9b hung it off a `⌄` pinned to
+  the right of the Quote button, and that chevron read as a generic "more
+  tools" affordance rather than as the route to the callout types: it is the
+  same glyph the highlight pair uses, at the end of the strip, saying nothing
+  about what it opens. It is now one button carrying its own glyph
+  (`MessageSquareQuote`) with `aria-haspopup="menu"` and `aria-expanded`, and
+  it REPLACED the Quote button rather than joining it — the menu's first row is
+  Quote, so a second control for the same thing would be the redundancy this
+  removed. `toolbars.test.tsx` asserts the absence of both the old Quote button
+  and the old `Callout type` chevron, because a change like this drifts back by
+  addition, not by revert. Accepted cost, taken deliberately: a plain
+  blockquote is two clicks instead of one.
+
+- **The menu is ANCHORED to that button.** It rendered as a centred child of a
+  flex column above the toolbar until the same change, so a menu opened from
+  the strip's right-hand end floated over the middle of the pane with nothing
+  connecting it to its opener. It goes through `useAnchoredMenu` now, like
+  every other menu in the app. Two things about that are load-bearing: it must
+  render OUTSIDE the toolbar's positioned wrapper, because that wrapper takes
+  a `transform` when the virtual keyboard is up (J3) and a transformed
+  ancestor becomes the containing block for `position: fixed`; and the hook's
+  first paint is deliberately the UNFLIPPED position, corrected in an effect
+  once the menu's height exists, so an e2e assertion on its box must poll
+  rather than read once — measured, not guessed.
+
+- **A toggle button that opens a menu must be excluded from that menu's
+  outside-click dismissal.** `useAnchoredMenu`'s listener is a CAPTURE
+  listener, so without the `opener` argument it closes on mousedown and the
+  button's own click re-opens a render later: the menu the user clicked to
+  dismiss simply stays, with no error and nothing in the DOM to show why. The
+  four menus that predate this argument are opened by a right-click or by a
+  control inside the editor, none of which flips a state on click, so they
+  pass nothing and are unaffected.
+
+- **A menu row's accessible name carries its keyboard hint, and that is
+  deliberate.** The four table inserts in `EditorContextMenu` and
+  `TableHandleMenu` print their chord in a trailing span, which joins the name
+  by concatenation — `Insert row above ⌃⌘↑`. That is the shape `HeadingMenu`
+  has shipped since B, and it is the right one: a screen-reader user learns
+  the chord too. The consequence for tests is that a `name:` lookup must be a
+  REGEX, never a literal string, and `editorContextMenu.test.ts` and
+  `e2e/editorContext.spec.ts` both say so at their call sites.
+
 ## The heading badge and drag-to-reorder (B2)
 
 - **`EditorContextMenu`'s Section group is B2's only DISCOVERABLE keyboard and

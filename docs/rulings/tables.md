@@ -8,6 +8,8 @@ their `data-shape` rebuild guard, `onOpenTableMenu`, `runTableHandleAction`),
 `src/features/editor/tablePos.ts`
 (`tablePosAt`), `src/features/editor/tableCommands.ts` (`TABLE_ACTIONS`, the
 seven-action `COMMANDS` map),
+`src/features/editor/TableShortcuts.ts` (`TABLE_SHORTCUT_ACTIONS`,
+`tableShortcutChord`, `tableShortcutHint`) and `tableShortcuts.test.ts`,
 `src/features/editor/tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` imports and `MarkdownTable`/`TableRow`/`TableHeader`/`TableCell` entries in `src/features/editor/extensions.ts`, `RawTable` in `src/features/editor/RawBlock.ts`, `src/features/editor/table.test.ts`, and any table fixture in `markdown.test.ts`'s `CANONICAL` or `stability.test.ts`'s `NON_CANONICAL`.
 
 - **Tables are real nodes, and the `RawTable` fallback is no longer registered.**
@@ -148,3 +150,30 @@ seven-action `COMMANDS` map),
   2-D `data-shape` signature (rows and columns separately) rather than their
   sum, so any shape change — including one that preserves the total — forces a
   rebuild.
+
+- **Four of the seven actions have a keyboard chord; the three DELETES
+  deliberately have none.** `TableShortcuts.ts` binds the inserts only, with
+  the arrow's direction carrying the meaning — up/down for rows, left/right for
+  columns. The deletes stay in the right-click menu and the handle menus, on
+  the same reasoning this file already records for choosing a named menu row
+  over a bare `−` button: a mistyped chord that adds a row is one undo away,
+  while one that deletes a column the user was not looking at is data loss.
+  This asymmetry is the ruling, not an unfinished set.
+
+- **The chords cannot be the same on both platforms, and the split is
+  measured rather than stylistic.** `Alt-Shift-Arrow` is extend-selection-
+  by-word on macOS, and a table's cells need that as much as any other text;
+  `Mod-Alt-Arrow` off mac resolves to `Ctrl-Alt-Arrow`, which is already
+  `HeadingFold`'s section move and `StoredImage`'s image resize (and screen
+  rotation on several Windows graphics drivers). So macOS gets `⌃⌘`+arrow —
+  Bear's own chord — and everything else `Alt+Shift`+arrow, and only the
+  running platform's four are registered. Registering both sets would cost
+  each platform a binding it actually uses.
+
+- **The hint and the keymap come from ONE table.** `ARROWS` in
+  `TableShortcuts.ts` feeds both `tableShortcutChord` (what the extension
+  binds) and `tableShortcutHint` (what `EditorContextMenu` and
+  `TableHandleMenu` print beside the action). A second hand-written list is
+  how a menu comes to advertise a chord that does nothing, silently, since
+  nothing in the app renders a keymap. `tableShortcuts.test.ts` reads the
+  arrow back out of both and fails if they disagree.

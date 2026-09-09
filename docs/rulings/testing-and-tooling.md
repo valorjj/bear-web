@@ -11,6 +11,7 @@ new `import ... from 'lucide-react'` outside `src/ui/Icon.tsx`; any
 `page.evaluate` containing `querySelectorAll`, `.closest(`, or a
 `[role="..."]` selector; any assertion comparing a computed `backgroundColor`;
 any Playwright keyboard shortcut aimed at a Tiptap/ProseMirror binding; any
+test calling `editor.commands.keyboardShortcut(...)`; any
 `addInitScript` writing `localStorage` to seed app state; a push to `main`
 after any local merge; any test whose expectation you are about to edit
 because a restyle made it fail; and a `PointerEvent`/`setPointerCapture` call
@@ -25,17 +26,27 @@ component spec that opts out of the landing gate's pre-dismissed default. Also
 `src/features/editor/tagAutocomplete.test.ts` and `e2e/tags.spec.ts`'s
 autocomplete tests (S4).
 
-- **The eager-JS ceiling is a FROZEN budget at 346,500 B gzipped, not a
-  ratchet. Ruled 2026-08-31, before L5.** From K1 onward the ceiling was raised
+- **The eager-JS ceiling is a deliberate budget, not a ratchet. Ruled
+  2026-08-31, before L5.** From K1 onward the ceiling was raised
   once per sub-project by that feature's own measured cost plus ~2.5-3 KB of
   headroom — 324,000 → 328,000 → 333,000 → 336,000 → 341,350 → 346,500 — so it
   recorded growth honestly and refused nothing. Two consecutive sub-projects
   (L2, then L4) were shaped by it regardless, which is the point at which a
   limit is worth choosing once instead of re-negotiating per feature. The
-  number stays where L4 left it: the measured eager closure is **343,411 B**
-  against **346,500**, leaving **3,089 B**. That room is for wiring, not for a
+  headroom a raise leaves — ~2.5-3 KB — is for wiring, not for the next
   feature.
-  **A change that would exceed it does not raise it.** The three ways out, in
+
+  **The freeze did not hold, and saying so is the point of writing it down.**
+  346,500 was raised again by S1 and by S4, and stands at **358,000** as of
+  2026-09-09 — so this bullet spent three sub-projects stating a number the
+  guard had already left behind, which is exactly the "exists, unrun, silently
+  stale" failure this file warns about elsewhere. What SURVIVES the freeze is
+  the decision procedure, not the number: raising the ceiling is the user's
+  call, made once, with both sides measured and the reason recorded in the
+  guard's docblock. Read `CEILING_BYTES` for the current limit; never a figure
+  quoted in prose, here or in CLAUDE.md.
+
+  **A change that would exceed it does not raise it BY ITSELF.** The three ways out, in
   order of preference: move the code behind a `React.lazy` boundary (the guard
   walks static `imports` only and excludes `dynamicImports` by construction);
   move the work to the server, which already renders PDFs and stores images —
@@ -324,6 +335,45 @@ autocomplete tests (S4).
   would need to hold a synthetic pointer down mid-drag, which is a different
   and much more invasive harness than the corpus screenshots.
 
+
+## Driving a keymap from a test (2026-09-09, table shortcuts)
+
+- **`editor.commands.keyboardShortcut(...)` ALWAYS returns `true`, including
+  for a chord nothing binds.** Measured: `keyboardShortcut('Alt-Shift-F9')`
+  on a plain paragraph returns `true` and changes nothing. So it can never
+  answer "is this bound?", and an assertion on its return value is vacuous —
+  the near-vacuous-assertion shape CLAUDE.md warns about, in a new place.
+  Every existing keymap test in this repo asserts the DOCUMENT afterwards,
+  which is why none of them was wrong; a new one must do the same or use the
+  helper below.
+
+- **It is also actively WRONG for a `prosemirror-tables` command, and the
+  corruption is silent.** `keyboardShortcut` is itself a Tiptap command, so it
+  opens an outer transaction before invoking the handler. `prosemirror-tables`'
+  commands build their own transaction from `state.tr`, which on Tiptap's
+  chainable state IS that outer transaction — it gets dispatched by the table
+  command and then AGAIN by the command wrapper. Measured on `addColumnAfter`
+  with the caret in the first body cell: the header row gained its new column
+  at index 1 while the body row gained one at index 2, a table whose rows no
+  longer line up. The same call made directly (`COMMANDS.addColumnAfter(
+editor.state, editor.view.dispatch)`) produces the correct table, so the fault
+  is in the harness, not the extension. This is the same trap CLAUDE.md records
+  as "dispatching inside a Tiptap command", reached from the test side.
+
+- **The cure is to drive `handleKeyDown` the way the browser does.**
+  `tableShortcuts.test.ts`' `press()` builds a real `KeyboardEvent` and calls
+  `editor.view.someProp('handleKeyDown', (f) => f(editor.view, event))`. That
+  reproduces the browser path exactly, dispatches once, and returns a REAL
+  handled/not-handled signal — which is what lets that file assert the mirror
+  image (the other platform's chord is inert) rather than only that something
+  happened.
+
+- **`navigator.platform` is `''` under jsdom, so `isMacOS()` is FALSE in every
+  unit test.** The non-mac branch of any platform-split code is therefore the
+  one the suite exercises by default, and the mac branch is unreachable without
+  `Object.defineProperty(window.navigator, 'platform', ...)`. Both branches
+  need naming explicitly, or half the code ships untested and it is the half
+  the author is running on.
 
 ## L3: two traps from the relationship graph
 

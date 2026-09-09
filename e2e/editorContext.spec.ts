@@ -390,6 +390,72 @@ test('the menu flips above the pointer near the bottom edge', async ({ page }) =
     .toBeLessThanOrEqual(box!.y + box!.height / 2 + 1);
 });
 
+test('the insert chords add a row and a column at the caret', async ({ page }) => {
+  // The ONLY place a real keystroke can be tested. The unit suite drives
+  // `handleKeyDown` directly, which proves the extension binds the chord but
+  // says nothing about whether the browser lets it through — and this chord
+  // was chosen partly on which modifiers the browser and OS already own.
+  await openNoteWithTable(page);
+
+  const isMac = process.platform === 'darwin';
+  const chord = (arrow: 'ArrowDown' | 'ArrowRight'): string =>
+    isMac ? `Control+Meta+${arrow}` : `Alt+Shift+${arrow}`;
+
+  await page.locator('.ProseMirror td').first().click();
+  await page.keyboard.type('cell');
+  await expect(page.locator('.ProseMirror table tr')).toHaveCount(2);
+  await expect(page.locator('.ProseMirror table tr').first().locator('th')).toHaveCount(3);
+
+  await page.keyboard.press(chord('ArrowDown'));
+  await expect(page.locator('.ProseMirror table tr')).toHaveCount(3);
+
+  await page.keyboard.press(chord('ArrowRight'));
+  await expect(page.locator('.ProseMirror table tr').first().locator('th')).toHaveCount(4);
+
+  // The typed text is still where it was — the chords insert around the
+  // caret's cell rather than replacing or moving it.
+  await expect(page.locator('.ProseMirror td').first()).toHaveText('cell');
+});
+
+test('the insert chords do nothing outside a table', async ({ page }) => {
+  // The commands return false off a table, so the keystroke falls through to
+  // the browser instead of being swallowed. Without this the same chord would
+  // be dead everywhere in a note, which is a worse trade than not binding it.
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await page.keyboard.type('plain');
+  await expect(editor).toContainText('plain');
+
+  const isMac = process.platform === 'darwin';
+  await page.keyboard.press(isMac ? 'Control+Meta+ArrowDown' : 'Alt+Shift+ArrowDown');
+
+  await expect(page.locator('.ProseMirror table')).toHaveCount(0);
+  await expect(editor).toContainText('plain');
+});
+
+test('the context menu names the chord each insert answers to', async ({ page }) => {
+  // Discovery: nothing else in the app renders a keymap, so a chord with no
+  // hint is a feature only its author knows about. The hint and the binding
+  // come from one table in `TableShortcuts.ts`, so this also fails if they
+  // ever disagree.
+  await openNoteWithTable(page);
+
+  await page.locator('.ProseMirror td').first().click({ button: 'right' });
+  const menu = page.getByRole('menu', CONTEXT_MENU);
+  await expect(menu).toBeVisible();
+
+  const isMac = process.platform === 'darwin';
+  await expect(menu.getByRole('menuitem', { name: /Insert row below/ })).toContainText(
+    isMac ? '⌃⌘↓' : 'Alt+Shift+↓',
+  );
+  await expect(menu.getByRole('menuitem', { name: /Insert column after/ })).toContainText(
+    isMac ? '⌃⌘→' : 'Alt+Shift+→',
+  );
+});
+
 test('a table row inserts from the menu at the right-clicked cell', async ({ page }) => {
   await openNoteWithTable(page);
 
@@ -398,7 +464,7 @@ test('a table row inserts from the menu at the right-clicked cell', async ({ pag
   // there are two distinguishable rows to insert between.
   const firstCell = page.locator('.ProseMirror td').first();
   await firstCell.click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Insert row below' }).click();
+  await page.getByRole('menuitem', { name: /Insert row below/ }).click();
   await expect(page.locator('.ProseMirror table tr')).toHaveCount(3);
 
   const firstColumnCells = page.locator('.ProseMirror table tr td:first-child');
@@ -415,7 +481,7 @@ test('a table row inserts from the menu at the right-clicked cell', async ({ pag
   // ...but the right-click — and the row it inserts — targets RowB.
   await firstColumnCells.nth(1).click({ button: 'right' });
   await expect(page.getByRole('menu', CONTEXT_MENU)).toBeVisible();
-  await page.getByRole('menuitem', { name: 'Insert row below' }).click();
+  await page.getByRole('menuitem', { name: /Insert row below/ }).click();
 
   // The new empty row lands directly after RowB, not after RowA — which is
   // what the caret's own (unmoved) position would have produced instead.

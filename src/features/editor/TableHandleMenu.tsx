@@ -1,9 +1,11 @@
+import { isMacOS } from '@tiptap/core';
 import type { ReactElement } from 'react';
 
 import { useT } from '@/i18n';
 import { useAnchoredMenu } from '@/lib/useAnchoredMenu';
 
 import type { TableHandleAction, TableHandleMenuRequest } from './TableHandles';
+import { type TableShortcutAction, tableShortcutHint } from './TableShortcuts';
 
 export interface TableHandleMenuProps {
   request: TableHandleMenuRequest;
@@ -41,14 +43,21 @@ export function TableHandleMenu({
   onClose,
 }: TableHandleMenuProps): ReactElement {
   const t = useT();
+  // The same hints the right-click menu shows, from `TableShortcuts.ts`'
+  // single table. A handle menu is scoped to one row or column, so it
+  // shows only that pair's two chords.
+  const mac = isMacOS();
 
   const isRow = request.kind === 'row';
   const label = t(isRow ? 'editor.table.rowHandle' : 'editor.table.columnHandle');
   const beforeLabelKey = isRow ? 'editor.table.addRowBefore' : 'editor.table.addColumnBefore';
   const afterLabelKey = isRow ? 'editor.table.addRowAfter' : 'editor.table.addColumnAfter';
   const deleteLabelKey = isRow ? 'editor.table.deleteRow' : 'editor.table.deleteColumn';
-  const beforeAction: TableHandleAction = isRow ? 'addRowBefore' : 'addColumnBefore';
-  const afterAction: TableHandleAction = isRow ? 'addRowAfter' : 'addColumnAfter';
+  // Typed as the narrower `TableShortcutAction`, not `TableHandleAction`:
+  // these two feed `tableShortcutHint`, which has no chord for a delete,
+  // so the wider type would let a delete reach it and fail at runtime.
+  const beforeAction: TableShortcutAction = isRow ? 'addRowBefore' : 'addColumnBefore';
+  const afterAction: TableShortcutAction = isRow ? 'addRowAfter' : 'addColumnAfter';
   const deleteAction: TableHandleAction = isRow ? 'deleteRow' : 'deleteColumn';
 
   // Placement, initial focus, Escape/outside dismissal and the Tab trap all
@@ -74,9 +83,10 @@ export function TableHandleMenu({
           onAction(beforeAction);
           onClose();
         }}
-        className="text-ui-sm text-text hover:bg-hover w-full rounded px-2 py-1 text-left"
+        className="text-ui-sm text-text hover:bg-hover flex w-full items-center rounded px-2 py-1 text-left"
       >
         {t(beforeLabelKey)}
+        <span className="text-faint ml-auto pl-4">{tableShortcutHint(beforeAction, mac)}</span>
       </button>
       <button
         type="button"
@@ -85,9 +95,10 @@ export function TableHandleMenu({
           onAction(afterAction);
           onClose();
         }}
-        className="text-ui-sm text-text hover:bg-hover w-full rounded px-2 py-1 text-left"
+        className="text-ui-sm text-text hover:bg-hover flex w-full items-center rounded px-2 py-1 text-left"
       >
         {t(afterLabelKey)}
+        <span className="text-faint ml-auto pl-4">{tableShortcutHint(afterAction, mac)}</span>
       </button>
 
       <div className="bg-border my-1 h-px" role="separator" />

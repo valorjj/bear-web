@@ -310,6 +310,29 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   against `node_modules/@tiptap`, not assume the arrow keys are still free
   just because Up/Down and Left/Right look like a natural split.
 
+- **`Mod` in a keymap string is resolved ONCE, at module load, by
+  `prosemirror-keymap` — not per call.** Its `mac` constant is a
+  `navigator.platform` test evaluated when the module is first imported, so a
+  platform-split binding written as `Mod-Ctrl-ArrowRight` and registered off
+  mac collapses to a bare `Ctrl-ArrowRight`: the browser's own paragraph
+  navigation, silently claimed. `TableShortcuts.ts` therefore spells its mac
+  chord `Ctrl-Meta-` outright. Two consequences beyond the collision: the
+  string then says the same thing wherever it is read, and a test can reach
+  the other platform's branch at all by overriding `navigator.platform`, which
+  a `Mod-` chord makes impossible. Measured 2026-09-09 — with `Mod-Ctrl-`, the
+  mac branch bound nothing that a mac-platform test could press.
+
+- **`Ctrl-Meta-Arrow*` (macOS) and `Alt-Shift-Arrow*` (elsewhere) are the table
+  insert chords, added 2026-09-09**, and both were checked against every
+  installed editor package as this file requires rather than suggests:
+
+  ```
+  grep -rEn "Mod-Ctrl|Ctrl-Meta|Alt-Shift|Shift-Alt" node_modules/@tiptap
+  ```
+
+  returns nothing. See `docs/rulings/tables.md` for why the two platforms
+  cannot share one chord and why the deletes get none.
+
 - **The level menu SETS a level; the `Mod-Alt-N` shortcut TOGGLES.** Choosing
   the level a heading already has via the menu is a no-op — the check mark is
   radio semantics, and toggling from a selected radio item would contradict

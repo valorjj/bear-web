@@ -551,7 +551,12 @@ test('every formatting toolbar control is reachable at a narrow viewport', async
   const toolbar = page.getByRole('toolbar', { name: 'Formatting toolbar' });
   await expect(toolbar).toBeVisible();
 
-  const quote = toolbar.getByRole('button', { name: 'Quote' });
+  // The last control in the strip, and therefore the one clipped first at
+  // 390px. It was Quote until the callout button replaced it at that end of
+  // the row; what this test needs is only that the button it names really
+  // does start outside the toolbar's box, which the assertions below check
+  // rather than assume.
+  const quote = toolbar.getByRole('button', { name: 'Quote or callout' });
 
   const before = await toolbar.evaluate(
     (element, target) => {
@@ -567,7 +572,7 @@ test('every formatting toolbar control is reachable at a narrow viewport', async
   );
 
   // The toolbar must actually be narrower than its content at this width,
-  // and Quote must actually start outside it — otherwise the scroll check
+  // and that button must actually start outside it — otherwise the scroll check
   // below would pass vacuously because there was nothing to reach.
   expect(before.scrollWidth).toBeGreaterThan(before.clientWidth);
   expect(before.clipped).toBe(true);
