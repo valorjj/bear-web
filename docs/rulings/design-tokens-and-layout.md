@@ -194,25 +194,38 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   into the ground", which held `--bear-sidebar` equal to `--bear-canvas` in
   both indigo themes. It was reported as looking undifferentiated from the
   other panes, and the indigo pair now steps off its canvas like the other
-  thirteen themes already did — `#efecf9` against `#e6e1f5` in Indigo Light,
-  `#1e1a2a` against `#14121b` in Indigo Dark, with the
+  thirteen themes already did — `#dcd6ef` against `#e6e1f5` in Indigo Light,
+  `#0c0a11` against `#14121b` in Indigo Dark, with the
   `prefers-color-scheme: dark` block moved in step because
   `scripts/sourceLint.test.ts` asserts it is token-for-token identical to
   `SYSTEM_DARK_ID`'s theme.
 
-  **The step goes LIGHTER, and that direction is forced rather than chosen.**
-  Deeper is what the request asked for and it is unavailable in Indigo Light
-  at ANY size: `faint` on the old sidebar measured **3.042 against a 3.0
-  floor**, so even `#e3ddf3` — a three-unit darkening — drops it to 2.94, and
-  `#dcd6ef` failed BOTH `faint` (2.76) and `border` at once. Reaching Bear's
-  darker sidebar would need two literal overrides in that theme (`faint`
-  `#837e99` → `#7b7690`, which also lifts faint on white from 3.88 to 4.34,
-  plus a `border` override since border is derived globally at 13%) and was
-  declined as a bigger change than the complaint warranted. Going lighter
-  instead IMPROVES every ratio — faint 3.04 → 3.33, border 1.048 → 1.148 —
-  which is why the roster's other thirteen themes all step that way. Note
-  also that Bear's effect is macOS vibrancy sampling the desktop; a browser
-  has no desktop behind the window, so no colour choice here reproduces it.
+  **The step goes DEEPER, and a first attempt at going lighter was wrong.**
+  Lighter is the cheap direction — it clears every floor for free, and the
+  roster's other thirteen themes all step that way — so it shipped first, at
+  `#efecf9` / `#1e1a2a`. It was a mistake, and the measurement that proves it
+  is the one nobody took before shipping: **against the note-list card the
+  sidebar went from 1.167 to 1.065**, i.e. MORE similar to the very pane it
+  was supposed to distinguish itself from, which is why the reporter could not
+  see any change at all. The original relationship was already correct —
+  sidebar DARKER than the floating cards, in both themes — merely too weak to
+  read at 1.167 and 1.184.
+
+  The shipped values push that relationship instead of reversing it:
+  `#dcd6ef` against the card in Indigo Light (1.288) and `#0c0a11` in Indigo
+  Dark (1.256). Deeper in a LIGHT theme is what costs, and it is why the first
+  attempt dodged it: `faint` needs `#837e99` → `#7b7690` (the derived value
+  measures 2.76 on the new sidebar against a 3.0 floor) and `border` needs
+  `#e0dcec` → `#d2cddc` (1.05 exactly, which IS the floor and therefore
+  fails). **`muted` is the binding constraint on depth**: at `#d9d1eb` it
+  falls to 4.37 under a 4.5 floor, so `#dcd6ef` is the deepest value needing
+  no third override. A dark theme costs nothing by comparison — a darker
+  sidebar there RAISES light-text contrast (text 16.04 → 17.02).
+
+  Note that Bear's own effect is macOS vibrancy sampling the desktop; a
+  browser has no desktop behind the window, so no colour choice here
+  reproduces it — what these values buy is a sidebar that reads as its own
+  material, not the real thing.
   High Contrast keeps `#000000` for both: its panes are separated by borders,
   which is that theme's whole premise.
 

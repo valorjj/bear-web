@@ -36,7 +36,7 @@ Width is durable, from the settings table.
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(36, 31, 61)` |
-| background-color | `rgb(239, 236, 249)` |
+| background-color | `rgb(220, 214, 239)` |
 | border-radius | `12px` |
 
 ## pane: note list
