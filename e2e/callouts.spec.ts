@@ -190,6 +190,74 @@ test('clicking the callout button again closes its menu', async ({ page }) => {
   await expect(menu).toBeHidden();
 });
 
+/**
+ * Clicks into a callout's title and waits until ProseMirror has actually taken
+ * the caret, not merely until the DOM selection moved.
+ *
+ * A `.click()` sets the browser selection immediately; ProseMirror syncs it
+ * into its own state on a later `selectionchange`. Pressing a key in that gap
+ * runs the keymap against the PREVIOUS selection — measured: with the caret
+ * visibly in an empty callout title, the handler saw a `paragraph` of size 8
+ * at depth 1, which is the note's first line. Both tests below then passed
+ * VACUOUSLY, because a Backspace aimed at the wrong block cannot damage the
+ * callout either.
+ *
+ * The toolbar button's `aria-pressed` is the app's own selection-driven
+ * signal — it reads `flags.blockquote` — so waiting on it proves the state
+ * caret really is inside the callout. Nothing cheaper is trustworthy here:
+ * the DOM selection is already correct while the state's is not, so polling
+ * `window.getSelection()` would confirm exactly the wrong thing.
+ */
+async function caretInto(page: Page, callout: ReturnType<Page['locator']>): Promise<void> {
+  await callout.locator('[data-callout-title]').click();
+  await expect(
+    page.getByRole('button', { name: /Quote or callout|인용 또는 콜아웃/ }),
+  ).toHaveAttribute('aria-pressed', 'true');
+}
+
+test('Backspace in an empty title cannot strip the icon or the type', async ({ page }) => {
+  // The user's report: "I can remove the icon." The icon is a CSS `::before`
+  // on the title node, and the schema made that node optional, so one
+  // Backspace destroyed all three at once — glyph, `data-callout`, and the
+  // `[!danger]` marker in the saved text. Asserting the PAINTED pseudo-element
+  // is the point: a check on the node alone would pass against a build where
+  // the icon had stopped rendering for some other reason.
+  await open(page, 'Callouts\n\n> [!danger]\n>\n> aaaaaaa');
+
+  const callout = page.locator('.ProseMirror blockquote[data-callout="danger"]');
+  await expect(callout).toHaveCount(1);
+
+  const maskOf = async (): Promise<string> =>
+    callout
+      .locator('[data-callout-title]')
+      .evaluate((el) => getComputedStyle(el, '::before').maskImage);
+
+  const before = await maskOf();
+  expect(before).not.toBe('none');
+  expect(before).not.toBe('');
+
+  await caretInto(page, callout);
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Backspace');
+
+  await expect(callout).toHaveCount(1);
+  expect(await maskOf()).toBe(before);
+});
+
+test('Backspace still escapes a callout with nothing in it', async ({ page }) => {
+  // The escape hatch, and the only case where the icon may go: it leaves with
+  // the whole callout, never on its own.
+  await open(page, 'Callouts\n\n> [!success]');
+
+  const callout = page.locator('.ProseMirror blockquote[data-callout="success"]');
+  await expect(callout).toHaveCount(1);
+
+  await caretInto(page, callout);
+  await page.keyboard.press('Backspace');
+
+  await expect(callout).toHaveCount(0);
+});
+
 test('the note list previews the title, not the marker', async ({ page }) => {
   await open(page, 'Callouts\n\n> [!warning] Be careful\n>\n> Body.');
 

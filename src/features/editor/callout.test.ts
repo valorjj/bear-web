@@ -231,3 +231,124 @@ describe('setCalloutType where a blockquote cannot wrap', () => {
     editor.destroy();
   });
 });
+
+describe('the title cannot be deleted out from under a callout', () => {
+  /**
+   * The icon is a CSS `::before` on the `calloutTitle` node, and the schema
+   * makes that node OPTIONAL (`calloutTitle? block+`) — so destroying it took
+   * the icon AND the type with it. Measured before the fix, both silent:
+   *
+   *   Backspace at start of an empty title
+   *     `> [!danger]\n>\n> aaa`  ->  `>\n>\n> aaa`
+   *   Delete at end of an empty title
+   *     `> [!danger]\n>\n> aaa`  ->  `> aaa`
+   *
+   * The `[!danger]` marker is gone from the SAVED TEXT in both, which makes
+   * this data loss rather than a cosmetic defect. Shipped in M9b.
+   *
+   * Requiring the title in the schema (`calloutTitle block+`) is NOT the fix
+   * and was measured too: `content` belongs to the `blockquote` node type, not
+   * to callouts, so every plain quote would need a title and
+   * `toggleBlockquote` on a paragraph starts returning `false` — plain quotes
+   * become impossible to create. The guard has to be at the gesture.
+   */
+
+  /** Caret inside the callout's (empty) title. */
+  function inEmptyTitle(markdown: string): Editor {
+    const editor = mount(markdown);
+    editor.commands.setTextSelection(2);
+    expect(editor.state.selection.$from.parent.type.name).toBe('calloutTitle');
+    expect(editor.state.selection.$from.parent.content.size).toBe(0);
+    return editor;
+  }
+
+  it('survives Backspace at the start of an empty title', () => {
+    const editor = inEmptyTitle('> [!danger]\n>\n> aaa');
+
+    editor.commands.keyboardShortcut('Backspace');
+
+    expect(markdownOf(editor)).toBe('> [!danger]\n>\n> aaa');
+    editor.destroy();
+  });
+
+  it('survives Delete at the end of an empty title', () => {
+    const editor = inEmptyTitle('> [!danger]\n>\n> aaa');
+
+    editor.commands.keyboardShortcut('Delete');
+
+    expect(markdownOf(editor)).toBe('> [!danger]\n>\n> aaa');
+    editor.destroy();
+  });
+
+  it('Backspace removes a WHOLLY empty callout, which is the escape hatch', () => {
+    // Without this an accidental callout could only be undone through the
+    // menu. The icon still cannot be removed on its own — it goes only when
+    // the whole callout goes.
+    //
+    // The note has a line BEFORE the callout on purpose: a callout is never
+    // the first node of a real note, and the two positions do not behave the
+    // same. With the callout first, `joinBackward` has nothing to join into
+    // and several handlers no-op before this one is reached, so a test that
+    // only covered that shape would be testing the easy case.
+    const editor = mount('Callouts\n\n> [!success]');
+    let pos = -1;
+    editor.state.doc.descendants((node, at) => {
+      if (pos < 0 && node.type.name === 'calloutTitle') pos = at + 1;
+      return pos < 0;
+    });
+    editor.commands.setTextSelection(pos);
+    expect(editor.state.selection.$from.parent.type.name).toBe('calloutTitle');
+
+    editor.commands.keyboardShortcut('Backspace');
+
+    expect(editor.state.doc.child(1).type.name).toBe('paragraph');
+    expect(markdownOf(editor).startsWith('Callouts')).toBe(true);
+    expect(markdownOf(editor)).not.toContain('[!success]');
+    editor.destroy();
+  });
+
+  it('leaves the gestures that were already safe alone', () => {
+    // Controls. A guard that swallowed Backspace everywhere would pass the
+    // three tests above and quietly break ordinary editing.
+    //
+    // Deleting a CHARACTER is deliberately not among them: in a real browser
+    // that is a `beforeinput` the browser performs, not a keymap binding, so
+    // `keyboardShortcut('Backspace')` mid-text does nothing under jsdom either
+    // way and an assertion about it would prove nothing.
+
+    // A title with text in it already no-ops on Backspace at its start, by
+    // ProseMirror's own guard. The new one must not change that.
+    const filled = mount('> [!danger] Hi\n>\n> aaa');
+    filled.commands.setTextSelection(2);
+    filled.commands.keyboardShortcut('Backspace');
+    expect(markdownOf(filled)).toBe('> [!danger] Hi\n>\n> aaa');
+    filled.destroy();
+
+    // A PLAIN quote has no title node, so neither branch may fire: Backspace
+    // at the start of its paragraph still lifts it out of the quote. Pinned
+    // from the measured default, not guessed.
+    const quote = mount('> just a quote');
+    quote.commands.setTextSelection(2);
+    quote.commands.keyboardShortcut('Backspace');
+    expect(markdownOf(quote)).toBe('just a quote');
+    quote.destroy();
+
+    // And an empty plain quote is still removable, which is the behaviour the
+    // callout escape hatch above imitates.
+    const emptyQuote = mount('>');
+    emptyQuote.commands.setTextSelection(2);
+    emptyQuote.commands.keyboardShortcut('Backspace');
+    expect(markdownOf(emptyQuote)).toBe('');
+    emptyQuote.destroy();
+  });
+
+  it('still lets a plain blockquote be created, which the schema fix would have broken', () => {
+    const editor = mount('a paragraph');
+    editor.commands.setTextSelection(2);
+
+    expect(editor.commands.toggleBlockquote()).toBe(true);
+    expect(markdownOf(editor)).toBe('> a paragraph');
+
+    editor.destroy();
+  });
+});

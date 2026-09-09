@@ -336,6 +336,33 @@ autocomplete tests (S4).
   and much more invasive harness than the corpus screenshots.
 
 
+## A Playwright click does not give ProseMirror the caret (2026-09-09)
+
+- **`.click()` sets the BROWSER selection immediately; ProseMirror syncs it
+  into its own state on a later `selectionchange`.** A `page.keyboard.press`
+  in that gap runs the keymap against the PREVIOUS selection. Measured with
+  the caret visibly inside an empty callout title: the handler saw a
+  `paragraph` of size 8 at depth 1 — the note's first line — while
+  `window.getSelection()` correctly reported the title. So polling the DOM
+  selection confirms exactly the wrong thing.
+
+- **The failure mode is a VACUOUS PASS, not a flake.** Both callout tests
+  passed while the keystroke was landing on the wrong block entirely: a
+  Backspace aimed elsewhere cannot damage the callout either. They only
+  started failing when run in isolation, because the parallel file run was
+  slow enough to let the sync happen — so the green result was the racy one
+  and the red result was the honest one, which is the opposite of how a load
+  flake reads. Proof that a test is real is a fault injection, not a green
+  run: with the guard removed these two now fail, and before the fix they did
+  not.
+
+- **Wait on an app-owned, selection-driven signal.** `e2e/callouts.spec.ts`'
+  `caretInto` waits for the toolbar's callout button to report
+  `aria-pressed="true"`, which reads `flags.blockquote` off the editor-state
+  subscription — so it cannot go true until ProseMirror's own state selection
+  is inside the callout. Typing a character and asserting it landed works for
+  the same reason and is what the table tests use.
+
 ## Driving a keymap from a test (2026-09-09, table shortcuts)
 
 - **`editor.commands.keyboardShortcut(...)` ALWAYS returns `true`, including

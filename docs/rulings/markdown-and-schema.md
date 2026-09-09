@@ -310,6 +310,28 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   against `node_modules/@tiptap`, not assume the arrow keys are still free
   just because Up/Down and Left/Right look like a natural split.
 
+- **The `calloutTitle` cannot be deleted out from under its callout, and the
+  schema is NOT where that is enforced.** The type icon is a CSS `::before` on
+  that node and the schema makes it optional (`calloutTitle? block+`), so two
+  gestures destroyed the icon, the `data-callout` attribute and the `[!type]`
+  marker in the saved text at once — data loss, silent, shipped in M9b:
+  Backspace at the start of an empty title (`> [!danger]` → `>`) and Delete at
+  its end (`> [!danger]\n>\n> aaa` → `> aaa`). Only an EMPTY title is
+  reachable; with text in it ProseMirror's own guards already no-op.
+  `CalloutTitle.addKeyboardShortcuts` refuses both.
+
+  **Requiring the title (`calloutTitle block+`) is the obvious fix and it is
+  wrong** — measured, not reasoned: `content` belongs to the `blockquote` node
+  type rather than to callouts, so every plain quote would need a title too,
+  and `toggleBlockquote` on a paragraph starts returning `false`. Plain quotes
+  become impossible to create. `callout.test.ts` keeps that as a control.
+
+  **Backspace still removes a callout that is WHOLLY empty**, the way it
+  escapes any other empty block, so an accidental callout does not need the
+  menu to undo. That is the only case in which the icon may disappear: with it
+  and never on its own. Delete has no such hatch on purpose — two ways to lose
+  a callout by accident buys nothing.
+
 - **`setCalloutType` must check `can().wrapIn('blockquote')` before chaining
   into itself, and the failure without it is an INFINITE RECURSION.** The
   command walks out to the nearest blockquote and, finding none, chains

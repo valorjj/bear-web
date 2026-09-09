@@ -1,8 +1,8 @@
 import { InputRule, Node } from '@tiptap/core';
 import type { JSONContent, MarkdownParseHelpers, MarkdownRendererHelpers } from '@tiptap/core';
 import { Blockquote } from '@tiptap/extension-blockquote';
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import type { Node as ProseMirrorNode, ResolvedPos } from '@tiptap/pm/model';
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 import { type CalloutType, formatMarker, parseMarker } from './callouts';
@@ -73,6 +73,78 @@ export const CalloutTitle = Node.create({
 
   renderHTML() {
     return ['p', { 'data-callout-title': '' }, 0];
+  },
+
+  /**
+   * The title cannot be deleted out from under its callout.
+   *
+   * The type icon is a CSS `::before` on this node and the schema makes it
+   * OPTIONAL (`calloutTitle? block+`), so destroying it took the icon AND the
+   * type. Both routes were silent, and both changed the SAVED TEXT — this was
+   * data loss, not a cosmetic defect. Measured before the guard:
+   *
+   *   Backspace at the start of an empty title
+   *     `> [!danger]\n>\n> aaa`  ->  `>\n>\n> aaa`
+   *   Delete at the end of an empty title
+   *     `> [!danger]\n>\n> aaa`  ->  `> aaa`
+   *
+   * Only an EMPTY title is reachable: with text in it, both keys already hit
+   * ProseMirror's own guards and no-op. So the condition below is simply
+   * "caret in an empty callout title", which is why it needs no offset check —
+   * position 0 is both the start and the end of an empty textblock.
+   *
+   * **Requiring the title in the schema is NOT the fix, and that was measured
+   * rather than assumed.** `content` belongs to the `blockquote` node type,
+   * not to callouts, so `calloutTitle block+` would demand a title of every
+   * plain quote as well: `toggleBlockquote` on a paragraph starts returning
+   * `false` and a plain quote becomes impossible to create. `callout.test.ts`
+   * keeps that case as a control.
+   */
+  addKeyboardShortcuts() {
+    /** The caret's own empty `calloutTitle`, or `null`. */
+    const emptyTitle = (): ResolvedPos | null => {
+      const { selection } = this.editor.state;
+      // A range selection is somebody else's business — deleting one that
+      // spans the title and the body already preserves the title, verified.
+      if (!selection.empty) return null;
+
+      const { $from } = selection;
+      if ($from.parent.type.name !== this.name) return null;
+      return $from.parent.content.size === 0 ? $from : null;
+    };
+
+    return {
+      Backspace: () => {
+        const $title = emptyTitle();
+        if ($title === null) return false;
+
+        // The escape hatch, and the ONE case where the icon may go: a callout
+        // with nothing in it at all becomes a plain empty paragraph, the way
+        // Backspace escapes any other empty block. Without this an accidental
+        // callout could only be undone through the menu. A callout with a body
+        // is protected — the title stays and the keystroke does nothing.
+        const depth = $title.depth - 1;
+        const callout = $title.node(depth);
+        let empty = true;
+        callout.forEach((child) => {
+          if (child.content.size > 0) empty = false;
+        });
+        if (!empty) return true;
+
+        return this.editor.commands.command(({ tr, state, dispatch }) => {
+          if (!dispatch) return true;
+          const from = $title.before(depth);
+          tr.replaceWith(from, $title.after(depth), state.schema.nodes.paragraph!.create());
+          tr.setSelection(TextSelection.near(tr.doc.resolve(from)));
+          return true;
+        });
+      },
+
+      // No escape hatch on Delete: Backspace is the conventional key for
+      // leaving an empty block, and giving both the power to remove a callout
+      // doubles the ways to lose one by accident for no gain.
+      Delete: () => emptyTitle() !== null,
+    };
   },
 });
 
