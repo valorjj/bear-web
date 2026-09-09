@@ -15,6 +15,14 @@ const MARKED_UP = [
   '| --- | --- | --- |',
   '',
   'and **bold** with `code` and [a link](https://example.com).',
+  '',
+  // A tag, and the `&nbsp;` placeholder `@tiptap/markdown` writes for the
+  // second of two consecutive empty paragraphs. Both previewed verbatim
+  // until 2026-09-09: a real note's whole row read `#a/bc/d/e &nbsp;`.
+  '#a/bc/d/e',
+  '',
+  '',
+  '&nbsp;',
 ].join('\n');
 
 const AT = Date.UTC(2026, 7, 18, 5, 30);
@@ -53,6 +61,13 @@ test('the note list previews prose, never Markdown or HTML syntax', async ({ pag
   // The table's cells were already dropped before this change; kept here so a
   // rewrite of the stripper cannot quietly reintroduce them.
   expect(rowText).not.toContain('| ---');
+  // A tag is chrome the editor draws as a pill, and the placeholder is
+  // structure. Neither is prose, so neither belongs in the row.
+  expect(rowText).not.toContain('#a/bc/d/e');
+  expect(rowText).not.toContain('&nbsp;');
+  // The prose around them survives, which is what makes the two assertions
+  // above a stripping rule rather than an empty row.
+  expect(rowText).toContain('hi abcd hi, this is good.');
 });
 
 test('creating a note puts the caret on its title line', async ({ page }) => {

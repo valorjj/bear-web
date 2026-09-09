@@ -55,10 +55,55 @@ describe('deriveSnippet', () => {
     expect(deriveSnippet(text)).toBe(expected);
   });
 
-  it('leaves a hash INSIDE prose alone, so a tag still reads as one', () => {
-    // Only a LEADING marker is a block marker. A `#` mid-line is a tag or a
-    // number sign and belongs in the preview.
-    expect(deriveSnippet('Note\nplanning #work with **care**')).toBe('planning #work with care');
+  it('strips a tag, because the editor draws it as a pill and a row should not', () => {
+    // This REPLACES the rule that stood here until 2026-09-09 — "a `#`
+    // mid-line is a tag and belongs in the preview" — reported as ugly
+    // against a real note whose whole preview read `#a/bc/d/e &nbsp;`. A tag
+    // is chrome the editor renders as a pill; repeating its raw syntax in the
+    // row says nothing the sidebar does not already say.
+    expect(deriveSnippet('Note\nplanning #work with **care**')).toBe('planning with care');
+  });
+
+  it('keeps a NUMBER SIGN, which is not a tag', () => {
+    // The distinction the stripping must respect, and the reason it goes
+    // through `findTagRanges` rather than a regex of its own: `normalizeTag`
+    // rejects an all-numeric tag, so `#42` is prose and stays.
+    expect(deriveSnippet('Note\nsee issue #42 now')).toBe('see issue #42 now');
+  });
+
+  it('keeps a hash that only looks like a tag inside code', () => {
+    // `findTagRanges` masks code spans, so this is literal text, exactly as
+    // it is in the editor, where no pill is drawn either.
+    expect(deriveSnippet('Note\nrun `#work` first')).toBe('run #work first');
+  });
+
+  it('previews nothing when the body is only tags', () => {
+    // The consequence of the rule above, accepted deliberately: the row shows
+    // its title and date alone, which is what Bear does.
+    expect(deriveSnippet('TEST\n\n#a/bc/d/e')).toBe('');
+  });
+
+  it('drops a line that is only an &nbsp; placeholder', () => {
+    // `@tiptap/markdown` writes the SECOND and later of several consecutive
+    // empty paragraphs as a literal `&nbsp;` line — its own source calls
+    // these placeholders and strips them to decide whether a document is
+    // empty. They are not prose and must not preview as any.
+    expect(deriveSnippet('TEST\nbody\n&nbsp;')).toBe('body');
+  });
+
+  it('previews nothing for the real note that reported this', () => {
+    // Byte-identical to what was stored: a tag, then two empty paragraphs,
+    // the second of which serialized as the placeholder. The row read
+    // `#a/bc/d/e &nbsp;`.
+    expect(deriveSnippet('TEST\n\n#a/bc/d/e\n\n\n\n&nbsp;')).toBe('');
+  });
+
+  it('keeps an &nbsp; that sits INSIDE prose', () => {
+    // The rule is deliberately narrow: only a line that is NOTHING BUT
+    // placeholders goes. A real non-breaking space is stored as U+00A0, not
+    // as the entity, so an entity in the middle of a line is text the user
+    // typed and stays.
+    expect(deriveSnippet('Note\na &nbsp; b')).toBe('a &nbsp; b');
   });
 
   it('strips the inline HTML a coloured highlight serializes to', () => {

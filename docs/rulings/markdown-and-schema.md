@@ -532,8 +532,32 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   and carry none of its sense, so the prose around the table is what the
   preview should show. **Fence delimiters** go for the same reason. **Leading
   block markers** — heading hashes, bullets, ordered numbers, task checkboxes,
-  blockquote arrows — are trimmed from the FRONT of a line only, so a `#`
-  inside prose is still a tag and still previews as one.
+  blockquote arrows — are trimmed from the FRONT of a line only.
+
+  **TAGS are stripped, and the rule that previewed them was replaced on
+  2026-09-09 rather than caveated.** It read "a `#` inside prose is still a
+  tag and still previews as one", and it was reported against a real note
+  whose entire row read `#a/bc/d/e &nbsp;`. A tag is chrome the editor draws
+  as a pill; repeating its raw syntax in the row says nothing the tag sidebar
+  does not already say, and a note whose body is only tags now previews with
+  its title and date alone — which is what Bear does and is the point of the
+  change. Stripping goes through **`findTagRanges`**, the same grammar the
+  pills and the index use, never a regex of its own: a hand-rolled `#\S+`
+  strips `#42`, which `normalizeTag` rejects as all-numeric and which is
+  therefore prose, and it strips a `#work` inside a code span where the editor
+  draws no pill either. `format.test.ts` pins both, and an injection swapping
+  the grammar for that regex fails exactly those two tests.
+
+  **A line that is NOTHING BUT `&nbsp;` is dropped as structure.**
+  `@tiptap/markdown` writes the first of several consecutive empty paragraphs
+  as a blank line and every LATER one as a literal `&nbsp;` line — its own
+  source calls them placeholders and strips them to decide whether a document
+  is empty — and they compound, so four empty paragraphs leave three. The
+  match is anchored at BOTH ends deliberately: a genuine non-breaking space is
+  stored as U+00A0, not as an entity, so an `&nbsp;` sitting inside a line is
+  text the user typed and stays. Verified by reading the note out of the sync
+  database rather than by guessing: the stored text was
+  `#a/bc/d/e\n\n\n\n&nbsp;` with zero U+00A0 characters.
 
   **Inline marks go too, and the rule that kept them was wrong.** It said
   `**bold**` and `` `code` `` read as light emphasis rather than as structure.

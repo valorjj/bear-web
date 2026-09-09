@@ -1,3 +1,5 @@
+import { findTagRanges } from '@/data';
+
 import { hasQuery, normalizeForSearch } from './search';
 
 /**
@@ -39,6 +41,23 @@ const TABLE_LINE = /^\s*\|/;
 
 /** A fenced code block's delimiter, and the lines between two of them. */
 const FENCE_LINE = /^\s*(?:`{3,}|~{3,})/;
+
+/**
+ * A line that is NOTHING BUT `&nbsp;` placeholders.
+ *
+ * `@tiptap/markdown` writes the first of several consecutive empty paragraphs
+ * as a blank line and every LATER one as a literal `&nbsp;` line — its own
+ * source calls them placeholders and strips them to decide whether a document
+ * is empty. So they are structure, not prose, and previewing them printed a
+ * real note's row as `#a/bc/d/e &nbsp;`. They compound, too: four empty
+ * paragraphs leave three of these.
+ *
+ * Deliberately anchored at BOTH ends rather than stripping the entity
+ * anywhere it appears. A genuine non-breaking space is stored as U+00A0, not
+ * as an entity, so an `&nbsp;` sitting inside a line is text the user typed
+ * and stays.
+ */
+const PLACEHOLDER_LINE = /^(?:\s|&nbsp;)+$/;
 
 /**
  * Leading block markers: heading hashes, list bullets, ordered-list numbers,
@@ -152,11 +171,37 @@ function stripInline(line: string): string {
     .join('');
 }
 
+/**
+ * Removes every tag from a line, using the SAME grammar the pills and the
+ * index use rather than a regex of its own.
+ *
+ * That sharing is the point. A hand-rolled `#\S+` would strip `#42`, which
+ * `normalizeTag` rejects as an all-numeric tag and which is therefore prose;
+ * it would also strip a `#work` inside a code span, where the editor draws no
+ * pill either. `findTagRanges` masks code and applies the real boundary
+ * rules, so the preview and the editor cannot disagree about what a tag is.
+ *
+ * Runs on the RAW line, before any marker trimming, because the ranges index
+ * into the string as given.
+ */
+function stripTags(line: string): string {
+  const ranges = findTagRanges(line);
+  if (ranges.length === 0) return line;
+
+  let out = '';
+  let at = 0;
+  for (const range of ranges) {
+    out += line.slice(at, range.start);
+    at = range.end;
+  }
+  return out + line.slice(at);
+}
+
 /** Turns one Markdown line into the prose a preview should show, or `''`. */
 function previewLine(line: string): string {
-  if (TABLE_LINE.test(line) || FENCE_LINE.test(line)) return '';
+  if (TABLE_LINE.test(line) || FENCE_LINE.test(line) || PLACEHOLDER_LINE.test(line)) return '';
 
-  let text = line;
+  let text = stripTags(line);
   for (const marker of BLOCK_MARKERS) text = text.replace(marker, '');
   // Images are removed BEFORE the inline rules, not after: the link rule would
   // otherwise take `![a](url)` down to a bare `!`.
