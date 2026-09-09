@@ -57,11 +57,21 @@ export interface AnchoredMenu<E extends HTMLElement> {
  *                 menu whose own height can change AFTER the first mount (a
  *                 conditional section arriving a render late). `rect` is always
  *                 a dependency; these are added to it.
+ * @param opener   The TOGGLE BUTTON that opened this menu, if there is one, so
+ *                 the outside-mousedown listener does not treat it as outside.
+ *                 Without this a toggle button cannot close its own menu: the
+ *                 capture listener below closes on mousedown and the button's
+ *                 own click then re-opens, in that order, so the menu the user
+ *                 clicked to dismiss simply stays. The four menus that opened
+ *                 this hook are opened by a right-click or by a control INSIDE
+ *                 the editor, none of which flips a state on click, so they
+ *                 pass nothing and are unaffected.
  */
 export function useAnchoredMenu<E extends HTMLElement>(
   rect: DOMRect,
   onClose: () => void,
   remeasureOn: readonly unknown[] = [],
+  opener: HTMLElement | null = null,
 ): AnchoredMenu<E> {
   const ref = useRef<E | null>(null);
   const remeasureKey = remeasureOn.join('\u0000');
@@ -121,7 +131,9 @@ export function useAnchoredMenu<E extends HTMLElement>(
   // ever receiving a keydown at all.
   useEffect(() => {
     function handleOutsideMouseDown(event: MouseEvent): void {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (opener?.contains(target)) return;
+      if (ref.current && !ref.current.contains(target)) {
         onClose();
       }
     }
@@ -142,7 +154,7 @@ export function useAnchoredMenu<E extends HTMLElement>(
       document.removeEventListener('mousedown', handleOutsideMouseDown, true);
       document.removeEventListener('keydown', handleDocumentKeyDown);
     };
-  }, [onClose]);
+  }, [onClose, opener]);
 
   function onKeyDown(event: KeyboardEvent<E>): void {
     if (event.key !== 'Tab') return;

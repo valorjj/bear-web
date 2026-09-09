@@ -99,6 +99,22 @@ import { describe, expect, it } from 'vitest';
  * — it forces each growth to be measured on both sides — but it has to be the
  * one on the page.
  *
+ * Raised from 355,000 by the table-shortcuts / callout-button change on
+ * 2026-09-09, measured on both sides as this file's convention requires:
+ * `main` (`3e725b6`) was **354,672 B** — **328 bytes of headroom**, tighter
+ * still than the 410 B CLAUDE.md recorded after S4, because `main` itself
+ * moved three commits in between — and the finished branch measures
+ * **355,236 B**, a true cost of **564 B gzipped** for the `TableShortcuts`
+ * extension and its chord/hint table, the shortcut hints in the context and
+ * handle menus, the `opener` exclusion in `useAnchoredMenu`, and the
+ * toolbar's callout button replacing its quote-plus-chevron pair.
+ *
+ * Of that, the new `MessageSquareQuote` glyph is **103 B**, measured by
+ * building once with the already-bundled `Quote` glyph in its place
+ * (355,133 B). Dropping the new glyph would NOT have avoided this raise —
+ * 355,133 is still over 355,000 — so the icon was kept on its own merits
+ * rather than traded for headroom that was already gone.
+ *
  * Raised from 333,000 by B2 Task 4 (drag the level badge to move a section)
  * on 2026-08-29, measured on both sides as this file's convention requires:
  * the branch before this task was **332,255 B** — **745 bytes of headroom**,
@@ -468,7 +484,7 @@ import { describe, expect, it } from 'vitest';
  * raises actually left (1,640 B, 775 B, 233 B, 455 B): the eager closure is
  * still functionally spent, and the fix is still not another raise.
  */
-const CEILING_BYTES = 355_000;
+const CEILING_BYTES = 358_000;
 
 interface ManifestChunk {
   file: string;

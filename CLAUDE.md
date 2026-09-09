@@ -76,10 +76,11 @@ redirect stub instead of the app.
 | R landing page: first-visit gate, guest mode, welcome note         | complete |
 | S1 tag rename and delete, across every note, trashed ones included | complete |
 | S4 tag autocomplete + plain-click filtering (absorbs S2)           | complete |
+| T table insert chords + the callout button                         | complete |
 
-2947 unit tests pass and 112 skip (the server integration tests, which skip
+2980 unit tests pass and 112 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
-`npm run test:pdf`), 257 end-to-end tests pass and 1 skips. `main` is always green and
+`npm run test:pdf`), 262 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**
@@ -794,15 +795,16 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
   after L3 shipped was **1,884 B** (main moved 337,259 → 338,116 B gzipped).
   **Both numbers are historical, not current** — the ceiling has since been
   raised several times (`scripts/bundleSize.test.ts`'s docblock carries every
-  raise with its reason) and stands at **355,000 B** as of S1. Measured after
-  S4: the eager closure is **354,590 B**, leaving **410 B**. The pattern this
+  raise with its reason) and stands at **358,000 B** as of 2026-09-09.
+  Measured then: the eager closure is **355,236 B**, leaving **2,764 B**. The
+  pattern this
   bullet exists to establish still holds: check the CURRENT number
   (`npx vitest run scripts/bundleSize.test.ts`, or gzip the built file
   yourself) before adding to the main chunk, never a number written down
-  here. At 410 B, the next sub-project that adds eager code will need the
-  ceiling raised deliberately, with both sides measured and the reason
-  recorded in the guard's own docblock — that is not optional headroom to
-  spend without noticing.
+  here — this bullet has been wrong twice for exactly that reason. A raise is
+  the USER's decision, not a step in a sub-project's normal course: both sides
+  measured, the reason recorded in the guard's own docblock, and the ruling in
+  `docs/rulings/testing-and-tooling.md` read first.
 - **The bundle guard used to measure "the largest single JS asset", and that
   was only ever valid while the eager code compiled to ONE chunk.** L4 added a
   second `React.lazy` boundary (`CommandPalette`, alongside L3's `GraphView`),

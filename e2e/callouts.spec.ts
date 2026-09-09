@@ -103,7 +103,7 @@ test('an untitled callout shows its type name as a hint that never reaches the n
   await expect(title).toHaveText('');
 });
 
-test('the chevron menu switches a type, and the note text follows', async ({ page }) => {
+test('the callout menu switches a type, and the note text follows', async ({ page }) => {
   await open(page, 'Callouts\n\n> [!warning] Be careful\n>\n> Body.');
 
   // The caret has to be IN the callout, exactly as a user would put it: the
@@ -113,7 +113,7 @@ test('the chevron menu switches a type, and the note text follows', async ({ pag
   // one. Verified: without this click the menu opens with Warning unchecked.
   await page.locator('.ProseMirror blockquote[data-callout="warning"] p').last().click();
 
-  await page.getByRole('button', { name: /Callout type|칼아웃 종류/ }).click();
+  await page.getByRole('button', { name: /Quote or callout|인용 또는 콜아웃/ }).click();
   const menu = page.getByRole('menu', { name: /Callout type|칼아웃 종류/ });
   await expect(menu.getByRole('menuitemradio', { name: /Warning|경고/ })).toHaveAttribute(
     'aria-checked',
@@ -124,6 +124,70 @@ test('the chevron menu switches a type, and the note text follows', async ({ pag
 
   await expect(page.locator('.ProseMirror blockquote[data-callout="danger"]')).toHaveCount(1);
   await expect(page.locator('.ProseMirror blockquote[data-callout="warning"]')).toHaveCount(0);
+});
+
+test('the callout menu opens over the button that opened it', async ({ page }) => {
+  // The defect this pins: the menu used to render as a centred child of a flex
+  // column above the toolbar, so it floated over the middle of the pane while
+  // its opener sat at the strip's right-hand end — "its location is not right
+  // at all". Only a real layout engine can see this; jsdom has none, and the
+  // component test can only check that two different anchors give two
+  // different positions.
+  await open(page, 'Callouts\n\n> [!warning] Be careful\n>\n> Body.');
+  await page.locator('.ProseMirror blockquote[data-callout="warning"] p').last().click();
+
+  const button = page.getByRole('button', { name: /Quote or callout|인용 또는 콜아웃/ });
+  await button.click();
+  const menu = page.getByRole('menu', { name: /Callout type|칼아웃 종류/ });
+  await expect(menu).toBeVisible();
+
+  // `useAnchoredMenu` paints once at the anchor and CORRECTS after measuring
+  // its own height, so the FIRST frame is deliberately the un-flipped
+  // position. `toBeVisible()` resolves on that frame and a one-shot
+  // `boundingBox()` then reads it — measured, not guessed: this assertion
+  // failed at `menu.bottom = 879` against a `button.top = 668` until it
+  // polled, while the settled geometry is 664 against 668.
+  await expect
+    .poll(async () => {
+      const b = await button.boundingBox();
+      const m = await menu.boundingBox();
+      return b !== null && m !== null && m.y + m.height <= b.y;
+    })
+    .toBe(true);
+
+  const buttonBox = (await button.boundingBox())!;
+  const menuBox = (await menu.boundingBox())!;
+
+  // Horizontally connected to its opener: the two boxes overlap. A centred
+  // menu on a wide pane does not, which is what makes this fail against the
+  // old behaviour rather than merely describe the new one.
+  expect(menuBox.x).toBeLessThan(buttonBox.x + buttonBox.width);
+  expect(menuBox.x + menuBox.width).toBeGreaterThan(buttonBox.x);
+
+  // Clamped inside the viewport rather than running off the right edge — the
+  // opener is near the end of the strip, which is exactly where an unclamped
+  // menu would escape.
+  const viewport = page.viewportSize()!;
+  expect(menuBox.x).toBeGreaterThanOrEqual(0);
+  expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(viewport.width);
+});
+
+test('clicking the callout button again closes its menu', async ({ page }) => {
+  // A toggle button must be able to close its own popup. The dismissal
+  // listener runs during CAPTURE, so without excluding the opener it closes on
+  // mousedown and the button's click re-opens a render later — the menu the
+  // user clicked to dismiss simply stays.
+  await open(page, 'Callouts\n\n> [!warning] Be careful\n>\n> Body.');
+  await page.locator('.ProseMirror blockquote[data-callout="warning"] p').last().click();
+
+  const button = page.getByRole('button', { name: /Quote or callout|인용 또는 콜아웃/ });
+  const menu = page.getByRole('menu', { name: /Callout type|칼아웃 종류/ });
+
+  await button.click();
+  await expect(menu).toBeVisible();
+
+  await button.click();
+  await expect(menu).toBeHidden();
 });
 
 test('the note list previews the title, not the marker', async ({ page }) => {

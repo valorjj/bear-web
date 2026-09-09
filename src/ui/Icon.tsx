@@ -295,6 +295,7 @@ export {
   Link,
   Code,
   Quote,
+  MessageSquareQuote,
   Info,
   Palette,
   Languages,

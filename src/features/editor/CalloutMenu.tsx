@@ -2,12 +2,15 @@ import { type ReactElement, useEffect, useRef } from 'react';
 
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n';
+import { useAnchoredMenu } from '@/lib/useAnchoredMenu';
 
 import { CALLOUT_TYPES, type CalloutType } from './callouts';
 
 export interface CalloutMenuProps {
   /** The type under the cursor; `null` is a plain quote. */
   current: CalloutType | null;
+  /** The toolbar button this menu belongs to — its rect and its element. */
+  anchor: { rect: DOMRect; opener: HTMLElement | null };
   onChoose: (type: CalloutType | null) => void;
   /** Closes without choosing — Escape, or a click elsewhere. */
   onDismiss: () => void;
@@ -30,7 +33,24 @@ const CHOICES: ReadonlyArray<{ type: CalloutType | null; label: TranslationKey }
 ];
 
 /**
- * The callout types, as a menu under the toolbar's Quote chevron.
+ * The callout types, as a menu anchored to the toolbar's callout button.
+ *
+ * ANCHORED since the button replaced M9b's quote-plus-chevron pair. Until then
+ * this rendered as a centred child of a flex column above the toolbar, so a
+ * menu opened from the strip's right-hand end floated over the middle of the
+ * pane with nothing connecting it to the control that opened it — the user's
+ * report was "its location is not right at all", and a card that points at
+ * nothing is exactly what that describes. `useAnchoredMenu` is the same
+ * placement, focus, dismissal and Tab-trap behaviour `HeadingMenu`,
+ * `EditorContextMenu`, `TableHandleMenu` and `NoteRowMenu` share; it flips
+ * above the button, which here is always, since the toolbar floats at the
+ * bottom of the pane.
+ *
+ * It must render OUTSIDE the toolbar's own positioned wrapper. That wrapper
+ * takes a `transform` when the virtual keyboard is up (J3), and a transformed
+ * ancestor becomes the containing block for `position: fixed` — the menu would
+ * then be anchored to the toolbar rather than to the viewport, and the
+ * hook's viewport clamp would be measuring the wrong box.
  *
  * `menuitemradio` rather than `menuitem`, on the same reasoning as
  * `HighlightMenu`: the choices are mutually exclusive and exactly one is
@@ -38,35 +58,41 @@ const CHOICES: ReadonlyArray<{ type: CalloutType | null; label: TranslationKey }
  * icon alone would leave a screen-reader user with six identically-shaped
  * buttons.
  *
- * Focus moves to the checked item on open and Escape returns to the opener,
- * because the control that opens this is icon-only: a keyboard user who cannot
- * get in has no route to a callout at all.
+ * Focus moves to the checked item on open — the hook focuses the first
+ * focusable in its own effect, and this component's effect runs after it and
+ * wins — because the control that opens this is icon-only: a keyboard user who
+ * cannot get in has no route to a callout at all.
  */
-export function CalloutMenu({ current, onChoose, onDismiss }: CalloutMenuProps): ReactElement {
+export function CalloutMenu({
+  current,
+  anchor,
+  onChoose,
+  onDismiss,
+}: CalloutMenuProps): ReactElement {
   const t = useT();
   const checked = useRef<HTMLButtonElement | null>(null);
+
+  const { ref, position, onKeyDown } = useAnchoredMenu<HTMLDivElement>(
+    anchor.rect,
+    onDismiss,
+    [],
+    // Without this the button could not close its own menu: the hook's capture
+    // listener closes on mousedown and the button's click re-opens.
+    anchor.opener,
+  );
 
   useEffect(() => {
     checked.current?.focus();
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onDismiss();
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onDismiss]);
-
   return (
     <div
+      ref={ref}
       role="menu"
       aria-label={t('editor.callout.menu')}
-      className="flex min-w-36 flex-col gap-0.5 rounded-lg bg-surface p-1 shadow-popover"
+      onKeyDown={onKeyDown}
+      style={{ top: position.top, left: position.left }}
+      className="bg-surface shadow-popover fixed z-20 flex min-w-36 flex-col gap-0.5 rounded-lg p-1"
     >
       {CHOICES.map((choice) => (
         <button

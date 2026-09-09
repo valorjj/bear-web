@@ -85,6 +85,24 @@ function bottomToolbar(): HTMLElement {
   return screen.getByRole('toolbar', { name: 'Formatting toolbar' });
 }
 
+function calloutButton(): HTMLElement {
+  return within(bottomToolbar()).getByRole('button', { name: 'Quote or callout' });
+}
+
+/**
+ * A plain blockquote takes two steps now.
+ *
+ * The toolbar's one-click Quote button was replaced by a single stand-alone
+ * callout button whose menu's FIRST row is Quote — the cost the user accepted
+ * in exchange for losing the chevron that read as a generic "more tools"
+ * affordance. Every test that used to click Quote directly goes through here,
+ * so the extra step is stated once rather than inlined at each call site.
+ */
+async function applyPlainQuote(): Promise<void> {
+  await userEvent.click(calloutButton());
+  await userEvent.click(screen.getByRole('menuitemradio', { name: 'Quote' }));
+}
+
 function topToolbar(): HTMLElement {
   return screen.getByRole('toolbar', { name: 'Top controls' });
 }
@@ -181,7 +199,7 @@ describe('the bottom toolbar', () => {
     await screen.findByLabelText('Note text');
 
     handleRef.current?.editor?.commands.selectAll();
-    await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Quote' }));
+    await applyPlainQuote();
 
     expect(handleRef.current?.getMarkdown()).toBe('> word\n\n');
   });
@@ -289,7 +307,7 @@ describe('repeated and mixed block toggles do not grow the document', () => {
 
     handleRef.current?.editor?.commands.selectAll();
     await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Checklist' }));
-    await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Quote' }));
+    await applyPlainQuote();
 
     // A blockquote cannot wrap a task list in this schema, so the second
     // click is rejected outright — the document is exactly what the first
@@ -304,7 +322,7 @@ describe('repeated and mixed block toggles do not grow the document', () => {
     await screen.findByLabelText('Note text');
 
     handleRef.current?.editor?.commands.selectAll();
-    await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Quote' }));
+    await applyPlainQuote();
     await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Code block' }));
 
     // One clean nesting — a code block inside the quote — never the
@@ -338,7 +356,7 @@ describe('icons', () => {
       'Highlight',
       'Link',
       'Code block',
-      'Quote',
+      'Quote or callout',
     ]) {
       expect(within(bottomToolbar()).getByRole('button', { name })).toBeInTheDocument();
     }
@@ -379,20 +397,33 @@ describe('the info panel', () => {
 
 describe('the callout type menu', () => {
   async function openCalloutMenu(): Promise<HTMLElement> {
-    await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Callout type' }));
+    await userEvent.click(calloutButton());
     return screen.getByRole('menu', { name: 'Callout type' });
   }
 
-  it('opens from a chevron beside Quote that reports its own state', async () => {
+  it('opens from a stand-alone button that reports its own state', async () => {
+    // It was a chevron pinned to the right of a Quote button until the user
+    // reported it read as a generic "more tools" affordance rather than as
+    // the route to the callout types. One button, one popup, no chevron.
     renderEditor('word');
     await screen.findByLabelText('Note text');
 
-    const chevron = within(bottomToolbar()).getByRole('button', { name: 'Callout type' });
-    expect(chevron).toHaveAttribute('aria-haspopup', 'menu');
-    expect(chevron).toHaveAttribute('aria-expanded', 'false');
+    const button = calloutButton();
+    expect(button).toHaveAttribute('aria-haspopup', 'menu');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
 
-    await userEvent.click(chevron);
-    expect(chevron).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('has replaced the Quote button rather than joining it', () => {
+    // The picker's first row IS Quote, so a second control for the same thing
+    // would be the redundancy this change removed. Asserting the ABSENCE is
+    // what stops it drifting back in beside the new button.
+    renderEditor('word');
+
+    expect(within(bottomToolbar()).queryByRole('button', { name: 'Quote' })).toBeNull();
+    expect(within(bottomToolbar()).queryByRole('button', { name: 'Callout type' })).toBeNull();
   });
 
   it('writes the chosen type into the document', async () => {
@@ -446,7 +477,7 @@ describe('the callout type menu', () => {
     );
     expect(screen.getByRole('menu', { name: 'Highlight colour' })).toBeInTheDocument();
 
-    await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Callout type' }));
+    await userEvent.click(calloutButton());
 
     expect(screen.queryByRole('menu', { name: 'Highlight colour' })).toBeNull();
     expect(screen.getByRole('menu', { name: 'Callout type' })).toBeInTheDocument();

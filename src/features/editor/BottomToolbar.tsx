@@ -15,7 +15,7 @@ import {
   List,
   ListOrdered,
   ListTodo,
-  Quote,
+  MessageSquareQuote,
   Strikethrough,
   TableGlyph,
 } from '@/ui/Icon';
@@ -35,9 +35,15 @@ export interface BottomToolbarProps {
    * colour is current.
    */
   highlightColor: HighlightColor | null;
-  /** Whether the callout menu is open — drives `aria-expanded` on its chevron. */
+  /** Whether the callout menu is open — drives `aria-expanded` on its button. */
   calloutMenuOpen: boolean;
-  onToggleCalloutMenu: () => void;
+  /**
+   * Toggles the callout menu, handing over the button's own element so the
+   * menu can anchor to it. The menu is `position: fixed` and placed by
+   * `useAnchoredMenu`; a rect measured anywhere but at the click would be a
+   * second source of truth for where this button is.
+   */
+  onToggleCalloutMenu: (opener: HTMLElement) => void;
   /** Whether the colour menu is open — drives `aria-expanded` on the chevron. */
   colorMenuOpen: boolean;
   onToggleColorMenu: () => void;
@@ -57,7 +63,7 @@ interface Action {
     | 'highlight'
     | 'link'
     | 'code'
-    | 'quote'
+    | 'callout'
     | 'table';
   label: TranslationKey;
   glyph: LucideIcon;
@@ -191,10 +197,16 @@ const ACTIONS: readonly Action[] = [
     active: 'table',
   },
   {
-    key: 'quote',
-    label: 'editor.toolbar.quote',
-    glyph: Quote,
-    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().toggleBlockquote().run(),
+    key: 'callout',
+    label: 'editor.toolbar.callout',
+    glyph: MessageSquareQuote,
+    // Opens the type menu rather than running a command, so `run` is never
+    // called for it — see the click handler below, which branches on the key.
+    // The six choices INCLUDE a plain quote, which is why this button replaced
+    // the Quote button rather than joining it: one control, one popup, and no
+    // chevron that reads as a generic "more tools" affordance. The cost, taken
+    // deliberately, is that a plain blockquote is now two clicks.
+    run: () => {},
     active: 'blockquote',
   },
 ];
@@ -245,8 +257,16 @@ export function BottomToolbar({
             type="button"
             aria-label={t(action.label)}
             aria-pressed={flags[action.active] === true}
+            aria-haspopup={action.key === 'callout' ? 'menu' : undefined}
+            aria-expanded={action.key === 'callout' ? calloutMenuOpen : undefined}
             disabled={editor === null}
-            onClick={() => editor !== null && action.run(editor, t, highlightColor)}
+            onClick={(event) => {
+              if (action.key === 'callout') {
+                onToggleCalloutMenu(event.currentTarget);
+                return;
+              }
+              if (editor !== null) action.run(editor, t, highlightColor);
+            }}
             // `touch:size-11` is 44x44 of real ink on a coarse pointer (J3).
             //
             // J2 left this button at 28px deliberately and recorded why: it
@@ -258,28 +278,25 @@ export function BottomToolbar({
             className={`h-7 shrink-0 rounded-sm text-ui text-muted coarse:size-11 coarse:rounded-md transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40 ${
               // The highlight pair reads as ONE control: the button loses its
               // trailing inset so the chevron sits against it rather than a
-              // full gap away.
-              action.key === 'highlight' || action.key === 'quote' ? 'pr-0.5 pl-2' : 'px-2'
+              // full gap away. Only `highlight` still has a chevron — the
+              // callout menu hangs off a stand-alone button now.
+              action.key === 'highlight' ? 'pr-0.5 pl-2' : 'px-2'
             }`}
           >
             <Icon glyph={action.glyph} />
           </button>
-          {(action.key === 'highlight' || action.key === 'quote') && (
+          {action.key === 'highlight' && (
             <button
               type="button"
-              aria-label={t(
-                action.key === 'highlight'
-                  ? 'editor.toolbar.highlightColor'
-                  : 'editor.toolbar.calloutType',
-              )}
+              aria-label={t('editor.toolbar.highlightColor')}
               aria-haspopup="menu"
-              aria-expanded={action.key === 'highlight' ? colorMenuOpen : calloutMenuOpen}
+              aria-expanded={colorMenuOpen}
               disabled={editor === null}
-              onClick={action.key === 'highlight' ? onToggleColorMenu : onToggleCalloutMenu}
+              onClick={onToggleColorMenu}
               // The narrowest control in the app at ~18px, and the only route
-              // to the highlight colours and the callout types. It keeps its
-              // narrow width so it still reads as one control with the button
-              // it follows, and takes the strip's full height instead.
+              // to the highlight colours. It keeps its narrow width so it
+              // still reads as one control with the button it follows, and
+              // takes the strip's full height instead.
               className="h-7 shrink-0 touch:h-11 rounded-sm pr-2 pl-0.5 text-ui text-muted transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-expanded:bg-selected aria-expanded:text-text disabled:pointer-events-none disabled:opacity-40"
             >
               <Icon glyph={ChevronDown} size="sm" />

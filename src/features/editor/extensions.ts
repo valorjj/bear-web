@@ -12,6 +12,7 @@ import { CodeLanguageControls, type CodeLanguageControlsOptions } from './CodeLa
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
 import { ContextMenu, type ContextMenuOptions } from './ContextMenu';
 import { TableHandles, type TableHandlesOptions } from './TableHandles';
+import { TableShortcuts } from './TableShortcuts';
 import { Highlight } from './Highlight';
 import { lowlightForEditor } from './lowlight';
 import { MermaidDiagram, type MermaidDiagramOptions } from './MermaidDiagram';
@@ -110,6 +111,11 @@ function buildSupportedExtensions(
     TableRow,
     TableHeader,
     TableCell,
+    // Four insert chords, keyed off the arrow direction. An `Extension`, so
+    // it adds nothing to the schema; its commands are the same
+    // `tableCommands.ts` map the context menu and the handle menus run, so
+    // the three doors to a table edit cannot drift apart.
+    TableShortcuts,
     // An `Extension` (not a `Node` or `Mark`), so it registers nothing in the
     // schema: `computeRecognizedHtmlTags()` below and every round-trip suite are
     // unaffected by it. It contributes exactly one input rule.

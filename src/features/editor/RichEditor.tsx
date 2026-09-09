@@ -187,7 +187,18 @@ export function RichEditor({
   const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
   const [tableMenu, setTableMenu] = useState<TableHandleMenuRequest | null>(null);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
-  const [calloutMenuOpen, setCalloutMenuOpen] = useState(false);
+  /**
+   * The callout menu's anchor, or `null` when it is closed.
+   *
+   * A rect rather than a boolean since the menu became a stand-alone
+   * toolbar button's popover: `useAnchoredMenu` places it against the
+   * button's own box, and the `opener` element is what keeps that button's
+   * click from being treated as an outside dismissal.
+   */
+  const [calloutAnchor, setCalloutAnchor] = useState<{
+    rect: DOMRect;
+    opener: HTMLElement | null;
+  } | null>(null);
   /**
    * The colour the toolbar's Highlight button applies. Sticky across clicks so
    * highlighting in one colour stays a single click; it is a session
@@ -879,28 +890,6 @@ export function RichEditor({
          * rather than within it.
          */}
         <div className="pointer-events-auto flex max-w-full flex-col items-center gap-2">
-          {calloutMenuOpen && (
-            <CalloutMenu
-              // Read through `flags`, the editor-state subscription, never
-              // `editor.isActive` in this render body: `useEditor` does not
-              // re-render on transactions in Tiptap v3, so an `isActive` call
-              // made during render is stale from the moment the caret moves.
-              current={flags.calloutType}
-              onChoose={(type) => {
-                // The document mutation runs FIRST, before any React state
-                // change, for the same reason the colour menu does it: closing
-                // the menu unmounts it and moves focus off the item it focused
-                // on open, and doing that before the command left the edit
-                // dependent on render timing.
-                if (editor !== null) {
-                  editor.chain().command(pinAllSelectionStep).focus().setCalloutType(type).run();
-                }
-
-                setCalloutMenuOpen(false);
-              }}
-              onDismiss={() => setCalloutMenuOpen(false)}
-            />
-          )}
           {colorMenuOpen && (
             <HighlightMenu
               // What the cursor is actually sitting in wins over the sticky
@@ -946,15 +935,17 @@ export function RichEditor({
             highlightColor={highlightColor}
             colorMenuOpen={colorMenuOpen}
             onToggleColorMenu={() => {
-              setCalloutMenuOpen(false);
+              setCalloutAnchor(null);
               setColorMenuOpen((open) => !open);
             }}
-            calloutMenuOpen={calloutMenuOpen}
-            onToggleCalloutMenu={() => {
-              // Two menus stack in one column above the toolbar, so opening
-              // either closes the other rather than letting both float.
+            calloutMenuOpen={calloutAnchor !== null}
+            onToggleCalloutMenu={(opener) => {
+              // The colour menu still stacks in the column above the toolbar,
+              // so opening this one closes it rather than letting both float.
               setColorMenuOpen(false);
-              setCalloutMenuOpen((open) => !open);
+              setCalloutAnchor((current) =>
+                current === null ? { rect: opener.getBoundingClientRect(), opener } : null,
+              );
             }}
           />
         </div>
@@ -1004,6 +995,38 @@ export function RichEditor({
        * Rendered by the app, never by the plugin: the editor learns nothing
        * about app concerns, the same boundary `onActivateTag` keeps.
        */}
+      {/*
+       * OUTSIDE the toolbar's own wrapper, deliberately. That wrapper takes a
+       * `transform` when the virtual keyboard is up (J3), and a transformed
+       * ancestor becomes the containing block for `position: fixed` — the menu
+       * would then be placed against the toolbar instead of the viewport, and
+       * `useAnchoredMenu`'s clamp would be measuring the wrong box. It sits
+       * here with the other viewport-anchored menus for that reason.
+       */}
+      {calloutAnchor !== null && (
+        <CalloutMenu
+          anchor={calloutAnchor}
+          // Read through `flags`, the editor-state subscription, never
+          // `editor.isActive` in this render body: `useEditor` does not
+          // re-render on transactions in Tiptap v3, so an `isActive` call
+          // made during render is stale from the moment the caret moves.
+          current={flags.calloutType}
+          onChoose={(type) => {
+            // The document mutation runs FIRST, before any React state
+            // change, for the same reason the colour menu does it: closing
+            // the menu unmounts it and moves focus off the item it focused
+            // on open, and doing that before the command left the edit
+            // dependent on render timing.
+            if (editor !== null) {
+              editor.chain().command(pinAllSelectionStep).focus().setCalloutType(type).run();
+            }
+
+            setCalloutAnchor(null);
+          }}
+          onDismiss={() => setCalloutAnchor(null)}
+        />
+      )}
+
       {menu !== null && (
         <HeadingMenu
           request={menu}
