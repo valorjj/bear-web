@@ -310,6 +310,29 @@ matched = true })`: once any rule commits steps, `matched` is set and every
   against `node_modules/@tiptap`, not assume the arrow keys are still free
   just because Up/Down and Left/Right look like a natural split.
 
+- **`setCalloutType` must check `can().wrapIn('blockquote')` before chaining
+  into itself, and the failure without it is an INFINITE RECURSION.** The
+  command walks out to the nearest blockquote and, finding none, chains
+  `wrapIn('blockquote')` and calls itself — but `wrapIn` can legitimately fail
+  (a blockquote may not wrap a task item in this schema), and the chained call
+  then re-runs against a state that still has no blockquote and chains again,
+  until the stack overflows. Shipped in M9b, live for two weeks, and reachable
+  by any user who opened the callout menu with the caret in a checklist.
+  Refusing matches what the toolbar's old Quote button did with
+  `toggleBlockquote`: a checklist simply cannot become a callout.
+
+  **Two things kept it hidden, and both are worth remembering.** `vitest run`
+  reports every test PASSING and exits 1 on an unhandled error, so a review
+  that reads the summary lines rather than `$?` sees a green suite — the exact
+  trap CLAUDE.md names for editor tests, walked into anyway. And the toolbar's
+  Quote button no-ops safely on a task list, so the only route that could
+  reach the bug was the menu's Quote row, which no test exercised from a
+  checklist until that button was removed on 2026-09-09. `callout.test.ts`
+  now drives the command directly from inside a task item, including a
+  positive control that a plain paragraph still wraps — a guard that refused
+  everything would satisfy the two negative tests and silently delete the
+  feature.
+
 - **`Mod` in a keymap string is resolved ONCE, at module load, by
   `prosemirror-keymap` — not per call.** Its `mac` constant is a
   `navigator.platform` test evaluated when the module is first imported, so a

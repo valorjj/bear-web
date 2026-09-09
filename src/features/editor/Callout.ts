@@ -222,7 +222,7 @@ export const Callout = Blockquote.extend<CalloutOptions>({
       ...this.parent?.(),
       setCalloutType:
         (type) =>
-        ({ state, tr, dispatch, chain }) => {
+        ({ state, tr, dispatch, chain, can }) => {
           const { $from } = state.selection;
 
           // Walk out to the nearest enclosing blockquote. Depth 0 is the doc,
@@ -231,6 +231,21 @@ export const Callout = Blockquote.extend<CalloutOptions>({
           while (depth > 0 && $from.node(depth).type.name !== 'blockquote') depth -= 1;
 
           if (depth === 0) {
+            // `wrapIn` CAN legitimately fail, and the recursion below has no
+            // other floor. A blockquote may not wrap a task item in this
+            // schema, so with the caret in a checklist `wrapIn` no-ops, the
+            // chained `setCalloutType` re-runs against a state that still has
+            // no blockquote, and the two call each other until the stack
+            // overflows. That shipped in M9b and stayed live for two weeks:
+            // `vitest run` reports every test PASSING and exits 1 on the
+            // unhandled error, so a pass-count review sees nothing, and the
+            // toolbar's own Quote button used `toggleBlockquote` — which
+            // no-ops safely — which kept the menu's Quote row the only way in.
+            //
+            // Refusing here matches what that button did: a checklist simply
+            // cannot become a callout, and nothing happens.
+            if (!can().wrapIn('blockquote')) return false;
+
             // CHAINED, not two calls on `commands`. `wrapIn` already computes
             // the join and lift steps, so it is worth reusing — but a second
             // `commands.setCalloutType` re-reads the ORIGINAL `state`, where

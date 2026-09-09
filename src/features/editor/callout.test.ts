@@ -170,3 +170,64 @@ describe('setCalloutType', () => {
     editor.destroy();
   });
 });
+
+describe('setCalloutType where a blockquote cannot wrap', () => {
+  /**
+   * Regression for an infinite recursion that shipped in M9b and stayed live
+   * until 2026-09-09.
+   *
+   * `setCalloutType` walks out to the nearest blockquote and, finding none,
+   * chains `wrapIn('blockquote')` and calls itself. `wrapIn` can legitimately
+   * FAIL — a blockquote cannot wrap a task item in this schema — and the
+   * chained call then re-ran against a state that still had no blockquote,
+   * chained again, and overflowed the stack.
+   *
+   * Nothing caught it for two weeks because of how it presents: `vitest run`
+   * reports every test PASSING and exits 1 on an unhandled error, which is the
+   * exact failure mode CLAUDE.md warns about for editor tests. It was found
+   * only in CI, and only once the toolbar's own Quote button — which used
+   * `toggleBlockquote` and no-ops safely — was replaced by the callout menu,
+   * making the menu's Quote row the sole route to a quote.
+   */
+  function taskListEditor(): Editor {
+    const editor = mount('- [ ] a task');
+    // Into the task item's paragraph. `mount` leaves the selection at the
+    // document start, which is not inside the list at all.
+    editor.commands.setTextSelection(4);
+    return editor;
+  }
+
+  it('returns false rather than recursing until the stack overflows', () => {
+    const editor = taskListEditor();
+
+    expect(() => editor.commands.setCalloutType('info')).not.toThrow();
+    expect(editor.commands.setCalloutType('info')).toBe(false);
+
+    editor.destroy();
+  });
+
+  it('leaves the document alone, including for a plain quote', () => {
+    const editor = taskListEditor();
+    const before = markdownOf(editor);
+
+    expect(editor.commands.setCalloutType(null)).toBe(false);
+    expect(markdownOf(editor)).toBe(before);
+
+    editor.destroy();
+  });
+
+  it('still wraps a plain paragraph, which is the case the guard must not break', () => {
+    // The control. A guard that refused everything would pass both tests above
+    // and silently remove the feature.
+    const editor = mount('a paragraph');
+    editor.commands.setTextSelection(2);
+
+    expect(editor.commands.setCalloutType('tip')).toBe(true);
+    // The paragraph becomes the callout's BODY under an empty title, not the
+    // title itself — the command's real output, read off it once rather than
+    // guessed. What this test is for is only that the wrap still HAPPENS.
+    expect(markdownOf(editor)).toBe('> [!tip]\n>\n> a paragraph');
+
+    editor.destroy();
+  });
+});

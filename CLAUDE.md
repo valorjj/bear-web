@@ -78,7 +78,7 @@ redirect stub instead of the app.
 | S4 tag autocomplete + plain-click filtering (absorbs S2)           | complete |
 | T table insert chords + the callout button                         | complete |
 
-2980 unit tests pass and 112 skip (the server integration tests, which skip
+2983 unit tests pass and 112 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
 `npm run test:pdf`), 262 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
