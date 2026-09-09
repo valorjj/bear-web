@@ -944,13 +944,41 @@ rejected on a measured bundle number rather than on taste.
   opposite of `LinkAutocomplete`'s own `Enter`-accepts contract.** Row 0 is
   always the literal text the user just typed (never the highest-ranked
   existing tag — matching is substring-anywhere, so `#a` matches `bear`), and
-  accepting row 0 is a no-op. With the literal pre-selected, `Enter` on it has
-  nothing to insert, so intercepting it would only swallow a keystroke that
+  accepting row 0 is a no-op. With the literal pre-selected on a freshly TYPED
+  query, `Enter` on it has nothing to insert, so intercepting it would only swallow a keystroke that
   means "new paragraph" in every other context. `space` is what commits and
   closes the popover at any depth, exactly like typing it anywhere else in
   the document — it is ordinary typing that happens to also close a menu, not
   a menu keybinding that happens to be a space. Only `Tab` (accept) and the
   arrow keys (move) are intercepted.
+
+- **An ACCEPT pre-selects the first descendant; a freshly typed query
+  pre-selects the literal. `Tab` `Tab` therefore walks down two levels.**
+  A document change normally resets `activeIndex` to 0, which is the rule that
+  stops a default from rewriting what was just typed. An accept is also a
+  document change, so it carries a `descend` meta on the SAME transaction that
+  does the inserting — nothing else can distinguish it, because typing, undo
+  and an accept are all just `docChanged` — and `apply` pre-selects row 1 for
+  those.
+
+  **This reverses a ruling made and reversed on the same day, 2026-09-09**, so
+  the reasoning is worth keeping rather than the conclusion alone. The first
+  implementation left row 0 pre-selected after an accept, on the grounds that
+  pre-selecting a descendant puts a tag one stray keystroke away. That
+  misapplied the rule above: the hazard row 0 exists to prevent is a default
+  REWRITING freshly typed text with something unrelated (`#a` → `#bear`, since
+  matching is substring-anywhere), whereas a stray `Tab` after a deliberate
+  accept lands one level deeper INSIDE the subtree the user just entered, and
+  undo reverses it. Descend-and-stay-open exists for hierarchy; requiring an
+  `ArrowDown` between every step defeated the point of it.
+
+  No bounds check is needed for a leaf: `openRows` clamps through
+  `clampedActiveIndex`, so a reopened list holding only the literal falls back
+  to row 0 and the next `Tab` commits rather than inserting a tag that does
+  not exist. Row 0 stays one `ArrowUp` away, which is how a user stops at an
+  intermediate level. Both ends of the mechanism are injection-proven — reverting
+  the pre-selection, or dropping the meta from `insertTag` — and each fails the
+  same two unit tests plus the real-`Tab` assertion in `e2e/tags.spec.ts`.
 
 - **The `Tab` collision with `@tiptap/extension-list-keymap` (which binds
   `Tab` to indent a list item) is resolved by the popover's OPEN STATE alone,

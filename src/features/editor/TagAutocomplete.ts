@@ -206,7 +206,14 @@ interface TagAutocompleteState {
 type Meta =
   | { type: 'keys'; keys: readonly string[] }
   | { type: 'move'; direction: 'next' | 'prev' | 'first' | 'last' }
-  | { type: 'dismiss' };
+  | { type: 'dismiss' }
+  /**
+   * An accept that inserted an existing tag, as opposed to any other document
+   * change. It rides the SAME transaction that does the inserting rather than
+   * being a dispatch of its own, so it cannot be a meta-only transaction and
+   * needs no `skipTrailingNodeMeta`.
+   */
+  | { type: 'descend' };
 
 /**
  * Every tag in the document, plus every ancestor of each.
@@ -311,13 +318,13 @@ function renderPopover(
 /**
  * Replaces the typed tag with `#<key>` and leaves the caret at its end,
  * WITHOUT a trailing space — so `tagAutocompleteMatchAt` immediately matches
- * again and the popover reopens on that tag's descendants, with row 0 the
- * literal (the just-accepted tag) rather than a child — the document just
- * changed, and a document change always resets `activeIndex` to 0 so the
- * pre-selected row stays the safe one. Accepting THAT row again (a second
- * Tab) therefore commits and closes rather than descending; descending
- * another level needs an ArrowDown first, or typing `/`. A space commits
- * and closes at any depth.
+ * again and the popover reopens on that tag's descendants.
+ *
+ * The `descend` meta below is what makes `Tab` `Tab` walk down two levels:
+ * it marks this document change as an accept, and `apply` pre-selects the
+ * first descendant rather than the literal for those. Row 0 stays the literal
+ * and is one ArrowUp away, so stopping at an intermediate level costs one
+ * keypress; a space commits and closes at any depth.
  */
 function insertTag(view: EditorView, match: TagAutocompleteMatch, key: string): void {
   const text = `#${key}`;
@@ -325,6 +332,11 @@ function insertTag(view: EditorView, match: TagAutocompleteMatch, key: string): 
   // Set explicitly rather than relying on selection mapping, because the
   // reopened popover's position depends on exactly where this lands.
   tr.setSelection(TextSelection.create(tr.doc, match.from + text.length));
+  // Tells `apply` that THIS document change was an accept, which is what
+  // pre-selects the first descendant in the reopened list. Nothing else can
+  // be inferred from the transaction itself: typing, undo and an accept are
+  // all just `docChanged`.
+  tr.setMeta(tagAutocompleteKey, { type: 'descend' });
   view.dispatch(tr);
   view.focus();
 }
@@ -484,7 +496,27 @@ export const TagAutocomplete = Extension.create<TagAutocompleteOptions>({
             if (tr.docChanged) {
               next = {
                 ...next,
-                activeIndex: 0,
+                // A freshly TYPED query pre-selects row 0, the literal, so
+                // accepting a default can never rewrite what was typed. An
+                // ACCEPT pre-selects row 1 instead — the first descendant of
+                // the tag just taken — so `Tab` `Tab` walks down a hierarchy
+                // without an `ArrowDown` between every step, which is the
+                // flow descend-and-stay-open exists for.
+                //
+                // Safe at any depth without a bounds check: `openRows` clamps
+                // through `clampedActiveIndex`, so a leaf — whose reopened
+                // list holds only the literal — falls back to row 0 and the
+                // next `Tab` commits rather than inserting a tag that does
+                // not exist. Row 0 stays one `ArrowUp` away, which is how you
+                // stop at an intermediate level.
+                //
+                // The milder hazard is deliberate. Pre-selecting a descendant
+                // does put a tag one stray keystroke away, but it is a tag
+                // INSIDE the subtree just entered, not an unrelated one — the
+                // `#a` → `#bear` rewrite that row 0's pre-selection exists to
+                // prevent is still prevented, because that case is a typed
+                // query and takes the branch above.
+                activeIndex: meta?.type === 'descend' ? 1 : 0,
                 openFrom: match?.from ?? null,
               };
             } else if (tr.selectionSet) {

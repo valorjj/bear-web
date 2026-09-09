@@ -313,6 +313,76 @@ describe('the keyboard', () => {
     editor.destroy();
   });
 
+  it('descends a level on each Tab, without an ArrowDown between them', () => {
+    // The flow the hierarchy case exists for. Accepting pre-selects the first
+    // DESCENDANT rather than the literal, so `Tab` `Tab` walks down two
+    // levels. Row 0 stays the literal and is one ArrowUp away, which is how
+    // you stop at an intermediate level.
+    const editor = pluginEditorWith('see ', LABELS, ['a', 'a/b', 'a/b/c']);
+    caretAtEnd(editor);
+    type(editor, '#a');
+
+    // The FIRST Tab still lands on row 0 — a freshly typed query pre-selects
+    // the literal, which is the promise that accepting a default never
+    // rewrites what was typed. So descend explicitly for the first step.
+    expect(keydown(editor, 'ArrowDown')).toBe(true);
+    expect(keydown(editor, 'Tab')).toBe(true);
+    expect(markdownOf(editor)).toContain('#a/b');
+
+    // ...and now Tab alone keeps going, with no ArrowDown.
+    expect(activeOption(editor)).toBe('a/b/c');
+    expect(keydown(editor, 'Tab')).toBe(true);
+    expect(markdownOf(editor)).toContain('#a/b/c');
+    editor.destroy();
+  });
+
+  it('still pre-selects the literal for a freshly TYPED query', () => {
+    // Guards the half of the rule that did not change: the descend
+    // pre-selection applies only after an accept. Typing must never
+    // pre-select something that rewrites what was typed.
+    const editor = pluginEditorWith('see ', LABELS, ['a', 'a/b', 'a/b/c']);
+    caretAtEnd(editor);
+    type(editor, '#a');
+    expect(activeOption(editor)).toBe('a');
+    editor.destroy();
+  });
+
+  it('commits and closes when the accepted tag is a LEAF', () => {
+    // With no descendants the reopened list holds only the literal, so the
+    // pre-selected index clamps back to row 0 and the next Tab commits
+    // instead of inserting something that does not exist.
+    const editor = pluginEditorWith('see ', LABELS, ['a', 'a/b']);
+    caretAtEnd(editor);
+    type(editor, '#a');
+    keydown(editor, 'ArrowDown');
+    keydown(editor, 'Tab');
+    expect(markdownOf(editor)).toContain('#a/b');
+    expect(activeOption(editor)).toBe('a/b');
+
+    expect(keydown(editor, 'Tab')).toBe(true);
+    expect(markdownOf(editor)).toContain('#a/b');
+    expect(popover(editor)).toBeNull();
+    editor.destroy();
+  });
+
+  it('stops at an intermediate level with ArrowUp then Tab', () => {
+    // The escape hatch from the descend pre-selection: row 0 is still the
+    // literal, one ArrowUp away, and accepting it commits.
+    const editor = pluginEditorWith('see ', LABELS, ['a', 'a/b', 'a/b/c']);
+    caretAtEnd(editor);
+    type(editor, '#a');
+    keydown(editor, 'ArrowDown');
+    keydown(editor, 'Tab');
+
+    expect(keydown(editor, 'ArrowUp')).toBe(true);
+    expect(activeOption(editor)).toBe('a/b');
+    expect(keydown(editor, 'Tab')).toBe(true);
+    expect(markdownOf(editor)).toContain('#a/b');
+    expect(markdownOf(editor)).not.toContain('#a/b/c');
+    expect(popover(editor)).toBeNull();
+    editor.destroy();
+  });
+
   it('commits the typed text and closes when Tab lands on row 0', () => {
     const editor = pluginEditorWith('see ');
     caretAtEnd(editor);

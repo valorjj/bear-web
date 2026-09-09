@@ -95,19 +95,36 @@ handler returns `false` on the very first guard and indentation behaves
 exactly as it does today. A tag typed inside a list item is therefore the case
 to test, not the case to forbid.
 
-**4. Accepting an existing tag descends and stays open.** The tag text is
-replaced with `#<key>`, the caret lands at the end, and **no trailing space is
-inserted** — so the match rule immediately re-evaluates and the popover
-reopens showing what lives under the tag just accepted, with row 0 the just-
-accepted tag itself: a document change always resets `activeIndex` to 0, and
-that keeps the pre-selected row the safe one after an accept, same as after
-any other edit. Accepting row 0 again therefore commits and closes rather
-than descending further — descending needs an ArrowDown first to move off
-row 0, or typing `/`. A space commits and closes at any depth.
+**4. Accepting an existing tag descends and stays open, and `Tab` `Tab`
+walks down two levels.** The tag text is replaced with `#<key>`, the caret
+lands at the end, and **no trailing space is inserted** — so the match rule
+immediately re-evaluates and the popover reopens showing what lives under the
+tag just accepted.
 
-Accepting row 0 instead commits and closes, because there is nothing to
-insert; it sets `dismissedFrom` so the list does not immediately reopen on the
-tag the user just settled on.
+The reopened list pre-selects the first DESCENDANT, not the literal. A
+document change normally resets `activeIndex` to 0, which is what keeps a
+freshly TYPED query from having its default rewrite what was typed; an accept
+carries a `descend` meta on the same transaction that does the inserting, and
+that pre-selects row 1 instead. So `Tab` `Tab` descends without an
+`ArrowDown` between the steps, which is the flow this whole decision exists
+for.
+
+**This reverses a ruling made on 2026-09-09 and reversed the same day.** The
+first implementation left row 0 pre-selected after an accept, so a second
+`Tab` committed instead of descending, and the reasoning was that
+pre-selecting a descendant puts a tag one stray keystroke away. That was
+misapplied: the hazard decision 2 exists to prevent is a default REWRITING
+freshly typed text with something unrelated (`#a` → `#bear`), and a stray
+`Tab` after a deliberate accept lands one level deeper INSIDE the subtree
+just entered. Much milder, and recoverable by undo.
+
+Row 0 remains the literal and is one `ArrowUp` away, which is how a user
+stops at an intermediate level. Accepting it commits and closes, because
+there is nothing to insert; it clears `openFrom` so the list does not
+immediately reopen on the tag just settled on. No bounds check is needed for
+a leaf: `openRows` clamps through `clampedActiveIndex`, so a reopened list
+holding only the literal falls back to row 0 and the next `Tab` commits. A
+space commits and closes at any depth.
 
 **5. On a phone, the caret is placed by tapping past the pill and using the
 platform's own caret handle.** This is what Bear does on iOS. The rejected

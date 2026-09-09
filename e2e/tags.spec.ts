@@ -140,11 +140,19 @@ test('the tag autocomplete completes and descends', async ({ page }) => {
   await expect(list).toBeVisible();
   await expect(list.getByRole('option')).toContainText(['economy', 'economy/rates']);
 
+  // And the reopened list pre-selects the first DESCENDANT, not the literal,
+  // so a second Tab keeps walking down with no ArrowDown between the steps.
+  // Row 0 stays the literal and is one ArrowUp away, which is how a user
+  // stops at an intermediate level. Driven with real keypresses because the
+  // unit suite can only invoke `handleKeyDown` directly.
+  await page.keyboard.press('Tab');
+  await expect(editor).toContainText('Notes #economy/rates');
+
   // A space commits and closes at any depth.
-  await page.keyboard.type('/us-market');
+  await page.keyboard.type('/deeper');
   await page.keyboard.press('Space');
   await expect(list).toHaveCount(0);
-  await expect(editor).toContainText('Notes #economy/us-market');
+  await expect(editor).toContainText('Notes #economy/rates/deeper');
 });
 
 test('a plain click on a tag pill re-scopes the note list', async ({ page }) => {
