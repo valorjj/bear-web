@@ -179,6 +179,18 @@ const DECORATIVE = [
 const OVERLAYS = [
   { overlay: 'selected', ground: 'surface', fg: 'text', min: 4.5 },
   { overlay: 'hover', ground: 'surface', fg: 'text', min: 4.5 },
+  /*
+   * The SIDEBAR's own selected and hovered rows, which this list never
+   * covered although `SidebarRow` paints `bg-selected` and `bg-hover` on
+   * exactly that ground. The gap became consequential when the light indigo
+   * themes turned the sidebar dark: both tints are low-alpha washes, and the
+   * light theme's own (`rgb(40 34 66 / 0.05)`, `rgb(91 74 214 / 0.09)`) are
+   * mixed from a DARK colour and disappear on a dark panel, which is why the
+   * scope re-maps them to Indigo Dark's. Read through the scoped set for the
+   * same reason every `sidebar` ground is.
+   */
+  { overlay: 'selected', ground: 'sidebar', fg: 'text', min: 4.5 },
+  { overlay: 'hover', ground: 'sidebar', fg: 'text', min: 4.5 },
   { overlay: 'tag-fill', ground: 'bg', fg: 'accent', min: 3.0 },
   // A highlight is body text on a tinted page: the fill must not eat the text
   // it exists to draw attention to. `bg` is the ground because a highlight is
@@ -262,6 +274,16 @@ test.describe('contrast', () => {
       // the cascade to resolve it.
       const tokens = await readThemeTokens(page, id, READ);
 
+      // A SECOND read, from inside the sidebar's own scope. The light indigo
+      // themes paint a DARK sidebar and re-map `text`, `muted`, `faint`,
+      // `border`, `hover` and `selected` on that container, so the pair the
+      // app actually renders there is light-on-dark. Reading at the root
+      // would compare the theme's near-black `text` against its near-black
+      // `sidebar` and report 1.00 — a failure describing a pair nothing
+      // paints. Every other theme re-maps nothing, so this read returns the
+      // same values as the one above and the two are interchangeable there.
+      const sidebarTokens = await readThemeTokens(page, id, READ, 'bear-sidebar-scope');
+
       for (const name of READ) {
         expect(tokens[name], `--bear-${name} resolved to nothing in ${id}`).toBeTruthy();
       }
@@ -272,7 +294,13 @@ test.describe('contrast', () => {
 
       for (const rule of [...RULES, ...DECORATIVE]) {
         for (const ground of rule.grounds) {
-          const ratio = contrastRatio(parseColour(tokens[rule.fg]!), parseColour(tokens[ground]!));
+          // Read both sides from the same place, so a scoped ground is
+          // compared against the foreground actually painted on it.
+          const painted = ground === 'sidebar' ? sidebarTokens : tokens;
+          const ratio = contrastRatio(
+            parseColour(painted[rule.fg]!),
+            parseColour(painted[ground]!),
+          );
           // A non-finite ratio (NaN, or +/-Infinity from a degenerate colour)
           // must fail, not silently pass: `NaN < min` and `Infinity < min`
           // are both false, which is the exact mechanism that hid nine
@@ -288,11 +316,12 @@ test.describe('contrast', () => {
       }
 
       for (const rule of OVERLAYS) {
+        const painted = rule.ground === 'sidebar' ? sidebarTokens : tokens;
         const ground = composite(
-          parseColour(tokens[rule.overlay]!),
-          parseColour(tokens[rule.ground]!),
+          parseColour(painted[rule.overlay]!),
+          parseColour(painted[rule.ground]!),
         );
-        const ratio = contrastRatio(parseColour(tokens[rule.fg]!), ground);
+        const ratio = contrastRatio(parseColour(painted[rule.fg]!), ground);
         // Same non-finite guard as the loop above — an unparseable colour
         // must not be able to hide behind `NaN < min` being false.
         if (!Number.isFinite(ratio)) {

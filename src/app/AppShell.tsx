@@ -712,11 +712,18 @@ export function AppShell(): ReactElement {
                 <Pane
                   label={t('pane.sidebar')}
                   width={widths.sidebarWidth}
-                  // Not a card: in Soft Depth the sidebar dissolves into the ground and
-                  // only the panes holding content float. Its `--bear-sidebar` equals
-                  // `--bear-canvas` in the indigo themes for the same reason.
+                  // Not a card: only the panes holding CONTENT float, and the
+                  // sidebar is chrome. `e2e/appearance.spec.ts` asserts its
+                  // `boxShadow === 'none'` by name, so this becoming a card
+                  // fails loudly.
                   elevated={false}
-                  className="bg-sidebar flex flex-col overflow-hidden"
+                  // `bear-sidebar-scope` is what lets the light indigo themes
+                  // paint a DARK sidebar: `tokens.css` re-maps `text`, `muted`,
+                  // `faint`, `border`, `hover` and `selected` on this element,
+                  // so every descendant inherits light-on-dark without a single
+                  // component knowing about it. Themes wanting no dark sidebar
+                  // declare nothing and are untouched.
+                  className="bear-sidebar-scope bg-sidebar flex flex-col overflow-hidden"
                 >
                   <SidebarContent
                     scope={scope}

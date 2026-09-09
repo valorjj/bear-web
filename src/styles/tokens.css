@@ -640,14 +640,14 @@
   /* Indigo Light — see the named block below; the two must stay identical. */
   --bear-bg: #ffffff;
   --bear-surface: #f5f4fa;
-  --bear-sidebar: #dcd6ef;
+  --bear-sidebar: #241f3d;
   --bear-canvas: #e6e1f5;
   --bear-text: #241f3d;
   --bear-muted: #605b78;
   /* Darkened from the mockup's #9d99b0, which the harness measured at 2.76:1
      on white and 2.31:1 on the sidebar, against a 3.0 floor. */
-  --bear-faint: #7b7690;
-  --bear-border: #d2cddc;
+  --bear-faint: #837e99;
+  --bear-border: #e0dcec;
   --bear-accent: #5b4ad6;
   --bear-danger: #c62828;
   --bear-focus: #5b4ad6;
@@ -737,14 +737,14 @@
    */
   --bear-bg: #ffffff;
   --bear-surface: #f5f4fa;
-  --bear-sidebar: #dcd6ef;
+  --bear-sidebar: #241f3d;
   --bear-canvas: #e6e1f5;
   --bear-text: #241f3d;
   --bear-muted: #605b78;
   /* Darkened from the mockup's #9d99b0, which the harness measured at 2.76:1
      on white and 2.31:1 on the sidebar, against a 3.0 floor. */
-  --bear-faint: #7b7690;
-  --bear-border: #d2cddc;
+  --bear-faint: #837e99;
+  --bear-border: #e0dcec;
   --bear-accent: #5b4ad6;
   --bear-danger: #c62828;
   --bear-focus: #5b4ad6;
@@ -1260,4 +1260,55 @@
   .bear-spin {
     animation: none;
   }
+}
+
+/*
+ * The sidebar is a DARK panel in the light indigo themes, and these are the
+ * tokens that makes its contents readable on it.
+ *
+ * Requested as "huge contrast for light-theme", against Bear, whose sidebar is
+ * a dark material while its content panes stay white. Two earlier attempts
+ * moved `--bear-sidebar` by a few units in each direction and were invisible:
+ * the shipped one measured **1.288** against the note-list card, and the one
+ * before it 1.065, which was WORSE than the 1.167 it started from. This is
+ * **14.35**.
+ *
+ * The overrides are SCOPED to the sidebar's own container rather than added as
+ * a `--bear-sidebar-*` token family, and that is deliberate: a family whose
+ * defaults read `--bear-sidebar-text: var(--bear-text)` would form a custom
+ * property CYCLE the moment the scope remapped `--bear-text` back onto it, and
+ * a cycle resolves to unset with no warning. Scoping instead means the themes
+ * that want no dark sidebar need no declarations at all — only these two
+ * blocks exist, and every other theme inherits its own text tokens untouched.
+ *
+ * `hover` and `selected` have to move too. Both are low-alpha tints of a DARK
+ * colour (`rgb(40 34 66 / 0.05)`, `rgb(91 74 214 / 0.09)`) chosen for a light
+ * ground, and they vanish on a dark one; these are Indigo Dark's, which were
+ * designed for exactly this ground.
+ *
+ * Measured on `#241f3d` — the theme's own `--bear-text`, so the panel stays on
+ * palette: text 13.57, muted 8.10, faint 5.00, border 1.57, against floors of
+ * 4.5, 4.5, 3.0 and 1.05. `e2e/contrast.spec.ts` checks these through a probe
+ * mounted INSIDE the scope, because reading the theme-level tokens would
+ * compare the light theme's dark text against a dark sidebar and report a
+ * failure that is not real.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .bear-sidebar-scope {
+    --bear-text: #f0edf7;
+    --bear-muted: #bdb7cf;
+    --bear-faint: #948ea8;
+    --bear-border: #453e5c;
+    --bear-hover: rgb(255 255 255 / 0.06);
+    --bear-selected: rgb(155 140 255 / 0.2);
+  }
+}
+
+[data-theme='indigo-light'] .bear-sidebar-scope {
+  --bear-text: #f0edf7;
+  --bear-muted: #bdb7cf;
+  --bear-faint: #948ea8;
+  --bear-border: #453e5c;
+  --bear-hover: rgb(255 255 255 / 0.06);
+  --bear-selected: rgb(155 140 255 / 0.2);
 }

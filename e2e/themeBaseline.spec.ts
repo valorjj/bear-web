@@ -32,32 +32,27 @@ import { readThemeTokens } from './fixtures/tokens.ts';
  * distinguishable here.
  *
  * **The sidebar was deliberately re-based on 2026-09-09, for the two indigo
- * themes only — and re-based TWICE that day, the first attempt being wrong.**
- * It had been equal to `--bear-canvas` in both, so it dissolved into the
- * ground and read as undifferentiated from the other panes. The first attempt
- * stepped it LIGHTER (`#efecf9` / `#1e1a2a`) because that direction clears
- * the contrast floors for free — and it was a mistake: measured against the
- * note-list card, the sidebar went from 1.167 to 1.065, i.e. MORE similar to
- * the pane it was supposed to distinguish itself from. The original already
- * had the right relationship (sidebar darker than the floating cards); it was
- * only too weak to read.
+ * themes, after two wrong attempts that day.** It had equalled
+ * `--bear-canvas` in both, so it dissolved into the ground. The first attempt
+ * stepped it LIGHTER because that direction clears every floor for free, and
+ * it was worse than useless: against the note-list card the sidebar went from
+ * 1.167 to 1.065, i.e. MORE similar to the pane it was meant to distinguish
+ * itself from. The second pushed it deeper to `#dcd6ef` (1.288) and was still
+ * far too timid to read as the "huge contrast" that was asked for.
  *
- * So the shipped values push that relationship harder instead: `#dcd6ef`
- * against the `#f5f4fa` card in Indigo Light (1.288) and `#0c0a11` against
- * `#252131` in Indigo Dark (1.256). Going deeper in a LIGHT theme costs two
- * further overrides, which is why the first attempt avoided it: `faint`
- * `#837e99` → `#7b7690` (the derived value measures 2.76 on the new sidebar,
- * under a 3.0 floor) and `border` `#e0dcec` → `#d2cddc` (1.05 exactly, which
- * is the floor itself and therefore fails). `muted` is what caps how deep the
- * sidebar can go: at `#d9d1eb` it falls to 4.37 under a 4.5 floor, so
- * `#dcd6ef` is the darkest value that needs no third override.
+ * What ships is a DARK panel: `#241f3d` — the theme's own `--bear-text`, so it
+ * stays on palette — measuring **14.35** against the white card. Its contents
+ * are made readable by tokens re-mapped on the sidebar's own container
+ * (`.bear-sidebar-scope` in `tokens.css`), NOT by further theme-level
+ * changes, which is why only ONE token moved here: `sidebar` itself. The
+ * `faint` and `border` edits the second attempt needed were reverted with it,
+ * because a dark panel with its own scoped tokens has no use for them.
  *
- * Three tokens moved in Indigo Light and one in Indigo Dark, all deliberately
- * — unlike the `tag-fill` re-base above, this one cannot lean on "only one
- * token moved" as its evidence of intent. What distinguishes it from drift is
- * that every value is derived from a stated floor and recorded with its
- * measurement, and that `paper`, `ink` and `high-contrast` are untouched.
- * See `docs/rulings/design-tokens-and-layout.md`.
+ * So this re-base can lean on the same evidence of intent the `tag-fill` one
+ * above does — a single token moved per theme, `paper`, `ink` and
+ * `high-contrast` untouched — and `e2e/contrast.spec.ts` checks the scoped
+ * pairs through a probe mounted inside that scope. See
+ * `docs/rulings/design-tokens-and-layout.md`.
  *
  * Comparison is by parsed RGBA, never by string. A value that reads `rgb(…)`
  * today may legitimately read `color(srgb …)` afterwards while denoting the

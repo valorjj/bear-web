@@ -188,46 +188,64 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   pass on the heading rule and prove nothing) and asserts the title is larger
   and heavier than the body AND that its gap exceeds the ordinary block rhythm.
 
-- **The sidebar is a panel of its own, and it is `Pane`'s one
-  `elevated={false}` caller.** The first half of that replaces a rule retired
-  on 2026-09-09 rather than caveated: "In Soft Depth the sidebar dissolves
-  into the ground", which held `--bear-sidebar` equal to `--bear-canvas` in
-  both indigo themes. It was reported as looking undifferentiated from the
-  other panes, and the indigo pair now steps off its canvas like the other
-  thirteen themes already did — `#dcd6ef` against `#e6e1f5` in Indigo Light,
-  `#0c0a11` against `#14121b` in Indigo Dark, with the
-  `prefers-color-scheme: dark` block moved in step because
-  `scripts/sourceLint.test.ts` asserts it is token-for-token identical to
-  `SYSTEM_DARK_ID`'s theme.
+- **The sidebar is a DARK PANEL in the light indigo themes, and `Pane`'s one
+  `elevated={false}` caller.** This replaces "In Soft Depth the sidebar
+  dissolves into the ground", retired on 2026-09-09, which held
+  `--bear-sidebar` equal to `--bear-canvas` in both indigo themes.
 
-  **The step goes DEEPER, and a first attempt at going lighter was wrong.**
-  Lighter is the cheap direction — it clears every floor for free, and the
-  roster's other thirteen themes all step that way — so it shipped first, at
-  `#efecf9` / `#1e1a2a`. It was a mistake, and the measurement that proves it
-  is the one nobody took before shipping: **against the note-list card the
-  sidebar went from 1.167 to 1.065**, i.e. MORE similar to the very pane it
-  was supposed to distinguish itself from, which is why the reporter could not
-  see any change at all. The original relationship was already correct —
-  sidebar DARKER than the floating cards, in both themes — merely too weak to
-  read at 1.167 and 1.184.
+  **Three attempts shipped that day, and the two failures are the useful
+  part.** Asked for as Bear's treatment — a dark sidebar beside white content
+  — the first attempt stepped the sidebar LIGHTER (`#efecf9`), because
+  lighter clears every contrast floor for free and the roster's other
+  thirteen themes all step that way. Measured against the note-list card it
+  went from 1.167 to **1.065**: MORE similar to the pane it was supposed to
+  distinguish itself from, which is why the reporter saw no change at all.
+  The second pushed it deeper to `#dcd6ef` (1.288) and needed `faint` and
+  `border` overrides to clear the floors; it was still far too timid. Both
+  mistakes have one cause worth naming: **the number that disproved the
+  choice was computed BEFORE shipping and treated as a caveat to mention
+  rather than a result to act on.**
 
-  The shipped values push that relationship instead of reversing it:
-  `#dcd6ef` against the card in Indigo Light (1.288) and `#0c0a11` in Indigo
-  Dark (1.256). Deeper in a LIGHT theme is what costs, and it is why the first
-  attempt dodged it: `faint` needs `#837e99` → `#7b7690` (the derived value
-  measures 2.76 on the new sidebar against a 3.0 floor) and `border` needs
-  `#e0dcec` → `#d2cddc` (1.05 exactly, which IS the floor and therefore
-  fails). **`muted` is the binding constraint on depth**: at `#d9d1eb` it
-  falls to 4.37 under a 4.5 floor, so `#dcd6ef` is the deepest value needing
-  no third override. A dark theme costs nothing by comparison — a darker
-  sidebar there RAISES light-text contrast (text 16.04 → 17.02).
+  What ships is `#241f3d` — the theme's own `--bear-text`, so the panel stays
+  on palette — at **14.35** against the white card.
 
-  Note that Bear's own effect is macOS vibrancy sampling the desktop; a
-  browser has no desktop behind the window, so no colour choice here
-  reproduces it — what these values buy is a sidebar that reads as its own
-  material, not the real thing.
-  High Contrast keeps `#000000` for both: its panes are separated by borders,
-  which is that theme's whole premise.
+  **Its contents are readable because of tokens re-mapped on the sidebar's own
+  container, not because of further theme-level changes.**
+  `.bear-sidebar-scope` (set in `AppShell`, defined in `tokens.css`) re-maps
+  `text`, `muted`, `faint`, `border`, `hover` and `selected`, so every
+  descendant inherits light-on-dark without one component knowing about it,
+  and the `faint`/`border` edits the second attempt required were reverted
+  with it — only `--bear-sidebar` itself moved at theme level.
+
+  **A `--bear-sidebar-*` token family was rejected, and the reason is a
+  language rule rather than taste.** Defaults reading
+  `--bear-sidebar-text: var(--bear-text)` would form a custom-property CYCLE
+  the moment the scope re-mapped `--bear-text` back onto it, and a cycle
+  resolves to unset with no warning anywhere. Scoping instead means a theme
+  that wants no dark sidebar declares nothing at all: only two blocks exist,
+  for `[data-theme='indigo-light']` and for the bare-`:root` default under
+  `prefers-color-scheme: light`.
+
+  **`hover` and `selected` had to move too, and would have failed silently.**
+  Both are low-alpha tints of a DARK colour chosen for a light ground
+  (`rgb(40 34 66 / 0.05)`, `rgb(91 74 214 / 0.09)`) and they vanish on a dark
+  panel; the scope uses Indigo Dark's, which were designed for that ground.
+  `e2e/contrast.spec.ts` had never checked either over `sidebar` although
+  `SidebarRow` paints both there — that gap is now closed, and an injection
+  proves it catches a vanishing tint (`text on selected over sidebar: 1.16 <
+4.5`).
+
+  **The gate reads the SCOPED values, through a probe mounted inside the
+  scope** (`readThemeTokens`' `scopeClass`). Reading at the root would compare
+  the light theme's near-black `text` against its now-near-black `sidebar` and
+  report 1.00 — a failure describing a pair nothing paints. Two injections
+  prove the scoped read still catches real ones. Note also that Bear's own
+  effect is macOS vibrancy sampling the desktop, which a browser cannot
+  reproduce at any colour; what these values buy is a sidebar that reads as
+  its own material.
+
+  High Contrast keeps `#000000` for both sidebar and canvas: its panes are
+  separated by borders, which is that theme's premise.
 
   Only the panes holding content float. Only the panes holding content float. That is a
   PROP and not a `shadow-none` the caller appends, because two utilities in the

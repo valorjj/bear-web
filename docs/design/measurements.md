@@ -36,7 +36,7 @@ Width is durable, from the settings table.
 | font-weight | `400` |
 | line-height | `24px` |
 | color | `rgb(36, 31, 61)` |
-| background-color | `rgb(220, 214, 239)` |
+| background-color | `rgb(36, 31, 61)` |
 | border-radius | `12px` |
 
 ## pane: note list
@@ -111,8 +111,8 @@ The workhorse row. Bear's equivalent is the density benchmark.
 | font-size | `13px` |
 | font-weight | `500` |
 | line-height | `18.85px` |
-| color | `rgb(36, 31, 61)` |
-| background-color | `rgba(91, 74, 214, 0.09)` |
+| color | `rgb(240, 237, 247)` |
+| background-color | `rgba(155, 140, 255, 0.2)` |
 | padding | `0px 8px` |
 | border-radius | `8px` |
 | gap | `8px` |
@@ -128,7 +128,7 @@ A root tag.
 | font-size | `13px` |
 | font-weight | `400` |
 | line-height | `18.85px` |
-| color | `rgb(36, 31, 61)` |
+| color | `rgb(240, 237, 247)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | padding | `0px 8px` |
 | border-radius | `8px` |
@@ -145,7 +145,7 @@ A nested tag. Compare padding-left against depth 0 for the indent step.
 | font-size | `13px` |
 | font-weight | `400` |
 | line-height | `18.85px` |
-| color | `rgb(36, 31, 61)` |
+| color | `rgb(240, 237, 247)` |
 | background-color | `rgba(0, 0, 0, 0)` |
 | padding | `0px 8px 0px 20px` |
 | border-radius | `8px` |
