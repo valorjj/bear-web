@@ -439,15 +439,27 @@ whether an installed PWA changes J1's answer on routing — and it now also
 carries two surfaces that have a phone entry point with nothing usable behind
 it:
 
-- **The relationship graph.** Nodes measure **2.8px** against a 44px
-  fingertip, the canvas draws no labels by design, and the Summary panel is a
-  fixed `w-64` that leaves the graph **134px of a 390px screen**.
-- **The command palette.** `⌘K` only — no touch route at all, absent from
-  both the phone header and the drawer footer.
-- Smaller: the drawer's four footer buttons (theme, typography, account,
-  language) are **32×32 with no `touch-target`** and are the only route to
-  those panels on a phone; the table row/column handles measure 44×32 and
-  44×24.
+- ~~**The relationship graph.**~~ **DONE 2026-09-10.** The phone now opens
+  on the summary list, full width with 44px rows, and the map is one tap
+  away. The cause was one number: `frameBounds` caps at `min(1, fitScale)`
+  so it only ever zooms OUT, landing at 0.459 on a 390px screen — which
+  drew a degree-0 node at 2.8px and left the canvas 134px beside the fixed
+  `w-64` panel. **Correction to this section's first draft:** it claimed the
+  canvas "draws no labels by design". It does draw them — a label needs
+  `scale > 1.2`, a hover, or degree >= 3, and a phone failed all three at
+  once. Node tap targets were deliberately NOT grown; see the ruling on
+  overlapping targets.
+- ~~**The command palette.**~~ **CLOSED 2026-09-10, without building
+  anything, and the audit's framing was wrong.** All 16 commands were mapped
+  against what a phone can already reach and not one is palette-only, so the
+  palette is a keyboard ACCELERATOR over controls that all exist rather than
+  the only route to anything. A fifth button in a 390px header would add a
+  slower second path to things that already have a faster first one. Ruling
+  in `docs/rulings/design-tokens-and-layout.md`.
+- Still open, smaller: the drawer's four footer buttons (theme, typography,
+  account, language) are **32×32 with no `touch-target`** and are the only
+  route to those panels on a phone; the table row/column handles measure
+  44×32 and 44×24.
 
 Healthy, and not worth re-auditing: the `touch-target` pseudo-element system
 (hit-test it — the 22px pin really is 44px effective, which

@@ -981,7 +981,7 @@ user_id FROM identities WHERE email = ?`, which reads `user_id` without
 
 ## Rules that must not be silently reversed
 
-**The rulings live in `docs/rulings/`, not here.** 546 bullets across 13 files,
+**The rulings live in `docs/rulings/`, not here.** 547 bullets across 13 files,
 every one a live constraint. They are NOT loaded into context automatically —
 this index is. Its job is to tell you which file to open before you touch
 something, so read the row before you write the diff, not after.

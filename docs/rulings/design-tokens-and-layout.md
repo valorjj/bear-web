@@ -1108,6 +1108,32 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
 
 ## Touch parity (J2)
 
+- **A keyboard ACCELERATOR needs no touch entry point, provided every command
+  it carries has one of its own. Audit the commands; do not add a button.**
+
+  The 2026-09-10 phone audit listed "the command palette has no touch route
+  at all" as a gap, and it is not one. All 16 of `commands.ts`'s entries were
+  mapped against what a phone can already reach, and **not one is
+  palette-only**: the smart lists are drawer rows, graph and search are
+  header buttons, themes are the drawer footer's picker, preview size / sort
+  / hide-sub-tag-notes are the note-list options menu, New note is the FAB,
+  duplicate / pin / trash / restore / export are the row's long-press menu,
+  Empty trash is in the drawer, and the three account commands are behind its
+  Account button.
+
+  What the palette buys on a desktop is skipping a trip to a control you
+  already know exists — four letters instead of moving a mouse. A phone has
+  no keyboard, so the same feature becomes: tap, wait for the lazy chunk,
+  type with the virtual keyboard covering half the screen, tap a result — to
+  reach something that was one or two taps away. It would also cost a FIFTH
+  button in a 390px header that already carries four.
+
+  **The rule generalises past this one surface.** When a keyboard-first
+  feature looks unreachable on touch, the question is not "where does the
+  button go" but "is anything behind it reachable ONLY here". If something
+  is, that thing gets a touch route. The palette gets nothing, and `⌘K`
+  stays what it is.
+
 - **Two queries, and collapsing them into one is a regression even though no
   device separates them.** `(hover: none)` gates the REVEALS — it is the
   literal statement "this control can never be revealed", which is the defect
