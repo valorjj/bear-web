@@ -58,6 +58,63 @@ describe('GraphView', () => {
     expect(await screen.findByRole('button', { name: /nowhere/i })).toBeInTheDocument();
   });
 
+  /**
+   * On a phone the list and the canvas are ALTERNATIVES, not neighbours.
+   *
+   * Side by side, the panel's fixed `w-64` left the canvas 134px of a 390px
+   * screen — measured on 2026-09-10 — and the canvas at that width fits the
+   * whole layout at about 0.45 scale, which draws a degree-0 node at 2.7px
+   * and labels nothing (labels need scale > 1.2, hover, or degree >= 3, and
+   * a phone has none of the three). The readable half is the list, so the
+   * list is what a phone opens on.
+   */
+  describe('on a phone', () => {
+    beforeEach(() => {
+      globalThis.__setViewportWidth(390);
+    });
+
+    it('opens on the summary list rather than the canvas', async () => {
+      await notes.create('# Alpha\n\nlinks to [[Beta]]');
+      await notes.create('# Beta');
+
+      renderView();
+
+      expect(await screen.findByRole('navigation', { name: 'Summary' })).toBeInTheDocument();
+      expect(screen.queryByRole('img', { name: /notes/ })).not.toBeInTheDocument();
+    });
+
+    it('reaches the canvas through the toggle, and comes back', async () => {
+      await notes.create('# Alpha\n\nlinks to [[Beta]]');
+      await notes.create('# Beta');
+      renderView();
+      await screen.findByRole('navigation', { name: 'Summary' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Map' }));
+
+      expect(await screen.findByRole('img', { name: /notes/ })).toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Summary' })).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Summary' }));
+
+      expect(await screen.findByRole('navigation', { name: 'Summary' })).toBeInTheDocument();
+      expect(screen.queryByRole('img', { name: /notes/ })).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * The regression this change could most easily cause: the phone default
+   * leaking upward and hiding the canvas on the surface it was built for.
+   */
+  it('still opens on the canvas at desktop width, with the panel closed', async () => {
+    await notes.create('# Alpha\n\nlinks to [[Beta]]');
+    await notes.create('# Beta');
+
+    renderView();
+
+    expect(await screen.findByRole('img', { name: /notes/ })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Summary' })).not.toBeInTheDocument();
+  });
+
   it('closes when its back control is used', async () => {
     await notes.create('# Alpha');
 

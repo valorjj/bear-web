@@ -149,7 +149,21 @@ test.describe('on a phone', () => {
     await page.getByRole('button', { name: 'Relationship graph' }).tap();
 
     await expect(page.getByRole('heading', { name: 'Graph' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Groceries/ })).toHaveCount(0);
+
+    /*
+     * The note LIST is gone — asserted on the region, not on "no button is
+     * named Groceries" as it was until J4.
+     *
+     * That older form passed for the right reason and then failed for a
+     * wrong one. Its intent was always "the graph replaced the shell", but
+     * its mechanism was the absence of a button with the note's title, and
+     * J4 made the phone's graph OPEN on its summary list — where the same
+     * note legitimately appears as a row. The assertion was over-broad, not
+     * stale: narrowed to what it meant rather than edited to match new
+     * output, which `docs/rulings/testing-and-tooling.md` calls the same
+     * defect as asserting a class name.
+     */
+    await expect(page.getByRole('region', { name: 'Note list' })).toHaveCount(0);
   });
 
   test('the search input is 16px, which is what stops iOS zooming on focus', async ({ page }) => {

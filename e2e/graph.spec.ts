@@ -274,3 +274,58 @@ test.describe('graph', () => {
     expect(afterZoom).toBeGreaterThan(atRest);
   });
 });
+
+/**
+ * The phone, where the list and the canvas are alternatives.
+ *
+ * A separate `describe` with its own viewport, so the seven-plus assertions
+ * elsewhere that require a viewport of at least 1024 are untouched —
+ * `test.use` is block-scoped.
+ *
+ * These open the graph by BUTTON, not by `Mod+Shift+G`: a phone has no
+ * keyboard, and the button is the only route a real user has.
+ */
+test.describe('the graph on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test.beforeEach(async ({ page }) => {
+    await page.clock.setFixedTime(FIXED_NOW);
+  });
+
+  test('opens on the readable list, full width, with tappable rows', async ({ page }) => {
+    await seedDatabase(page, CORPUS);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Relationship graph' }).click();
+
+    const list = page.getByRole('navigation', { name: 'Summary' });
+    await expect(list).toBeVisible();
+    await expect(canvas(page)).toHaveCount(0);
+
+    // Full width, not the 256px column that left the canvas 134px of a
+    // 390px screen. Asserted as a NUMBER: "is visible" was true of the old
+    // placement too.
+    const box = (await list.boundingBox())!;
+    expect(box.width).toBeGreaterThan(300);
+
+    // And its rows are a fingertip tall — this is now the primary way to
+    // reach a note from the graph, so it has to be tappable.
+    const row = list.getByRole('button').first();
+    const rowBox = (await row.boundingBox())!;
+    expect(Math.round(rowBox.height)).toBeGreaterThanOrEqual(44);
+  });
+
+  test('the toggle reaches the map and comes back', async ({ page }) => {
+    await seedDatabase(page, CORPUS);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Relationship graph' }).click();
+    await expect(page.getByRole('navigation', { name: 'Summary' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Map' }).click();
+    await expect(canvas(page)).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Summary' })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Summary' }).click();
+    await expect(page.getByRole('navigation', { name: 'Summary' })).toBeVisible();
+    await expect(canvas(page)).toHaveCount(0);
+  });
+});

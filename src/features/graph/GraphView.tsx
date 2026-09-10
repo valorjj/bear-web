@@ -3,6 +3,7 @@ import { type ReactElement, useCallback, useLayoutEffect, useMemo, useRef, useSt
 import { notes } from '@/data';
 import { useT } from '@/i18n';
 import { boundsOf, frameBounds, type Viewport } from '@/lib/panZoom';
+import { useLayoutMode } from '@/lib/useLayoutMode';
 import { usePanZoom } from '@/lib/usePanZoom';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
@@ -37,7 +38,26 @@ const HUB_LIMIT = 10;
 export function GraphView({ activeId, onClose, onOpenNote }: GraphViewProps): ReactElement {
   const t = useT();
   const snapshot = useGraphSnapshot();
-  const [summaryOpen, setSummaryOpen] = useState(false);
+  /**
+   * On a phone the list and the canvas are ALTERNATIVES, and the list is what
+   * opens.
+   *
+   * Side by side the panel's fixed `w-64` left the canvas 134px of a 390px
+   * screen, and a canvas that narrow fits the whole layout at about 0.45
+   * scale — `frameBounds` caps at `min(1, fitScale)`, so it only ever zooms
+   * out. That draws a degree-0 node at 2.7px against a 44px fingertip and
+   * labels nothing, since a label needs `scale > 1.2`, a hover, or degree
+   * >= 3 and a phone has none of the three. The readable half was always the
+   * list; this makes it the one you land on.
+   *
+   * Seeded from the layout mode at FIRST render and then left alone. A
+   * resize across the breakpoint with the graph open leaves whichever view
+   * the user last chose, and both are legitimate — forcing the list back on
+   * entering phone width would fight someone who deliberately switched to
+   * the map and then rotated.
+   */
+  const phone = useLayoutMode() === 'phone';
+  const [summaryOpen, setSummaryOpen] = useState(phone);
 
   const openNode = useCallback(
     async (node: GraphNode) => {
@@ -95,42 +115,66 @@ export function GraphView({ activeId, onClose, onOpenNote }: GraphViewProps): Re
         </Button>
         <h1 className="text-ui-sm font-semibold">{t('graph.title')}</h1>
         <div className="flex-1" />
+        {/*
+          On a phone this SWITCHES between two views, so it names the one it
+          leads to; on desktop it still reveals a panel beside the canvas, so
+          it keeps naming the panel and its `aria-expanded` stays meaningful.
+        */}
         <Button
           onClick={() => setSummaryOpen((open) => !open)}
           variant="ghost"
           size="sm"
-          ariaExpanded={summaryOpen}
+          ariaExpanded={phone ? undefined : summaryOpen}
         >
-          {t('graph.summary')}
+          {phone && summaryOpen ? t('graph.map') : t('graph.summary')}
         </Button>
       </header>
 
       <div className="relative flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1">
-          {snapshot.status === 'empty' && (
-            <EmptyState title={t('graph.empty.title')} body={t('graph.empty.body')} />
-          )}
-          {(snapshot.status === 'building' || snapshot.status === 'settling') && (
-            <div className="text-muted flex h-full items-center justify-center text-ui-sm">
-              {t('graph.settling')}
-            </div>
-          )}
-          {snapshot.status === 'ready' && (
-            <GraphCanvasFrame
-              label={canvasLabel}
-              graph={snapshot.graph}
-              positions={snapshot.positions}
-              capped={snapshot.capped}
-              activeId={activeId}
-              onSelect={(node) => void openNode(node)}
-            />
-          )}
-        </div>
+        {/*
+          NOT RENDERED on a phone while the list is up — not hidden with a
+          class. Two reasons, and the second is why the first is not enough.
+
+          `GraphCanvasFrame` measures its own container to compute the
+          framing, so a `display: none` container would frame against a
+          zero-size box and the canvas would be wrong the moment it came
+          back. And a class-hidden canvas stays in the accessibility tree's
+          reach for anything that does not consult the stylesheet — which
+          includes this project's own component tests, where Tailwind is
+          never loaded and `hidden` therefore does nothing at all. The first
+          version of this used the class and its test caught it.
+        */}
+        {!(phone && summaryOpen) && (
+          <div className="min-w-0 flex-1">
+            {snapshot.status === 'empty' && (
+              <EmptyState title={t('graph.empty.title')} body={t('graph.empty.body')} />
+            )}
+            {(snapshot.status === 'building' || snapshot.status === 'settling') && (
+              <div className="text-muted flex h-full items-center justify-center text-ui-sm">
+                {t('graph.settling')}
+              </div>
+            )}
+            {snapshot.status === 'ready' && (
+              <GraphCanvasFrame
+                label={canvasLabel}
+                graph={snapshot.graph}
+                positions={snapshot.positions}
+                capped={snapshot.capped}
+                activeId={activeId}
+                onSelect={(node) => void openNode(node)}
+              />
+            )}
+          </div>
+        )}
 
         {summaryOpen && summary !== null && (
           <nav
             aria-label={t('graph.summary')}
-            className="border-border w-64 shrink-0 overflow-y-auto border-l p-2"
+            // Full width on a phone, where it IS the view; a bordered column
+            // beside the canvas everywhere else.
+            className={`overflow-y-auto p-2 ${
+              phone ? 'min-w-0 flex-1' : 'border-border w-64 shrink-0 border-l'
+            }`}
           >
             <h2 className="text-faint px-2 pt-1 text-ui-xs font-semibold">{t('graph.hubs')}</h2>
             <ul>
@@ -140,6 +184,12 @@ export function GraphView({ activeId, onClose, onOpenNote }: GraphViewProps): Re
                   label={node.title === '' ? t('note.untitled') : node.title}
                   count={node.degree}
                   selected={false}
+                  // 44px rows with a 16px label on a phone, where this list
+                  // is the primary way to reach a note from the graph.
+                  // `SidebarRow` takes the flag rather than reading a media
+                  // query: `src/ui/` primitives know nothing about layout
+                  // modes, which is why `SidebarDrawer` passes it too.
+                  touch={phone}
                   onSelect={() => void openNode(node)}
                 />
               ))}

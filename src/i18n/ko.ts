@@ -300,6 +300,7 @@ export const ko: Record<TranslationKey, string> = {
   'graph.title': '그래프',
   'graph.back': '노트로 돌아가기',
   'graph.summary': '요약',
+  'graph.map': '지도',
   'graph.zoomIn': '확대',
   'graph.zoomOut': '축소',
   'graph.zoomReset': '배율 초기화',

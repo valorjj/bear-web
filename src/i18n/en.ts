@@ -358,6 +358,7 @@ export const en = {
   'graph.title': 'Graph',
   'graph.back': 'Back to notes',
   'graph.summary': 'Summary',
+  'graph.map': 'Map',
   'graph.zoomIn': 'Zoom in',
   'graph.zoomOut': 'Zoom out',
   'graph.zoomReset': 'Reset zoom',
