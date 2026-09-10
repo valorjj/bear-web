@@ -1,4 +1,4 @@
-import { Editor, isMacOS } from '@tiptap/core';
+import { Editor } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { buildEditorExtensions, editorExtensions } from './extensions';
@@ -233,60 +233,48 @@ function recording(into: string[], answer = true): (title: string) => boolean {
 }
 
 describe('link activation', () => {
-  it('reports the NORMALIZED title and swallows the event when the app accepts it', () => {
+  it('reports the NORMALIZED title and swallows the event on a plain click', () => {
     const activated: string[] = [];
     const editor = docFor(
       '<p>a [[Deploy   CHECKLIST]] b</p>',
       buildEditorExtensions({ onActivateLink: recording(activated) }),
     );
 
-    const result = mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+    const result = mousedownAt(editor, 5, {});
 
     expect(activated).toEqual(['deploy checklist']);
     expect(result.handled).toBe(true);
     expect(result.defaultPrevented).toBe(true);
   });
 
-  it('leaves the event alone when the app declines the link', () => {
+  // The property worth injecting a fault against, now that no modifier gates
+  // the gesture: a DECLINED link must leave the event completely alone, so
+  // ProseMirror's own mousedown handling still places the caret. This is the
+  // whole of what keeps an unresolved `[[link]]` editable by pointer —
+  // perturbing the handler to `preventDefault()` unconditionally must fail
+  // exactly here, and nothing else in this file would notice.
+  it('leaves the event alone when the app declines the link, so the caret still moves', () => {
     const asked: string[] = [];
     const editor = docFor(
       '<p>a [[Note]] b</p>',
       buildEditorExtensions({ onActivateLink: recording(asked, false) }),
     );
 
-    const result = mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+    const result = mousedownAt(editor, 5, {});
 
     expect(asked).toEqual(['note']);
     expect(result.handled).toBe(false);
     expect(result.defaultPrevented).toBe(false);
   });
 
-  // The property under fault injection: a plain click must NOT activate, so
-  // the caret still moves. This is the fault-injection assertion the brief
-  // requires — perturbing the mousedown handler to accept a plain click
-  // (dropping the modifier check) must fail exactly this test.
-  it('does nothing on a plain click, so the caret still moves', () => {
+  it('does nothing on a click outside any link', () => {
     const activated: string[] = [];
     const editor = docFor(
       '<p>a [[Note]] b</p>',
       buildEditorExtensions({ onActivateLink: recording(activated) }),
     );
 
-    const result = mousedownAt(editor, 5, {});
-
-    expect(activated).toEqual([]);
-    expect(result.handled).toBe(false);
-    expect(result.defaultPrevented).toBe(false);
-  });
-
-  it('does nothing on a modifier click outside any link', () => {
-    const activated: string[] = [];
-    const editor = docFor(
-      '<p>a [[Note]] b</p>',
-      buildEditorExtensions({ onActivateLink: recording(activated) }),
-    );
-
-    const result = mousedownAt(editor, 1, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+    const result = mousedownAt(editor, 1, {});
 
     expect(activated).toEqual([]);
     expect(result.handled).toBe(false);
@@ -299,13 +287,18 @@ describe('link activation', () => {
       buildEditorExtensions({ onActivateLink: recording(activated) }),
     );
 
-    const modifier = isMacOS() ? { metaKey: true } : { ctrlKey: true };
-    expect(mousedownAt(editor, 5, { ...modifier, button: 1 }).handled).toBe(false);
-    expect(mousedownAt(editor, 5, { ...modifier, button: 2 }).handled).toBe(false);
+    expect(mousedownAt(editor, 5, { button: 1 }).handled).toBe(false);
+    expect(mousedownAt(editor, 5, { button: 2 }).handled).toBe(false);
     expect(activated).toEqual([]);
   });
 
-  it('on an Apple platform, Cmd activates and Ctrl does not', () => {
+  // Half of the old modifier rule survives the move to a plain click, and
+  // only on Apple platforms. `isMacOS()` reads `navigator.platform`, which
+  // jsdom reports as `''` — so a test that merely BRANCHES on `isMacOS()`
+  // exercises the non-Apple arm on every machine and leaves the Apple arm
+  // guarded by nothing. Each test below stubs the platform explicitly, the
+  // same shape `tagPill.test.ts` settled on for the same reason.
+  it('on an Apple platform, a plain click opens and Ctrl-click does not', () => {
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
     try {
@@ -315,11 +308,14 @@ describe('link activation', () => {
         buildEditorExtensions({ onActivateLink: recording(activated) }),
       );
 
+      // Ctrl-click on macOS is the context-menu gesture, and it arrives as
+      // `button === 0` with `ctrlKey` set. It must not ALSO navigate, or one
+      // gesture opens a menu and leaves the note the menu belongs to.
       const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
-      const meta = mousedownAt(editor, 5, { metaKey: true });
+      const plain = mousedownAt(editor, 5, {});
 
       expect(ctrl.handled).toBe(false);
-      expect(meta.handled).toBe(true);
+      expect(plain.handled).toBe(true);
       expect(activated).toEqual(['note']);
     } finally {
       Object.defineProperty(navigator, 'platform', {
@@ -329,7 +325,7 @@ describe('link activation', () => {
     }
   });
 
-  it('off Apple platforms, Ctrl activates and Cmd does not', () => {
+  it('off Apple platforms, Ctrl-click opens too, because Ctrl is not the menu gesture there', () => {
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
     try {
@@ -339,11 +335,7 @@ describe('link activation', () => {
         buildEditorExtensions({ onActivateLink: recording(activated) }),
       );
 
-      const ctrl = mousedownAt(editor, 5, { ctrlKey: true });
-      const meta = mousedownAt(editor, 5, { metaKey: true });
-
-      expect(ctrl.handled).toBe(true);
-      expect(meta.handled).toBe(false);
+      expect(mousedownAt(editor, 5, { ctrlKey: true }).handled).toBe(true);
       expect(activated).toEqual(['note']);
     } finally {
       Object.defineProperty(navigator, 'platform', {
@@ -356,7 +348,7 @@ describe('link activation', () => {
   it('is inert when no callback is injected', () => {
     const editor = docFor('<p>a [[Note]] b</p>', editorExtensions);
 
-    const result = mousedownAt(editor, 5, isMacOS() ? { metaKey: true } : { ctrlKey: true });
+    const result = mousedownAt(editor, 5, {});
 
     expect(result.handled).toBe(false);
   });
@@ -365,7 +357,7 @@ describe('link activation', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const editor = new Editor({
-      extensions: buildEditorExtensions({ linkActivateHint: 'Cmd-click to open' }),
+      extensions: buildEditorExtensions({ linkActivateHint: 'Open this note' }),
       content: '<p>[[One]] and [[Two]]</p>',
       element: container,
     });
@@ -373,7 +365,7 @@ describe('link activation', () => {
 
     const pills = container.querySelectorAll('.bear-link');
     expect(pills).toHaveLength(2);
-    pills.forEach((pill) => expect(pill.getAttribute('title')).toBe('Cmd-click to open'));
+    pills.forEach((pill) => expect(pill.getAttribute('title')).toBe('Open this note'));
   });
 });
 

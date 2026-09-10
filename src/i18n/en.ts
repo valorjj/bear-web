@@ -234,8 +234,7 @@ export const en = {
   'editor.link.remove': 'Remove link',
   'editor.link.cancel': 'Cancel',
   'editor.tagPill.hint': 'Filter by this tag',
-  'editor.linkPill.hint.mac': 'Cmd-click to open this note',
-  'editor.linkPill.hint.other': 'Ctrl-click to open this note',
+  'editor.linkPill.hint': 'Open this note',
 
   'editor.linkAutocomplete.listLabel': 'Link to note',
   'editor.linkAutocomplete.empty': 'No matching note',

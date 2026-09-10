@@ -4,7 +4,7 @@ import { CORPUS, FIXED_NOW } from './fixtures/corpus.ts';
 import { seedDatabase } from './fixtures/seed.ts';
 
 /**
- * L2's own harness. Nothing in the unit suite can prove a real Mod-click
+ * L2's own harness. Nothing in the unit suite can prove a real click
  * navigates a real editor to a real note — `LinkPill.ts`'s plugin logic is
  * unit-tested against a headless `Editor`, but the app-level wiring
  * (`AppShell.handleActivateLink` → `select` → `NoteEditor` remount) has no
@@ -66,7 +66,7 @@ test.describe('backlinks', () => {
     await expect(page.getByRole('region', { name: 'Note list' })).toBeVisible();
   });
 
-  test('Mod-click on a link pill navigates to the target note', async ({ page }) => {
+  test('a click on a resolved link pill navigates to the target note', async ({ page }) => {
     await page.getByRole('button', { name: rowNamed(SPRINT_TITLE) }).click();
     const editor = editorLocator(page);
     await expect(editor).toContainText(SPRINT_TITLE);
@@ -74,7 +74,7 @@ test.describe('backlinks', () => {
     const pill = editor.locator('.bear-link', { hasText: SEED_TITLE });
     await expect(pill).toHaveAttribute('data-resolved', 'true');
 
-    await pill.click({ modifiers: ['ControlOrMeta'] });
+    await pill.click();
 
     // A value that changes with the behaviour, not merely "something
     // changed": the editor now contains text unique to the TARGET note's
@@ -92,45 +92,48 @@ test.describe('backlinks', () => {
     );
   });
 
-  test('a plain click on a link pill places the caret and does not navigate', async ({ page }) => {
+  /*
+   * The editability the modifier used to buy, now bought by non-resolution
+   * instead. A click on a RESOLVED pill navigates (the test above), so the
+   * only pointer route left into a link's own text is a link with no note
+   * behind it — which is exactly the one you need to fix a title you got
+   * wrong. `handleActivateLink` declines it, the plugin consumes nothing,
+   * and ProseMirror places the caret.
+   *
+   * Typed rather than seeded: the corpus is shared with `measure` and
+   * `shots`, and an extra line of body text in any of its notes moves
+   * note-list geometry into `measurements.md`'s committed diff.
+   */
+  test('a click on an unresolved link pill places the caret and does not navigate', async ({
+    page,
+  }) => {
     await page.getByRole('button', { name: rowNamed(SPRINT_TITLE) }).click();
     const editor = editorLocator(page);
-
-    // Wait for RESOLUTION before taking a handle, the way the Mod-click test
-    // above does. `setKnownNoteTitles` arrives a tick after mount, and a
-    // resolved pill renders as three spans (`[[`, the title, `]]` — the
-    // brackets are collapsed by `linkSyntaxDecorations`) where an unresolved
-    // one is a single span. So a handle taken during the unresolved instant
-    // is destroyed, not merely re-attributed, and Playwright then waits out
-    // the full timeout on an element that will never be visible again.
     await expect(editor).toContainText(SPRINT_TITLE);
-    await expect(editor.locator('.bear-link', { hasText: SEED_TITLE })).toHaveAttribute(
-      'data-resolved',
-      'true',
-    );
 
-    // The title span, not the whole pill: `.bear-link` matches the two
-    // collapsed bracket spans too, and a zero-width span cannot be clicked.
-    const pill = editor.locator('.bear-link:not(.bear-link__bracket)', { hasText: SEED_TITLE });
-    await expect(pill).toHaveCount(1);
+    // Trailing ` end` matters: the caret must finish OUTSIDE the link's
+    // range for the pill to paint at all. `linkDecorations` suppresses on
+    // intersection, and a caret resting immediately after `]]` still
+    // intersects (`selFrom <= to`).
+    await editor.click();
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.type(' [[Nowhere at all]] end');
 
-    // Mid-pill is safe here: `linkAutocompleteMatchAt` refuses to open inside
-    // an already-complete `[[Title]]` (`LinkAutocomplete.ts`), so the caret
-    // landing between `[[` and the title no longer flips the contenteditable
-    // to `role="combobox"`. This test previously clicked 2px from the right
-    // edge to dodge exactly that, and the comment explaining why outlived the
-    // fix it was working around.
+    // One span, not three: `linkSyntaxDecorations` collapses the brackets of
+    // a RESOLVED pill only, so an unresolved one is a single `.bear-link`
+    // carrying its own `[[`/`]]`.
+    const pill = editor.locator('.bear-link', { hasText: 'Nowhere at all' });
+    await expect(pill).toHaveAttribute('data-resolved', 'false');
+
     await pill.click();
 
-    // The caret landed inside the link's range, so its decoration is
-    // suppressed while the caret sits there — the same observable
-    // `TagPill`'s equivalent test uses, and for the same reason: stealing
-    // the click for navigation would make the text under it uneditable.
-    await expect(editor.locator('.bear-link', { hasText: SEED_TITLE })).toHaveCount(0);
+    // The caret landed inside the link's range, so the decoration is
+    // suppressed while it sits there — the same observable the tag pill's
+    // equivalent uses, and the proof the raw text is editable.
+    await expect(editor.locator('.bear-link', { hasText: 'Nowhere at all' })).toHaveCount(0);
 
-    // And no navigation happened: still on Sprint checklist, not the target.
+    // And no navigation happened: still on Sprint checklist.
     await expect(editor).toContainText(SPRINT_TITLE);
-    await expect(editor).not.toContainText('The seed runs in an init script');
     await expect(page.getByRole('button', { name: rowNamed(SPRINT_TITLE) })).toHaveAttribute(
       'aria-current',
       'true',
@@ -187,11 +190,9 @@ test.describe('backlinks', () => {
     // not merely "nothing observable happens on click".
     await expect(editor.locator('.bear-link', { hasText: SPRINT_TITLE })).toHaveCount(0);
 
-    // And a Mod-click on that literal text does not navigate: still on the
+    // And a click on that literal text does not navigate: still on the
     // same note, not `n-todo`.
-    await editor.locator('pre code', { hasText: 'Sprint checklist' }).click({
-      modifiers: ['ControlOrMeta'],
-    });
+    await editor.locator('pre code', { hasText: 'Sprint checklist' }).click();
     await expect(editor).toContainText(SEED_TITLE);
     await expect(editor).not.toContainText('Rewrite the seed helper');
   });

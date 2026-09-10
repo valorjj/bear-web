@@ -1,4 +1,4 @@
-import { getMarkRange, isMacOS, posToDOMRect } from '@tiptap/core';
+import { getMarkRange, posToDOMRect } from '@tiptap/core';
 import { EditorContent, type Editor, useEditor, useEditorState } from '@tiptap/react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
@@ -77,9 +77,9 @@ export interface RichEditorProps {
    */
   onActivateTag?: (tag: string) => boolean;
   /**
-   * Called with the normalized title when the user Mod-clicks a `[[link]]`
-   * pill. Returns whether the app acted on it; `false` makes the gesture
-   * behave exactly like a plain click, caret placement and all — same
+   * Called with the normalized title when the user clicks a `[[link]]`
+   * pill. Returns whether the app acted on it; `false` falls through to
+   * placing the caret, which is what an unresolved link does — same
    * contract as `onActivateTag`.
    */
   onActivateLink?: (title: string) => boolean;
@@ -256,7 +256,6 @@ export function RichEditor({
    * and the menu is one click away.
    */
   const [highlightColor, setHighlightColor] = useState<HighlightColor | null>(null);
-  const surfaceRef = useRef<HTMLDivElement | null>(null);
 
   // The plugin reads its callback once, at construction, and `useEditor` reads
   // its options once, at mount. A ref keeps the identity stable while the
@@ -350,7 +349,7 @@ export function RichEditor({
       // for every case, including a successful one.
       onActivateLink:
         onActivateLink === undefined ? null : (title) => activateLinkRef.current?.(title) === true,
-      linkActivateHint: t(isMacOS() ? 'editor.linkPill.hint.mac' : 'editor.linkPill.hint.other'),
+      linkActivateHint: t('editor.linkPill.hint'),
       // Unlike `onActivate`, this is unconditionally wired: the level menu is
       // a built-in editor affordance, not an opt-in prop the app may omit, so
       // there is no "nobody is listening" state to represent with `null` here.
@@ -828,32 +827,13 @@ export function RichEditor({
     };
   }, [editor, handleRef, initialMarkdown]);
 
-  // The modifier-held affordance is a DOM attribute, not React state: setting
-  // state on every `keydown` would re-render the editor's whole subtree on
-  // every keystroke the user types while composing a note.
-  useEffect(() => {
-    // Derived from each event's own modifier flags rather than from tracking
-    // which key went down: a keyup can be missed entirely (hold Cmd, press Tab
-    // to leave the window), and then the pills would go on claiming to be
-    // clickable while a plain click edits. `blur` is the backstop for the case
-    // where no key event arrives at all.
-    const sync = (held: boolean): void => {
-      surfaceRef.current?.setAttribute('data-mod-held', String(held));
-    };
-    const fromEvent = (event: KeyboardEvent): void => {
-      sync(isMacOS() ? event.metaKey : event.ctrlKey);
-    };
-    const clear = (): void => sync(false);
-
-    window.addEventListener('keydown', fromEvent);
-    window.addEventListener('keyup', fromEvent);
-    window.addEventListener('blur', clear);
-    return () => {
-      window.removeEventListener('keydown', fromEvent);
-      window.removeEventListener('keyup', fromEvent);
-      window.removeEventListener('blur', clear);
-    };
-  }, []);
+  // A window-level keydown/keyup/blur listener used to live here, mirroring
+  // the held modifier onto `data-mod-held` so the pills could light up under
+  // it. Both pill gestures are plain clicks now — tags since S4, links since
+  // the change that removed this — so there is no modifier state left to
+  // mirror, and both CSS rules that read the attribute became plain `:hover`
+  // rules. Deleted rather than left inert: an attribute nothing selects on is
+  // the kind of thing a later reader keeps alive by accident.
 
   return (
     // `relative` is what makes the three floating surfaces below position
@@ -861,7 +841,7 @@ export function RichEditor({
     // component so the pill offsets are stated once, together, and cannot
     // drift apart — and so `TopControls`, `InfoPanel` and `BottomToolbar` stay
     // testable as plain groups of controls with no layout of their own.
-    <div ref={surfaceRef} data-mod-held="false" className="relative flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       {/*
        * The writing surface comes FIRST in the DOM, so the natural tab order
        * reaches the prose before the chrome and a screen reader meets the note

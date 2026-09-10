@@ -313,7 +313,7 @@ with is not resolved; only code can retire one.
   notes are in "All notes") and asserts the resulting `aria-current`
   honestly, per the controller's instruction not to paper over this with a
   same-scope-only test that implies more coverage than it has. Cost if
-  wrong: a user who Mod-clicks a cross-scope link may wonder, briefly, which
+  wrong: a user who clicks a cross-scope link may wonder, briefly, which
   row in the list corresponds to what they are now reading — recoverable by
   clicking any list scope, which reselects normally.
 - **The rename-while-panel-open stale-title guard (`BacklinksPanel`'s

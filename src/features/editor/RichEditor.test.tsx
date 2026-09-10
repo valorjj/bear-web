@@ -451,32 +451,6 @@ describe('RichEditor tag activation', () => {
     expect(declined.posAtCoordsCalls).toBe(1);
   });
 
-  it('marks the editor while the modifier is held, and clears it on blur', () => {
-    renderWithI18n(<RichEditor {...makeBaseProps()} onActivateTag={vi.fn(() => true)} />);
-    const surface = screen.getByRole('textbox').closest('[data-mod-held]');
-    expect(surface).not.toBeNull();
-    expect(surface!.getAttribute('data-mod-held')).toBe('false');
-
-    fireEvent.keyDown(window, { key: 'Meta', metaKey: true, ctrlKey: true });
-    expect(surface!.getAttribute('data-mod-held')).toBe('true');
-
-    fireEvent.keyUp(window, { key: 'Meta', metaKey: false, ctrlKey: false });
-    expect(surface!.getAttribute('data-mod-held')).toBe('false');
-  });
-
-  // Hold Cmd, press Tab to switch windows, and the keyup never arrives. The
-  // pills would keep claiming to be clickable while a plain click edits.
-  it('clears the modifier state when the window loses focus', () => {
-    renderWithI18n(<RichEditor {...makeBaseProps()} onActivateTag={vi.fn(() => true)} />);
-    const surface = screen.getByRole('textbox').closest('[data-mod-held]')!;
-
-    fireEvent.keyDown(window, { key: 'Meta', metaKey: true, ctrlKey: true });
-    expect(surface.getAttribute('data-mod-held')).toBe('true');
-
-    fireEvent.blur(window);
-    expect(surface.getAttribute('data-mod-held')).toBe('false');
-  });
-
   // A `RichEditor` rendered with no `onActivateTag` must behave as though the
   // feature is off: `TagPillOptions.onActivate === null` is what gates the
   // plugin's own `preventDefault()`, so passing a wrapper unconditionally

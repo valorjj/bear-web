@@ -333,7 +333,7 @@ export function AppShell(): ReactElement {
     return true;
   };
 
-  // Answers a Mod-click on a `[[link]]` pill in the editor. Same contract as
+  // Answers a click on a `[[link]]` pill in the editor. Same contract as
   // `handleActivateTag` right above: returns whether it acted, so a decline
   // costs the user a navigation but never the caret.
   //

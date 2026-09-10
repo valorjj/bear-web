@@ -2,14 +2,14 @@
 
 Governs how `#tag` is rendered inside the editor as a decoration, how the pill's
 extent is kept in agreement with the tag index, and how a plain click
-activates a tag into a scope (S4; `LinkPill` still reserves that gesture for
-Mod-click — see below).
+activates a tag into a scope (S4) or opens a `[[link]]`'s target (the change
+that followed it — see below).
 
 **Trigger:** any change to `src/features/editor/TagPill.ts` (`tagDecorations`,
 `tagRangeAt`, `tagHitsIn`, `TagPillOptions`, the `handleDOMEvents.mousedown`
 handler), `src/features/editor/blockText.ts` (`maskedBlockText`, `MASK`),
 `findTagRanges`/`parseTags` in `src/data/tags/parseTags.ts`,
-`RichEditor.tsx`'s `activateRef` / `onActivateTag` / `data-mod-held` wiring,
+`RichEditor.tsx`'s `activateRef` / `onActivateTag` wiring,
 `AppShell.handleActivateTag`, the `--bear-tag-fill` and `--bear-tag-fill-strong`
 tokens or the `.bear-tag` rules in `src/styles/editor.css`, and the suites
 `tagPill.test.ts`, `tagAgreement.test.ts`, `blockText.test.ts`,
@@ -25,9 +25,10 @@ the `--bear-tag-icon` token, and any selector anywhere that counts
 and `tagAutocomplete.test.ts` — S4's autocomplete is the premise the plain-click
 ruling below rests on.
 
-- **`LinkPill`'s activation matches `TagPill`'s exactly: `Mod`-click
-  activates, a plain click places the caret, and `onActivateLink === null`
-  makes the plugin inert — same reasons, same shape.** `mousedown`, not
+- **`LinkPill`'s activation matches `TagPill`'s exactly, and now including
+  the gesture: a PLAIN click opens the target, an unresolved link falls
+  through to the caret, and `onActivateLink === null` makes the plugin inert
+  — same reasons, same shape.** `mousedown`, not
   `handleClick`, because the browser moves the DOM selection natively during
   mousedown and by mouseup the caret has already moved and the pill has
   already vanished. `preventDefault()` is called only AFTER
@@ -189,11 +190,12 @@ ruling below rests on.
   and too weak for a pill, which is a few characters of inline text and has to
   read as a discrete chip. At 0.11 the pill read as a highlighted word. Paper's
   fill is 0.16; Ink's 0.18 was already comfortable, so the two tokens coincide
-  there. **`--bear-tag-fill-strong` is a third token**, used only by the
-  `[data-mod-held='true']` rule, and `--bear-selected` was rejected for that
-  state because it is fainter than a resting pill in Paper and identical to it
-  in Ink — holding the modifier would look like the pill fading rather than
-  lighting up. Both are tier-1 palette tokens, so every theme in the roster
+  there. **`--bear-tag-fill-strong` is a third token**, used by the two
+  `:hover` rules (a tag pill, and a RESOLVED link pill) that were
+  `[data-mod-held='true']` rules until each gesture lost its modifier, and
+  `--bear-selected` was rejected for that state because it is fainter than a
+  resting pill in Paper and identical to it in Ink — the hover would look
+  like the pill fading rather than lighting up. Both are tier-1 palette tokens, so every theme in the roster
   must define them; `scripts/sourceLint.test.ts` checks that per theme and
   compares the system-dark block against its named theme value-for-value.
 
@@ -205,13 +207,32 @@ ruling below rests on.
   A negative inline margin was considered and rejected: it hides the gap by
   letting the pill overlap its neighbouring characters.
 
-- **A plain click on a tag pill filters, matching Bear, since S4.** The
-  previous ruling here (no modifier gesture at all; Mod-click reserved for
-  `LinkPill`) read "if autocomplete ever ships, revisit this ruling" and S4 is
-  that revisit: with `TagAutocomplete.ts` in place, the repair path for a
-  mistyped tag no longer depends on a plain click landing a caret inside the
-  pill, so the divergence's premise is gone and the Mod-activates requirement
-  is deleted outright. The macOS Ctrl-click refusal is a different piece of
+- **A plain click on a tag pill filters, matching Bear, since S4 — and a
+  plain click on a RESOLVED link pill opens its target, since the change
+  right after it.** The previous ruling here (no modifier gesture at all;
+  Mod-click reserved for `LinkPill`) read "if autocomplete ever ships,
+  revisit this ruling" and S4 is that revisit: with `TagAutocomplete.ts` in
+  place, the repair path for a mistyped tag no longer depends on a plain
+  click landing a caret inside the pill, so the divergence's premise is gone
+  and the Mod-activates requirement is deleted outright.
+
+  **S4 then left `LinkPill` holding a reservation for a gesture nothing was
+  reserving it from**, and that asymmetry is what the follow-up deleted: a
+  plain click acted on a tag and did nothing on a link, with no principle
+  left holding the difference up. The premise transfers whole — `[[`
+  autocomplete shipped with L2, so the repair path for a wrong title does
+  not run through clicking a caret into the pill either. It was reported as
+  a bug by the user, in exactly those terms: "I expect the actual
+  navigation, but it does not."
+
+  Links keep ONE thing tags do not need: an unresolved pill still places the
+  caret, because `handleActivateLink` declines a title with no note behind
+  it and the plugin consumes nothing on a decline. That is not a special
+  case bolted on for this — it is the pre-existing boolean contract two
+  bullets up, and it happens to leave the pointer a way into a link's own
+  text. `e2e/backlinks.spec.ts` pins both halves, and the resolved half was
+  demonstrated failing against a re-injected modifier gate before it was
+  trusted. The macOS Ctrl-click refusal is a different piece of
   platform knowledge and survives — `isMacOS` is still imported and used by
   `TagPill.ts`; see the bullet three below for why.
 
@@ -232,26 +253,24 @@ ruling below rests on.
   this gesture too — there is no later point in the sequence that still has
   the information filtering needs.
 
-- **Mod is Cmd on Apple platforms and Ctrl elsewhere, never `metaKey ||
-  ctrlKey` — this now governs `LinkPill` only.** `TagPill` has no modifier
-  gate to get right or wrong since the bullet above. Ctrl-click on macOS is
-  the context-menu gesture; accepting both `metaKey` and `ctrlKey` on
-  `LinkPill` would mean one gesture both opens a menu and navigates.
-  `isMacOS` from `@tiptap/core` decides. Getting this wrong is invisible on
-  Linux CI, so `linkPill.test.ts` asserts both branches — struck here for
-  `tagPill.test.ts`, which no longer has a modifier branch to assert.
+- **~~Mod is Cmd on Apple platforms and Ctrl elsewhere, never `metaKey ||
+  ctrlKey`~~ — struck: no pill has a modifier REQUIREMENT left.** `TagPill`
+  lost its at S4, `LinkPill` its at the change above. What both keep is the
+  narrower half, and it is the half that is easy to lose by "simplifying":
+  **both mousedown handlers still refuse a macOS Ctrl-click**
+  (`isMacOS() && event.ctrlKey` returns `false`), because on macOS a
+  Ctrl-click is the context-menu gesture and arrives as `button === 0` with
+  `ctrlKey` set, NOT as `button === 2` — so `event.button !== 0` alone does
+  not exclude it. Without the refusal, one gesture would open the context
+  menu AND re-scope the note list, or open the menu AND navigate away from
+  the note the menu belongs to. This is why `isMacOS` is still imported by
+  `TagPill.ts` and `LinkPill.ts` and by nothing else in the editor.
 
-  `TagPill.ts` keeps one narrower piece of this platform knowledge, though,
-  and its `isMacOS` import from `@tiptap/core` survives for exactly this
-  reason: the mousedown handler still refuses a **macOS Ctrl-click**
-  specifically (`isMacOS() && event.ctrlKey` returns `false`, declining to
-  filter), because on macOS a Ctrl-click is the context-menu gesture and
-  arrives as `button === 0` with `ctrlKey` set, NOT as `button === 2` — so
-  `event.button !== 0` alone does not exclude it, and without the explicit
-  refusal a Ctrl-click would both open the context menu AND re-scope the note
-  list. No Linux CI run can see this: jsdom reports `navigator.platform` as
-  `''`, so a unit test exercising this branch must stub the platform
-  explicitly, or only the non-Apple arm ever runs.
+  No Linux CI run can see either refusal: jsdom reports `navigator.platform`
+  as `''`, so `isMacOS()` is false on every machine and a test that merely
+  BRANCHES on it exercises the non-Apple arm twice. Both `tagPill.test.ts`
+  and `linkPill.test.ts` stub `navigator.platform` explicitly and restore it
+  in a `finally`, which is the only shape that drives the Apple arm at all.
 
 - **Activation is handled in `handleDOMEvents.mousedown`, not `handleClick`.**
   ProseMirror does not place the caret itself on a plain click — the browser
@@ -297,8 +316,8 @@ ruling below rests on.
   `tree.nodes` is `undefined`, because that means "loading", not "no tags".
 
 - **`onActivate` returns a boolean, and the app's answer — not the plugin — is
-  what consumes the event. A Mod-click either filters, or behaves exactly like
-  a plain click. Never nothing.** The plugin originally called
+  what consumes the event. A click either filters, or places the caret.
+  Never nothing.** The plugin originally called
   `preventDefault()` before asking, which made every case the app declines cost
   the user the caret as well as the filter: the click simply vanished. That is
   not only the two lying-pill classes and a trashed note's pills — **a tag
@@ -318,7 +337,7 @@ ruling below rests on.
   without making it so.** The decision is made once, in the `useState`
   initializer, matching the plugin's read-once semantics. Historically a
   non-null wrapper meant the plugin believed someone was listening and
-  `preventDefault()`ed a Mod-click into nothing; since the boolean contract the
+  `preventDefault()`ed a click into nothing; since the boolean contract the
   outcomes coincide instead — with an unconditional wrapper and no prop,
   `activateRef.current` is `undefined`, `undefined === true` is `false`, and
   the app-declined path produces a byte-identical `handled: false` /
@@ -332,8 +351,8 @@ ruling below rests on.
   exits that produce the same outcome.
 
 - **The tooltip stays optimistic on pills that cannot work, and that is
-  inherent.** Both lying-pill classes and every pill in a trashed note light up
-  under the modifier and read "Cmd-click to filter by this tag", then decline.
+  inherent.** Both lying-pill classes and every pill in a trashed note read
+  "Filter by this tag" (or, on a link, "Open this note"), then decline.
   The editor deliberately learns nothing about scopes or the tag index, and the
   guard that knows lives downstream of the decoration, so making the copy
   honest means pushing index knowledge into the editor — the boundary M7.6 and
@@ -347,16 +366,23 @@ ruling below rests on.
   call site supplies the prop; if one ever does not, gate the hint on the same
   condition.
 
-- **The modifier affordance is a DOM attribute set through a ref, never React
-  state.** `data-mod-held` on the editor's outer element; setting state on
-  every `keydown` would re-render the editor subtree on every keystroke the
-  user types. It is derived from each event's own modifier flags on both
-  `keydown` and `keyup`, and cleared on window `blur` — hold Cmd, press Tab to
-  leave the window, and the `keyup` never arrives, leaving pills claiming to
-  be clickable while a plain click edits. **This is convention enforced by
-  nothing** — there is no lint rule or test forbidding a future edit from
-  routing this through `useState` instead, the same gap the
-  `@tiptap/markdown` single-importer rule already names for itself.
+- **~~The modifier affordance is a DOM attribute set through a ref, never
+  React state~~ — struck: `data-mod-held` no longer exists.** It was the
+  editor's outer-element mirror of the held modifier, kept out of React state
+  because setting state on every `keydown` re-renders the editor subtree on
+  every keystroke. S4 left it alive for the link rules alone; when the link
+  gesture lost its modifier too, the attribute, its window `keydown`/`keyup`/
+  `blur` listener in `RichEditor`, and the two `RichEditor.test.tsx` tests
+  that read it were all deleted, and both CSS rules became plain `:hover`.
+  Deleted rather than left inert on purpose — an attribute nothing selects on
+  is the kind of thing a later reader keeps alive by accident.
+
+  **The reasoning survives the attribute**, and is why this bullet is struck
+  rather than removed: any future affordance that must track a live input
+  state across the editor belongs on a DOM attribute set through a ref, for
+  exactly the re-render reason above. And the `blur` backstop is the detail
+  worth carrying forward — hold Cmd, press Tab to leave the window, and the
+  `keyup` never arrives.
 
 - **`editorExtensions` is `buildEditorExtensions()` with no options**, so
   `getSchema(editorExtensions)` and `computeRecognizedHtmlTags()` are

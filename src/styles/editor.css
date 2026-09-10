@@ -989,8 +989,8 @@
 /*
  * A link to a title with no matching note. Fail-open, not an error: the spec
  * is explicit that this is a normal way to work, so the pill stays legible
- * and clickable (Mod-click still fires, and the app still decides whether it
- * acted) rather than reading as broken. Muted text plus a dashed underline —
+ * (the plugin still asks, the app declines, and the click places a caret)
+ * rather than reading as broken. Muted text plus a dashed underline —
  * no fill at all — is what keeps it visually subordinate to a resolved link
  * without looking like a warning or an error.
  */
@@ -1000,13 +1000,23 @@
   text-underline-offset: 0.15em;
 }
 
-[data-mod-held='true'] .ProseMirror .bear-link[data-resolved='true']:not(.bear-link__bracket) {
+/*
+ * A RESOLVED link pill lights up on hover for the same reason a tag pill
+ * does, and now on the same condition: a plain click opens the target, so
+ * the affordance is unconditional rather than gated on a modifier the
+ * gesture no longer needs. `[data-mod-held]` left this file with that
+ * modifier, and `RichEditor`'s key listener left with it — these two rules
+ * were the only things in the app that ever selected on the attribute.
+ *
+ * An UNRESOLVED pill deliberately gets neither the pointer nor the lift.
+ * There is no note to open, `handleActivateLink` declines it, and the click
+ * places a caret instead — which is honest for a link to a note that does
+ * not exist yet, and is also the only way left to edit such a title in
+ * place by pointer alone.
+ */
+.ProseMirror .bear-link[data-resolved='true']:not(.bear-link__bracket):hover {
   cursor: pointer;
   background-color: var(--bear-tag-fill-strong);
-}
-
-[data-mod-held='true'] .ProseMirror .bear-link[data-resolved='false'] {
-  cursor: pointer;
 }
 
 /*

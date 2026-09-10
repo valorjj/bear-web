@@ -215,8 +215,7 @@ export const ko: Record<TranslationKey, string> = {
   'editor.link.remove': '링크 제거',
   'editor.link.cancel': '취소',
   'editor.tagPill.hint': '이 태그로 필터링',
-  'editor.linkPill.hint.mac': 'Cmd-클릭하면 이 노트가 열립니다',
-  'editor.linkPill.hint.other': 'Ctrl-클릭하면 이 노트가 열립니다',
+  'editor.linkPill.hint': '이 노트 열기',
 
   'editor.linkAutocomplete.listLabel': '노트 링크',
   'editor.linkAutocomplete.empty': '일치하는 노트가 없습니다',

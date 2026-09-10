@@ -63,7 +63,7 @@ export function linkRangeAt(state: EditorState, pos: number): LinkHit | null {
 
 export interface LinkPillOptions {
   /**
-   * Called with the normalized title when the user Mod-clicks a link pill.
+   * Called with the normalized title when the user clicks a link pill.
    * `null` when nobody is listening, which is the state of the schema-only
    * `editorExtensions` constant.
    *
@@ -73,13 +73,15 @@ export interface LinkPillOptions {
    * exists or has been trashed since the note list was last read, so it asks
    * first and consumes second. A link to a title with no matching note is a
    * normal way to work, not an error, and declining must cost the user
-   * nothing but the filter — never the caret a plain click would have given.
+   * nothing but the navigation — never the caret, which is the whole of what
+   * a click on an unresolved link is now expected to do.
    */
   onActivateLink: ((title: string) => boolean) | null;
   /**
-   * Tooltip naming the gesture. Supplied already translated and already
-   * platform-correct, exactly like `TagPillOptions.activateHint` — an
-   * extension has no access to `useT`.
+   * Tooltip naming what a click does. Supplied already translated, exactly
+   * like `TagPillOptions.activateHint` — an extension has no access to
+   * `useT`. It no longer names a modifier, because there is none: a plain
+   * click opens the target.
    */
   linkActivateHint: string | null;
 }
@@ -263,17 +265,36 @@ export const LinkPill = Extension.create<LinkPillOptions>({
           },
 
           handleDOMEvents: {
-            // `mousedown`, not `handleClick`, for the identical reason
-            // `TagPill` documents: the browser moves the DOM selection
+            // A PLAIN left click opens the target, exactly as it filters on
+            // a tag pill. `mousedown`, not `handleClick`, for the identical
+            // reason `TagPill` documents: the browser moves the DOM selection
             // natively during mousedown, and by `handleClick` (mouseup) the
             // caret has already moved and the pill has already vanished.
+            //
+            // The same two gestures regress here as regressed for tags when
+            // S4 dropped the modifier there, and they are accepted on the
+            // same grounds: a selection drag that STARTS inside a resolved
+            // pill navigates instead of selecting, and a double-click
+            // navigates on its first mousedown so no word selection happens.
+            // Deferring to mouseup rescues neither — by then the caret has
+            // moved and the pill is gone. What makes this affordable for a
+            // link is the same thing that made it affordable for a tag: the
+            // repair path for a wrong title no longer runs through clicking
+            // a caret into the pill. `LinkAutocomplete` writes the title,
+            // and the pill dissolves whenever the caret merely intersects it
+            // (see `linkDecorations`), so arrowing in from the character
+            // before `[[` still exposes the raw text.
             mousedown(view, event) {
               if (onActivateLink === null) return false;
               if (event.button !== 0) return false;
-              // Mod is Cmd on Apple platforms and Ctrl elsewhere, never
-              // `metaKey || ctrlKey` — Ctrl-click on macOS is the
-              // context-menu gesture and must not also activate a link.
-              if (!(isMacOS() ? event.metaKey : event.ctrlKey)) return false;
+              // Half of the old modifier rule survives, and only half. The
+              // REQUIREMENT is gone, but Ctrl-click on macOS is the
+              // context-menu gesture and arrives as `button === 0` with
+              // `ctrlKey` set, not as `button === 2` — so `event.button !== 0`
+              // above does not exclude it. Without this refusal one gesture
+              // would open the context menu AND navigate away from the note
+              // the menu belongs to.
+              if (isMacOS() && event.ctrlKey) return false;
 
               const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
               if (at === null) return false;
@@ -281,9 +302,12 @@ export const LinkPill = Extension.create<LinkPillOptions>({
               const hit = linkRangeAt(view.state, at.pos);
               if (hit === null) return false;
 
-              // Ask first, consume second — a Mod-click either opens the
-              // target, or behaves exactly like a plain click. Never
-              // nothing. A plain click must still place the caret.
+              // Ask first, consume second — a click either opens the target
+              // or places the caret. Never nothing. This is what keeps an
+              // UNRESOLVED pill editable: the app declines a title with no
+              // note behind it, and the click falls through to ProseMirror's
+              // own handling, which is exactly the behaviour a link to a
+              // note you have not written yet needs.
               if (!onActivateLink(hit.title)) return false;
 
               event.preventDefault();

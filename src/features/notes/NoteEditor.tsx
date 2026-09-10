@@ -73,9 +73,9 @@ export interface NoteEditorProps {
    */
   onActivateTag?: (tag: string) => boolean;
   /**
-   * Called with the normalized title when the user Mod-clicks a `[[link]]`
-   * pill. Returns whether the app acted on it; `false` makes the gesture
-   * behave like a plain click — same contract as `onActivateTag`.
+   * Called with the normalized title when the user clicks a `[[link]]`
+   * pill. Returns whether the app acted on it; `false` falls through to
+   * placing the caret — same contract as `onActivateTag`.
    */
   onActivateLink?: (title: string) => boolean;
   /** Normalized tag keys the editor's autocomplete suggests from. */
