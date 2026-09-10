@@ -31,8 +31,12 @@ spacing, `rounded-*`, `shadow-*` or `outline-none` utility; a plain CSS
 `e2e/smoke.spec.ts`; `src/features/notes/NoteListItem.tsx`'s row structure and
 `src/features/notes/thumbnail.ts`; `src/lib/useLayoutMode.ts`'s breakpoints,
 `src/app/SidebarDrawer.tsx`, `src/ui/Dialog.tsx`'s `placement`, and
-`src/app/paneWidths.ts`'s `SHELL_CHROME_WIDTH` / `maxPaneWidth`; and the four
-brand hex literals in `src/features/landing/GoogleMark.tsx`.
+`src/app/paneWidths.ts`'s `SHELL_CHROME_WIDTH` / `maxPaneWidth`; the four
+brand hex literals in `src/features/landing/GoogleMark.tsx`; any use of the
+`bg-sidebar` or `bear-sidebar-scope` class, and the `.bear-sidebar-scope` /
+`.bear-app-palette` blocks in `tokens.css`; and the outermost class list of
+`src/features/notes/NoteEditor.tsx` and `src/ui/Pane.tsx` (`h-full` versus
+`min-h-0 flex-1`).
 
 - **Tokens sit in THREE TIERS, and the split is what the theme system rests
   on.** Tier 1, palette (16 tokens): `bg` `surface` `sidebar` `canvas` `text`
@@ -285,13 +289,65 @@ Variable'`.** `tokens.css` named `'Pretendard'` from M2 to M5.5 with no
   High Contrast keeps `#000000` for both sidebar and canvas: its panes are
   separated by borders, which is that theme's premise.
 
-  Only the panes holding content float. Only the panes holding content float. That is a
+  Only the panes holding content float. That is a
   PROP and not a `shadow-none` the caller appends, because two utilities in the
   same layer are resolved by stylesheet order rather than class-attribute
   order. The card test in `e2e/appearance.spec.ts` was narrowed from "every
   pane" to "every content pane" for this, and still asserts the sidebar in the
   negative by name (`boxShadow === 'none'`), so it becoming a card again fails
   just as loudly.
+
+- **`bg-sidebar` and `bear-sidebar-scope` travel TOGETHER, always** —
+  enforced by `scripts/sourceLint.test.ts`, not merely written here.
+
+  Painting one without the other is not a degraded rendering, it is an
+  invisible one. `--bear-sidebar` IS each light theme's own `--bear-text`,
+  which is the single rule the eight of them share, so a descendant
+  inheriting the unscoped `--bear-text` paints its label on precisely its own
+  background. `SidebarDrawer` shipped `bg-sidebar` alone on 2026-09-09 and
+  every list and tag name in the phone drawer rendered AS the panel:
+  **1.00:1**, measured in all eight light themes, live for a day. Dark themes
+  were untouched, where `sidebar` is a panel colour rather than ink — which
+  is also why nobody developing in one would ever see it.
+
+  **The gate that should have caught it instead assumed the thing it was
+  meant to check.** `e2e/contrast.spec.ts` reads the sidebar pair through
+  `readThemeTokens`' `scopeClass` — a probe the TEST mounts, carrying
+  `bear-sidebar-scope`. That read is correct and must stay: reading at the
+  root would compare a light theme's near-black `text` against its near-black
+  `sidebar` and report a 1.00 that nothing paints. But a probe placed by the
+  test can only ever confirm that the SCOPE's values are sound; it is
+  structurally incapable of noticing a surface that never entered the scope.
+  It reported **33/33** throughout.
+
+  **So the rule generalises past this one class pair: a gate must measure
+  what the app PAINTS, not what the test arranges.** The drawer's own rows
+  are now read with `getComputedStyle` on the real label span against the
+  first opaque ground above it, at 390×844, for all 16 themes — and it was
+  watched failing at 1.00 on the eight before the fix. This is the same
+  shape as `parseColour`'s `NaN` passing `ratio < min`, and as a text
+  assertion passing over a page of tofu: the check does not fail, it quietly
+  stops being a check. When a probe and the real element can disagree,
+  measure the real element.
+
+- **A pane's child takes `min-h-0 flex-1`, never `h-full`, the moment the
+  pane has more than one child.** `Pane` is a flex column. `h-full` sets the
+  child's flex BASE to the pane's full height, and flexbox's automatic
+  `min-height: auto` then floors it at its own content height, so it cannot
+  shrink into the space a sibling took. `NoteEditor`'s outer `div` was
+  `h-full`, and on a phone — the one layout where a back-to-list header
+  (`h-14 shrink-0`) sits above it — the pane overflowed by exactly the
+  header's 56px and the floating format toolbar, anchored `bottom-3` to a
+  descendant, landed at **874 on an 844px screen**.
+
+  Two things made it survive from J3 to 2026-09-10. It reproduces only on a
+  note long enough to SCROLL: with a short one the content floor sits under
+  the available space, the item shrinks normally, and the two anchors
+  coincide. And every toolbar test in `e2e/phoneEditor.spec.ts` measured the
+  bar RELATIVE to its own earlier position (`before.y - 336`), so all three
+  held while it sat off-screen. **A position assertion needs one absolute
+  anchor**; the two added there check the bottom edge against the viewport
+  and that the bar does not move when the text scrolls.
 
 - **Motion lives in two duration tokens, never per-component**, so one
   `prefers-reduced-motion` block covers animations added later. `sourceLint`

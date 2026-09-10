@@ -78,9 +78,9 @@ redirect stub instead of the app.
 | S4 tag autocomplete + plain-click filtering (absorbs S2)           | complete |
 | T table insert chords + the callout button                         | complete |
 
-2988 unit tests pass and 112 skip (the server integration tests, which skip
+2989 unit tests pass and 112 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
-`npm run test:pdf`), 264 end-to-end tests pass and 1 skips. `main` is always green and
+`npm run test:pdf`), 282 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**
@@ -136,14 +136,18 @@ publishHost.ts`) uses it to decide which incoming `Host` is the anonymous
   one and 404s every public page silently. A loud crash at boot beats either
   of those failing quietly at request time.
 
-**Four further Playwright entry points exist and are deliberately not in that
-count, because they assert nothing.** The first three drive the fixed corpus
-in `e2e/fixtures/corpus.ts`; `shots:mermaid` carries its own small local
-fixture instead, deliberately kept out of that shared corpus — a diagram note
-added there would change note-list geometry and drag `measure.spec.ts`'s
-committed `measurements.md` into an unrelated diff. `grepInvert` on
-`@shots|@measure` in `playwright.config.ts` keeps all four out of
-`npm run test:e2e`:
+**Six further Playwright entry points exist and are deliberately not in that
+count, because they assert nothing.** `shots` and `measure` drive the fixed
+corpus in `e2e/fixtures/corpus.ts`, as does `shots:pdf`; `shots:mermaid`,
+`shots:image` and `shots:mobile` each carry their own small local fixture
+instead, deliberately kept out of that shared corpus — a diagram note added
+there would change note-list geometry and drag `measure.spec.ts`'s committed
+`measurements.md` into an unrelated diff. `grepInvert` on `@shots|@measure`
+in `playwright.config.ts` keeps all six out of `npm run test:e2e`.
+
+**Enumerate them from `package.json`, never from this list** — two of the six
+went unrecorded here for weeks:
+`node -e "const s=require('./package.json').scripts;Object.keys(s).filter(k=>/^(shots|measure)/.test(k)).forEach(k=>console.log(k))"`.
 
 - `npm run shots` → `e2e/shots.spec.ts` writes design reference screenshots to
   `docs/design/shots/` (gitignored) — three panes, search, trash, the empty
@@ -193,6 +197,24 @@ committed `measurements.md` into an unrelated diff. `grepInvert` on
   against Mermaid's real output with `getComputedStyle`, not by reading class
   names, but a clipped label or a diagram type that silently fell back to
   Mermaid's base palette is invisible to that check and to every other gate.
+- `npm run shots:image` → `e2e/shots-image.spec.ts` pastes a real 1600×500
+  canvas of MONOSPACE TEXT into a note and shoots the editor to
+  `docs/design/shots/images/editor.png` (**1 file**). Text, not a flat
+  colour, on purpose: softened glyphs are the failure WebP q80 would
+  produce, and a flat fill would hide it. Nothing else in the suite can
+  judge the encode quality or the column fit.
+- `npm run shots:mobile` → `e2e/shots-mobile.spec.ts` shoots the four phone
+  surfaces — list, tag drawer, search, editor — at 390×844 in the default
+  theme only, to `docs/design/shots/mobile/` (**4 files**). One theme, not
+  the roster: this is a LAYOUT check, and the desktop shots already prove
+  every theme paints.
+
+  **It is the only harness that looks at a phone, and for a long time
+  nothing looked at one at all.** The audit on 2026-09-10 found the tag
+  drawer had been rendering its labels at **1.00:1** — the theme's ink on
+  the theme's ink — in all eight light themes, live for a day, with
+  `contrast.spec.ts` reporting 33/33 throughout. Run this when you touch
+  anything the phone renders, and count the four files.
 
 They exist because **nothing in the test suite can see "renders wrong"**: the unit
 suite has no layout engine and `e2e/appearance.spec.ts` is deliberately relative.
@@ -414,12 +436,25 @@ function`, so every test rendering the shell needs the stub
   only in `npm run build`, where `tsc -b` compiles `src/` including its test
   files. The declaration lives in `src/testGlobals.d.ts` for that reason.
 
-- **Seven e2e assertions silently depend on Playwright's viewport being at
-  least 1024.** `codePalette.spec.ts:19,39,107`, `contrast.spec.ts:138` and
-  `appearance.spec.ts:302,418,901` all assert the shell has three panes, which
-  is now viewport-dependent. Lowering the configured viewport turns all seven
-  into confusing failures about missing panes; `e2e/mobile.spec.ts` carries one
-  named assertion that fails honestly instead.
+- **26 e2e assertions silently depend on Playwright's viewport being at least 1024.** They assert the shell has three panes, which is viewport-dependent.
+  Lowering the configured viewport turns all 26 into confusing failures about
+  missing panes; `e2e/mobile.spec.ts` carries one named assertion that fails
+  honestly instead, and it is the 27th match below.
+
+  **Enumerate them, do not read a list.** This bullet used to name seven by
+  `file:line`, and by 2026-09-10 the count had grown to 27 while two of the
+  seven references pointed at neither an assertion nor even a line of code —
+  `contrast.spec.ts:138` had drifted onto a comment. Line numbers in this
+  file cannot survive the specs they point into:
+
+  ```bash
+  grep -rn "toHaveCount(3)" e2e/*.spec.ts | grep -E "section\[aria-label\]|getByRole\('region'\)"
+  ```
+
+  A phone-viewport block inside one of these files is fine and does not add
+  to the count — `test.use` is BLOCK-scoped, so a `describe` with its own
+  viewport leaves its siblings alone. `contrast.spec.ts`'s drawer block is
+  the worked example.
 
 - **`src/lib/zip.ts` is a hand-written archive format, and no test we own can
   prove it correct.** Its own unit test reads the archive back with our parser,
@@ -946,7 +981,7 @@ user_id FROM identities WHERE email = ?`, which reads `user_id` without
 
 ## Rules that must not be silently reversed
 
-**The rulings live in `docs/rulings/`, not here.** 506 bullets across 13 files,
+**The rulings live in `docs/rulings/`, not here.** 546 bullets across 13 files,
 every one a live constraint. They are NOT loaded into context automatically —
 this index is. Its job is to tell you which file to open before you touch
 something, so read the row before you write the diff, not after.
@@ -966,7 +1001,7 @@ at the top; the rows here are abridged.
 | `tableMarkdown.ts` (`MarkdownTable`, `withPipeEscapingCells`), the `@tiptap/extension-table` entries in `extensions.ts`, `RawTable`, `table.test.ts`, any table fixture                                                                                                                                                                                                                                                                                                                                                                             | [tables.md](docs/rulings/tables.md)                                                                                                    |
 | `TagPill.ts` (`tagDecorations`, `tagSyntaxDecorations`, `tagRangeAt`, the `mousedown` handler), `LinkPill.ts`'s `linkSyntaxDecorations`, `blockText.ts` (`maskedBlockText`), `RichEditor`'s `activateRef` / `data-mod-held`, `AppShell.handleActivateTag`, `--bear-tag-fill*`, `--bear-tag-icon`, any selector counting `.bear-tag` / `.bear-link`, `tagAgreement.test.ts`, `TagAutocomplete.ts`, `tagAutocomplete.test.ts`                                                                                                                         | [tag-pills.md](docs/rulings/tag-pills.md)                                                                                              |
 | `src/features/export/` — `html.ts`, `exportNote.ts`, `requestPdf.ts`, `filename.ts`, `ExportMenu.tsx`; `NoteEditor.handleExport`; `server/src/routes/export.ts`, `server/pdf/`; the `export.*` i18n keys and `ALLOWED_IDENTICAL`                                                                                                                                                                                                                                                                                                                    | [export.md](docs/rulings/export.md)                                                                                                    |
-| `src/styles/*.css`, `themes.ts`, `app/theme.ts`, `index.html`'s inline script, `Pane.tsx`, `Resizer.tsx`, `Button.tsx`, `ThemePicker.tsx`, `RichEditor.tsx`; a new `--bear-*` property, `[data-theme]` block, spacing / radius / shadow / `outline-none` utility                                                                                                                                                                                                                                                                                    | [design-tokens-and-layout.md](docs/rulings/design-tokens-and-layout.md)                                                                |
+| `src/styles/*.css`, `themes.ts`, `app/theme.ts`, `index.html`'s inline script, `Pane.tsx`, `Resizer.tsx`, `Button.tsx`, `ThemePicker.tsx`, `RichEditor.tsx`, `SidebarDrawer.tsx`, `NoteEditor.tsx`'s outer class list; a new `--bear-*` property, `[data-theme]` block, spacing / radius / shadow / `outline-none` utility; any `bg-sidebar` / `bear-sidebar-scope` / `bear-app-palette` class, or `h-full` on a pane child                                                                                                                         | [design-tokens-and-layout.md](docs/rulings/design-tokens-and-layout.md)                                                                |
 | `src/data/sync/` (`config.ts`, `transport.ts`, `engine.ts`, `markDirty.ts`), `syncState` in `db.ts`, `server/src/repositories/sync.ts`, `server/src/routes/sync.ts`, `server/migrations/002_sync.sql`, `LAST_PULLED_REV_KEY`, `SYNCED_ACCOUNT_KEY`, `useSync.ts`, `SyncContext.tsx`, `markAllDirty`, `reindexNote`                                                                                                                                                                                                                                  | [sync.md](docs/rulings/sync.md)                                                                                                        |
 | `Highlight.ts` (`HIGHLIGHT_COLORS`, `highlightClass`, the `color` attribute, the tokenizer's two branches), `HighlightMenu.tsx`, `--bear-hl-*`, `BottomToolbar`'s colour chevron                                                                                                                                                                                                                                                                                                                                                                    | [markdown-and-schema.md](docs/rulings/markdown-and-schema.md), [design-tokens-and-layout.md](docs/rulings/design-tokens-and-layout.md) |
 | `TableHandles.ts` (the edge-handle widgets, `data-shape`), `tablePos.ts` (`tablePosAt`), `tableCommands.ts` (`TABLE_ACTIONS`, `COMMANDS`), `tableCommands.test.ts`, `tableHandles.test.ts`                                                                                                                                                                                                                                                                                                                                                          | [tables.md](docs/rulings/tables.md), [accessibility.md](docs/rulings/accessibility.md)                                                 |
