@@ -48,10 +48,24 @@ export function SidebarDrawer({ open, onClose, ...content }: SidebarDrawerProps)
       onClose={onClose}
       label={t('sidebar.drawer')}
       placement="start"
+      // `bear-sidebar-scope` travels with `bg-sidebar`, ALWAYS. The class
+      // paints the dark panel; the scope is what re-maps `text`, `muted`,
+      // `faint`, `border`, `hover` and `selected` onto it. Painting one
+      // without the other is not a degraded rendering, it is an invisible
+      // one: `--bear-sidebar` IS each light theme's own ink, so a label
+      // inheriting the unscoped `--bear-text` lands on precisely its own
+      // background — measured at **1.00:1** in all eight light themes, with
+      // every list and tag name in the drawer rendering as the panel. It
+      // shipped that way, and `e2e/contrast.spec.ts` still reported 33/33,
+      // because its sidebar read goes through a probe carrying the scope —
+      // encoding the pairing as an assumption instead of checking it.
+      // `scripts/sourceLint.test.ts` now holds the two together, and the
+      // drawer's own rows are measured where they are painted.
+      //
       // `max-w-xs` rather than full width, so the note list stays visible at
       // the right edge — the drawer reads as covering the list rather than
       // replacing it, and the strip of list is a target for dismissing it.
-      className="bg-sidebar h-full w-full max-w-xs"
+      className="bear-sidebar-scope bg-sidebar h-full w-full max-w-xs"
     >
       <SidebarContent {...content} onScopeChange={chooseScope} touch />
     </Dialog>

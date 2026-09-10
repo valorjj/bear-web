@@ -164,6 +164,43 @@ describe('design lint', () => {
     const offenders = files.flatMap(suspectLines);
     expect(offenders, `colour literals must live in ${TOKENS}`).toEqual([]);
   });
+
+  /**
+   * `bg-sidebar` paints the dark panel; `bear-sidebar-scope` is what makes
+   * anything written on it legible. Separating them has exactly one outcome,
+   * and it is not a degraded rendering.
+   *
+   * `--bear-sidebar` IS each light theme's own `--bear-text` — that is the
+   * single rule the eight light themes share — so a descendant inheriting the
+   * UNSCOPED `--bear-text` paints its label on precisely its own background:
+   * **1.00:1**, measured in all eight. `SidebarDrawer` shipped that way on
+   * 2026-09-09 and every list and tag name in the phone drawer rendered as the
+   * panel itself.
+   *
+   * Nothing caught it. `e2e/contrast.spec.ts` reported 33/33 through a probe
+   * carrying `bear-sidebar-scope`, which makes the pairing an ASSUMPTION of
+   * the gate rather than something the gate checks; `npm test` has no layout
+   * engine; `npm run shots` never photographs a phone. The e2e half is fixed
+   * by measuring the drawer's real rows, and this is the structural half —
+   * cheap, and it fires on the next element to paint the panel, not just on
+   * the two that exist today.
+   */
+  it('pairs every bg-sidebar with the scope that makes it readable', () => {
+    const offenders = codeFiles.flatMap((path) => {
+      const source = readFileSync(path, 'utf8');
+      return [...source.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)]
+        .map((match) => match[1] ?? match[2] ?? '')
+        .filter(
+          (classes) => /\bbg-sidebar\b/.test(classes) && !/\bbear-sidebar-scope\b/.test(classes),
+        )
+        .map((classes) => `${relative('.', path)}: ${classes}`);
+    });
+
+    expect(
+      offenders,
+      'bg-sidebar without bear-sidebar-scope paints a label on its own colour',
+    ).toEqual([]);
+  });
 });
 
 /**

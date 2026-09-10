@@ -433,3 +433,82 @@ test.describe('the theme picker frames every card in the app palette', () => {
     });
   }
 });
+
+/**
+ * The phone drawer's own rows, measured where they are actually PAINTED.
+ *
+ * The gate above reads the sidebar pair through a probe carrying
+ * `bear-sidebar-scope`, and that probe encodes an ASSUMPTION rather than an
+ * observation: that everything painting `bg-sidebar` sits inside the scope
+ * that re-maps `text` onto it. The desktop pane does. The phone drawer did
+ * not, and so this pair — the theme's ink on the theme's ink, ratio **1.00**
+ * in all eight light themes — was invisible to a suite reporting 33/33. Every
+ * list and tag name in the drawer rendered as its own background.
+ *
+ * So this reads the REAL row: `getComputedStyle` on the label span the user
+ * looks at, against the first opaque ground above it. A probe cannot see this
+ * class of defect, because a probe is placed by the test rather than by the
+ * app.
+ *
+ * The drawer exists only below the desktop breakpoint, which is why this
+ * describe carries its own phone viewport. `test.use` is BLOCK-scoped, so it
+ * must be its own describe and not a call inside the loop above — the seven
+ * assertions listed in `docs/rulings/testing-and-tooling.md` that require a
+ * viewport of at least 1024 are in sibling files and blocks, and are
+ * untouched by this.
+ */
+test.describe('the phone drawer paints its rows on the sidebar palette', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  for (const id of THEME_IDS) {
+    test(`${id} keeps the drawer's rows readable`, async ({ page }) => {
+      // Before load: the app's own inline script reads this key at paint
+      // time, and setting `data-theme` afterwards would test a route no user
+      // takes. Same reason `e2e/shots.spec.ts` seeds it here.
+      await page.addInitScript((theme) => localStorage.setItem('bear-web:theme', theme), id);
+      await page.goto('/');
+
+      await page.getByRole('button', { name: 'Show tags' }).click();
+      await expect(page.getByRole('dialog', { name: 'Tags and lists' })).toBeVisible();
+
+      const measured = await page
+        .getByRole('dialog', { name: 'Tags and lists' })
+        .evaluate((dialog) => {
+          const row = [...dialog.querySelectorAll('button')].find((button) =>
+            [...button.querySelectorAll('span')].some((span) => span.textContent === 'Trash'),
+          );
+          if (row === undefined) return { error: 'no Trash row in the drawer' };
+          const label = [...row.querySelectorAll('span')].find(
+            (span) => span.textContent === 'Trash',
+          )!;
+
+          // The first ancestor that paints something. An alpha ground would
+          // need compositing to compare honestly, so it is reported rather
+          // than silently averaged — see the assertion below.
+          let node: HTMLElement | null = row;
+          let ground = '';
+          while (node !== null) {
+            const painted = getComputedStyle(node).backgroundColor;
+            if (painted !== 'rgba(0, 0, 0, 0)' && painted !== 'transparent') {
+              ground = painted;
+              break;
+            }
+            node = node.parentElement;
+          }
+          return { fg: getComputedStyle(label).color, ground };
+        });
+
+      expect(measured.error ?? '', 'the drawer rendered its rows').toBe('');
+      expect(
+        measured.ground,
+        `the drawer's ground is opaque in ${id}, so the ratio below is honest`,
+      ).toMatch(/^rgb\(/);
+
+      const ratio = contrastRatio(parseColour(measured.fg!), parseColour(measured.ground!));
+      expect(
+        Number.isFinite(ratio) && ratio >= 4.5,
+        `a drawer row label is ${measured.fg} on ${measured.ground} — ${ratio.toFixed(2)}:1 in ${id}`,
+      ).toBe(true);
+    });
+  }
+});
