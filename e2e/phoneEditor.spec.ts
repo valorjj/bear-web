@@ -23,9 +23,43 @@ const CORPUS: Corpus = {
       trashedAt: null,
       archivedAt: null,
     },
+    {
+      /*
+       * Long enough that the editor pane SCROLLS, which the note above is
+       * deliberately not — and that difference is the whole reason the
+       * toolbar's absolute position went unchecked from J3 until now. Every
+       * assertion in this file measures the toolbar RELATIVELY (`before.y -
+       * 336`), so all of them held while the bar itself sat 30px below the
+       * bottom of the screen on any real note.
+       */
+      id: 'j3-long',
+      title: 'Long enough to scroll',
+      text:
+        'Long enough to scroll\n\n' +
+        Array.from(
+          { length: 40 },
+          (_unused, index) =>
+            `Paragraph ${index + 1}. The editor pane has to overflow for this note to be worth ` +
+            'anything, so there is a lot of it.',
+        ).join('\n\n') +
+        '\n',
+      createdAt: FIXED_NOW,
+      updatedAt: FIXED_NOW,
+      pinned: false,
+      trashedAt: null,
+      archivedAt: null,
+    },
   ],
   settings: [],
 };
+
+async function openLongNote(page: import('@playwright/test').Page): Promise<void> {
+  await installFakeViewport(page);
+  await seedDatabase(page, CORPUS);
+  await page.goto('/');
+  await page.getByRole('button', { name: /Long enough to scroll/ }).click();
+  await expect(page.getByRole('textbox', { name: 'Note text' })).toBeVisible();
+}
 
 async function openNote(page: import('@playwright/test').Page): Promise<void> {
   await installFakeViewport(page);
@@ -40,6 +74,47 @@ const toolbar = (page: import('@playwright/test').Page) =>
 
 test.describe('the editor on a phone', () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  /**
+   * The bar is anchored to the VIEWPORT, not to the bottom of the scrolled
+   * document — and the difference is invisible until a note is long enough to
+   * scroll.
+   *
+   * Measured before the fix, on a 844px-tall screen: the toolbar's bottom edge
+   * sat at **874**, leaving 14px of a 44px control strip reachable, and it
+   * drifted further with every scroll. A short note hid it completely, because
+   * then the content height and the pane height coincide and the two anchors
+   * agree. Three of this file's own notes are short, which is why J3 shipped
+   * green.
+   *
+   * Absolute, not relative: every other assertion here compares the toolbar
+   * against its own earlier position, and all of them held throughout.
+   */
+  test('the toolbar stays on screen in a note long enough to scroll', async ({ page }) => {
+    await openLongNote(page);
+
+    const box = (await toolbar(page).boundingBox())!;
+    expect(
+      Math.round(box.y + box.height),
+      "the toolbar's bottom edge is inside the 844px viewport",
+    ).toBeLessThanOrEqual(PHONE.height);
+  });
+
+  test('the toolbar does not scroll away with the text', async ({ page }) => {
+    await openLongNote(page);
+    const before = (await toolbar(page).boundingBox())!;
+
+    await page.getByRole('textbox', { name: 'Note text' }).evaluate((el) => {
+      const scroller = el.closest('section');
+      if (scroller !== null) scroller.scrollTop = 400;
+    });
+    await page.waitForTimeout(200);
+
+    const after = (await toolbar(page).boundingBox())!;
+    expect(Math.round(after.y), 'the toolbar held its place while the text scrolled').toBe(
+      Math.round(before.y),
+    );
+  });
 
   test('the formatting toolbar rises clear of the keyboard', async ({ page }) => {
     await openNote(page);

@@ -491,7 +491,34 @@ export function NoteEditor({
   }, [note.text, note.updatedAt, locale]);
 
   return (
-    <div className="flex h-full flex-col">
+    /*
+     * `min-h-0 flex-1`, never `h-full` — and the difference is invisible
+     * until the editor has a SIBLING inside the pane.
+     *
+     * `Pane` is a flex column, and on a phone it holds the back-to-list
+     * header (`h-14 shrink-0`) above this. `h-full` made this element's
+     * flex base the pane's FULL height, and `min-height: auto` — flexbox's
+     * automatic minimum size, which applies to every flex item that does
+     * not opt out — then floored it at its own content height, so it could
+     * not shrink to the 772px the header actually left it. The pane
+     * overflowed by exactly the header's 56px, and the floating format
+     * toolbar, anchored `bottom-3` to a descendant of this box, landed at
+     * **874 on an 844px screen**: 14px of a 44px control strip reachable,
+     * drifting further with every scroll.
+     *
+     * It only reproduced on a note long enough to scroll. With a short one
+     * the content floor is under the available space, the item shrinks
+     * normally, and the two anchors coincide — which is why J3 shipped
+     * green and why this file's three older toolbar tests, all of which
+     * measure the bar RELATIVE to its own earlier position, held the whole
+     * time.
+     *
+     * Desktop and tablet were never affected: no header sibling, so the
+     * item is the pane's only child and 100% and "the remaining space" are
+     * the same number. Measured before the fix — desktop 780/800, tablet
+     * 1092/1112, phone 880/844.
+     */
+    <div className="flex min-h-0 flex-1 flex-col">
       <RichEditor
         initialMarkdown={initialMarkdown}
         autoFocus={autoFocus}
