@@ -86,6 +86,69 @@ test('dismissing leaves an existing link exactly as it was', async ({ page }) =>
   await expect(page.locator('.ProseMirror a')).toHaveAttribute('href', 'https://example.com');
 });
 
+/**
+ * Anchored to the CARET, not parked above the toolbar.
+ *
+ * Asserted as a distance from the selection rather than as "is visible":
+ * the popover was visible in its old placement too, so only a value that
+ * moves with the behaviour can tell the two apart. The toolbar floats at the
+ * bottom of the pane, so a popover still living in its column would sit
+ * hundreds of pixels below a selection made in the first line.
+ */
+test('the popover opens at the selection, not above the toolbar', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  await editor.click();
+  await editor.pressSequentially('Anchor me here');
+
+  // A SHORT note on purpose. An earlier version typed twelve filler
+  // paragraphs to "push the toolbar away" — unnecessary, because the toolbar
+  // floats at the bottom of the PANE whatever the note contains, and
+  // actively harmful: it made the editor scrollable, clicking the toolbar
+  // button scrolled it by 52px between the two measurements, and that
+  // presented as a 56px placement error that did not exist.
+  const scrollTop = await page
+    .locator('section[aria-label]')
+    .last()
+    .evaluate((el) => el.scrollTop);
+  expect(scrollTop, 'the editor must not scroll, or the two rects are different frames').toBe(0);
+
+  // A double-click selects one word. Read the rect BEFORE opening: once
+  // focus moves into the popover's field, `window.getSelection()` reports
+  // that input's own empty selection and returns a 0x0 rect — which sailed
+  // through a "is the selection small" guard, since 0 is very small indeed.
+  await page.locator('.ProseMirror > *').first().dblclick();
+  const selection = await page.evaluate(() => {
+    const range = window.getSelection()!.getRangeAt(0).getBoundingClientRect();
+    return { top: range.top, bottom: range.bottom, height: range.height };
+  });
+  expect(selection.height, 'a real one-word selection was measured').toBeGreaterThan(8);
+
+  await linkButton(page).click();
+  const popover = page.getByRole('form', { name: 'Link address' });
+  await expect(popover).toBeVisible();
+  const box = (await popover.boundingBox())!;
+  const toolbar = (await page.getByRole('toolbar', { name: 'Formatting toolbar' }).boundingBox())!;
+
+  // Within a menu gap of the selection, below it or flipped above it.
+  const gapFromSelection = Math.min(
+    Math.abs(box.y - selection.bottom),
+    Math.abs(box.y + box.height - selection.top),
+  );
+  expect(
+    gapFromSelection,
+    `popover at ${Math.round(box.y)}..${Math.round(box.y + box.height)}, selection at ${Math.round(selection.top)}..${Math.round(selection.bottom)}`,
+  ).toBeLessThan(24);
+
+  // And demonstrably NOT in the toolbar's column, which is the placement
+  // this replaces — the failure mode a "is it visible" assertion cannot see.
+  expect(
+    Math.abs(box.y + box.height - toolbar.y),
+    `popover bottom ${Math.round(box.y + box.height)}, toolbar top ${Math.round(toolbar.y)}`,
+  ).toBeGreaterThan(100);
+});
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 

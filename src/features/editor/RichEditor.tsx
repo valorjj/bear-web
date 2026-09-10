@@ -206,6 +206,8 @@ export function RichEditor({
     from: number;
     to: number;
     href: string;
+    rect: DOMRect;
+    opener: HTMLElement | null;
   } | null>(null);
 
   /**
@@ -214,22 +216,25 @@ export function RichEditor({
    * address from the middle of the text would re-link three characters and
    * leave the rest pointing at the old target.
    */
-  function openLinkMenu(): void {
+  function openLinkMenu(opener: HTMLElement | null): void {
     if (editor === null) return;
     const { state } = editor;
     const linkType = state.schema.marks.link;
     const range =
       linkType === undefined ? null : (getMarkRange(state.selection.$from, linkType) ?? null);
-    if (range !== null) {
-      setLinkTarget({
-        from: range.from,
-        to: range.to,
-        href: String(editor.getAttributes('link').href ?? ''),
-      });
-      return;
-    }
-    const { from, to } = state.selection;
-    setLinkTarget({ from, to, href: '' });
+    const { from, to } = range !== null ? { from: range.from, to: range.to } : state.selection;
+
+    setLinkTarget({
+      from,
+      to,
+      href: range === null ? '' : String(editor.getAttributes('link').href ?? ''),
+      // Measured ONCE, here, and stored. `posToDOMRect` returns a fresh
+      // object on every call, and the hook's placement effect takes the rect
+      // as a dependency — recomputing it during render would re-measure on
+      // every render forever.
+      rect: posToDOMRect(editor.view, from, to),
+      opener,
+    });
   }
   /**
    * The callout menu's anchor, or `null` when it is closed.
@@ -674,7 +679,10 @@ export function RichEditor({
          * it became a component with a captured range and a prefill. Two
          * hand-kept copies of that would drift on the first change to either.
          */
-        openLinkMenu();
+        // No opener: the context menu is already gone by the time this
+        // runs, so there is no button for the hook to exempt from its
+        // outside-mousedown listener.
+        openLinkMenu(null);
         break;
       }
       case 'bulletList':
@@ -972,46 +980,6 @@ export function RichEditor({
               onDismiss={() => setColorMenuOpen(false)}
             />
           )}
-          {linkTarget !== null && (
-            <LinkMenu
-              initialHref={linkTarget.href}
-              hasLink={linkTarget.href !== ''}
-              onSubmit={(href) => {
-                if (editor !== null) {
-                  const { from, to } = linkTarget;
-                  if (from === to) {
-                    // Nothing was selected, so there is no text to carry the
-                    // mark. Insert the address AS the link text rather than
-                    // applying a mark to an empty range, which is what the
-                    // `window.prompt` version did and why it silently did
-                    // nothing at all here.
-                    editor
-                      .chain()
-                      .focus()
-                      .insertContentAt(from, {
-                        type: 'text',
-                        text: href,
-                        marks: [{ type: 'link', attrs: { href } }],
-                      })
-                      .run();
-                  } else {
-                    editor.chain().focus().setTextSelection({ from, to }).setLink({ href }).run();
-                  }
-                }
-                setLinkTarget(null);
-              }}
-              onRemove={() => {
-                if (editor !== null) {
-                  const { from, to } = linkTarget;
-                  editor.chain().focus().setTextSelection({ from, to }).unsetLink().run();
-                }
-                setLinkTarget(null);
-              }}
-              // Dismissing touches the document not at all — the whole point
-              // of replacing a dialog whose Cancel destroyed the link.
-              onDismiss={() => setLinkTarget(null)}
-            />
-          )}
           <BottomToolbar
             editor={editor}
             flags={flags}
@@ -1035,17 +1003,18 @@ export function RichEditor({
                   }
             }
             linkMenuOpen={linkTarget !== null}
-            onToggleLinkMenu={() => {
-              // Every popover in this column closes the others rather than
-              // letting two float above one toolbar; the colour and callout
-              // menus already did this to each other.
+            onToggleLinkMenu={(opener) => {
+              // The other two float in the toolbar's own column; this one is
+              // anchored to the caret. They still close each other — two
+              // surfaces open at once over one editor is noise whatever their
+              // placement.
               setColorMenuOpen(false);
               setCalloutAnchor(null);
               if (linkTarget !== null) {
                 setLinkTarget(null);
                 return;
               }
-              openLinkMenu();
+              openLinkMenu(opener);
             }}
             calloutMenuOpen={calloutAnchor !== null}
             onToggleCalloutMenu={(opener) => {
@@ -1113,6 +1082,57 @@ export function RichEditor({
        * `useAnchoredMenu`'s clamp would be measuring the wrong box. It sits
        * here with the other viewport-anchored menus for that reason.
        */}
+      {/*
+        Rendered HERE, beside the other viewport-anchored menus, and NOT in
+        the toolbar's popover column where it first shipped. `CalloutMenu`'s
+        docblock records the reason in full: that column takes a `transform`
+        when the virtual keyboard is up (J3), and a transformed ancestor
+        becomes the containing block for `position: fixed` — so a popover
+        anchored inside it is placed against the toolbar rather than the
+        viewport, and the hook's clamp measures the wrong box entirely.
+      */}
+      {linkTarget !== null && (
+        <LinkMenu
+          anchor={linkTarget}
+          initialHref={linkTarget.href}
+          hasLink={linkTarget.href !== ''}
+          onSubmit={(href) => {
+            if (editor !== null) {
+              const { from, to } = linkTarget;
+              if (from === to) {
+                // Nothing was selected, so there is no text to carry the
+                // mark. Insert the address AS the link text rather than
+                // applying a mark to an empty range, which is what the
+                // `window.prompt` version did and why it silently did
+                // nothing at all here.
+                editor
+                  .chain()
+                  .focus()
+                  .insertContentAt(from, {
+                    type: 'text',
+                    text: href,
+                    marks: [{ type: 'link', attrs: { href } }],
+                  })
+                  .run();
+              } else {
+                editor.chain().focus().setTextSelection({ from, to }).setLink({ href }).run();
+              }
+            }
+            setLinkTarget(null);
+          }}
+          onRemove={() => {
+            if (editor !== null) {
+              const { from, to } = linkTarget;
+              editor.chain().focus().setTextSelection({ from, to }).unsetLink().run();
+            }
+            setLinkTarget(null);
+          }}
+          // Dismissing touches the document not at all — the whole point
+          // of replacing a dialog whose Cancel destroyed the link.
+          onDismiss={() => setLinkTarget(null)}
+        />
+      )}
+
       {calloutAnchor !== null && (
         <CalloutMenu
           anchor={calloutAnchor}

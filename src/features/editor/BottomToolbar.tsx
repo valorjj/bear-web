@@ -48,7 +48,16 @@ export interface BottomToolbarProps {
   onToggleColorMenu: () => void;
   /** Whether the link address popover is open — drives `aria-expanded` on the Link button. */
   linkMenuOpen: boolean;
-  onToggleLinkMenu: () => void;
+  /**
+   * Toggles the link popover, handing over the button's own element.
+   *
+   * The popover anchors to the SELECTION, not to this button — but
+   * `useAnchoredMenu` still needs the opener, so its outside-mousedown
+   * listener does not treat this button as outside. Without it the button
+   * cannot close its own popover: the listener closes on mousedown and the
+   * click reopens, in that order.
+   */
+  onToggleLinkMenu: (opener: HTMLElement) => void;
   /**
    * Hands over the files chosen from the picker. Absent — not disabled — when
    * this editor cannot store an image, so the button is not rendered at all:
@@ -301,7 +310,7 @@ export function BottomToolbar({
                 return;
               }
               if (action.key === 'link') {
-                onToggleLinkMenu();
+                onToggleLinkMenu(event.currentTarget);
                 return;
               }
               if (editor !== null) action.run(editor, highlightColor);

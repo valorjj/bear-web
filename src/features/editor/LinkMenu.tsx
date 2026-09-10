@@ -1,9 +1,15 @@
 import { type FormEvent, type ReactElement, useEffect, useId, useRef, useState } from 'react';
 
 import { useT } from '@/i18n';
+import { useAnchoredMenu } from '@/lib/useAnchoredMenu';
 import { Button } from '@/ui/Button';
 
 export interface LinkMenuProps {
+  /**
+   * Where to put it: the SELECTION's viewport rectangle, and the toolbar
+   * button that opened it (or `null` when the context menu did).
+   */
+  anchor: { rect: DOMRect; opener: HTMLElement | null };
   /** The href already on the selection, or `''` for a selection with no link. */
   initialHref: string;
   /** Whether a link mark is already there — decides Save vs Add, and whether Remove exists. */
@@ -47,7 +53,7 @@ export function normalizeHref(raw: string): string | null {
 }
 
 /**
- * The link address, as a popover anchored above the toolbar.
+ * The link address, as a popover anchored to the SELECTION.
  *
  * Replaces `window.prompt`, which was the OS dialog rather than the app's —
  * unstyled, unthemeable, and modal to the whole tab. It also carried a real
@@ -56,12 +62,23 @@ export function normalizeHref(raw: string): string | null {
  * the dialog DESTROYED an existing link. Here dismissing calls `onDismiss`,
  * which touches nothing.
  *
- * A `form`, so Enter submits without a keydown handler of its own and the
- * button carries its own `type="submit"` semantics. Escape is handled on
- * `window` and stopped there, exactly as `HighlightMenu` does it, so it
- * closes this rather than reaching the editor or the shell behind it.
+ * It first shipped in the toolbar's popover column, beside the highlight and
+ * callout menus, and moved here on request. The difference is real rather
+ * than cosmetic: those two are menus hanging off a specific BUTTON, so the
+ * button is the thing to point at, while this one is about the text under the
+ * caret and belongs next to it. The cost of the move is that it must render
+ * outside the toolbar's positioned wrapper — see `RichEditor`, and
+ * `CalloutMenu`'s docblock, which records why: that wrapper takes a
+ * `transform` when the virtual keyboard is up, and a transformed ancestor
+ * becomes the containing block for `position: fixed`, so anything anchored
+ * inside it is measured against the toolbar instead of the viewport.
+ *
+ * A `form`, so Enter submits without a keydown handler of its own. Escape,
+ * the outside-click dismissal and the Tab trap all come from
+ * `useAnchoredMenu` rather than being hand-rolled here.
  */
 export function LinkMenu({
+  anchor,
   initialHref,
   hasLink,
   onSubmit,
@@ -73,24 +90,36 @@ export function LinkMenu({
   const field = useRef<HTMLInputElement | null>(null);
   const labelId = useId();
 
+  /*
+   * The same placement, dismissal and Tab trap every other floating surface
+   * here uses — flip above when there is no room below, clamp into the
+   * viewport, close on Escape or an outside mousedown.
+   *
+   * Two of those matter more here than for a menu. The clamp measures against
+   * `visibleBottom()` rather than `innerHeight`, so a caret near the bottom of
+   * a phone screen puts this ABOVE the virtual keyboard instead of behind it.
+   * And `opener` is what lets the toolbar's Link button close its own popover:
+   * without it the hook's capture listener closes on mousedown and the
+   * button's click immediately reopens.
+   *
+   * `remeasureOn` carries `hasLink`, because the Remove button appears only
+   * for an existing link — the popover is one button wider in that state, and
+   * the horizontal clamp has to know.
+   */
+  const { ref, position, onKeyDown } = useAnchoredMenu<HTMLFormElement>(
+    anchor.rect,
+    onDismiss,
+    [hasLink],
+    anchor.opener,
+  );
+
   useEffect(() => {
-    field.current?.focus();
-    // Selected, not just focused: the common edit is REPLACING an address, and
-    // a caret parked at the end of a long URL makes that a manual clear first.
+    // The hook focuses the first focusable, which is this field. Selecting is
+    // the part it cannot know to do: the common edit is REPLACING an address,
+    // and a caret parked at the end of a long URL makes that a manual clear
+    // first.
     field.current?.select();
   }, []);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onDismiss();
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onDismiss]);
 
   function handleSubmit(event?: FormEvent): void {
     event?.preventDefault();
@@ -107,9 +136,16 @@ export function LinkMenu({
 
   return (
     <form
+      ref={ref}
       aria-labelledby={labelId}
       onSubmit={handleSubmit}
-      className="flex w-72 max-w-full flex-col gap-2 rounded-lg bg-surface p-2 shadow-popover"
+      onKeyDown={onKeyDown}
+      style={{ top: position.top, left: position.left }}
+      // `w-72` is a fixed width rather than a max, so the hook's horizontal
+      // clamp has a real number to work with before the field has any content
+      // — an intrinsically-sized popover would jump sideways as the user
+      // types. `max-w-[calc(100vw-8px)]` keeps that honest below 296px.
+      className="bg-surface shadow-popover fixed z-20 flex w-72 max-w-[calc(100vw-8px)] flex-col gap-2 rounded-lg p-2"
     >
       <label id={labelId} htmlFor={`${labelId}-field`} className="px-1 text-ui-xs text-faint">
         {t('editor.link.address')}
