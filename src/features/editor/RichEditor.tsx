@@ -1,4 +1,4 @@
-import { isMacOS, posToDOMRect } from '@tiptap/core';
+import { getMarkRange, isMacOS, posToDOMRect } from '@tiptap/core';
 import { EditorContent, type Editor, useEditor, useEditorState } from '@tiptap/react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
@@ -16,6 +16,7 @@ import { buildEditorExtensions } from './extensions';
 import { CalloutMenu } from './CalloutMenu';
 import { HeadingMenu } from './HeadingMenu';
 import { HighlightMenu } from './HighlightMenu';
+import { LinkMenu } from './LinkMenu';
 import { HighlightPalette, type HighlightChoiceResult } from './HighlightPalette';
 import type { HighlightColor } from './Highlight';
 import { TableHandleMenu } from './TableHandleMenu';
@@ -187,6 +188,49 @@ export function RichEditor({
   const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
   const [tableMenu, setTableMenu] = useState<TableHandleMenuRequest | null>(null);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
+
+  /**
+   * The link popover's target, captured when it OPENS rather than read when it
+   * submits.
+   *
+   * Focus moves to the popover's text field, so by submit time the live
+   * selection is no longer what the user aimed at. This is the same rule
+   * `ImagePaste.handle` follows for its async inserts, and it is why
+   * `pinAllSelectionStep` does not cover this case: that only normalises an
+   * `AllSelection` into a concrete range, within one dispatch. It does
+   * nothing about a range going stale across a focus change.
+   *
+   * `null` means closed.
+   */
+  const [linkTarget, setLinkTarget] = useState<{
+    from: number;
+    to: number;
+    href: string;
+  } | null>(null);
+
+  /**
+   * Reads the range the link should land on, widening to the WHOLE existing
+   * link when the caret merely sits inside one — otherwise editing an
+   * address from the middle of the text would re-link three characters and
+   * leave the rest pointing at the old target.
+   */
+  function openLinkMenu(): void {
+    if (editor === null) return;
+    const { state } = editor;
+    const linkType = state.schema.marks.link;
+    const range =
+      linkType === undefined ? null : (getMarkRange(state.selection.$from, linkType) ?? null);
+    if (range !== null) {
+      setLinkTarget({
+        from: range.from,
+        to: range.to,
+        href: String(editor.getAttributes('link').href ?? ''),
+      });
+      return;
+    }
+    const { from, to } = state.selection;
+    setLinkTarget({ from, to, href: '' });
+  }
   /**
    * The callout menu's anchor, or `null` when it is closed.
    *
@@ -621,17 +665,16 @@ export function RichEditor({
         chain.toggleStrike().run();
         break;
       case 'link': {
-        // Same prompt-driven flow as the bottom toolbar's own link button —
-        // see `BottomToolbar.tsx`'s `ACTIONS` entry for `link`. Not extracted
-        // into a shared helper: this is the only other call site, and the
-        // two already agree because both defer to `window.prompt` and the
-        // same `unsetLink`/`setLink` pair.
-        const href = window.prompt(t('editor.link.prompt'));
-        if (href === null || href === '') {
-          chain.unsetLink().run();
-        } else {
-          chain.extendMarkRange('link').setLink({ href }).run();
-        }
+        /*
+         * Both routes now open the SAME popover, and that is a change of kind
+         * rather than of style. The comment this replaces justified
+         * duplicating the flow here on the grounds that the two call sites
+         * "already agree because both defer to `window.prompt`" — true while
+         * the dialog was the platform's and stateless, and false the moment
+         * it became a component with a captured range and a prefill. Two
+         * hand-kept copies of that would drift on the first change to either.
+         */
+        openLinkMenu();
         break;
       }
       case 'bulletList':
@@ -929,6 +972,46 @@ export function RichEditor({
               onDismiss={() => setColorMenuOpen(false)}
             />
           )}
+          {linkTarget !== null && (
+            <LinkMenu
+              initialHref={linkTarget.href}
+              hasLink={linkTarget.href !== ''}
+              onSubmit={(href) => {
+                if (editor !== null) {
+                  const { from, to } = linkTarget;
+                  if (from === to) {
+                    // Nothing was selected, so there is no text to carry the
+                    // mark. Insert the address AS the link text rather than
+                    // applying a mark to an empty range, which is what the
+                    // `window.prompt` version did and why it silently did
+                    // nothing at all here.
+                    editor
+                      .chain()
+                      .focus()
+                      .insertContentAt(from, {
+                        type: 'text',
+                        text: href,
+                        marks: [{ type: 'link', attrs: { href } }],
+                      })
+                      .run();
+                  } else {
+                    editor.chain().focus().setTextSelection({ from, to }).setLink({ href }).run();
+                  }
+                }
+                setLinkTarget(null);
+              }}
+              onRemove={() => {
+                if (editor !== null) {
+                  const { from, to } = linkTarget;
+                  editor.chain().focus().setTextSelection({ from, to }).unsetLink().run();
+                }
+                setLinkTarget(null);
+              }}
+              // Dismissing touches the document not at all — the whole point
+              // of replacing a dialog whose Cancel destroyed the link.
+              onDismiss={() => setLinkTarget(null)}
+            />
+          )}
           <BottomToolbar
             editor={editor}
             flags={flags}
@@ -936,13 +1019,40 @@ export function RichEditor({
             colorMenuOpen={colorMenuOpen}
             onToggleColorMenu={() => {
               setCalloutAnchor(null);
+              setLinkTarget(null);
               setColorMenuOpen((open) => !open);
+            }}
+            // Undefined, not a no-op, when this editor cannot store images:
+            // `BottomToolbar` renders no button at all in that case, matching
+            // `ImagePaste`, which registers no plugin when `onImage` is null.
+            onPickImages={
+              onImage === undefined
+                ? undefined
+                : (files) => {
+                    // Through the extension's own command, so the picker
+                    // shares the exact path a paste and a drop take.
+                    editor?.chain().focus().insertImageFiles(files).run();
+                  }
+            }
+            linkMenuOpen={linkTarget !== null}
+            onToggleLinkMenu={() => {
+              // Every popover in this column closes the others rather than
+              // letting two float above one toolbar; the colour and callout
+              // menus already did this to each other.
+              setColorMenuOpen(false);
+              setCalloutAnchor(null);
+              if (linkTarget !== null) {
+                setLinkTarget(null);
+                return;
+              }
+              openLinkMenu();
             }}
             calloutMenuOpen={calloutAnchor !== null}
             onToggleCalloutMenu={(opener) => {
               // The colour menu still stacks in the column above the toolbar,
               // so opening this one closes it rather than letting both float.
               setColorMenuOpen(false);
+              setLinkTarget(null);
               setCalloutAnchor((current) =>
                 current === null ? { rect: opener.getBoundingClientRect(), opener } : null,
               );

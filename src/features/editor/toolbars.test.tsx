@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EditorView } from '@tiptap/pm/view';
 import { createRef } from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { renderWithI18n } from '@/i18n/testing';
 
@@ -63,7 +63,10 @@ afterAll(() => {
   scrollToSelectionSpy.mockRestore();
 });
 
-function renderEditor(initialMarkdown: string): {
+function renderEditor(
+  initialMarkdown: string,
+  onImage?: (file: Blob) => Promise<string | null>,
+): {
   handleRef: React.RefObject<RichEditorHandle | null>;
 } {
   const handleRef = createRef<RichEditorHandle>();
@@ -74,6 +77,7 @@ function renderEditor(initialMarkdown: string): {
       onBlur={vi.fn()}
       ariaLabel="Note text"
       handleRef={handleRef}
+      onImage={onImage}
       createdAt={new Date(2026, 0, 15, 9, 0).getTime()}
       updatedAt={new Date(2026, 0, 15, 9, 0).getTime()}
     />,
@@ -205,34 +209,202 @@ describe('the bottom toolbar', () => {
   });
 
   describe('the link action', () => {
-    // Scoped to just this one spy, not `vi.restoreAllMocks()` — that would
-    // also tear down the file-level `scrollToSelectionSpy` above and crash
-    // every test that runs after this block in jsdom.
-    let promptSpy: ReturnType<typeof vi.spyOn>;
+    /**
+     * The address is asked for in an anchored popover, not `window.prompt`.
+     *
+     * The two tests this block replaces asserted the prompt itself — one of
+     * them that it was CALLED with a translated label — so they pinned the
+     * native dialog in place. They are gone rather than adapted: the
+     * behaviour they described is the behaviour being removed.
+     */
+    async function openLinkMenu(): Promise<void> {
+      await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Link' }));
+    }
 
-    afterEach(() => {
+    function addressField(): HTMLElement {
+      return screen.getByRole('textbox', { name: 'Link address' });
+    }
+
+    it('asks for the address in a popover, never a native prompt', async () => {
+      const promptSpy = vi.spyOn(window, 'prompt');
+      renderEditor('word');
+      await screen.findByLabelText('Note text');
+
+      await openLinkMenu();
+
+      expect(addressField()).toBeInTheDocument();
+      expect(promptSpy).not.toHaveBeenCalled();
       promptSpy.mockRestore();
     });
 
     it('applies a link to the document', async () => {
-      promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('https://example.com');
       const { handleRef } = renderEditor('word');
       await screen.findByLabelText('Note text');
 
       handleRef.current?.editor?.commands.selectAll();
-      await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Link' }));
+      await openLinkMenu();
+      await userEvent.type(addressField(), 'https://example.com');
+      await userEvent.click(screen.getByRole('button', { name: 'Add link' }));
 
       expect(handleRef.current?.getMarkdown()).toBe('[word](https://example.com)');
     });
 
-    it('asks for the address with a translated label, never an empty prompt', async () => {
-      promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('https://example.com');
+    /**
+     * The selection is captured when the popover OPENS.
+     *
+     * Focus moves to the text field, so by submit time the live selection is
+     * not what the user aimed at. Same rule `ImagePaste.handle` follows for
+     * its async inserts, and the reason `pinAllSelectionStep` is not enough:
+     * that only normalises an `AllSelection`, it does not survive a focus
+     * change.
+     */
+    it('links the text that was selected when the popover opened', async () => {
+      const { handleRef } = renderEditor('one two');
+      await screen.findByLabelText('Note text');
+
+      handleRef.current?.editor?.commands.setTextSelection({ from: 1, to: 4 });
+      await openLinkMenu();
+      await userEvent.type(addressField(), 'https://example.com');
+      await userEvent.click(screen.getByRole('button', { name: 'Add link' }));
+
+      expect(handleRef.current?.getMarkdown()).toBe('[one](https://example.com) two');
+    });
+
+    it('prefills the address when the caret is already inside a link', async () => {
+      const { handleRef } = renderEditor('[word](https://example.com)');
+      await screen.findByLabelText('Note text');
+
+      handleRef.current?.editor?.commands.setTextSelection({ from: 2, to: 2 });
+      await openLinkMenu();
+
+      expect(addressField()).toHaveValue('https://example.com');
+    });
+
+    /**
+     * Dismissing must change nothing — the defect this whole change carries
+     * with it. `window.prompt` returns `null` on Cancel and the old handler
+     * read that as "unset the link", so cancelling out of the dialog silently
+     * destroyed an existing link.
+     */
+    it('leaves an existing link untouched when dismissed', async () => {
+      const { handleRef } = renderEditor('[word](https://example.com)');
+      await screen.findByLabelText('Note text');
+
+      handleRef.current?.editor?.commands.setTextSelection({ from: 2, to: 2 });
+      await openLinkMenu();
+      await userEvent.keyboard('{Escape}');
+
+      expect(handleRef.current?.getMarkdown()).toBe('[word](https://example.com)');
+    });
+
+    it('removes an existing link through its own button', async () => {
+      const { handleRef } = renderEditor('[word](https://example.com)');
+      await screen.findByLabelText('Note text');
+
+      handleRef.current?.editor?.commands.setTextSelection({ from: 2, to: 2 });
+      await openLinkMenu();
+      await userEvent.click(screen.getByRole('button', { name: 'Remove link' }));
+
+      expect(handleRef.current?.getMarkdown()).toBe('word');
+    });
+
+    /**
+     * With nothing selected there is no text to carry the mark, and the
+     * `window.prompt` version simply did nothing: `setLink` applied a mark to
+     * an empty range and the user got no link and no error. Tolerable from a
+     * native dialog, broken from a deliberate one — so the address becomes
+     * its own link text, which is what every other editor does here.
+     */
+    it('inserts the address as its own link text when nothing is selected', async () => {
+      const { handleRef } = renderEditor('word');
+      await screen.findByLabelText('Note text');
+
+      handleRef.current?.editor?.commands.setTextSelection({ from: 5, to: 5 });
+      await openLinkMenu();
+      await userEvent.type(addressField(), 'https://example.com');
+      await userEvent.click(screen.getByRole('button', { name: 'Add link' }));
+
+      expect(handleRef.current?.getMarkdown()).toBe(
+        'word[https://example.com](https://example.com)',
+      );
+    });
+
+    it('offers no Remove for a selection that is not yet a link', async () => {
+      const { handleRef } = renderEditor('word');
+      await screen.findByLabelText('Note text');
+
+      handleRef.current?.editor?.commands.selectAll();
+      await openLinkMenu();
+
+      expect(screen.queryByRole('button', { name: 'Remove link' })).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * The file picker, which Bear's own help calls "the attach function (which
+   * looks like a photo)" and places in the toolbar. Only images are accepted
+   * here, so a photo glyph is the honest label as well as the familiar one.
+   *
+   * The REAL encode cannot run in jsdom — it has neither `createImageBitmap`
+   * nor `OffscreenCanvas`, which is why `downscaleImage` takes both as
+   * injected dependencies and why `e2e/images.spec.ts` owns the only real
+   * WebP in the suite. What is worth asserting here is the WIRING: that the
+   * button reaches a file input at all, and that a chosen file arrives at the
+   * same `onImage` a paste would reach.
+   */
+  describe('the image attach action', () => {
+    function imageButton(): HTMLElement {
+      return within(bottomToolbar()).getByRole('button', { name: 'Insert image' });
+    }
+
+    /**
+     * By its data hook, not by an accessible name: the input is deliberately
+     * `aria-hidden` so the toolbar button is the single control in the
+     * accessibility tree for this affordance. Same convention as
+     * `data-code-copy`.
+     */
+    function picker(): HTMLInputElement {
+      const input = bottomToolbar().querySelector('[data-image-picker]');
+      if (!(input instanceof HTMLInputElement)) throw new Error('no image picker input');
+      return input;
+    }
+
+    it('hands a chosen file to the same onImage a paste uses', async () => {
+      const onImage = vi.fn().mockResolvedValue('files/abc.webp');
+      renderEditor('word', onImage);
+      await screen.findByLabelText('Note text');
+
+      const input = picker();
+      await userEvent.upload(input, new File(['x'], 'shot.png', { type: 'image/png' }));
+
+      await waitFor(() => expect(onImage).toHaveBeenCalledTimes(1));
+      expect((onImage.mock.calls[0]![0] as File).name).toBe('shot.png');
+    });
+
+    it('accepts images only, so the picker does not offer every file', async () => {
+      renderEditor('word', vi.fn());
+      await screen.findByLabelText('Note text');
+
+      expect(picker()).toHaveAttribute('accept', 'image/*');
+    });
+
+    it('is absent when the editor cannot store an image', async () => {
       renderEditor('word');
       await screen.findByLabelText('Note text');
 
-      await userEvent.click(within(bottomToolbar()).getByRole('button', { name: 'Link' }));
+      expect(
+        within(bottomToolbar()).queryByRole('button', { name: 'Insert image' }),
+      ).not.toBeInTheDocument();
+    });
 
-      expect(promptSpy).toHaveBeenCalledWith('Link address');
+    it('opens the picker when the toolbar button is clicked', async () => {
+      renderEditor('word', vi.fn());
+      await screen.findByLabelText('Note text');
+      const click = vi.spyOn(picker(), 'click');
+
+      await userEvent.click(imageButton());
+
+      expect(click).toHaveBeenCalledTimes(1);
     });
   });
 

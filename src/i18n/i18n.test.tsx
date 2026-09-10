@@ -61,6 +61,11 @@ describe('translation bundles', () => {
       'app.name',
       'export.html',
       'export.pdf',
+      // A URL, shown as placeholder text in the link popover. There is
+      // nothing to translate in `https://example.com`, and localising the
+      // host would make the example WORSE — a Korean-looking domain reads as
+      // a real suggestion rather than as a shape.
+      'editor.link.placeholder',
       'landing.wordmark',
       'typography.unit.px',
       'typography.unit.em',

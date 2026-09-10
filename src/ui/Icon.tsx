@@ -303,6 +303,7 @@ export {
   Download,
   FileCode,
   Table as TableGlyph,
+  Image as ImageGlyph,
   Heading1,
   Heading2,
   Heading3,

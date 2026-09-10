@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/react';
-import { Fragment, type ReactElement } from 'react';
+import { Fragment, type ReactElement, useRef } from 'react';
 
 import { useT } from '@/i18n';
 import type { TranslationKey } from '@/i18n';
@@ -10,6 +10,7 @@ import {
   Heading,
   Highlighter,
   Icon,
+  ImageGlyph,
   Italic,
   Link,
   List,
@@ -24,8 +25,6 @@ import type { LucideIcon } from '@/ui/Icon';
 import type { EditorFlags } from './editorState';
 import type { HighlightColor } from './Highlight';
 import { pinAllSelectionStep } from './toolbarSelection';
-
-type Translate = (key: TranslationKey) => string;
 
 export interface BottomToolbarProps {
   editor: Editor | null;
@@ -47,6 +46,17 @@ export interface BottomToolbarProps {
   /** Whether the colour menu is open — drives `aria-expanded` on the chevron. */
   colorMenuOpen: boolean;
   onToggleColorMenu: () => void;
+  /** Whether the link address popover is open — drives `aria-expanded` on the Link button. */
+  linkMenuOpen: boolean;
+  onToggleLinkMenu: () => void;
+  /**
+   * Hands over the files chosen from the picker. Absent — not disabled — when
+   * this editor cannot store an image, so the button is not rendered at all:
+   * the same rule `ExportMenu`'s items follow, and the reason `ImagePaste`
+   * registers no plugin when `onImage` is null. A control that silently does
+   * nothing is worse than one that is not there.
+   */
+  onPickImages?: (files: File[]) => void;
   /** Live formatting state at the caret. See `editorState.ts`. */
   flags: EditorFlags;
 }
@@ -68,18 +78,19 @@ interface Action {
   label: TranslationKey;
   glyph: LucideIcon;
   /**
-   * `t` is threaded in rather than read from a hook because ACTIONS is a
-   * module-level constant. The link action needs a translated prompt, and no
-   * user-facing string may be hardcoded in a component.
-   */
-  /**
    * Every action receives the current highlight colour, though only
    * `highlight` reads it. The alternative — branching on `action.key` inside
    * the render loop — would put one action's behaviour somewhere other than
    * its own row in this table, which is the property that makes the table
    * worth having.
+   *
+   * A translator used to be threaded in here too, for the one action that
+   * needed a user-facing string: `link`, which called `window.prompt` with a
+   * translated label. The popover owns that string now, so the parameter and
+   * its local `Translate` alias are gone rather than left unused with their
+   * justification still attached.
    */
-  run: (editor: Editor, t: Translate, highlightColor: HighlightColor | null) => void;
+  run: (editor: Editor, highlightColor: HighlightColor | null) => void;
   /**
    * The `EditorFlags` key this action's pressed state reads.
    *
@@ -92,6 +103,18 @@ interface Action {
    */
   active: keyof EditorFlags;
 }
+
+/**
+ * The shape every control in the strip shares.
+ *
+ * Hoisted when the image button joined, so the two cannot drift: the touch
+ * sizing here (`coarse:size-11` — 44px of real INK, which J2's pseudo-element
+ * approach cannot deliver inside an `overflow-x-auto` strip) is a measured
+ * rule, and a second button pasted with a stale copy of it would be 28px on a
+ * phone with nothing to catch it.
+ */
+const TOOLBAR_BUTTON =
+  'h-7 shrink-0 rounded-sm text-ui text-muted coarse:size-11 coarse:rounded-md transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40';
 
 const ACTIONS: readonly Action[] = [
   {
@@ -150,7 +173,7 @@ const ACTIONS: readonly Action[] = [
     glyph: Highlighter,
     // Toggles the LAST-CHOSEN colour, so highlighting stays one click. The
     // chevron beside it is the route to a different one.
-    run: (editor, _t, color) =>
+    run: (editor, color) =>
       editor.chain().command(pinAllSelectionStep).focus().toggleHighlight(color).run(),
     active: 'highlight',
   },
@@ -158,20 +181,16 @@ const ACTIONS: readonly Action[] = [
     key: 'link',
     label: 'editor.toolbar.link',
     glyph: Link,
-    run: (editor, t) => {
-      const href = window.prompt(t('editor.link.prompt'));
-      if (href === null || href === '') {
-        editor.chain().command(pinAllSelectionStep).focus().unsetLink().run();
-        return;
-      }
-      editor
-        .chain()
-        .command(pinAllSelectionStep)
-        .focus()
-        .extendMarkRange('link')
-        .setLink({ href })
-        .run();
-    },
+    // Opens the address popover rather than running a command, so `run` is
+    // never called for it — the same shape as `callout` above, and the click
+    // handler below branches on the key for both.
+    //
+    // What this replaces was `window.prompt`, and it carried a defect worth
+    // naming so it is not reintroduced: `prompt` returns `null` on Cancel,
+    // this handler read that as "unset the link", and dismissing the dialog
+    // therefore DESTROYED an existing link. `LinkMenu` cannot express that —
+    // dismissing calls `onDismiss`, which touches nothing.
+    run: () => {},
     active: 'link',
   },
   {
@@ -229,11 +248,15 @@ export function BottomToolbar({
   highlightColor,
   colorMenuOpen,
   onToggleColorMenu,
+  linkMenuOpen,
+  onToggleLinkMenu,
+  onPickImages,
   calloutMenuOpen,
   onToggleCalloutMenu,
   flags,
 }: BottomToolbarProps): ReactElement {
   const t = useT();
+  const picker = useRef<HTMLInputElement | null>(null);
 
   return (
     <div
@@ -257,15 +280,31 @@ export function BottomToolbar({
             type="button"
             aria-label={t(action.label)}
             aria-pressed={flags[action.active] === true}
-            aria-haspopup={action.key === 'callout' ? 'menu' : undefined}
-            aria-expanded={action.key === 'callout' ? calloutMenuOpen : undefined}
+            // `dialog` for the link popover, not `menu`: it holds a text
+            // field and two buttons, and a screen reader announcing "menu"
+            // there promises arrow-key navigation between items that do not
+            // exist.
+            aria-haspopup={
+              action.key === 'callout' ? 'menu' : action.key === 'link' ? 'dialog' : undefined
+            }
+            aria-expanded={
+              action.key === 'callout'
+                ? calloutMenuOpen
+                : action.key === 'link'
+                  ? linkMenuOpen
+                  : undefined
+            }
             disabled={editor === null}
             onClick={(event) => {
               if (action.key === 'callout') {
                 onToggleCalloutMenu(event.currentTarget);
                 return;
               }
-              if (editor !== null) action.run(editor, t, highlightColor);
+              if (action.key === 'link') {
+                onToggleLinkMenu();
+                return;
+              }
+              if (editor !== null) action.run(editor, highlightColor);
             }}
             // `touch:size-11` is 44x44 of real ink on a coarse pointer (J3).
             //
@@ -275,7 +314,7 @@ export function BottomToolbar({
             // The utility was applied, measured, and removed. Growing the ink
             // is the only route and it reflows the strip, which J2 refused to
             // do and J3 owns.
-            className={`h-7 shrink-0 rounded-sm text-ui text-muted coarse:size-11 coarse:rounded-md transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-pressed:bg-selected aria-pressed:text-text disabled:pointer-events-none disabled:opacity-40 ${
+            className={`${TOOLBAR_BUTTON} ${
               // The highlight pair reads as ONE control: the button loses its
               // trailing inset so the chevron sits against it rather than a
               // full gap away. Only `highlight` still has a chevron — the
@@ -304,6 +343,58 @@ export function BottomToolbar({
           )}
         </Fragment>
       ))}
+
+      {/*
+       * The image picker, rendered outside the `ACTIONS` table because it is
+       * CONDITIONAL and the table is a static constant — the same reason the
+       * highlight chevron sits outside it.
+       *
+       * Bear's own help describes this control as "the attach function (which
+       * looks like a photo)" and puts it in the toolbar, which is where this
+       * is and what it looks like. It accepts images only, so a photo glyph
+       * is the honest label as well as the familiar one; a paperclip would
+       * promise the PDFs and arbitrary files Bear takes and this does not.
+       */}
+      {onPickImages !== undefined && (
+        <>
+          <button
+            type="button"
+            aria-label={t('editor.toolbar.image')}
+            disabled={editor === null}
+            onClick={() => picker.current?.click()}
+            className={`${TOOLBAR_BUTTON} px-2`}
+          >
+            <Icon glyph={ImageGlyph} />
+          </button>
+          <input
+            ref={picker}
+            type="file"
+            accept="image/*"
+            multiple
+            data-image-picker
+            // The BUTTON is the accessible control; this input is plumbing.
+            // Labelling both put two "Insert image" entries in the
+            // accessibility tree for one affordance, and a screen-reader user
+            // would meet the second with no way to tell it apart. Hidden from
+            // the tree and out of the tab order, it can still be `.click()`ed,
+            // which is the only thing it is here to do.
+            aria-hidden="true"
+            tabIndex={-1}
+            // `sr-only`, never `display: none`: a display-none input cannot
+            // be opened programmatically in every browser.
+            className="sr-only"
+            onChange={(event) => {
+              const files = [...(event.target.files ?? [])];
+              // Cleared BEFORE handing the files on, so choosing the same
+              // file twice in a row still fires `change`. The input keeps its
+              // value otherwise, and the second pick is silently ignored —
+              // which reads as "the app dropped my image".
+              event.target.value = '';
+              if (files.length > 0) onPickImages(files);
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }

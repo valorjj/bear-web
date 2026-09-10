@@ -18,6 +18,34 @@
  * `scripts/sourceLint.test.ts`.
  */
 
+/*
+ * A drag carrying files is over the editor (`ImagePaste`'s
+ * `DRAG_OVER_ATTRIBUTE`).
+ *
+ * An `outline`, never a `border`: a border is in the box model and would
+ * reflow the whole prose column by 2px the moment a file crossed the pane,
+ * moving the very text the user is aiming at. An outline is drawn outside
+ * the box and costs no layout at all.
+ *
+ * `outline-offset` is negative so the ring sits INSIDE the pane's rounded
+ * corner rather than straddling it; the editor fills its pane, so a
+ * positive offset would be clipped by the pane's own `overflow`.
+ *
+ * The tint is `color-mix` against `--bear-accent` rather than a literal or
+ * an opacity on the whole element: opacity would fade the note's text along
+ * with the wash, and every colour in this app comes from a token.
+ *
+ * NOT gated on `@media (hover: hover)`. A file drag is a pointer gesture a
+ * touch device cannot start, so the rule is simply unreachable there and a
+ * media query would only claim otherwise.
+ */
+.ProseMirror[data-drag-over] {
+  outline: 2px solid var(--bear-accent);
+  outline-offset: -2px;
+  border-radius: var(--bear-radius-md);
+  background-color: color-mix(in srgb, var(--bear-accent) 6%, transparent);
+}
+
 .ProseMirror {
   font-size: var(--bear-font-size);
   line-height: var(--bear-line-height);

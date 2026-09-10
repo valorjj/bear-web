@@ -34,6 +34,44 @@ async function pasteImage(page: Page, size = { width: 40, height: 20 }): Promise
   }, size);
 }
 
+/**
+ * A real PNG on a synthetic `DragEvent`.
+ *
+ * The drop path has existed since K1 and had NO test until now — the suite
+ * covered paste only, so a handler that inserted at the wrong position, or
+ * twice, or not at all, would have shipped unnoticed. It also positions by
+ * POINTER rather than by caret, which is the part a paste test can never
+ * cover.
+ */
+async function dropImage(page: Page, point: { x: number; y: number }): Promise<void> {
+  await page.evaluate(async (at) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 30;
+    canvas.height = 30;
+    const context = canvas.getContext('2d');
+    if (context === null) throw new Error('no 2d context');
+    context.fillStyle = '#cc4488';
+    context.fillRect(0, 0, 30, 30);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((value) => resolve(value), 'image/png'),
+    );
+    if (blob === null) throw new Error('no blob');
+
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([blob], 'dropped.png', { type: 'image/png' }));
+    document.querySelector('.ProseMirror')!.dispatchEvent(
+      new DragEvent('drop', {
+        dataTransfer: transfer,
+        bubbles: true,
+        cancelable: true,
+        clientX: at.x,
+        clientY: at.y,
+      }),
+    );
+  }, point);
+}
+
 async function newNote(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByRole('button', { name: 'New note' }).click();
@@ -164,4 +202,91 @@ test('a remote image URL still renders as source, never as a picture', async ({ 
   // only evidence was this counter. The thumbnail now reads STORED images
   // only.
   expect(requested).toBe(false);
+});
+
+test('a dropped image is stored and rendered, exactly as a pasted one is', async ({ page }) => {
+  await newNote(page);
+
+  const editor = page.getByRole('textbox', { name: 'Note text' });
+  const box = (await editor.boundingBox())!;
+  await dropImage(page, { x: Math.round(box.x + 40), y: Math.round(box.y + 10) });
+
+  // Scoped to the stored-image class, NOT `.ProseMirror img`. ProseMirror
+  // keeps a zero-size `img.ProseMirror-separator` in the document, so the
+  // looser selector reports two elements for one image and reads as a
+  // duplicate-insert bug that is not there. It cost a wrong diagnosis once.
+  const image = page.locator('.ProseMirror img.bear-stored-image');
+  await expect(image).toHaveCount(1);
+  await expect(image).toHaveAttribute('src', /^blob:/);
+  await expect
+    .poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth))
+    .toBeGreaterThan(0);
+});
+
+test('the toolbar picker stores an image through the same path as a paste', async ({ page }) => {
+  await newNote(page);
+
+  // A REAL PNG through the real file input — `setInputFiles` is the only way
+  // to drive an `<input type="file">`, since a page cannot construct a
+  // trusted file dialog.
+  await page.locator('[data-image-picker]').setInputFiles({
+    name: 'picked.png',
+    mimeType: 'image/png',
+    // A 1x1 PNG, base64. Small on purpose: this test is about the WIRING
+    // reaching `downscaleImage`, and `images.spec.ts` above already proves
+    // the encode itself on a realistic bitmap.
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    ),
+  });
+
+  const image = page.locator('.ProseMirror img.bear-stored-image');
+  await expect(image).toHaveCount(1);
+  await expect(image).toHaveAttribute('src', /^blob:/);
+});
+
+test('a file drag rings the editor, and a text drag does not', async ({ page }) => {
+  await newNote(page);
+  const editor = page.locator('.ProseMirror');
+
+  const dragOver = async (kind: 'Files' | 'text/plain'): Promise<void> => {
+    await page.evaluate((type) => {
+      const transfer = new DataTransfer();
+      if (type === 'Files') {
+        transfer.items.add(new File(['x'], 'x.png', { type: 'image/png' }));
+      } else {
+        transfer.setData('text/plain', 'just words');
+      }
+      const target = document.querySelector('.ProseMirror')!;
+      target.dispatchEvent(
+        new DragEvent('dragenter', { dataTransfer: transfer, bubbles: true, cancelable: true }),
+      );
+      target.dispatchEvent(
+        new DragEvent('dragover', { dataTransfer: transfer, bubbles: true, cancelable: true }),
+      );
+    }, kind);
+  };
+
+  await dragOver('Files');
+  // Polled `toHaveCSS`, not `toBeVisible`: the ring is an `outline`, and
+  // `toBeVisible` cannot see a style at all. Asserting the RULE is what makes
+  // this fail if the selector stops matching.
+  await expect(editor).toHaveAttribute('data-drag-over', 'true');
+  await expect(editor).toHaveCSS('outline-style', 'solid');
+
+  await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['x'], 'x.png', { type: 'image/png' }));
+    document
+      .querySelector('.ProseMirror')!
+      .dispatchEvent(
+        new DragEvent('dragleave', { dataTransfer: transfer, bubbles: true, cancelable: true }),
+      );
+  });
+  await expect(editor).not.toHaveAttribute('data-drag-over', 'true');
+
+  // Dragging TEXT within the note must not promise an image drop.
+  await dragOver('text/plain');
+  await expect(editor).not.toHaveAttribute('data-drag-over', 'true');
 });

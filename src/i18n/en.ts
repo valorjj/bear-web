@@ -127,6 +127,7 @@ export const en = {
   'editor.highlight.palette': 'Highlight colour',
   'editor.highlight.remove': 'Remove highlight',
   'editor.toolbar.link': 'Link',
+  'editor.toolbar.image': 'Insert image',
   'editor.toolbar.code': 'Code block',
   'editor.toolbar.table': 'Table',
   'editor.toolbar.callout': 'Quote or callout',
@@ -223,7 +224,15 @@ export const en = {
   'editor.info.characters': 'Characters',
   'editor.info.created': 'Created',
   'editor.info.modified': 'Modified',
-  'editor.link.prompt': 'Link address',
+  // Sub-project U: the link address is asked for in an anchored popover, not
+  // `window.prompt`. `editor.link.prompt` is gone rather than reused — it was
+  // named for the native dialog it fed.
+  'editor.link.address': 'Link address',
+  'editor.link.placeholder': 'https://example.com',
+  'editor.link.add': 'Add link',
+  'editor.link.save': 'Save link',
+  'editor.link.remove': 'Remove link',
+  'editor.link.cancel': 'Cancel',
   'editor.tagPill.hint': 'Filter by this tag',
   'editor.linkPill.hint.mac': 'Cmd-click to open this note',
   'editor.linkPill.hint.other': 'Ctrl-click to open this note',
