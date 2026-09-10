@@ -19,25 +19,27 @@ believe the table and fix this file.
 ## Where things stand
 
 - `main` carries everything in `CLAUDE.md`'s status table marked complete —
-  through **R (first-visit landing page), 2026-09-07**. Live on Pages.
-  **S1 (tag rename/delete) and S4 (tag autocomplete + plain-click filtering,
-  below) are complete on their own branches** as of this write-up; the
-  controller merges after a whole-branch review, per this repo's working
-  style, so treat `CLAUDE.md`'s status table as the up-to-the-minute truth
-  when it and this paragraph's "on `main`" claim disagree.
-- 2947 unit tests, 257 end-to-end, measured on `s4-tag-autocomplete` at the
-  end of S4. All six gates green, plus `measure:check` and the frozen
-  355,000 B bundle ceiling (410 B headroom — see S4's own section).
-- Every sub-project branch named in this file THROUGH R is merged and
-  deleted; S1 and S4 are not yet merged as of this reconciliation.
+  through **T (table insert chords + the callout button)**, with **S1 (tag
+  rename/delete) and S4 (tag autocomplete + plain-click filtering, below)
+  merged** since this section last claimed they were unmerged. Live on
+  `https://markflowing.com/`. Treat `CLAUDE.md`'s status table as the
+  up-to-the-minute truth wherever it and this paragraph disagree.
+- **2989 unit tests, 282 end-to-end**, on `main` at 2026-09-10. All six gates
+  green, plus `measure:check`.
+- **Do not read a bundle number out of this file.** Every figure below is a
+  record of what was measured THEN, and the ceiling has been raised several
+  times since — it was 355,000 B when this header was written and is
+  **358,000 B** now. `scripts/bundleSize.test.ts` is the only current source;
+  its docblock carries every raise with its reason.
+- Every sub-project branch named in this file is merged.
 
-**What is actually left, as of 2026-09-09:**
+**What is actually left, as of 2026-09-10:**
 
 | Open | State |
 | --- | --- |
 | **R landing page** | SHIPPED 2026-09-07 — see the section below |
 | **N paste Markdown as Markdown** | SHIPPED 2026-09-02 — see the spec |
-| **J4 platform chrome** | not started — the last of the four |
+| **J4 mobile** | not started, and **bigger than "platform chrome"** — a phone audit on 2026-09-10 found the post-J3 feature surfaces were never checked on a phone. See the J section below. |
 | **K4 the thumbnail** | mostly done in K1; what remains is cosmetic |
 | **Dropping** Markdown text into a note | not started — N covered pasting only; `ImagePaste` handles `drop` for images, so text dropped in keeps the literal behaviour |
 | `&amp;nbsp;` round-trip corruption in `markdown.ts` | not started — found while specing N. Named and numeric entities survive `parseMarkdown` as literal text and gain an `&amp;` on serialize, so a TYPED or already-stored `&nbsp;` is permanently wrong. N fixed the paste path only. Needs `CANONICAL` + `NON_CANONICAL` entries. |
@@ -409,12 +411,49 @@ before upload, the server caps one image at 5 MB and an account at 2 GB, so a
 pasted screenshot lands at a few hundred KB and a 3 MB cap would never bind.
 What was missing was visibility, and L1 added it.
 
-**Mobile is nearly done.** J1 turned "unusable" into "usable", J2a fixed the
-phone header's proportions, J2 made every affordance reachable by a finger, and
-J3 fixed the editor's layout — the keyboard, the toolbar and tables that
-scroll. Only J4 is left, and it is the smallest of the four: safe-area insets
-throughout, `100dvh` on the shell, installability, pull-to-refresh, and whether
-an installed PWA changes J1's answer on routing.
+**The FOUNDATION is done; the features built on top of it were never
+checked.** J1 turned "unusable" into "usable", J2a fixed the phone header's
+proportions, J2 made every affordance reachable by a finger, and J3 fixed the
+editor's layout — the keyboard, the toolbar and tables that scroll. A phone
+audit on **2026-09-10** confirmed all four hold up, and found that nothing
+shipped AFTER J3 had ever been looked at on a phone: 243 commits, and only 5
+of 40 e2e specs use a phone viewport, none of them covering a post-J3
+feature.
+
+It found two live bugs, both fixed and deployed that day:
+
+- The tag drawer rendered its labels at **1.00:1** in all eight light themes
+  — `SidebarDrawer` painted `bg-sidebar` without `bear-sidebar-scope`, and
+  `--bear-sidebar` IS each light theme's ink. Live for a day;
+  `contrast.spec.ts` reported 33/33 throughout, because its sidebar read goes
+  through a probe the test mounts carrying the scope.
+- The floating format toolbar sat **30px below the bottom of the screen** on
+  any note long enough to scroll — `h-full` plus flexbox's automatic
+  `min-height: auto` floored the editor column at its content height. Phone
+  only; three existing toolbar tests held throughout because all three
+  measure the bar relative to its own earlier position.
+
+**So J4 is bigger than "platform chrome".** It still carries safe-area insets
+throughout, `100dvh` on the shell, installability, pull-to-refresh, and
+whether an installed PWA changes J1's answer on routing — and it now also
+carries two surfaces that have a phone entry point with nothing usable behind
+it:
+
+- **The relationship graph.** Nodes measure **2.8px** against a 44px
+  fingertip, the canvas draws no labels by design, and the Summary panel is a
+  fixed `w-64` that leaves the graph **134px of a 390px screen**.
+- **The command palette.** `⌘K` only — no touch route at all, absent from
+  both the phone header and the drawer footer.
+- Smaller: the drawer's four footer buttons (theme, typography, account,
+  language) are **32×32 with no `touch-target`** and are the only route to
+  those panels on a phone; the table row/column handles measure 44×32 and
+  44×24.
+
+Healthy, and not worth re-auditing: the `touch-target` pseudo-element system
+(hit-test it — the 22px pin really is 44px effective, which
+`getBoundingClientRect` cannot see), the tablet two-pane shell, landing, the
+theme picker, the typography panel, the account popover, and no horizontal
+overflow on any surface.
 
 **Nothing blocks anything now that L3 has shipped.** K4 is small enough to
 slot in anywhere.
@@ -1611,7 +1650,7 @@ was needed to start using either.
   constraints they qualify.
 
 
-## J. Mobile — J1, J2a, J2 and J3 SHIPPED; only J4 remains
+## J. Mobile — J1, J2a, J2 and J3 SHIPPED; J4 remains and is wider than first scoped
 
 **The starting point was worse than "cramped".** Measured at 390×844 before
 anything was written: sidebar 240 + note list 320 + two resizers laid out wider
