@@ -59,6 +59,7 @@ export { canRenameTo, canWriteTag, findTagRanges, normalizeTag, parseTags } from
 export type { TagRange } from './tags';
 export {
   buildTitleIndex,
+  findHeadings,
   findLinkRanges,
   normalizeTitle,
   parseLinks,

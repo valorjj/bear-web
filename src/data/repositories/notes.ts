@@ -1,6 +1,6 @@
 import type { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
-import { normalizeTitle, type TitledNote } from '../links';
+import { buildTitleIndex, findHeadings, normalizeTitle, type TitledNote } from '../links';
 import { compareNotes, DEFAULT_NOTE_ORDER, type NoteOrder } from '../order';
 import { newId } from '../ids';
 import { reindexNote } from '../reindex';
@@ -57,6 +57,12 @@ export interface NotesRepository {
   /** Titles of every non-trashed note. What `[[` autocomplete and link-pill resolution match against. */
   allNoteTitles(): Promise<string[]>;
   /**
+   * Headings of the non-trashed note with this title, for the `[[` popover's
+   * `/` mode. Empty when no note matches — never throws, because a query
+   * typed one character at a time names a non-existent note most of the time.
+   */
+  headingsOf(title: string): Promise<string[]>;
+  /**
    * `{ id, title, updatedAt }` for every non-trashed note — what L3's graph
    * needs to place a node and what `buildTitleIndex` needs to resolve a link
    * target. Streams via Dexie's `each()` rather than `toArray()` so the
@@ -71,6 +77,31 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
   const { db, parseTags, parseLinks } = deps;
   const now = deps.now ?? (() => Date.now());
   const generateId = deps.generateId ?? newId;
+
+  /**
+   * `{ id, title, updatedAt }` for every non-trashed note.
+   *
+   * A local function rather than a method the other methods reach through
+   * `this`: the repository is an object literal handed out through a barrel,
+   * and `this` in one of its methods is whatever the call site made it. Two
+   * callers (`allNoteIndex`, `headingsOf`) share the streaming projection
+   * this way without either duplicating it — and duplicating it is the real
+   * hazard, since `each()` rather than `toArray()` is what keeps full note
+   * text out of memory.
+   */
+  async function noteIndex(): Promise<TitledNote[]> {
+    // `each()`, not `toArray()` + `filter`/`map`: the latter briefly holds
+    // every row of the table — full markdown text included — as one array
+    // before projecting it away. `each()` visits one row at a time, so
+    // only the small projection below is ever retained.
+    const result: TitledNote[] = [];
+    await db.notes.each((n) => {
+      if (n.trashedAt === null) {
+        result.push({ id: n.id, title: n.title, updatedAt: n.updatedAt });
+      }
+    });
+    return result;
+  }
 
   /** Named `requireNote`, not `require` — shadowing the CommonJS global invites trouble. */
   async function requireNote(id: string): Promise<Note> {
@@ -350,17 +381,23 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     },
 
     async allNoteIndex() {
-      // `each()`, not `toArray()` + `filter`/`map`: the latter briefly holds
-      // every row of the table — full markdown text included — as one array
-      // before projecting it away. `each()` visits one row at a time, so
-      // only the small projection below is ever retained.
-      const result: TitledNote[] = [];
-      await db.notes.each((n) => {
-        if (n.trashedAt === null) {
-          result.push({ id: n.id, title: n.title, updatedAt: n.updatedAt });
-        }
-      });
-      return result;
+      return noteIndex();
+    },
+
+    async headingsOf(title) {
+      const key = normalizeTitle(title);
+      // `buildTitleIndex` picks the most recently updated note when two share
+      // a title, which is the same note `LinkPill` resolves the link to — so
+      // the popover cannot offer headings from a different note than the one
+      // the finished link will open.
+      const match = buildTitleIndex(await noteIndex()).get(key);
+      if (match === undefined) return [];
+      const note = await db.notes.get(match.id);
+      // Re-checked rather than trusted: `noteIndex` already excludes trashed
+      // notes, but the two reads are not one transaction and a note can be
+      // trashed between them.
+      if (note === undefined || note.trashedAt !== null) return [];
+      return findHeadings(note.text);
     },
   };
 }
