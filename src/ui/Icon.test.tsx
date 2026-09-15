@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   ChevronDown,
   ChevronRight,
+  FileText,
   GripHorizontal,
   GripVertical,
   Hash,
@@ -144,6 +145,12 @@ describe('renderIconMarkup', () => {
     // The tag-autocomplete popover's row glyph (`TagAutocomplete.ts`), copied
     // verbatim like every entry above it and needing the same drift guard.
     ['Hash', Hash],
+    // The link-autocomplete popover's row glyph (`LinkAutocomplete.ts`), same
+    // verbatim copy and same drift guard. `FileText` is the largest entry in
+    // the registry — five shapes, one of them a long rounded path — which is
+    // exactly the kind a hand copy gets subtly wrong, and exactly what this
+    // row renders the real glyph to catch.
+    ['FileText', FileText],
   ])('matches the real %s glyph', (_name, glyph) => {
     const { container: real } = render(<Icon glyph={glyph} />);
 

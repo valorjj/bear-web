@@ -650,6 +650,16 @@ does not as sharply.
   is removed rather than set when nothing is active, because pointing at an
   option id that no longer exists is worse than pointing at nothing.
 
+- **Both popovers' row glyphs are `aria-hidden`, and a row's accessible name
+  is the bare title or tag.** A link row draws `FileText` where a tag row
+  draws `Hash` (`renderIconMarkup`, because a ProseMirror widget cannot render
+  React). The glyph answers "which popover am I in", which a screen reader
+  already has from the listbox's own `aria-label` — labelling it instead would
+  prefix every option's read-out with a word the sighted user never hears.
+  Consequence for a diff: the title must go in its own `<span>` beside the
+  icon, never back into `item.textContent`, which would wipe the icon out of
+  the row entirely.
+
 ## The command palette's combobox contract
 
 - **A DEDICATED `<input role="combobox">` drives a real `<ul role="listbox">`

@@ -4,6 +4,7 @@ import {
   ChevronRight,
   CircleAlert,
   Copy,
+  FileText,
   GripHorizontal,
   GripVertical,
   Hash,
@@ -218,6 +219,26 @@ const ICON_NODES = new Map<LucideIcon, IconNode>([
       ['line', { x1: '4', x2: '20', y1: '15', y2: '15' }],
       ['line', { x1: '10', x2: '8', y1: '3', y2: '21' }],
       ['line', { x1: '16', x2: '14', y1: '3', y2: '21' }],
+    ],
+  ],
+  // The link-autocomplete popover's row glyph (`LinkAutocomplete.ts`), a
+  // `Decoration.widget` for the same reason `Hash` above is: a ProseMirror
+  // widget cannot render React. A DOCUMENT, where a tag row gets a `#` —
+  // the two popovers pick from different kinds of thing, and the glyph is
+  // what says which one you are in before you read a single row.
+  [
+    FileText,
+    [
+      [
+        'path',
+        {
+          d: 'M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z',
+        },
+      ],
+      ['path', { d: 'M14 2v5a1 1 0 0 0 1 1h5' }],
+      ['path', { d: 'M10 9H8' }],
+      ['path', { d: 'M16 13H8' }],
+      ['path', { d: 'M16 17H8' }],
     ],
   ],
   [

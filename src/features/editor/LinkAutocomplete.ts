@@ -4,6 +4,7 @@ import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 
 import { normalizeTitle } from '@/data';
+import { FileText, renderIconMarkup } from '@/ui/Icon';
 
 import { MASK, maskedBlockText } from './blockText';
 
@@ -197,7 +198,25 @@ function renderPopover(
       item.setAttribute('data-link-autocomplete-option', String(index));
       item.setAttribute('aria-selected', String(index === activeIndex));
       item.classList.toggle('is-active', index === activeIndex);
-      item.textContent = title;
+
+      const icon = document.createElement('span');
+      icon.className = 'bear-link-autocomplete-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      // A ProseMirror widget cannot render React, which is why this goes
+      // through `renderIconMarkup` rather than through `Icon` — the same
+      // constraint `TagAutocomplete.ts` documents at its own icon.
+      //
+      // `aria-hidden`, so the row's accessible name stays the bare title.
+      // The glyph says WHICH popover this is (a document, where a tag row
+      // shows a `#`), which is information the screen reader already has
+      // from the listbox's own label.
+      icon.innerHTML = renderIconMarkup(FileText);
+      item.append(icon);
+
+      const text = document.createElement('span');
+      text.textContent = title;
+      item.append(text);
+
       list.appendChild(item);
     });
     popover.append(list);
