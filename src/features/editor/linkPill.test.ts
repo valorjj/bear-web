@@ -171,13 +171,85 @@ describe('link pill decorations', () => {
   });
 });
 
+describe('heading links', () => {
+  function mounted(titles: string[], content: string): HTMLElement {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const editor = new Editor({ extensions: editorExtensions, content, element: container });
+    createdEditors.push(editor);
+    editor.commands.setKnownNoteTitles(titles);
+    return container;
+  }
+
+  it('renders a resolved heading link as note, slash and heading', () => {
+    const container = mounted(['Deploy Checklist'], '<p>See [[Deploy Checklist/Rollback]] now</p>');
+
+    expect(container.querySelector('.bear-link__slash')?.textContent).toBe('/');
+    expect(container.querySelector('.bear-link__heading')?.textContent).toBe('Rollback');
+    const note = container.querySelector(
+      '.bear-link:not(.bear-link__bracket):not(.bear-link__slash):not(.bear-link__heading)',
+    );
+    expect(note?.textContent).toBe('Deploy Checklist');
+  });
+
+  // Nothing in the repo can see a DOUBLED glyph — it is drawn by CSS from a
+  // class — so the count of tail spans is the only thing standing between one
+  // arrow and three.
+  it('marks exactly one span as the tail', () => {
+    const container = mounted(['Deploy Checklist'], '<p>See [[Deploy Checklist/Rollback]] now</p>');
+
+    expect(container.querySelectorAll('.bear-link__tail')).toHaveLength(1);
+    expect(container.querySelector('.bear-link__tail')?.textContent).toBe('Rollback');
+  });
+
+  it('marks the note span as the tail when there is no heading', () => {
+    const container = mounted(['Deploy Checklist'], '<p>See [[Deploy Checklist]] now</p>');
+
+    expect(container.querySelectorAll('.bear-link__tail')).toHaveLength(1);
+    expect(container.querySelector('.bear-link__tail')?.textContent).toBe('Deploy Checklist');
+  });
+
+  it('resolves on the note alone, so an unknown heading still resolves', () => {
+    const container = mounted(['Deploy Checklist'], '<p>See [[Deploy Checklist/Gone]] now</p>');
+
+    expect(container.querySelector('.bear-link')?.getAttribute('data-resolved')).toBe('true');
+  });
+
+  it('gives an unresolved link no parts and no tail', () => {
+    const container = mounted(['Something else'], '<p>See [[Nowhere/Rollback]] now</p>');
+
+    expect(container.querySelectorAll('.bear-link__slash')).toHaveLength(0);
+    expect(container.querySelectorAll('.bear-link__tail')).toHaveLength(0);
+    expect(container.querySelector('.bear-link')?.getAttribute('data-resolved')).toBe('false');
+  });
+
+  it('does not split a note whose own title contains a slash', () => {
+    const container = mounted(['A/B testing'], '<p>See [[A/B testing]] now</p>');
+
+    expect(container.querySelectorAll('.bear-link__slash')).toHaveLength(0);
+    expect(container.querySelector('.bear-link__tail')?.textContent).toBe('A/B testing');
+  });
+
+  it('cuts at the raw offset, not the normalized one', () => {
+    // Two spaces in the title: an index taken from `normalizeTitle`'s output
+    // would land one character early and decorate the wrong span.
+    const container = mounted(
+      ['Deploy Checklist'],
+      '<p>See [[Deploy  Checklist/Rollback]] now</p>',
+    );
+
+    expect(container.querySelector('.bear-link__slash')?.textContent).toBe('/');
+    expect(container.querySelector('.bear-link__heading')?.textContent).toBe('Rollback');
+  });
+});
+
 describe('linkRangeAt', () => {
   it('finds the link covering a position inside it', () => {
     const editor = docFor('<p>a [[Note]] b</p>');
     // '[[Note]]' occupies positions 3..11: paragraph starts at 0, its text at
     // 1, so 'a ' is 1..3 and '[' is at 3.
     const hit = linkRangeAt(editor.state, 5);
-    expect(hit).toEqual({ title: 'note', from: 3, to: 11 });
+    expect(hit).toEqual({ title: 'note', raw: 'Note', from: 3, to: 11 });
     expect(editor.state.doc.textBetween(hit!.from, hit!.to)).toBe('[[Note]]');
   });
 
@@ -343,6 +415,40 @@ describe('link activation', () => {
         configurable: true,
       });
     }
+  });
+
+  it('passes the heading alongside the title', () => {
+    const activated: Array<[string, string | null]> = [];
+    const editor = docFor(
+      '<p>a [[Deploy Checklist/Rollback]] b</p>',
+      buildEditorExtensions({
+        onActivateLink: (title: string, heading: string | null) => {
+          activated.push([title, heading]);
+          return true;
+        },
+      }),
+    );
+    editor.commands.setKnownNoteTitles(['Deploy Checklist']);
+
+    expect(mousedownAt(editor, 6, {}).handled).toBe(true);
+    expect(activated).toEqual([['deploy checklist', 'rollback']]);
+  });
+
+  it('reports no heading for a plain link', () => {
+    const activated: Array<[string, string | null]> = [];
+    const editor = docFor(
+      '<p>a [[Deploy Checklist]] b</p>',
+      buildEditorExtensions({
+        onActivateLink: (title: string, heading: string | null) => {
+          activated.push([title, heading]);
+          return true;
+        },
+      }),
+    );
+    editor.commands.setKnownNoteTitles(['Deploy Checklist']);
+
+    expect(mousedownAt(editor, 6, {}).handled).toBe(true);
+    expect(activated).toEqual([['deploy checklist', null]]);
   });
 
   it('is inert when no callback is injected', () => {

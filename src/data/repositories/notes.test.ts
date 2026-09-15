@@ -566,6 +566,58 @@ describe('notesRepository', () => {
       expect(rebuilt).toEqual(incremental);
     });
 
+    it('counts a heading link as a backlink to the note', async () => {
+      const target = await notes.create('# Deploy Checklist\n\n## Rollback\n');
+      await notes.create('# Release\n\nSee [[Deploy Checklist/Rollback]].');
+
+      const found = await notes.linksTo('Deploy Checklist');
+
+      expect(found).toHaveLength(1);
+      expect(found[0]?.title).toBe('Release');
+      // The target itself must not appear: `reindexNote` drops a note's links
+      // to itself, and this asserts that still holds through the split.
+      expect(found.map((note) => note.id)).not.toContain(target.id);
+    });
+
+    it('counts a plain link and a heading link to one note once each', async () => {
+      await notes.create('# Deploy Checklist\n\n## Rollback\n');
+      await notes.create('# A\n\n[[Deploy Checklist]]');
+      await notes.create('# B\n\n[[Deploy Checklist/Rollback]]');
+
+      expect(await notes.linksTo('Deploy Checklist')).toHaveLength(2);
+    });
+
+    it('counts a note linking to two headings of one note only once', async () => {
+      await notes.create('# Deploy Checklist\n\n## Rollback\n\n## Smoke tests\n');
+      await notes.create(
+        '# A\n\n[[Deploy Checklist/Rollback]] and [[Deploy Checklist/Smoke tests]]',
+      );
+
+      expect(await notes.linksTo('Deploy Checklist')).toHaveLength(1);
+    });
+
+    // The false positive the prefix query would otherwise create: a note whose
+    // TITLE is another note's title plus `/` plus more. The link below names
+    // that second note directly and must not appear under the first.
+    it('does not treat a link to a slash-titled note as a heading link', async () => {
+      await notes.create('# Deploy Checklist\n');
+      await notes.create('# Deploy Checklist/Rollback\n');
+      await notes.create('# C\n\n[[Deploy Checklist/Rollback]]');
+
+      expect(await notes.linksTo('Deploy Checklist')).toHaveLength(0);
+      expect(await notes.linksTo('Deploy Checklist/Rollback')).toHaveLength(1);
+    });
+
+    it('does not mistake a longer title for a heading link', async () => {
+      // `startsWith(key)` without the slash would match this; `startsWith(key + '/')`
+      // does not. The guard is the separator, not the prefix.
+      await notes.create('# Deploy Checklist\n');
+      await notes.create('# Deploy Checklist v2\n');
+      await notes.create('# D\n\n[[Deploy Checklist v2]]');
+
+      expect(await notes.linksTo('Deploy Checklist')).toHaveLength(0);
+    });
+
     it('excludes trashed notes from a backlinks list', async () => {
       const one = await notes.create('One\n\n[[target]]');
       await notes.trash(one.id);
@@ -581,6 +633,44 @@ describe('notesRepository', () => {
       const titles = await notes.allNoteTitles();
       expect(titles).toContain(kept.title);
       expect(titles).not.toContain(tossed.title);
+    });
+  });
+
+  describe('textOf', () => {
+    it('returns the named note markdown', async () => {
+      await notes.create('# Deploy Checklist\n\n## Rollback\n');
+
+      expect(await notes.textOf('deploy checklist')).toBe('# Deploy Checklist\n\n## Rollback\n');
+    });
+
+    it('matches the title the way a link does, ignoring case and spacing', async () => {
+      await notes.create('# Deploy  Checklist\n\nbody\n');
+
+      expect(await notes.textOf('DEPLOY CHECKLIST')).toContain('body');
+    });
+
+    it('returns null for a title no note has', async () => {
+      await notes.create('# Deploy Checklist\n');
+
+      expect(await notes.textOf('nowhere at all')).toBeNull();
+    });
+
+    it('returns null for a trashed note', async () => {
+      const note = await notes.create('# Gone\n\n## Section\n');
+      await notes.trash(note.id);
+
+      expect(await notes.textOf('gone')).toBeNull();
+    });
+
+    it('reads the note a link would actually open', async () => {
+      // Two notes share a title; `buildTitleIndex` resolves to the most
+      // recently updated one, and so must this — otherwise the popover lists
+      // headings from one note and the finished link opens the other.
+      await notes.create('# Duplicate\n\n## Older heading\n');
+      clock += 1000;
+      await notes.create('# Duplicate\n\n## Newer heading\n');
+
+      expect(await notes.textOf('duplicate')).toContain('Newer heading');
     });
   });
 

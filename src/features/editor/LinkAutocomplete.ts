@@ -3,8 +3,8 @@ import { skipTrailingNodeMeta } from '@tiptap/extensions';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 
-import { normalizeTitle } from '@/data';
-import { FileText, renderIconMarkup } from '@/ui/Icon';
+import { normalizeTitle, splitLinkTarget } from '@/data';
+import { FileText, Heading, renderIconMarkup } from '@/ui/Icon';
 
 import { MASK, maskedBlockText } from './blockText';
 
@@ -21,7 +21,12 @@ export interface LinkAutocompleteOptions {
    * `TableHandlesOptions.labels`. A control with blank text would be worse
    * than no control.
    */
-  linkAutocompleteLabels: { listLabel: string; empty: string } | null;
+  linkAutocompleteLabels: {
+    listLabel: string;
+    empty: string;
+    headingListLabel: string;
+    headingEmpty: string;
+  } | null;
 }
 
 export const linkAutocompleteKey = new PluginKey<LinkAutocompleteState>('linkAutocomplete');
@@ -31,6 +36,16 @@ interface LinkAutocompleteState {
    * `setLinkAutocompleteTitles` for why this is a SEPARATE copy from
    * `LinkPill`'s known-title set rather than a shared one. */
   titles: readonly string[];
+  /**
+   * Headings of one note, as fetched for the `/` mode, or `null` before any
+   * fetch has landed.
+   *
+   * Rides plugin state rather than an option for the same reason `titles`
+   * does — options are read once at construction — and carries its own
+   * `title` so a result arriving late, after the reader has backspaced to a
+   * different note, is ignored rather than listed under the wrong one.
+   */
+  headings: { title: string; rows: readonly string[] } | null;
   /** The keyboard-highlighted row, before clamping to however many rows the
    * current query actually matches. */
   activeIndex: number;
@@ -129,8 +144,94 @@ export function matchingTitles(titles: readonly string[], query: string): string
   return [...startsWith, ...contains].slice(0, MAX_RESULTS);
 }
 
+/**
+ * `headings` filtered to `query`, the same shape `matchingTitles` uses: prefix
+ * matches before substring matches, capped, compared through `normalizeTitle`,
+ * and returning the ORIGINAL casing so the inserted link reproduces the
+ * heading exactly as written.
+ *
+ * Deliberately NOT merged with `matchingTitles` into one helper with a flag.
+ * The two are eight lines each and identical today; a shared function that
+ * grows a `mode` parameter the first time one of them needs to differ is
+ * worse than two functions that can diverge honestly.
+ */
+export function matchingHeadings(headings: readonly string[], query: string): string[] {
+  const q = normalizeTitle(query);
+  const startsWith: string[] = [];
+  const contains: string[] = [];
+  for (const heading of headings) {
+    const key = normalizeTitle(heading);
+    if (key.startsWith(q)) startsWith.push(heading);
+    else if (key.includes(q)) contains.push(heading);
+  }
+  return [...startsWith, ...contains].slice(0, MAX_RESULTS);
+}
+
+export interface LinkRows {
+  /** Which list the popover is showing. */
+  mode: 'title' | 'heading';
+  /** The rows themselves, exactly cased. */
+  rows: string[];
+  /** In heading mode, the target note's title, exactly as stored. */
+  title: string | null;
+}
+
+/**
+ * What the popover should list for a query — the ONE place that decision is
+ * made, so the renderer, the keyboard handler, the click handler and the
+ * active-index clamp cannot disagree about how many rows exist.
+ *
+ * The `/` rule itself is not re-implemented here: `splitLinkTarget` owns it,
+ * and `allowEmptyHeading` is what makes `Deploy Checklist/` — slash typed, no
+ * filter yet — mean "that note's headings" rather than an unresolved whole.
+ *
+ * Heading mode with no fetched headings yet yields NO rows rather than
+ * falling back to titles. Falling back would flash the note list for one
+ * frame every time the reader types a slash, and then replace it.
+ */
+export function linkRowsFor(
+  titles: readonly string[],
+  headings: { title: string; rows: readonly string[] } | null,
+  query: string,
+): LinkRows {
+  const byKey = new Map(titles.map((title) => [normalizeTitle(title), title]));
+  const target = splitLinkTarget(query, (candidate) => byKey.has(candidate), {
+    allowEmptyHeading: true,
+  });
+
+  if (target.heading === null) {
+    return { mode: 'title', rows: matchingTitles(titles, query), title: null };
+  }
+
+  const exact = byKey.get(target.title) ?? null;
+  const loaded = headings !== null && headings.title === target.title ? headings.rows : null;
+  return {
+    mode: 'heading',
+    rows: loaded === null ? [] : matchingHeadings(loaded, target.heading),
+    title: exact,
+  };
+}
+
+/**
+ * The normalized title whose headings the popover needs right now, or `null`.
+ *
+ * `RichEditor` watches this to decide when to fetch. It deliberately reports
+ * the title even when headings for it are already loaded: the effect that
+ * consumes it keys on the value, so an unchanged title re-fetches nothing.
+ */
+export function headingTargetTitle(state: EditorState): string | null {
+  const match = linkAutocompleteMatchAt(state);
+  if (match === null) return null;
+  const value = linkAutocompleteKey.getState(state);
+  if (value === undefined) return null;
+
+  const rows = linkRowsFor(value.titles, value.headings, match.query);
+  return rows.mode === 'heading' && rows.title !== null ? normalizeTitle(rows.title) : null;
+}
+
 type Meta =
   | { type: 'titles'; titles: readonly string[] }
+  | { type: 'headings'; title: string; rows: readonly string[] }
   | { type: 'move'; direction: 'next' | 'prev' | 'first' | 'last' }
   | { type: 'dismiss'; from: number };
 
@@ -165,10 +266,12 @@ function optionId(from: number, index: number): string {
 
 function renderPopover(
   labels: NonNullable<LinkAutocompleteOptions['linkAutocompleteLabels']>,
-  matches: readonly string[],
+  rows: LinkRows,
   activeIndex: number,
   from: number,
 ): HTMLElement {
+  const matches = rows.rows;
+  const heading = rows.mode === 'heading';
   const container = document.createElement('div');
   container.className = 'bear-link-autocomplete';
   container.contentEditable = 'false';
@@ -181,14 +284,17 @@ function renderPopover(
   list.id = listboxId(from);
   list.className = 'bear-link-autocomplete-list';
   list.setAttribute('role', 'listbox');
-  list.setAttribute('aria-label', labels.listLabel);
+  // The listbox renames itself, so a screen reader hears WHICH list this is.
+  // That is also why the row glyphs stay `aria-hidden`: the distinction is
+  // carried here, once, rather than prefixed onto every option.
+  list.setAttribute('aria-label', heading ? labels.headingListLabel : labels.listLabel);
   list.tabIndex = -1;
 
   if (matches.length === 0) {
     list.hidden = true;
     const emptyEl = document.createElement('div');
     emptyEl.className = 'bear-link-autocomplete-empty';
-    emptyEl.textContent = labels.empty;
+    emptyEl.textContent = heading ? labels.headingEmpty : labels.empty;
     popover.append(list, emptyEl);
   } else {
     matches.forEach((title, index) => {
@@ -210,7 +316,9 @@ function renderPopover(
       // The glyph says WHICH popover this is (a document, where a tag row
       // shows a `#`), which is information the screen reader already has
       // from the listbox's own label.
-      icon.innerHTML = renderIconMarkup(FileText);
+      // A heading glyph in `/` mode, a document otherwise: the two lists look
+      // alike by design, so the glyph is what says which one you are reading.
+      icon.innerHTML = renderIconMarkup(heading ? Heading : FileText);
       item.append(icon);
 
       const text = document.createElement('span');
@@ -230,8 +338,20 @@ function renderPopover(
  * stored title, closed and bracketed. Never the typed query text — the
  * whole point of this control is offering a title the user does not have to
  * type (or spell) exactly. */
-function insertLink(view: EditorView, match: LinkAutocompleteMatch, title: string): void {
-  const tr = view.state.tr.insertText(`[[${title}]]`, match.from, match.to);
+function insertLink(
+  view: EditorView,
+  match: LinkAutocompleteMatch,
+  rows: LinkRows,
+  index: number,
+): void {
+  const chosen = rows.rows[index];
+  if (chosen === undefined) return;
+  // In heading mode BOTH halves come from storage, never from what was typed:
+  // the note title from the plugin's own list and the heading from the fetched
+  // set, so `[[deploy check/roll]]` completes to `[[Deploy Checklist/Rollback]]`
+  // with the casing each one actually has.
+  const text = rows.mode === 'heading' && rows.title !== null ? `${rows.title}/${chosen}` : chosen;
+  const tr = view.state.tr.insertText(`[[${text}]]`, match.from, match.to);
   view.dispatch(tr);
   view.focus();
 }
@@ -306,6 +426,22 @@ export const LinkAutocomplete = Extension.create<LinkAutocompleteOptions>({
           }
           return true;
         },
+
+      setLinkAutocompleteHeadings:
+        (title: string, rows: string[]) =>
+        ({ tr, dispatch }) => {
+          if (dispatch) {
+            // `skipTrailingNodeMeta` for the same reason the command above
+            // carries it: meta-only, and `TrailingNode.appendTransaction` is
+            // not gated on `docChanged`.
+            dispatch(
+              tr
+                .setMeta(linkAutocompleteKey, { type: 'headings', title, rows })
+                .setMeta(skipTrailingNodeMeta, true),
+            );
+          }
+          return true;
+        },
     };
   },
 
@@ -319,17 +455,22 @@ export const LinkAutocomplete = Extension.create<LinkAutocompleteOptions>({
         key: linkAutocompleteKey,
 
         state: {
-          init: () => ({ titles: [], activeIndex: 0, dismissedFrom: null }),
+          init: () => ({ titles: [], headings: null, activeIndex: 0, dismissedFrom: null }),
           apply(tr, value, _oldState, newState) {
             const meta = tr.getMeta(linkAutocompleteKey) as Meta | undefined;
 
             if (meta?.type === 'titles') return { ...value, titles: meta.titles };
 
+            if (meta?.type === 'headings') {
+              return { ...value, headings: { title: meta.title, rows: meta.rows } };
+            }
+
             if (meta?.type === 'dismiss') return { ...value, dismissedFrom: meta.from };
 
             if (meta?.type === 'move') {
               const match = linkAutocompleteMatchAt(newState);
-              const matches = match === null ? [] : matchingTitles(value.titles, match.query);
+              const matches =
+                match === null ? [] : linkRowsFor(value.titles, value.headings, match.query).rows;
               if (matches.length === 0) return value;
               const count = matches.length;
               let next: number;
@@ -371,13 +512,13 @@ export const LinkAutocomplete = Extension.create<LinkAutocompleteOptions>({
             if (pluginState === undefined) return DecorationSet.empty;
             if (pluginState.dismissedFrom === match.from) return DecorationSet.empty;
 
-            const matches = matchingTitles(pluginState.titles, match.query);
-            const activeIndex = clampedActiveIndex(pluginState.activeIndex, matches.length);
+            const rows = linkRowsFor(pluginState.titles, pluginState.headings, match.query);
+            const activeIndex = clampedActiveIndex(pluginState.activeIndex, rows.rows.length);
 
             return DecorationSet.create(state.doc, [
               Decoration.widget(
                 match.to,
-                () => renderPopover(labels, matches, activeIndex, match.from),
+                () => renderPopover(labels, rows, activeIndex, match.from),
                 {
                   side: 1,
                   ignoreSelection: true,
@@ -395,7 +536,8 @@ export const LinkAutocomplete = Extension.create<LinkAutocompleteOptions>({
             if (pluginState === undefined) return false;
             if (pluginState.dismissedFrom === match.from) return false;
 
-            const matches = matchingTitles(pluginState.titles, match.query);
+            const rows = linkRowsFor(pluginState.titles, pluginState.headings, match.query);
+            const matches = rows.rows;
 
             switch (event.key) {
               case 'Escape':
@@ -430,9 +572,8 @@ export const LinkAutocomplete = Extension.create<LinkAutocompleteOptions>({
               case 'Enter': {
                 if (matches.length === 0) return false;
                 const activeIndex = clampedActiveIndex(pluginState.activeIndex, matches.length);
-                const title = matches[activeIndex];
-                if (title === undefined) return false;
-                insertLink(view, match, title);
+                if (matches[activeIndex] === undefined) return false;
+                insertLink(view, match, rows, activeIndex);
                 return true;
               }
 
@@ -455,10 +596,13 @@ export const LinkAutocomplete = Extension.create<LinkAutocompleteOptions>({
                 const pluginState = linkAutocompleteKey.getState(view.state);
                 if (pluginState === undefined) return true;
 
-                const matches = matchingTitles(pluginState.titles, match.query);
-                const index = Number(option.getAttribute('data-link-autocomplete-option'));
-                const title = matches[index];
-                if (title !== undefined) insertLink(view, match, title);
+                const rows = linkRowsFor(pluginState.titles, pluginState.headings, match.query);
+                insertLink(
+                  view,
+                  match,
+                  rows,
+                  Number(option.getAttribute('data-link-autocomplete-option')),
+                );
                 return true;
               }
 
@@ -507,7 +651,7 @@ export const LinkAutocomplete = Extension.create<LinkAutocompleteOptions>({
               return;
             }
 
-            const matches = matchingTitles(pluginState.titles, match.query);
+            const matches = linkRowsFor(pluginState.titles, pluginState.headings, match.query).rows;
             const activeIndex = clampedActiveIndex(pluginState.activeIndex, matches.length);
 
             view.dom.setAttribute('role', 'combobox');
@@ -556,6 +700,15 @@ declare module '@tiptap/core' {
        * has to differ.
        */
       setLinkAutocompleteTitles: (titles: string[]) => ReturnType;
+      /**
+       * Hands the popover one note's headings for its `/` mode.
+       *
+       * Carries the NOTE TITLE it fetched for, not just the rows: the fetch
+       * is asynchronous, and a result landing after the reader has backspaced
+       * to a different note must be ignored rather than listed under the
+       * wrong one.
+       */
+      setLinkAutocompleteHeadings: (title: string, rows: string[]) => ReturnType;
     };
   }
 }

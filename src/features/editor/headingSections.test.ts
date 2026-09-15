@@ -2,7 +2,13 @@ import { Editor } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
 import { editorExtensions } from './extensions';
-import { headingSections, hiddenRangesFor, serializeFoldKey } from './headingSections';
+import {
+  foldKeyOf,
+  headingSections,
+  hiddenRangesFor,
+  keysRevealing,
+  serializeFoldKey,
+} from './headingSections';
 
 /*
  * Fixtures carry a leading `<p>Title</p>` on purpose. A note's FIRST block is
@@ -142,6 +148,55 @@ describe('the title line', () => {
     // `Real` must still stop at the LATER h1, not run past it because the
     // title was removed from the list the end-search walks.
     expect(real.end).toBe(later.pos);
+    editor.destroy();
+  });
+});
+
+describe('keysRevealing', () => {
+  const keyFor = (editor: Editor, text: string) =>
+    serializeFoldKey(foldKeyOf(headingSections(editor.state.doc).find((s) => s.text === text)!));
+  const posOf = (editor: Editor, text: string) =>
+    headingSections(editor.state.doc).find((s) => s.text === text)!.pos;
+
+  it('drops the fold hiding the position', () => {
+    const editor = docFor('<p>Title</p><h2>One</h2><p>body</p>');
+    const one = keyFor(editor, 'One');
+    const body = posOf(editor, 'One') + 1;
+
+    expect(keysRevealing(editor.state.doc, [one], body)).toEqual([]);
+    editor.destroy();
+  });
+
+  /**
+   * The reason this is not a one-line filter at the call site. Folding an h2
+   * hides its h3s, so the heading a link targets can be invisible because of a
+   * section two levels above it — removing only the target's own fold would
+   * scroll to a line that is still `display: none`.
+   */
+  it('drops an ANCESTOR fold that hides the target heading itself', () => {
+    const editor = docFor('<p>Title</p><h2>One</h2><h3>Two</h3><p>body</p>');
+    const one = keyFor(editor, 'One');
+
+    expect(keysRevealing(editor.state.doc, [one], posOf(editor, 'Two'))).toEqual([]);
+    editor.destroy();
+  });
+
+  it('keeps folds that hide nothing relevant', () => {
+    const editor = docFor('<p>Title</p><h2>One</h2><p>a</p><h2>Three</h2><p>b</p>');
+    const three = keyFor(editor, 'Three');
+
+    expect(keysRevealing(editor.state.doc, [three], posOf(editor, 'One'))).toEqual([three]);
+    editor.destroy();
+  });
+
+  it('drops a fold on the target section itself, so its body is visible', () => {
+    // The target HEADING is visible when its own section is folded — only its
+    // body is hidden — but arriving at a collapsed heading with nothing under
+    // it reads as a broken link, so this fold goes too.
+    const editor = docFor('<p>Title</p><h2>One</h2><p>body</p>');
+    const one = keyFor(editor, 'One');
+
+    expect(keysRevealing(editor.state.doc, [one], posOf(editor, 'One'))).toEqual([]);
     editor.destroy();
   });
 });

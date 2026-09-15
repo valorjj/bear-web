@@ -18,7 +18,11 @@ tokens or the `.bear-tag` rules in `src/styles/editor.css`, and the suites
 `handleDOMEvents.mousedown`), `AppShell.handleActivateLink`, and
 `linkPill.test.ts` — the link pill's activation is a deliberate copy of this
 file's contract, not an independent design. Also `tagSyntaxDecorations` and
-`linkSyntaxDecorations`, the `bear-tag__hash` / `bear-link__bracket` classes,
+`linkSyntaxDecorations`, the `bear-tag__hash` / `bear-link__bracket` /
+`bear-link__slash` / `bear-link__heading` / `bear-link__tail` classes,
+`src/data/links/splitLinkTarget.ts`, `src/features/editor/HeadingReveal.ts`,
+`keysRevealing` in `headingSections.ts`, `AppShell`'s `reveal` state and
+`NoteEditor`'s `foldsRestored`,
 the `--bear-tag-icon` and `--bear-link-icon` tokens, and any selector anywhere that counts
 `.bear-tag` or `.bear-link` elements. Also `src/features/editor/TagAutocomplete.ts`
 (`tagAutocompleteMatchAt`, `matchingTags`, `insertTag`, `openRows`, `openFrom`)
@@ -493,6 +497,98 @@ prose rather than as emphasis on it.
   the row would have passed while measuring a combination the app does not
   render. A link is `accent` on `bg`, already checked at 4.5 — stricter than
   the 3.0 removed.
+
+## Heading links: `[[Note/Heading]]`
+
+Added 2026-09-15, sub-project U. Spec:
+`docs/superpowers/specs/2026-09-15-u-heading-links-design.md`.
+
+- **`splitLinkTarget` is the only place the `/` rule exists, and its first
+  branch must stay first.** The whole inner text is tried as a title BEFORE
+  any split, so a note genuinely titled `A/B testing` resolves as itself
+  rather than as note `A` with heading `B testing`. Titles containing a slash
+  are ordinary (`TCP/IP`, `2026/09/15`). Failing that, it walks the slashes
+  right-to-left and takes the LONGEST prefix naming a real note — so a heading
+  may itself contain a slash, which is the opposite of the intuitive reading
+  and is pinned by a test.
+
+- **It scans the RAW text and normalizes each candidate as it goes, never the
+  normalized string.** `normalizeTitle` lowercases and collapses whitespace,
+  so an index taken from its output does not address the same character in the
+  raw text — and `slash` exists precisely so the pill can cut the text it is
+  decorating. A double-spaced title is the case that catches this.
+
+- **Resolution reads the NOTE alone; the heading never makes a link look
+  broken.** A heading renamed or deleted since the link was written opens the
+  note at the top and costs the reader nothing else. This is why there is no
+  heading index, no new Dexie table and no migration — the alternative was
+  put to the user and declined.
+
+- **Exactly ONE span carries `bear-link__tail`, and the `::after` glyph hangs
+  off that class.** A resolved heading link renders as three content spans
+  (note, slash, heading), so the older `:not(.bear-link__bracket)` selector
+  matched every one of them and would have drawn three arrows. Nothing in the
+  repo can SEE a doubled glyph — it is painted by CSS off a class — so
+  `linkPill.test.ts` counts tail spans instead, and that count was
+  demonstrated failing against a tail widened to the whole content.
+
+- **The index is unchanged and stores the RAW target.** `parseLinks`,
+  `reindexNote` and the `noteLinks` schema are untouched; `notes.linksTo`
+  gains a `startsWith(key + '/')` query beside its exact one, and
+  `buildGraph` splits before its `byTitle.get`. Splitting at index time was
+  rejected because it would make a note's derived rows depend on OTHER notes
+  existing. The separator is part of the prefix on purpose — `startsWith(key)`
+  alone also matches a note titled `Deploy Checklist v2`.
+
+- **A heading link into a note that does NOT exist still makes one graph ghost
+  per distinct target.** Splitting requires a known title and a missing note
+  has none. Unchanged from before U, pinned by a test, and recorded because
+  the opposite is what a reader expects.
+
+- **The reveal travels as a nonce-carrying prop, not through the editor
+  handle.** `AppShell` keys the editor by note id, so following a link to
+  another note remounts it and the target editor does not exist at click time.
+  A read-once-at-mount prop would still be enough for that case — but a link
+  to a heading in the note you are ALREADY in remounts nothing, and without a
+  changing value there is nothing for the effect to react to. **A single-click
+  e2e test cannot see this**: it passed against an effect keyed on the heading
+  text. The test follows the same link twice, with a scroll between.
+
+- **`NoteEditor` gates `revealHeading` on `foldsRestored`, and the sequencing
+  is load-bearing.** The persisted fold restore is ASYNCHRONOUS, so without
+  the gate the order is: reveal unfolds the target (against an empty fold set,
+  removing nothing), then the restore lands and folds it straight back. The
+  link then opens the right note at a collapsed heading — the exact "reads as
+  broken" failure the unfold exists to prevent. Found by e2e; no unit test can
+  see it, because jsdom neither lays out nor scrolls.
+
+- **`keysRevealing` drops ANCESTOR folds too**, and tests the range
+  `pos`..`end` rather than `contentStart`..`end`: a folded h2 hides its h3s,
+  and a section's own fold leaves its heading visible while hiding the body —
+  arriving at a collapsed heading with nothing under it reads as a broken
+  link.
+
+- **A folded section's text is still in the DOM (`display: none`), so
+  Playwright's `toContainText` cannot see a fold at all.** Written that way,
+  the unfold test passed both against a fold that never happened and against
+  an unfold that never happened — two vacuous assertions in one test. Assert
+  `toBeVisible` / `toBeHidden` on the body paragraph.
+
+- **There is ONE heading reader, and it goes through the real parser.**
+  `noteHeadings.ts` derives headings with `parseMarkdownDoc` plus
+  `headingSections`; `notes.textOf` hands back text and the data layer knows
+  nothing about heading grammar. A regex scanner in `src/data/` existed first
+  and an agreement test caught it on its first run: `headingSections` reports
+  a heading as RENDERED (`node.textContent`), the scanner reported it as
+  WRITTEN, so `## Some **bold** step` would have been offered by the popover,
+  written into the link, and never found by the navigator. Do not reintroduce
+  a second reader "for speed".
+
+- **Clicking a pill needs `data-resolved="true"` waited for, not assumed.**
+  The known-title set reaches the plugin from an effect after
+  `notes.allNoteTitles()` resolves, so a pill is briefly unresolved and a
+  click then places a caret instead of navigating — which presents as
+  Playwright's "element is not stable".
 
 - **`white-space: nowrap` on the pill is load-bearing, not tidying.** The
   glyph is drawn by the name span's `::before`, and

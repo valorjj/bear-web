@@ -1001,7 +1001,16 @@
 }
 
 /*
- * The glyph, after the last character of the title rather than before the
+ * The `/` between a note and a heading. Dimmed rather than accented so the eye
+ * finds the seam without the link reading as two separate objects — it is one
+ * destination, more precisely named.
+ */
+.ProseMirror .bear-link__slash {
+  color: var(--bear-faint);
+}
+
+/*
+ * The glyph, after the last character of the link rather than before the
  * first: a leading mark indents the link text, so a link that starts a line
  * would sit out of step with the paragraph above it. `vertical-align` raises
  * it to the top-right the way a footnote marker sits, which is what keeps it
@@ -1011,8 +1020,16 @@
  * above for free and inverts with the theme — the same mechanism as
  * `.bear-tag`'s `::before`, and the reason neither glyph needs a token of its
  * own per theme.
+ *
+ * `.bear-link__tail` rather than `:not(.bear-link__bracket)`, which is what
+ * this selector was until heading links existed. A `[[Note/Heading]]` renders
+ * as THREE content spans — note, slash, heading — and the old selector matched
+ * every one of them, so the arrow would be drawn three times. Exactly one span
+ * carries the tail class (`linkDecorations`), and `linkPill.test.ts` counts
+ * them, because nothing in the repo can see a doubled glyph: it is painted by
+ * CSS off a class.
  */
-.ProseMirror .bear-link[data-resolved='true']:not(.bear-link__bracket)::after {
+.ProseMirror .bear-link[data-resolved='true'].bear-link__tail::after {
   content: '';
   display: inline-block;
   inline-size: 0.68em;
@@ -1063,6 +1080,44 @@
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 0.15em;
+}
+
+/*
+ * The landing flash after a `[[Note/Heading]]` link is followed.
+ *
+ * `--bear-tag-fill` rather than a colour of its own: this is the same
+ * "something is marked here" weight the pills carry, and a second fill token
+ * would have to be tuned across all sixteen themes to say the same thing.
+ *
+ * The animation is `forwards` and the decoration is removed when it ends
+ * (`REVEAL_MS` matches this duration), which is what lets a SECOND follow of
+ * the same link flash again instead of re-applying a class to an element whose
+ * animation has already finished.
+ */
+.ProseMirror .bear-heading-revealed {
+  border-radius: var(--bear-radius-sm);
+  animation: bear-heading-reveal 1s ease-out forwards;
+}
+
+@keyframes bear-heading-reveal {
+  from {
+    background-color: var(--bear-tag-fill-strong);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+/*
+ * Reduced motion gets the landing mark without the fade — removing the
+ * animation entirely would leave nothing at all to show where the link
+ * landed, which is the one thing this decoration exists to do.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ProseMirror .bear-heading-revealed {
+    animation: none;
+    background-color: var(--bear-tag-fill);
+  }
 }
 
 /*

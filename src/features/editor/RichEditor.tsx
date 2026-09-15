@@ -3,7 +3,7 @@ import { EditorContent, type Editor, useEditor, useEditorState } from '@tiptap/r
 import { useLiveQuery } from 'dexie-react-hooks';
 import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
 
-import { notes } from '@/data';
+import { normalizeTitle, notes } from '@/data';
 import { ExportMenu, type ExportFormat } from '@/features/export';
 import { useT } from '@/i18n';
 
@@ -13,6 +13,10 @@ import type { ContextMenuRequest } from './ContextMenu';
 import { EMPTY_FLAGS, editorFlagsSelector } from './editorState';
 import { EditorContextMenu, type ContextMenuAction } from './EditorContextMenu';
 import { buildEditorExtensions } from './extensions';
+import { headingTargetTitle } from './LinkAutocomplete';
+import { noteHeadings } from './noteHeadings';
+import { foldedKeys } from './HeadingFold';
+import { headingSections, keysRevealing } from './headingSections';
 import { CalloutMenu } from './CalloutMenu';
 import { HeadingMenu } from './HeadingMenu';
 import { HighlightMenu } from './HighlightMenu';
@@ -82,7 +86,14 @@ export interface RichEditorProps {
    * placing the caret, which is what an unresolved link does — same
    * contract as `onActivateTag`.
    */
-  onActivateLink?: (title: string) => boolean;
+  onActivateLink?: (title: string, heading: string | null) => boolean;
+  /**
+   * A heading to reveal after a `[[Note/Heading]]` link is followed. The
+   * `nonce` changes on every follow, so the same heading can be revealed
+   * twice — see `AppShell`'s own comment for why a read-once-at-mount prop
+   * (the shape `initialMarkdown` and `autoFocus` use) is not enough here.
+   */
+  revealHeading?: { text: string; nonce: number };
   /** Normalized tag keys the editor's autocomplete suggests from. */
   tagKeys?: string[];
   /**
@@ -168,6 +179,7 @@ export function RichEditor({
   updatedAt,
   onActivateTag,
   onActivateLink,
+  revealHeading,
   tagKeys,
   onExport,
   onPublish,
@@ -348,7 +360,9 @@ export function RichEditor({
       // `undefined` to a falsy-but-not-`false` value would read as "declined"
       // for every case, including a successful one.
       onActivateLink:
-        onActivateLink === undefined ? null : (title) => activateLinkRef.current?.(title) === true,
+        onActivateLink === undefined
+          ? null
+          : (title, heading) => activateLinkRef.current?.(title, heading) === true,
       linkActivateHint: t('editor.linkPill.hint'),
       // Unlike `onActivate`, this is unconditionally wired: the level menu is
       // a built-in editor affordance, not an opt-in prop the app may omit, so
@@ -449,6 +463,8 @@ export function RichEditor({
       linkAutocompleteLabels: {
         listLabel: t('editor.linkAutocomplete.listLabel'),
         empty: t('editor.linkAutocomplete.empty'),
+        headingListLabel: t('editor.linkAutocomplete.headingListLabel'),
+        headingEmpty: t('editor.linkAutocomplete.headingEmpty'),
       },
       // Same shape as `linkAutocompleteLabels` right above it: the labels
       // half of the contract only, read once at mount. The suggested KEYS
@@ -551,6 +567,93 @@ export function RichEditor({
     // the two never drift out of sync with each other.
     editor.commands.setLinkAutocompleteTitles(noteTitles);
   }, [editor, noteTitles]);
+
+  /**
+   * The note whose headings the `[[` popover is asking for, or `null`.
+   *
+   * Read through `useEditorState` rather than from a transaction handler,
+   * because this has to re-render React: `shouldRerenderOnTransaction`
+   * defaults to `false` in Tiptap v3, so a value read during render would be
+   * whatever was true the last time React ran for a reason of its own. Same
+   * rule as the formatting flags above — see
+   * `docs/rulings/markdown-and-schema.md`.
+   */
+  const headingTarget = useEditorState({
+    editor,
+    selector: ({ editor: current }) =>
+      current === null ? null : headingTargetTitle(current.state),
+  });
+
+  useEffect(() => {
+    if (editor === null || headingTarget === null || headingTarget === undefined) return;
+
+    // Guarded on BOTH flags, not just one: `cancelled` covers the reader
+    // typing on past this note, and `isDestroyed` covers the editor being
+    // unmounted (a note switch) while the read is in flight — dispatching
+    // into a destroyed view throws.
+    let cancelled = false;
+    void notes.textOf(headingTarget).then((text) => {
+      if (cancelled || editor.isDestroyed) return;
+      editor.commands.setLinkAutocompleteHeadings(
+        headingTarget,
+        text === null ? [] : noteHeadings(text),
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editor, headingTarget]);
+
+  /**
+   * Lands a followed `[[Note/Heading]]` link: unfold, scroll, flash.
+   *
+   * Keyed on the whole prop, whose NONCE changes on every follow — following
+   * the same link twice must land twice, and in the same-note case nothing
+   * else about this value changes. See `AppShell`'s comment on why the nonce
+   * exists at all.
+   */
+  useEffect(() => {
+    if (editor === null || revealHeading === undefined) return;
+
+    const section = headingSections(editor.state.doc).find(
+      (candidate) => normalizeTitle(candidate.text) === revealHeading.text,
+    );
+    // A heading renamed or deleted since the link was written costs the reader
+    // the scroll and nothing else — the note is already open. This is the
+    // spec's answer to a stale heading, and the reason no heading index
+    // exists to make such a link look broken instead.
+    if (section === undefined) return;
+
+    // TWO separate commands, never one dispatching the other: a
+    // `view.dispatch` inside a command body conflicts with the transaction
+    // that command already opened and throws `RangeError: Applying a
+    // mismatched transaction` (CLAUDE.md).
+    editor.commands.setHeadingFolds(
+      keysRevealing(editor.state.doc, foldedKeys(editor.state), section.pos),
+    );
+    editor.commands.revealHeading(revealHeading.text);
+
+    // `block: 'start'` rather than `scrollIntoView()`: the latter scrolls the
+    // MINIMUM distance, which parks a heading that was below the fold at the
+    // very bottom of the pane — technically visible, and useless for reading
+    // the section that follows it.
+    //
+    // Read after the two commands above, not before: unfolding changes what
+    // is laid out, and a node measured while its ancestors were still
+    // `display: none` scrolls to the wrong place.
+    //
+    // The `typeof` guard is not defensive noise: JSDOM implements no
+    // `scrollIntoView` AT ALL — the method is absent, not a stub — so without
+    // it this effect throws `node.scrollIntoView is not a function` inside a
+    // passive effect, which React surfaces as an uncaught error and which
+    // took out every `AppShell` test that follows a heading link. Same shape
+    // as the `matchMedia` gap CLAUDE.md records.
+    const node = editor.view.nodeDOM(section.pos);
+    if (node instanceof HTMLElement && typeof node.scrollIntoView === 'function') {
+      node.scrollIntoView({ block: 'start' });
+    }
+  }, [editor, revealHeading]);
 
   // Rides a command rather than an option for the same reason the note-title
   // list does: options are read once at mount, and this list changes while

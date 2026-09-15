@@ -650,6 +650,13 @@ does not as sharply.
   is removed rather than set when nothing is active, because pointing at an
   option id that no longer exists is worse than pointing at nothing.
 
+- **In `/` mode the LISTBOX renames itself, and that is what keeps the row
+  glyphs `aria-hidden`.** `aria-label` becomes `editor.linkAutocomplete.headingListLabel`
+  and the empty state `…headingEmpty`, so which list is open is announced
+  once, at the listbox, rather than prefixed onto every option. The glyph is
+  lucide's plain `Heading`, not `Heading1`: the popover lists headings of
+  every level, and a numeral would claim a level the row does not have.
+
 - **Both popovers' row glyphs are `aria-hidden`, and a row's accessible name
   is the bare title or tag.** A link row draws `FileText` where a tag row
   draws `Hash` (`renderIconMarkup`, because a ProseMirror widget cannot render

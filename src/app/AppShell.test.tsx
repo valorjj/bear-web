@@ -24,6 +24,13 @@ const capturedActivateTag = vi.hoisted(() => ({
   current: undefined as ((tag: string) => boolean) | undefined,
 }));
 
+const capturedActivateLink = vi.hoisted(() => ({
+  current: undefined as ((title: string, heading: string | null) => boolean) | undefined,
+}));
+
+/** Every `revealHeading` prop `AppShell` has rendered, newest last. */
+const revealHistory = vi.hoisted(() => [] as Array<{ text: string; nonce: number } | undefined>);
+
 // Every `scope` value `AppShell` has ever rendered with, in order. A guard
 // that sets a scope and lets the vanished-tag effect revert it a moment
 // later is NOT the same as a guard that never sets it — but by the time a
@@ -62,10 +69,17 @@ vi.mock('@/features/notes', async (importOriginal) => {
   function TestNoteEditor(props: NoteEditorProps) {
     useEffect(() => {
       capturedActivateTag.current = props.onActivateTag;
+      capturedActivateLink.current = props.onActivateLink;
       return () => {
         capturedActivateTag.current = undefined;
+        capturedActivateLink.current = undefined;
       };
-    }, [props.onActivateTag]);
+    }, [props.onActivateTag, props.onActivateLink]);
+    // Recorded on EVERY render, not from an effect keyed on the value: what
+    // the heading tests need to see is that the prop CHANGED between two
+    // follows of the same link, and an effect that de-duplicates by identity
+    // is exactly what would hide a nonce that never moved.
+    revealHistory.push(props.revealHeading);
     return <actual.NoteEditor {...props} />;
   }
 
@@ -243,6 +257,9 @@ describe('AppShell', () => {
 });
 
 beforeEach(async () => {
+  // Cleared per test for the same reason the tables are: a history that leaks
+  // between tests makes "the newest entry" mean the previous test's render.
+  revealHistory.length = 0;
   await db.open();
   // `settings` too, from A onward: the note-list sort and preview density are
   // durable preferences, so a test that changes one would otherwise leak it
@@ -1671,5 +1688,130 @@ describe('command palette', () => {
     // appeared would pass against an implementation that deleted first.
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
     expect(await notes.get(note.id)).toBeDefined();
+  });
+});
+
+describe('following a [[Note/Heading]] link', () => {
+  /**
+   * Invokes the exact `onActivateLink` prop `AppShell` supplied to the mounted
+   * `NoteEditor`, the same way `activateTag` does and for the same reason: the
+   * real gesture is a click resolved through `posAtCoords`, which jsdom cannot
+   * answer because it has no layout engine.
+   */
+  async function activateLink(title: string, heading: string | null): Promise<boolean> {
+    // Waited for rather than read once. `handleActivateLink` is a fresh
+    // closure on every `AppShell` render, so the capturing effect re-runs
+    // constantly — cleanup clears the ref, and the re-set lands in the NEXT
+    // passive-effect flush. Reading it synchronously after a `waitFor` lands
+    // in that window often enough to fail a different test on each run, which
+    // reads as a flake in whichever test happened to catch it.
+    await waitFor(() => expect(capturedActivateLink.current).toBeDefined());
+    const activate = capturedActivateLink.current;
+    if (activate === undefined) throw new Error('activateLink: no NoteEditor is mounted');
+    let answer: boolean | undefined;
+    await act(async () => {
+      answer = activate(title, heading);
+    });
+    return answer!;
+  }
+
+  /** The most recent `revealHeading` prop rendered. */
+  const currentReveal = () => revealHistory[revealHistory.length - 1];
+
+  it('passes the clicked heading down to the editor', async () => {
+    await notes.create('# Target\n\n## Section\n\nbody');
+    await notes.create('# Source\n\nsee [[Target/Section]]');
+
+    renderShell();
+    await userEvent.click(await screen.findByRole('button', { name: /^Source\b/ }));
+
+    expect(await activateLink('target', 'section')).toBe(true);
+
+    await waitFor(() => expect(currentReveal()?.text).toBe('section'));
+  });
+
+  it('passes nothing down for a link with no heading', async () => {
+    await notes.create('# Target\n\nbody');
+    await notes.create('# Source\n\nsee [[Target]]');
+
+    renderShell();
+    await userEvent.click(await screen.findByRole('button', { name: /^Source\b/ }));
+
+    expect(await activateLink('target', null)).toBe(true);
+
+    await waitFor(() => expect(currentReveal()).toBeUndefined());
+  });
+
+  /**
+   * The case the nonce exists for, and the one a reviewer is least likely to
+   * try by hand: the target note is ALREADY selected, so nothing remounts and
+   * nothing about the prop changes except the nonce. Without it there is
+   * nothing for the editor's effect to react to and the second follow does
+   * nothing at all.
+   */
+  it('changes the nonce when the same link is followed twice in one note', async () => {
+    await notes.create('# Target\n\n## Section\n\nbody\n\nsee [[Target/Section]]');
+
+    renderShell();
+    await userEvent.click(await screen.findByRole('button', { name: /^Target\b/ }));
+
+    expect(await activateLink('target', 'section')).toBe(true);
+    await waitFor(() => expect(currentReveal()?.text).toBe('section'));
+    const first = currentReveal()?.nonce;
+
+    expect(await activateLink('target', 'section')).toBe(true);
+
+    await waitFor(() => expect(currentReveal()?.nonce).not.toBe(first));
+    expect(currentReveal()?.text).toBe('section');
+  });
+
+  /**
+   * The assertion has to be about RE-OPENING the target, not about leaving it.
+   *
+   * Leaving is already covered by the render guard (`reveal.id ===
+   * selectedNote.id`), so a test that only moved away passed with the
+   * clearing effect disabled — a near-vacuous test of the kind
+   * `docs/rulings/testing-and-tooling.md` warns about, and it was caught by
+   * disabling the effect and watching it pass anyway.
+   *
+   * What genuinely needs the effect is coming BACK: the editor remounts, the
+   * reveal effect's `editor` dependency changes, and a reveal left standing
+   * from ten minutes ago would fire again on a note the reader merely
+   * reopened.
+   */
+  it('does not re-reveal when the target note is reopened later', async () => {
+    await notes.create('# Third\n\nbody');
+    await notes.create('# Target\n\n## Section\n\nbody');
+    await notes.create('# Source\n\nsee [[Target/Section]]');
+
+    renderShell();
+    await userEvent.click(await screen.findByRole('button', { name: /^Source\b/ }));
+    expect(await activateLink('target', 'section')).toBe(true);
+    await waitFor(() => expect(currentReveal()?.text).toBe('section'));
+
+    await userEvent.click(screen.getByRole('button', { name: /^Third\b/ }));
+    await waitFor(() => expect(currentReveal()).toBeUndefined());
+
+    await userEvent.click(screen.getByRole('button', { name: /^Target\b/ }));
+
+    // Re-opened by hand, so nothing should be revealed. Without the clearing
+    // effect the stale reveal is still in state and its id matches again.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Target\b/ })).toHaveAttribute(
+        'aria-current',
+        'true',
+      ),
+    );
+    expect(currentReveal()).toBeUndefined();
+  });
+
+  it('declines a link to a note that does not exist, leaving the caret alone', async () => {
+    await notes.create('# Source\n\nsee [[Nowhere/Section]]');
+
+    renderShell();
+    await userEvent.click(await screen.findByRole('button', { name: /^Source\b/ }));
+
+    expect(await activateLink('nowhere', 'section')).toBe(false);
+    expect(currentReveal()).toBeUndefined();
   });
 });

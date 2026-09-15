@@ -77,7 +77,14 @@ export interface NoteEditorProps {
    * pill. Returns whether the app acted on it; `false` falls through to
    * placing the caret — same contract as `onActivateTag`.
    */
-  onActivateLink?: (title: string) => boolean;
+  onActivateLink?: (title: string, heading: string | null) => boolean;
+  /**
+   * A heading to reveal after a `[[Note/Heading]]` link is followed. The
+   * `nonce` changes on every follow, so the same heading can be revealed
+   * twice — see `AppShell`'s own comment for why a read-once-at-mount prop
+   * (the shape `initialMarkdown` and `autoFocus` use) is not enough here.
+   */
+  revealHeading?: { text: string; nonce: number };
   /** Normalized tag keys the editor's autocomplete suggests from. */
   tagKeys?: string[];
   /**
@@ -131,6 +138,7 @@ export function NoteEditor({
   autoFocus = false,
   onActivateTag,
   onActivateLink,
+  revealHeading,
   tagKeys,
   onOpenNote,
   handleRef: externalHandleRef,
@@ -368,10 +376,28 @@ export function NoteEditor({
   // one mounted editor serves exactly one note for its lifetime — the same
   // property that makes its autosave flush-on-unmount correct — and no
   // cross-note reconciliation is needed here.
+  /**
+   * Whether the persisted fold set has been applied yet.
+   *
+   * Gates `revealHeading` below, and that sequencing is load-bearing rather
+   * than tidy. The restore below is ASYNCHRONOUS, so without the gate the
+   * order on a note switch is: reveal unfolds the target section (against an
+   * empty fold set, so it removes nothing), then the restore lands and folds
+   * it straight back. The link then opens the right note at a collapsed
+   * heading — which is precisely the "reads as a broken link" failure the
+   * unfold exists to prevent. Found by an e2e test, and invisible to every
+   * unit test, because jsdom neither lays out nor scrolls.
+   */
+  const [foldsRestored, setFoldsRestored] = useState(false);
+
   useEffect(() => {
     if (!foldEditor) return;
     let cancelled = false;
     void folds.get(note.id).then((keys) => {
+      // Marked restored on EVERY resolution, including the empty one: a note
+      // with no persisted folds must still release the reveal gate, or a link
+      // into any unfolded note would never scroll at all.
+      if (!cancelled) setFoldsRestored(true);
       if (cancelled || keys.length === 0) return;
       // Recorded BEFORE dispatching, not after: `setHeadingFolds` fires its
       // transaction synchronously, so if the persist effect's own change
@@ -530,6 +556,7 @@ export function NoteEditor({
         updatedAt={note.updatedAt}
         onActivateTag={onActivateTag}
         onActivateLink={onActivateLink}
+        revealHeading={foldsRestored ? revealHeading : undefined}
         tagKeys={tagKeys}
         onExport={handleExport}
         onPublish={() => setPublishOpen(true)}

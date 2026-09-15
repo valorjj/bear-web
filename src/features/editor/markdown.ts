@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
 import { MarkdownManager } from '@tiptap/markdown';
-import { Fragment } from '@tiptap/pm/model';
+import { Fragment, Node as ProseMirrorNode } from '@tiptap/pm/model';
 
 import { editorExtensions } from './extensions';
 
@@ -148,6 +148,19 @@ function wrapTopLevelInline(doc: JSONContent): JSONContent {
 
 export function parseMarkdown(markdown: string): JSONContent {
   return sanitize(wrapTopLevelInline(manager.parse(markdown) as JSONContent));
+}
+
+/**
+ * `parseMarkdown`, as a real ProseMirror `Node` rather than JSON.
+ *
+ * Exists so code that has to WALK a note's structure — `noteHeadings.ts`, for
+ * the `[[` popover's `/` mode — can do it without constructing an `Editor`
+ * per note. The schema here is the same one the editor uses, built from
+ * `editorExtensions` at the top of this module, so the node this returns is
+ * structurally identical to the one a mounted editor would hold.
+ */
+export function parseMarkdownDoc(markdown: string): ProseMirrorNode {
+  return ProseMirrorNode.fromJSON(schema, parseMarkdown(markdown));
 }
 
 export function serializeMarkdown(doc: JSONContent): string {

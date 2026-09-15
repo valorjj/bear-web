@@ -1,6 +1,6 @@
 import type { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
-import { normalizeTitle, type TitledNote } from '../links';
+import { buildTitleIndex, normalizeTitle, type TitledNote } from '../links';
 import { compareNotes, DEFAULT_NOTE_ORDER, type NoteOrder } from '../order';
 import { newId } from '../ids';
 import { reindexNote } from '../reindex';
@@ -57,6 +57,19 @@ export interface NotesRepository {
   /** Titles of every non-trashed note. What `[[` autocomplete and link-pill resolution match against. */
   allNoteTitles(): Promise<string[]>;
   /**
+   * The Markdown of the non-trashed note with this title, or `null`.
+   *
+   * `null` rather than a throw when nothing matches: the caller is the `[[`
+   * popover, whose query names a non-existent note most of the time because
+   * it is being typed one character at a time.
+   *
+   * Returns the TEXT, not a parsed view of it. Deriving headings from it is
+   * the editor's job — `noteHeadings.ts` — because the heading grammar is the
+   * editor's parser, and a second scanner in this layer disagreed with it on
+   * the first note carrying inline formatting in a heading.
+   */
+  textOf(title: string): Promise<string | null>;
+  /**
    * `{ id, title, updatedAt }` for every non-trashed note — what L3's graph
    * needs to place a node and what `buildTitleIndex` needs to resolve a link
    * target. Streams via Dexie's `each()` rather than `toArray()` so the
@@ -71,6 +84,31 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
   const { db, parseTags, parseLinks } = deps;
   const now = deps.now ?? (() => Date.now());
   const generateId = deps.generateId ?? newId;
+
+  /**
+   * `{ id, title, updatedAt }` for every non-trashed note.
+   *
+   * A local function rather than a method the other methods reach through
+   * `this`: the repository is an object literal handed out through a barrel,
+   * and `this` in one of its methods is whatever the call site made it. Two
+   * callers (`allNoteIndex`, `headingsOf`) share the streaming projection
+   * this way without either duplicating it — and duplicating it is the real
+   * hazard, since `each()` rather than `toArray()` is what keeps full note
+   * text out of memory.
+   */
+  async function noteIndex(): Promise<TitledNote[]> {
+    // `each()`, not `toArray()` + `filter`/`map`: the latter briefly holds
+    // every row of the table — full markdown text included — as one array
+    // before projecting it away. `each()` visits one row at a time, so
+    // only the small projection below is ever retained.
+    const result: TitledNote[] = [];
+    await db.notes.each((n) => {
+      if (n.trashedAt === null) {
+        result.push({ id: n.id, title: n.title, updatedAt: n.updatedAt });
+      }
+    });
+    return result;
+  }
 
   /** Named `requireNote`, not `require` — shadowing the CommonJS global invites trouble. */
   async function requireNote(id: string): Promise<Note> {
@@ -333,8 +371,32 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
       // here, on the query side, so an un-normalized caller-supplied title
       // still finds what the index side stored normalized.
       const key = normalizeTitle(title);
-      const rows = await db.noteLinks.where('toTitle').equals(key).toArray();
-      const ids = [...new Set(rows.map((row) => row.noteId))];
+
+      // TWO queries, because the index stores a heading link's target RAW
+      // (`deploy checklist/rollback`). Splitting at index time was considered
+      // and rejected: it would make a note's derived rows depend on OTHER
+      // notes existing, so creating a note would have to retroactively
+      // re-split every indexed link. See the U spec.
+      //
+      // The separator is part of the prefix on purpose. `startsWith(key)`
+      // alone would also match a note titled `Deploy Checklist v2`;
+      // `startsWith(key + '/')` cannot.
+      const exact = await db.noteLinks.where('toTitle').equals(key).toArray();
+      const prefixed = await db.noteLinks.where('toTitle').startsWith(`${key}/`).toArray();
+
+      let heading = prefixed;
+      if (prefixed.length > 0) {
+        // A prefix hit whose FULL key names a note of its own is a link to
+        // THAT note, not a heading link into this one — a note titled
+        // `Deploy Checklist/Rollback` is an ordinary target. Guarded on
+        // `prefixed.length` so the common case (no slash links anywhere)
+        // costs nothing: the note index is read only when there is something
+        // to disambiguate.
+        const titles = new Set((await noteIndex()).map((n) => normalizeTitle(n.title)));
+        heading = prefixed.filter((row) => !titles.has(row.toTitle));
+      }
+
+      const ids = [...new Set([...exact, ...heading].map((row) => row.noteId))];
       const found = await db.notes.bulkGet(ids);
 
       return found.filter((note): note is Note => note !== undefined && note.trashedAt === null);
@@ -350,17 +412,23 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
     },
 
     async allNoteIndex() {
-      // `each()`, not `toArray()` + `filter`/`map`: the latter briefly holds
-      // every row of the table — full markdown text included — as one array
-      // before projecting it away. `each()` visits one row at a time, so
-      // only the small projection below is ever retained.
-      const result: TitledNote[] = [];
-      await db.notes.each((n) => {
-        if (n.trashedAt === null) {
-          result.push({ id: n.id, title: n.title, updatedAt: n.updatedAt });
-        }
-      });
-      return result;
+      return noteIndex();
+    },
+
+    async textOf(title) {
+      const key = normalizeTitle(title);
+      // `buildTitleIndex` picks the most recently updated note when two share
+      // a title, which is the same note `LinkPill` resolves the link to — so
+      // the popover cannot read a different note than the one the finished
+      // link will open.
+      const match = buildTitleIndex(await noteIndex()).get(key);
+      if (match === undefined) return null;
+      const note = await db.notes.get(match.id);
+      // Re-checked rather than trusted: `noteIndex` already excludes trashed
+      // notes, but the two reads are not one transaction and a note can be
+      // trashed between them.
+      if (note === undefined || note.trashedAt !== null) return null;
+      return note.text;
     },
   };
 }

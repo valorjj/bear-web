@@ -117,3 +117,34 @@ export function hiddenRangesFor(
     .filter((section) => section.end > section.contentStart)
     .map((section) => ({ from: section.contentStart, to: section.end }));
 }
+
+/**
+ * The fold set with every fold that hides `pos` removed.
+ *
+ * ANCESTORS included, which is the whole reason this is not a one-line filter
+ * at the call site: a folded h2 hides its h3s, so the heading a
+ * `[[Note/Heading]]` link targets can be invisible because of a section two
+ * levels above it. Removing only the target's own fold would scroll to a line
+ * that is still `display: none`.
+ *
+ * The range tested is `pos`..`end`, not `contentStart`..`end` as
+ * `hiddenRangesFor` uses: a section's own fold leaves its HEADING visible and
+ * hides only the body, but arriving at a collapsed heading with nothing under
+ * it reads as a broken link when nothing is wrong. So that fold goes too.
+ *
+ * Pure, so the unfold rule is testable without an editor — and so the caller
+ * can hand the result to `setHeadingFolds` as an ordinary command rather than
+ * dispatching inside another command, which throws `RangeError: Applying a
+ * mismatched transaction` (see CLAUDE.md).
+ */
+export function keysRevealing(doc: Node, folded: readonly string[], pos: number): string[] {
+  const hiding = new Set<string>();
+
+  for (const section of headingSections(doc)) {
+    const key = serializeFoldKey(foldKeyOf(section));
+    if (!folded.includes(key)) continue;
+    if (pos >= section.pos && pos < section.end) hiding.add(key);
+  }
+
+  return folded.filter((key) => !hiding.has(key));
+}

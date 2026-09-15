@@ -5,6 +5,7 @@ import {
   ChevronRight,
   FileText,
   GripHorizontal,
+  Heading,
   GripVertical,
   Hash,
   Heading1,
@@ -151,6 +152,8 @@ describe('renderIconMarkup', () => {
     // exactly the kind a hand copy gets subtly wrong, and exactly what this
     // row renders the real glyph to catch.
     ['FileText', FileText],
+    // The same popover's heading-mode glyph, for the same reason.
+    ['Heading', Heading],
   ])('matches the real %s glyph', (_name, glyph) => {
     const { container: real } = render(<Icon glyph={glyph} />);
 

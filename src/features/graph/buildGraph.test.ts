@@ -26,6 +26,52 @@ describe('buildGraph', () => {
     expect(graph.nodes.map((n) => n.degree)).toEqual([1, 1]);
   });
 
+  it('resolves a heading link to the note itself, not a ghost', () => {
+    const graph = buildGraph(
+      [note('a', 'Release'), note('b', 'Deploy Checklist')],
+      [{ noteId: 'a', toTitle: 'deploy checklist/rollback' }],
+    );
+
+    expect(graph.nodes.filter((n) => n.kind === 'ghost')).toHaveLength(0);
+    expect(graph.edges).toEqual([{ source: 'a', target: 'b' }]);
+  });
+
+  it('draws one edge when a note links to two headings of the same note', () => {
+    const graph = buildGraph(
+      [note('a', 'Release'), note('b', 'Deploy Checklist')],
+      [
+        { noteId: 'a', toTitle: 'deploy checklist/rollback' },
+        { noteId: 'a', toTitle: 'deploy checklist/smoke tests' },
+      ],
+    );
+
+    expect(graph.edges).toEqual([{ source: 'a', target: 'b' }]);
+  });
+
+  it('prefers a slash-titled note over splitting it', () => {
+    const graph = buildGraph(
+      [note('a', 'Release'), note('b', 'A/B testing')],
+      [{ noteId: 'a', toTitle: 'a/b testing' }],
+    );
+
+    expect(graph.edges).toEqual([{ source: 'a', target: 'b' }]);
+  });
+
+  // Unchanged from before sub-project U, and deliberately so: splitting
+  // requires a KNOWN title, and a missing note has none. Recorded because the
+  // opposite is the intuitive expectation.
+  it('still makes one ghost per distinct target when the note does not exist', () => {
+    const graph = buildGraph(
+      [note('a', 'Release')],
+      [
+        { noteId: 'a', toTitle: 'missing/one' },
+        { noteId: 'a', toTitle: 'missing/two' },
+      ],
+    );
+
+    expect(graph.nodes.filter((n) => n.kind === 'ghost')).toHaveLength(2);
+  });
+
   it('mints a ghost node for a link no note answers', () => {
     const graph = buildGraph([note('a', 'Alpha')], [{ noteId: 'a', toTitle: 'kafka rebalancing' }]);
 
