@@ -4,13 +4,20 @@ import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
-import { findLinkRanges, normalizeTitle } from '@/data';
+import { findLinkRanges, normalizeTitle, splitLinkTarget } from '@/data';
 
 import { maskedBlockText } from './blockText';
 
 export interface LinkHit {
-  /** The normalized title, exactly as `normalizeTitle` would report it. */
+  /**
+   * The normalized WHOLE target, exactly as `normalizeTitle` would report it
+   * — `deploy checklist/rollback` for a heading link, not just the note.
+   * Splitting needs the known-title set, which this function does not have;
+   * every caller that has one runs `splitLinkTarget` over `raw`.
+   */
   title: string;
+  /** The target exactly as written, which is what `splitLinkTarget` scans. */
+  raw: string;
   /** Document position of the opening `[[`. */
   from: number;
   /** Document position one past the closing `]]`. */
@@ -33,6 +40,7 @@ export interface LinkHit {
 function linkHitsIn(node: Node, blockPos: number): LinkHit[] {
   return findLinkRanges(maskedBlockText(node)).map((range) => ({
     title: range.title,
+    raw: range.raw,
     from: blockPos + 1 + range.start,
     to: blockPos + 1 + range.end,
   }));
@@ -76,7 +84,7 @@ export interface LinkPillOptions {
    * nothing but the navigation — never the caret, which is the whole of what
    * a click on an unresolved link is now expected to do.
    */
-  onActivateLink: ((title: string) => boolean) | null;
+  onActivateLink: ((title: string, heading: string | null) => boolean) | null;
   /**
    * Tooltip naming what a click does. Supplied already translated, exactly
    * like `TagPillOptions.activateHint` — an extension has no access to
@@ -130,7 +138,12 @@ export function linkDecorations(
       // it's being typed or edited. Intersection, not containment.
       if (focused && selFrom <= to && selTo >= from) continue;
 
-      const resolved = knownTitles.has(hit.title);
+      const target = splitLinkTarget(hit.raw, (candidate) => knownTitles.has(candidate));
+      // Resolution reads the NOTE alone. A heading that has been renamed or
+      // deleted since the link was written never makes the link look broken —
+      // it costs the reader the scroll and nothing else. That is the whole
+      // reason no heading index exists; see the U spec.
+      const resolved = knownTitles.has(target.title);
       const attrs: Record<string, string> = {
         class: 'bear-link',
         'data-resolved': String(resolved),
@@ -141,6 +154,30 @@ export function linkDecorations(
       // `Decoration.spec` is public where the rendered attrs are reachable
       // only through ProseMirror's internal decoration type.
       decorations.push(Decoration.inline(from, to, attrs, { resolved }));
+
+      if (!resolved) continue;
+
+      // Everything between the brackets. ONE decoration marks whichever span
+      // ends the link as the tail, and the `::after` glyph hangs off that
+      // class alone: a heading link renders as three content spans, so a
+      // selector matching every one of them would draw three arrows.
+      const contentFrom = from + 2;
+      const contentTo = to - 2;
+
+      if (target.heading === null) {
+        decorations.push(Decoration.inline(contentFrom, contentTo, { class: 'bear-link__tail' }));
+        continue;
+      }
+
+      // `slash` indexes the RAW inner text and `contentFrom` is the document
+      // position of that text's first character — see `splitLinkTarget`'s
+      // docblock for why it is not an index into the normalized title.
+      const slashFrom = contentFrom + target.slash;
+      decorations.push(
+        Decoration.inline(slashFrom, slashFrom + 1, { class: 'bear-link__slash' }),
+        Decoration.inline(slashFrom + 1, contentTo, { class: 'bear-link__heading' }),
+        Decoration.inline(slashFrom + 1, contentTo, { class: 'bear-link__tail' }),
+      );
     }
     return false;
   });
@@ -310,7 +347,10 @@ export const LinkPill = Extension.create<LinkPillOptions>({
               // note behind it, and the click falls through to ProseMirror's
               // own handling, which is exactly the behaviour a link to a
               // note you have not written yet needs.
-              if (!onActivateLink(hit.title)) return false;
+              const target = splitLinkTarget(hit.raw, (candidate) =>
+                knownNoteTitles(view.state).has(candidate),
+              );
+              if (!onActivateLink(target.title, target.heading)) return false;
 
               event.preventDefault();
               return true;
