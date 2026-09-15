@@ -1091,3 +1091,50 @@ rejected on a measured bundle number rather than on taste.
   descend-and-stay-open keep working: the same transaction that moves the
   caret onto the accepted tag's end is the one that sets `openFrom` to the
   reopened match's `from`.
+
+## Footnotes (V)
+
+Added 2026-09-15. Spec:
+`docs/superpowers/specs/2026-09-15-v-footnotes-design.md`.
+
+- **A block tokenizer's `start` is not a hint — marked uses it to CUT the
+  current paragraph at the index you report.** `footnoteDefinition`'s first
+  version reported every `[^`, the way an inline tokenizer legitimately can,
+  and marked split `Alpha[^why] beta.` into two paragraphs at the marker: a
+  sentence containing a footnote grew a line break on every save, and so did
+  prose with no footnote in it at all, because the tokenizer then declined the
+  fragment. `start` must match only a position where the construct could
+  ACTUALLY begin.
+
+- **`computeRecognizedHtmlTags` reads `parseHTML`'s TAG NAME and ignores the
+  attribute filter, so any tag a node mentions is claimed wholesale.**
+  Registering `sup[data-footnote-ref]` claimed bare `<sup>`, `RawBlock` stopped
+  rescuing raw `<sup>` as unmapped HTML, and `H<sup>2</sup>O` in a note
+  silently became `H2O`. `span[data-footnote-ref]` did the same to `<span>`,
+  with 8 failures instead of 3. **`footnoteRef` therefore registers no
+  `parseHTML` rule at all**; `footnoteDefinition` keeps one only because `p` is
+  claimed wholesale by `paragraph` already, so it adds nothing to that set.
+  Widening the computation to ignore attribute-filtered rules was measured and
+  rejected: it would unclaim `a`, `img` and `span`, changing round-trip
+  behaviour for constructs V never touches. **A new node that needs DOM
+  parsing must check this set first.**
+
+- **The narrow label grammar is deliberate.** `[^` plus one or more characters
+  that are not `]`, whitespace or `^`. CommonMark allows almost anything; a
+  permissive label lets `[^` swallow prose when the closing bracket never
+  comes, and a note ABOUT Markdown is exactly where that happens. A bare
+  caret, an unclosed marker, an empty label and a caret inside the label all
+  stay plain text, and all four are pinned.
+
+- **Numbers are never stored.** Not in an attribute, not in the document. They
+  are derived by `footnoteNumbers` from the order of first reference, painted
+  as decorations in the editor and written into exported HTML by
+  `renderNoteBody`. An attribute would go stale the moment a marker was
+  inserted above it, and would be serialized into the user's file.
+
+- **A meta-only dispatch on a note ending in a footnote appends a paragraph
+  unless it carries `skipTrailingNodeMeta`.** Probed directly rather than
+  inherited: `TrailingNode`'s `appendTransaction` is gated only on that meta,
+  and a document ending in any non-paragraph has `shouldInsertNodeAtEnd` true
+  from init. EVERY note with footnotes ends in one, so the 각주 collapse
+  toggle would have grown a paragraph — and autosaved it — on its first use.

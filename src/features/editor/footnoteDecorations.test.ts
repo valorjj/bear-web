@@ -4,6 +4,36 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { buildEditorExtensions, editorExtensions } from './extensions';
 import { parseMarkdown, serializeMarkdown } from './markdown';
 
+/*
+ * jsdom has no layout engine, so ProseMirror's `posAtCoords` throws on APIs it
+ * never implements. Needed here because the fail-open test DECLINES a click:
+ * the event then falls through to ProseMirror's own mousedown handler, exactly
+ * as it does for a real reader, and that handler resolves coordinates.
+ *
+ * Without these the suite reports 3141 passing tests and exits 1 — the
+ * uncaught-error trap CLAUDE.md records. Same three stubs as
+ * `linkPill.test.ts`'s header.
+ */
+const emptyRect: DOMRect = {
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  toJSON: () => ({}),
+};
+Range.prototype.getBoundingClientRect = () => emptyRect;
+Range.prototype.getClientRects = () =>
+  ({
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: function* () {},
+  }) as unknown as DOMRectList;
+document.elementFromPoint = () => null;
+
 const createdEditors: Editor[] = [];
 
 const WITH_SECTION = buildEditorExtensions({

@@ -382,3 +382,26 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   960 B, almost entirely CSS comments. The rules Q added carry none; their
   reasoning is the three bullets above. This is why the stylesheet already
   says its reasoning lives in this file.
+
+## Footnote numbers are written in, not serialized (V)
+
+- **`numberFootnotes` exists for the same reason `highlightCodeBlocks` does.**
+  The number a reader sees in the editor is a DECORATION, and decorations live
+  in the `EditorView` — `DOMSerializer` never walks them. An export built by
+  serializing the document alone carries markers that are correctly marked up,
+  correctly styled and EMPTY.
+
+- **It calls `footnoteNumbers` on the document `renderNoteBody` has ALREADY
+  built**, rather than re-deriving numbering from the serialized DOM. One rule,
+  two mediums, nothing to keep in agreement — the arrangement sub-project U
+  reached only after its two-readers agreement test failed on its first run.
+  All four export surfaces (Markdown, HTML, the server-rendered PDF, the
+  published page) funnel through `renderNoteBody`, so all four are served by
+  the one call.
+
+- **The number is wrapped in `.bear-footnote-number` in both mediums**, even
+  though only the export can nest it inside the marker: a widget decoration
+  cannot be placed INSIDE an atom, so the editor's number is the marker's
+  sibling. The shared CLASS, not a shared element, is what lets one stylesheet
+  rule describe both — and styling the marker instead is what drew
+  `CommonMark1` at full size on the baseline.

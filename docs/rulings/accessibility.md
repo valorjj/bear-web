@@ -675,6 +675,20 @@ does not as sharply.
   routes (the toolbar's link button, the long-press menu), the same shape the
   fold gutter and table handles already have in `touch.spec.ts`.
 
+- **The 각주 section's toggle carries `aria-expanded`, and the footnote
+  toolbar button carries NO `aria-pressed`.** `BottomToolbar`'s `active` is
+  optional for exactly this: a footnote is inserted, never toggled, and
+  `aria-pressed="false"` announces a button that is currently OFF — a
+  different claim from one that does not toggle at all. Pointing the button at
+  an unrelated flag so the field could stay required would make it report
+  something that is not about it.
+
+- **The back link's accessible name is injected, not hardcoded**, the same
+  contract `linkActivateHint`, `linkEditLabel` and `footnoteSectionLabel`
+  follow: an extension has no access to `useT`, and a UI-language string
+  reaching the document would make a note depend on the language selected at
+  its last save.
+
 ## The command palette's combobox contract
 
 - **A DEDICATED `<input role="combobox">` drives a real `<ul role="listbox">`

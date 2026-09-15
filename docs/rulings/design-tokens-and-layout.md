@@ -7,7 +7,7 @@ chrome and prose column are positioned.
 
 **Trigger:** any change to `src/styles/tokens.css`, `src/styles/index.css`,
 `src/styles/editor.css` (including `.ProseMirror a` and `.bear-link-edit`),
-`src/features/editor/LinkEdit.ts`, `src/styles/themes.ts` (`THEMES`, `DEFAULT_THEME_ID`,
+`src/features/editor/LinkEdit.ts`, `src/features/editor/FootnoteDecorations.ts`, `src/styles/themes.ts` (`THEMES`, `DEFAULT_THEME_ID`,
 `SYSTEM_DARK_ID`), `src/app/theme.ts` (`applyTheme`, `readMirror`,
 `MIRROR_KEY`), the inline `<script>` and the `#boot` indicator in `index.html`,
 the `#boot` removal in `src/main.tsx`, `src/ui/Pane.tsx`,
@@ -1594,3 +1594,42 @@ Added 2026-09-15, benchmarking the reference app's link treatment.
   onto the baseline, so an absolutely-positioned child anchored to its top
   edge is drawn below the line. `.bear-link-edit` carries `height: 1em` to
   give the button a box to sit against.
+
+## The 각주 section (V)
+
+- **A widget decoration cannot be placed INSIDE an atom.** A footnote marker is
+  an atom with no text, so its number renders as the marker's SIBLING. Styling
+  the marker rather than the number is why `CommonMark1` first drew at full
+  size on the baseline instead of as a superscript. `.bear-footnote-number`
+  carries the appearance in both the editor and the export, which is the only
+  thing the two have in common — the export nests it, the editor cannot.
+
+- **The 각주 header is chrome and never enters the document.** The string is
+  injected through `useT` and asserted absent from the serialized Markdown.
+  `Callout.ts` argues the same point at its own placeholder: a UI-language
+  string in note text makes the note depend on the language selected at its
+  last save.
+
+- **The section's collapse is session state and is deliberately NOT
+  persisted.** Heading folds are (`noteFolds`), because the reader chose them
+  section by section and would lose their place. The footnote section is one
+  run at the end of a note, and a list that stayed shut across a reload would
+  read as footnotes that had gone missing. It hides its bodies with
+  `.bear-fold-hidden`, the same `display: none` a folded heading uses, so the
+  two cannot drift apart visually — and a Playwright test of either must
+  assert VISIBILITY, never `toContainText`, which reads `textContent` and is
+  true for hidden text.
+
+- **A marker whose footnote is not written yet is muted and dashed, exactly as
+  an unresolved `[[link]]` is.** Writing the marker before the note is the
+  ordinary order, so it must read as incomplete rather than as broken. It
+  still takes its number: skipping it would make the visible sequence disagree
+  with the order of reference, which is the one thing positional numbering
+  promises.
+
+- **Known and accepted: a footnote inserted BEFORE an existing one leaves the
+  list out of numeric order.** `insertFootnote` appends after the last
+  definition, so the section can read `2.` then `1.`. Sorting the list would
+  mean moving document nodes, which is the synchronisation layer the spec
+  rejected; placing the new definition by reference order instead is a
+  possible follow-up, not a defect to patch around.
