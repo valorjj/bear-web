@@ -1207,6 +1207,30 @@
 }
 
 /*
+ * A footnote marker. The `<sup>` carries NO text of its own: the number is
+ * derived from the order of first reference and painted as a decoration here,
+ * or written in by `renderNoteBody` for an export. See `footnoteNumbers`.
+ */
+.ProseMirror .bear-footnote-ref {
+  color: var(--bear-accent);
+  cursor: pointer;
+  font-size: 0.7em;
+  vertical-align: super;
+  line-height: 0;
+}
+
+/*
+ * A footnote itself. An ordinary editable block — the document is the note, so
+ * this is typed in directly rather than through a popover the app would have
+ * to reconcile with the file.
+ */
+.ProseMirror .bear-footnote-def {
+  display: block;
+  color: var(--bear-muted);
+  font-size: 0.92em;
+}
+
+/*
  * A folded section's blocks. `display: none` rather than `visibility` or a
  * height clamp: the block must take no space at all, and ProseMirror keeps the
  * positions regardless, since the document is untouched.
