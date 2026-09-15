@@ -60,17 +60,37 @@ function decorationsFor(
   const collapsed = footnoteKey.getState(state)?.collapsed ?? false;
   let firstDefinition = true;
 
+  // Which labels have a footnote written. A marker without one is an ordinary
+  // mid-writing state, not an error — but it must LOOK different, or the
+  // writer has no way to notice the half they have not written yet.
+  const defined = new Set<string>();
+  state.doc.descendants((node) => {
+    if (node.type.name !== 'footnoteDefinition') return true;
+    defined.add(String(node.attrs.label ?? ''));
+    return false;
+  });
+
   state.doc.descendants((node, pos) => {
     if (node.type.name === 'footnoteRef') {
       const label = String(node.attrs.label ?? '');
       decorations.push(
-        Decoration.widget(pos + 1, () => text('bear-footnote-number', numberFor(numbers, label)), {
-          side: -1,
-          // Chrome, not content: a selection running over the marker must not
-          // be affected by the number drawn inside it.
-          ignoreSelection: true,
-          key: `footnote-ref-${label}-${numbers.get(label) ?? 'x'}`,
-        }),
+        Decoration.widget(
+          pos + 1,
+          () =>
+            text(
+              defined.has(label)
+                ? 'bear-footnote-number'
+                : 'bear-footnote-number bear-footnote-number--orphan',
+              numberFor(numbers, label),
+            ),
+          {
+            side: -1,
+            // Chrome, not content: a selection running over the marker must
+            // not be affected by the number drawn beside it.
+            ignoreSelection: true,
+            key: `footnote-ref-${label}-${numbers.get(label) ?? 'x'}-${defined.has(label)}`,
+          },
+        ),
       );
       return false;
     }

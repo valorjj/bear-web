@@ -222,4 +222,17 @@ describe('footnote navigation', () => {
 
     expect(serializeMarkdown(editor.getJSON())).toBe(before);
   });
+
+  it('marks a marker whose footnote is not written yet', () => {
+    const { el } = mounted('Written[^a] and not[^b].\n\n[^a]: here', WITH_SECTION);
+    const orphans = [...el.querySelectorAll('.bear-footnote-number--orphan')];
+
+    expect(orphans.map((n) => n.textContent)).toEqual(['2']);
+  });
+
+  it('still numbers the orphan, so the sequence is not a lie', () => {
+    const { el } = mounted('A[^a] B[^b] C[^c].\n\n[^b]: only this one', WITH_SECTION);
+
+    expect(numbers(el)).toEqual(['1', '2', '3']);
+  });
 });

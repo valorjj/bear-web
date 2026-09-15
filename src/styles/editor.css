@@ -1271,6 +1271,17 @@
   color: var(--bear-text);
 }
 
+/*
+ * A marker whose footnote is not written yet. Muted and dashed, exactly as an
+ * unresolved `[[link]]` is, and for the same reason: it is a normal state
+ * while writing, so it must read as incomplete rather than as broken.
+ */
+.ProseMirror .bear-footnote-number--orphan {
+  color: var(--bear-muted);
+  text-decoration: underline dashed;
+  text-underline-offset: 0.15em;
+}
+
 /* The way back to a footnote's first marker. */
 .ProseMirror .bear-footnote-back {
   margin-inline-start: 0.4em;
