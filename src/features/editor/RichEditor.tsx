@@ -14,6 +14,7 @@ import { EMPTY_FLAGS, editorFlagsSelector } from './editorState';
 import { EditorContextMenu, type ContextMenuAction } from './EditorContextMenu';
 import { buildEditorExtensions } from './extensions';
 import { headingTargetTitle } from './LinkAutocomplete';
+import { noteHeadings } from './noteHeadings';
 import { foldedKeys } from './HeadingFold';
 import { headingSections, keysRevealing } from './headingSections';
 import { CalloutMenu } from './CalloutMenu';
@@ -591,9 +592,12 @@ export function RichEditor({
     // unmounted (a note switch) while the read is in flight — dispatching
     // into a destroyed view throws.
     let cancelled = false;
-    void notes.headingsOf(headingTarget).then((rows) => {
+    void notes.textOf(headingTarget).then((text) => {
       if (cancelled || editor.isDestroyed) return;
-      editor.commands.setLinkAutocompleteHeadings(headingTarget, rows);
+      editor.commands.setLinkAutocompleteHeadings(
+        headingTarget,
+        text === null ? [] : noteHeadings(text),
+      );
     });
 
     return () => {

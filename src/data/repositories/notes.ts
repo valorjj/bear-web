@@ -1,6 +1,6 @@
 import type { BearDatabase } from '../db';
 import { deriveTitle } from '../derive';
-import { buildTitleIndex, findHeadings, normalizeTitle, type TitledNote } from '../links';
+import { buildTitleIndex, normalizeTitle, type TitledNote } from '../links';
 import { compareNotes, DEFAULT_NOTE_ORDER, type NoteOrder } from '../order';
 import { newId } from '../ids';
 import { reindexNote } from '../reindex';
@@ -57,11 +57,18 @@ export interface NotesRepository {
   /** Titles of every non-trashed note. What `[[` autocomplete and link-pill resolution match against. */
   allNoteTitles(): Promise<string[]>;
   /**
-   * Headings of the non-trashed note with this title, for the `[[` popover's
-   * `/` mode. Empty when no note matches — never throws, because a query
-   * typed one character at a time names a non-existent note most of the time.
+   * The Markdown of the non-trashed note with this title, or `null`.
+   *
+   * `null` rather than a throw when nothing matches: the caller is the `[[`
+   * popover, whose query names a non-existent note most of the time because
+   * it is being typed one character at a time.
+   *
+   * Returns the TEXT, not a parsed view of it. Deriving headings from it is
+   * the editor's job — `noteHeadings.ts` — because the heading grammar is the
+   * editor's parser, and a second scanner in this layer disagreed with it on
+   * the first note carrying inline formatting in a heading.
    */
-  headingsOf(title: string): Promise<string[]>;
+  textOf(title: string): Promise<string | null>;
   /**
    * `{ id, title, updatedAt }` for every non-trashed note — what L3's graph
    * needs to place a node and what `buildTitleIndex` needs to resolve a link
@@ -408,20 +415,20 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
       return noteIndex();
     },
 
-    async headingsOf(title) {
+    async textOf(title) {
       const key = normalizeTitle(title);
       // `buildTitleIndex` picks the most recently updated note when two share
       // a title, which is the same note `LinkPill` resolves the link to — so
-      // the popover cannot offer headings from a different note than the one
-      // the finished link will open.
+      // the popover cannot read a different note than the one the finished
+      // link will open.
       const match = buildTitleIndex(await noteIndex()).get(key);
-      if (match === undefined) return [];
+      if (match === undefined) return null;
       const note = await db.notes.get(match.id);
       // Re-checked rather than trusted: `noteIndex` already excludes trashed
       // notes, but the two reads are not one transaction and a note can be
       // trashed between them.
-      if (note === undefined || note.trashedAt !== null) return [];
-      return findHeadings(note.text);
+      if (note === undefined || note.trashedAt !== null) return null;
+      return note.text;
     },
   };
 }

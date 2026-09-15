@@ -636,41 +636,41 @@ describe('notesRepository', () => {
     });
   });
 
-  describe('headingsOf', () => {
-    it('returns the headings of the named note, its title excluded', async () => {
-      await notes.create('# Deploy Checklist\n\n## Rollback\n\n## Smoke tests\n');
+  describe('textOf', () => {
+    it('returns the named note markdown', async () => {
+      await notes.create('# Deploy Checklist\n\n## Rollback\n');
 
-      expect(await notes.headingsOf('deploy checklist')).toEqual(['Rollback', 'Smoke tests']);
+      expect(await notes.textOf('deploy checklist')).toBe('# Deploy Checklist\n\n## Rollback\n');
     });
 
     it('matches the title the way a link does, ignoring case and spacing', async () => {
-      await notes.create('# Deploy  Checklist\n\n## Rollback\n');
+      await notes.create('# Deploy  Checklist\n\nbody\n');
 
-      expect(await notes.headingsOf('DEPLOY CHECKLIST')).toEqual(['Rollback']);
+      expect(await notes.textOf('DEPLOY CHECKLIST')).toContain('body');
     });
 
-    it('returns nothing for a title no note has', async () => {
-      await notes.create('# Deploy Checklist\n\n## Rollback\n');
+    it('returns null for a title no note has', async () => {
+      await notes.create('# Deploy Checklist\n');
 
-      expect(await notes.headingsOf('nowhere at all')).toEqual([]);
+      expect(await notes.textOf('nowhere at all')).toBeNull();
     });
 
-    it('returns nothing for a trashed note', async () => {
+    it('returns null for a trashed note', async () => {
       const note = await notes.create('# Gone\n\n## Section\n');
       await notes.trash(note.id);
 
-      expect(await notes.headingsOf('gone')).toEqual([]);
+      expect(await notes.textOf('gone')).toBeNull();
     });
 
-    it('offers the headings of the note a link would actually open', async () => {
+    it('reads the note a link would actually open', async () => {
       // Two notes share a title; `buildTitleIndex` resolves to the most
-      // recently updated one, and so must this — otherwise the popover offers
+      // recently updated one, and so must this — otherwise the popover lists
       // headings from one note and the finished link opens the other.
       await notes.create('# Duplicate\n\n## Older heading\n');
       clock += 1000;
       await notes.create('# Duplicate\n\n## Newer heading\n');
 
-      expect(await notes.headingsOf('duplicate')).toEqual(['Newer heading']);
+      expect(await notes.textOf('duplicate')).toContain('Newer heading');
     });
   });
 
