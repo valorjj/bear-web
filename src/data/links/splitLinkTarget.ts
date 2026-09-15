@@ -39,7 +39,28 @@ export interface LinkTarget {
  * the alternative — deciding the split at index time — would make a note's
  * derived rows depend on other notes existing. See the spec.
  */
-export function splitLinkTarget(raw: string, isKnownTitle: (title: string) => boolean): LinkTarget {
+export interface SplitOptions {
+  /**
+   * Treat `Title/` — a slash with nothing after it — as naming that note with
+   * an EMPTY heading, rather than as an unresolved whole.
+   *
+   * Exists for the `[[` popover, where `Deploy Checklist/` is the moment the
+   * reader has asked for that note's headings and typed no filter yet. The
+   * pill deliberately does not pass it: a link written `[[Title/]]` names no
+   * heading, and rendering a dangling separator for it would be noise.
+   *
+   * It is an option on THIS function rather than a second scanner in the
+   * popover because the `/` rule may exist in exactly one place — see the
+   * docblock above.
+   */
+  allowEmptyHeading?: boolean;
+}
+
+export function splitLinkTarget(
+  raw: string,
+  isKnownTitle: (title: string) => boolean,
+  { allowEmptyHeading = false }: SplitOptions = {},
+): LinkTarget {
   const whole = normalizeTitle(raw);
   if (isKnownTitle(whole)) return { title: whole, heading: null, slash: -1 };
 
@@ -53,7 +74,7 @@ export function splitLinkTarget(raw: string, isKnownTitle: (title: string) => bo
     const heading = normalizeTitle(raw.slice(slash + 1));
     // Neither side may be empty: `[[Title/]]` names no heading, and `[[/x]]`
     // names no note. Both fall through to the unresolved form below.
-    if (title === '' || heading === '') continue;
+    if (title === '' || (heading === '' && !allowEmptyHeading)) continue;
     if (isKnownTitle(title)) return { title, heading, slash };
   }
 

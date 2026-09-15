@@ -238,6 +238,8 @@ export const en = {
 
   'editor.linkAutocomplete.listLabel': 'Link to note',
   'editor.linkAutocomplete.empty': 'No matching note',
+  'editor.linkAutocomplete.headingListLabel': 'Link to heading',
+  'editor.linkAutocomplete.headingEmpty': 'No matching heading',
   'editor.tagAutocomplete.listLabel': 'Tag',
 
   'theme.indigoLight': 'Indigo Light',

@@ -85,4 +85,30 @@ describe('splitLinkTarget', () => {
       slash: 17,
     });
   });
+
+  describe('allowEmptyHeading', () => {
+    // The `[[` popover's case: a reader who has typed the slash has asked for
+    // that note's headings and has not filtered them yet.
+    it('reports an empty heading for a trailing slash', () => {
+      expect(
+        splitLinkTarget('Deploy Checklist/', known('deploy checklist'), {
+          allowEmptyHeading: true,
+        }),
+      ).toEqual({ title: 'deploy checklist', heading: '', slash: 16 });
+    });
+
+    it('still refuses an empty TITLE side', () => {
+      expect(splitLinkTarget('/Rollback', known(''), { allowEmptyHeading: true })).toEqual({
+        title: '/rollback',
+        heading: null,
+        slash: -1,
+      });
+    });
+
+    it('still prefers the whole string when it names a note', () => {
+      expect(
+        splitLinkTarget('A/B testing', known('a/b testing', 'a'), { allowEmptyHeading: true }),
+      ).toEqual({ title: 'a/b testing', heading: null, slash: -1 });
+    });
+  });
 });

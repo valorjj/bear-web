@@ -4,12 +4,21 @@ import { TextSelection } from '@tiptap/pm/state';
 import { describe, expect, it } from 'vitest';
 
 import { buildEditorExtensions, editorExtensions } from './extensions';
-import { linkAutocompleteKey, linkAutocompleteMatchAt, matchingTitles } from './LinkAutocomplete';
+import {
+  headingTargetTitle,
+  linkAutocompleteKey,
+  linkAutocompleteMatchAt,
+  linkRowsFor,
+  matchingHeadings,
+  matchingTitles,
+} from './LinkAutocomplete';
 import { parseMarkdown } from './markdown';
 
 const LABELS = {
   listLabel: 'Link to note',
   empty: 'No matching note',
+  headingListLabel: 'Link to heading',
+  headingEmpty: 'No matching heading',
 };
 
 const TITLES = ['Deploy Checklist', 'Design Review', 'Design Notes', 'Weekly Standup'];
@@ -450,6 +459,98 @@ describe('the trailing-node hazard', () => {
     const before = docJSON(editor);
     expect(keydown(editor, 'ArrowDown')).toBe(true);
     expect(docJSON(editor)).toEqual(before);
+    editor.destroy();
+  });
+});
+
+describe('the / heading mode', () => {
+  function withHeadings(
+    markdown: string,
+    headings: string[] = ['Rollback', 'Smoke tests'],
+  ): Editor {
+    const editor = editorWith(markdown, LABELS, ['Deploy Checklist', 'A/B testing']);
+    editor.commands.setLinkAutocompleteHeadings('deploy checklist', headings);
+    return editor;
+  }
+
+  it('filters headings the way it filters titles', () => {
+    expect(matchingHeadings(['Rollback', 'Smoke tests'], 'smo')).toEqual(['Smoke tests']);
+    expect(matchingHeadings(['Rollback', 'Smoke tests'], 'ROLL')).toEqual(['Rollback']);
+  });
+
+  it('offers every heading once the slash is typed', () => {
+    const editor = withHeadings('see [[Deploy Checklist/');
+
+    const rows = linkRowsFor(
+      ['Deploy Checklist'],
+      { title: 'deploy checklist', rows: ['Rollback', 'Smoke tests'] },
+      'Deploy Checklist/',
+    );
+
+    expect(rows.mode).toBe('heading');
+    expect(rows.rows).toEqual(['Rollback', 'Smoke tests']);
+    expect(rows.title).toBe('Deploy Checklist');
+    editor.destroy();
+  });
+
+  it('narrows the headings as the filter is typed', () => {
+    const rows = linkRowsFor(
+      ['Deploy Checklist'],
+      { title: 'deploy checklist', rows: ['Rollback', 'Smoke tests'] },
+      'Deploy Checklist/smo',
+    );
+
+    expect(rows.rows).toEqual(['Smoke tests']);
+  });
+
+  it('stays in title mode when the prefix names no note', () => {
+    const rows = linkRowsFor(['Deploy Checklist'], null, 'Nowhere/');
+
+    expect(rows.mode).toBe('title');
+  });
+
+  // The rule the pill follows too: a note genuinely titled `A/B testing` is a
+  // note, and typing its name must not silently become a heading query.
+  it('stays in title mode for a note whose own title has a slash', () => {
+    const rows = linkRowsFor(['A/B testing'], null, 'A/B testing');
+
+    expect(rows.mode).toBe('title');
+    expect(rows.rows).toEqual(['A/B testing']);
+  });
+
+  it('shows no rows while the headings for that note have not arrived', () => {
+    // Deliberately NOT a fallback to the note list: falling back would flash
+    // the titles for one frame every time a slash is typed, then replace them.
+    const rows = linkRowsFor(['Deploy Checklist'], null, 'Deploy Checklist/');
+
+    expect(rows.mode).toBe('heading');
+    expect(rows.rows).toEqual([]);
+  });
+
+  it('ignores headings fetched for a different note', () => {
+    const rows = linkRowsFor(
+      ['Deploy Checklist', 'A/B testing'],
+      { title: 'a/b testing', rows: ['Setup'] },
+      'Deploy Checklist/',
+    );
+
+    expect(rows.rows).toEqual([]);
+  });
+
+  it('names the note whose headings the popover needs', () => {
+    const editor = withHeadings('see [[Deploy Checklist/roll');
+    // Caret at the end of the typed query, which is where the match is read.
+    editor.commands.setTextSelection(editor.state.doc.content.size);
+
+    expect(headingTargetTitle(editor.state)).toBe('deploy checklist');
+    editor.destroy();
+  });
+
+  it('names nothing while an ordinary title is being typed', () => {
+    const editor = withHeadings('see [[Deploy');
+    editor.commands.setTextSelection(editor.state.doc.content.size);
+
+    expect(headingTargetTitle(editor.state)).toBeNull();
     editor.destroy();
   });
 });

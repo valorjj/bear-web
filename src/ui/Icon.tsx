@@ -5,6 +5,7 @@ import {
   CircleAlert,
   Copy,
   FileText,
+  Heading,
   GripHorizontal,
   GripVertical,
   Hash,
@@ -219,6 +220,18 @@ const ICON_NODES = new Map<LucideIcon, IconNode>([
       ['line', { x1: '4', x2: '20', y1: '15', y2: '15' }],
       ['line', { x1: '10', x2: '8', y1: '3', y2: '21' }],
       ['line', { x1: '16', x2: '14', y1: '3', y2: '21' }],
+    ],
+  ],
+  // The link-autocomplete popover's HEADING-mode row glyph
+  // (`LinkAutocomplete.ts`). A plain `H`, not `Heading1`: the popover lists
+  // headings of every level, and a glyph carrying a numeral would claim a
+  // level the row does not have.
+  [
+    Heading,
+    [
+      ['path', { d: 'M6 12h12' }],
+      ['path', { d: 'M6 20V4' }],
+      ['path', { d: 'M18 20V4' }],
     ],
   ],
   // The link-autocomplete popover's row glyph (`LinkAutocomplete.ts`), a

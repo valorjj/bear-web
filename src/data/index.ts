@@ -65,7 +65,7 @@ export {
   parseLinks,
   splitLinkTarget,
 } from './links';
-export type { LinkRange, LinkTarget, TitledNote } from './links';
+export type { LinkRange, LinkTarget, SplitOptions, TitledNote } from './links';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
 /**
  * `createDiagramsRepository` is the only repository FACTORY exported from

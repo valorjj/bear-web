@@ -13,6 +13,7 @@ import type { ContextMenuRequest } from './ContextMenu';
 import { EMPTY_FLAGS, editorFlagsSelector } from './editorState';
 import { EditorContextMenu, type ContextMenuAction } from './EditorContextMenu';
 import { buildEditorExtensions } from './extensions';
+import { headingTargetTitle } from './LinkAutocomplete';
 import { foldedKeys } from './HeadingFold';
 import { headingSections, keysRevealing } from './headingSections';
 import { CalloutMenu } from './CalloutMenu';
@@ -461,6 +462,8 @@ export function RichEditor({
       linkAutocompleteLabels: {
         listLabel: t('editor.linkAutocomplete.listLabel'),
         empty: t('editor.linkAutocomplete.empty'),
+        headingListLabel: t('editor.linkAutocomplete.headingListLabel'),
+        headingEmpty: t('editor.linkAutocomplete.headingEmpty'),
       },
       // Same shape as `linkAutocompleteLabels` right above it: the labels
       // half of the contract only, read once at mount. The suggested KEYS
@@ -563,6 +566,40 @@ export function RichEditor({
     // the two never drift out of sync with each other.
     editor.commands.setLinkAutocompleteTitles(noteTitles);
   }, [editor, noteTitles]);
+
+  /**
+   * The note whose headings the `[[` popover is asking for, or `null`.
+   *
+   * Read through `useEditorState` rather than from a transaction handler,
+   * because this has to re-render React: `shouldRerenderOnTransaction`
+   * defaults to `false` in Tiptap v3, so a value read during render would be
+   * whatever was true the last time React ran for a reason of its own. Same
+   * rule as the formatting flags above — see
+   * `docs/rulings/markdown-and-schema.md`.
+   */
+  const headingTarget = useEditorState({
+    editor,
+    selector: ({ editor: current }) =>
+      current === null ? null : headingTargetTitle(current.state),
+  });
+
+  useEffect(() => {
+    if (editor === null || headingTarget === null || headingTarget === undefined) return;
+
+    // Guarded on BOTH flags, not just one: `cancelled` covers the reader
+    // typing on past this note, and `isDestroyed` covers the editor being
+    // unmounted (a note switch) while the read is in flight — dispatching
+    // into a destroyed view throws.
+    let cancelled = false;
+    void notes.headingsOf(headingTarget).then((rows) => {
+      if (cancelled || editor.isDestroyed) return;
+      editor.commands.setLinkAutocompleteHeadings(headingTarget, rows);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editor, headingTarget]);
 
   /**
    * Lands a followed `[[Note/Heading]]` link: unfold, scroll, flash.
