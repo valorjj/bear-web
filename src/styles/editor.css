@@ -1231,6 +1231,21 @@
 }
 
 /*
+ * The number itself, drawn INSIDE the marker by a widget decoration. The
+ * marker node has no text of its own — see `Footnote.ts` — so this is the only
+ * thing in it.
+ */
+.ProseMirror .bear-footnote-number {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The definition's leading number, or its label when nobody references it. */
+.ProseMirror .bear-footnote-def-marker {
+  color: var(--bear-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
  * A folded section's blocks. `display: none` rather than `visibility` or a
  * height clamp: the block must take no space at all, and ProseMirror keeps the
  * positions regardless, since the document is untouched.

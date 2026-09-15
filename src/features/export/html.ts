@@ -26,6 +26,7 @@ import { storedImageId } from '@/data/images';
  */
 import { DIAGRAM_LANGUAGE_ID } from '@/features/editor/codeLanguages';
 import { editorExtensions } from '@/features/editor/extensions';
+import { footnoteNumbers } from '@/features/editor/footnoteNumbers';
 import { lowlight } from '@/features/editor/lowlight';
 import { parseMarkdown } from '@/features/editor/markdown';
 
@@ -436,6 +437,42 @@ function inlineImages(host: HTMLElement, images: Map<string, string>): void {
   }
 }
 
+/**
+ * Writes footnote numbers into the serialized markers and definitions.
+ *
+ * Exists for the same reason `highlightCodeBlocks` does, and it is the same
+ * class of bug: the number a reader sees in the editor is a DECORATION, and
+ * decorations live in the `EditorView` — `DOMSerializer` never walks them. An
+ * export built by serializing the document alone therefore carries markers
+ * that are correctly marked up, correctly styled, and empty.
+ *
+ * `footnoteNumbers` is called on the document `renderNoteBody` has ALREADY
+ * built, so the editor and every export share one rule with nothing to keep in
+ * agreement — rather than this function re-deriving numbering from the DOM,
+ * which is the second implementation sub-project U had to collapse.
+ *
+ * A definition nobody references keeps its label. That is not a placeholder
+ * for a missing number: an unreferenced footnote genuinely has no position in
+ * the sequence, and showing the label is what lets the writer find it.
+ */
+function numberFootnotes(host: Element, document_: ProseMirrorNode): void {
+  const numbers = footnoteNumbers(document_);
+
+  for (const marker of host.querySelectorAll('[data-footnote-ref]')) {
+    const label = marker.getAttribute('data-footnote-ref') ?? '';
+    marker.textContent = String(numbers.get(label) ?? label);
+  }
+
+  for (const definition of host.querySelectorAll('[data-footnote-def]')) {
+    const label = definition.getAttribute('data-footnote-def') ?? '';
+    const number = numbers.get(label);
+    const marker = definition.ownerDocument.createElement('span');
+    marker.className = 'bear-footnote-def-marker';
+    marker.textContent = number === undefined ? `${label}. ` : `${number}. `;
+    definition.prepend(marker);
+  }
+}
+
 export function renderNoteBody(
   text: string,
   images: Map<string, string> = new Map(),
@@ -463,6 +500,7 @@ export function renderNoteBody(
   replaceMermaidBlocks(host, document, diagrams);
   highlightCodeBlocks(host, document);
   inlineImages(host, images);
+  numberFootnotes(host, document_);
   return host.innerHTML;
 }
 

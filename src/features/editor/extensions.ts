@@ -11,6 +11,7 @@ import { CodeCopy, type CodeCopyOptions } from './CodeCopy';
 import { CodeLanguageControls, type CodeLanguageControlsOptions } from './CodeLanguageControls';
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
 import { FootnoteDefinition, FootnoteRef } from './Footnote';
+import { FootnoteDecorations } from './FootnoteDecorations';
 import { HeadingReveal } from './HeadingReveal';
 import { LinkEdit, type LinkEditOptions } from './LinkEdit';
 import { ContextMenu, type ContextMenuOptions } from './ContextMenu';
@@ -180,6 +181,10 @@ function buildSupportedExtensions(
     // merge. See `Footnote.ts`.
     FootnoteRef,
     FootnoteDefinition,
+    // Paints their numbers. A separate Extension so the NODES stay free of
+    // view concerns — the numbers are decorations and must never reach the
+    // document.
+    FootnoteDecorations,
     // The external link's edit pencil. An `Extension`, not a mark change: it
     // decorates the `link` mark StarterKit already registers and touches
     // neither the schema nor the document. See `LinkEdit.ts`.
