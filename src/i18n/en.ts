@@ -237,6 +237,7 @@ export const en = {
   'editor.linkPill.hint': 'Open this note',
 
   'editor.footnotes.section': 'Footnotes',
+  'editor.toolbar.footnote': 'Footnote',
   'editor.footnotes.back': 'Back to the reference',
   'editor.link.edit': 'Edit link',
   'editor.linkAutocomplete.listLabel': 'Link to note',

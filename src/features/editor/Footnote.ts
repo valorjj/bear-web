@@ -1,4 +1,5 @@
 import { Node } from '@tiptap/core';
+import { TextSelection } from '@tiptap/pm/state';
 import type {
   JSONContent,
   MarkdownParseHelpers,
@@ -23,6 +24,42 @@ const DEFINITION = new RegExp(`^\\[\\^${LABEL}\\]:[ \\t]*([^\\n]*)(?:\\n|$)`);
 /** The label a token carries, whatever the token's own shape. */
 function labelOf(token: MarkdownToken): string {
   return (token as { label?: string }).label ?? '';
+}
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    footnote: {
+      /**
+       * Inserts a marker at the caret, creates its footnote, and puts the
+       * caret in the footnote ready to type.
+       *
+       * ONE transaction, so one undo restores both halves. Two would make the
+       * writer undo twice for a single gesture — the rule
+       * `moveHeadingSection` already follows for the same reason.
+       */
+      insertFootnote: () => ReturnType;
+    };
+  }
+}
+
+/**
+ * The next free NUMERIC label.
+ *
+ * Numeric even though a label may be a word: a label the app invents should
+ * read like what it is, and a word label is a choice the writer makes
+ * deliberately. `max + 1` rather than "first gap", so a footnote inserted
+ * after `[^1]` and `[^3]` becomes 4 and never silently re-uses a label the
+ * writer deleted a marker for but kept the note of.
+ */
+function nextLabel(doc: import('@tiptap/pm/model').Node): string {
+  let highest = 0;
+  doc.descendants((node) => {
+    if (node.type.name !== 'footnoteRef' && node.type.name !== 'footnoteDefinition') return true;
+    const value = Number(node.attrs.label);
+    if (Number.isInteger(value) && value > highest) highest = value;
+    return false;
+  });
+  return String(highest + 1);
 }
 
 /**
@@ -75,6 +112,48 @@ export const FootnoteRef = Node.create({
    */
   renderHTML({ HTMLAttributes }) {
     return ['span', { ...HTMLAttributes, class: 'bear-footnote-ref' }];
+  },
+
+  addCommands() {
+    return {
+      insertFootnote:
+        () =>
+        ({ state, tr, dispatch }) => {
+          const refType = state.schema.nodes.footnoteRef;
+          const definitionType = state.schema.nodes.footnoteDefinition;
+          if (refType === undefined || definitionType === undefined) return false;
+
+          const label = nextLabel(state.doc);
+          const at = state.selection.from;
+
+          // After the LAST existing footnote, or at the end of the note when
+          // there is none, so the section stays one contiguous run.
+          let definitionAt = state.doc.content.size;
+          state.doc.descendants((node, pos) => {
+            if (node.type.name !== 'footnoteDefinition') return true;
+            definitionAt = pos + node.nodeSize;
+            return false;
+          });
+
+          if (!dispatch) return true;
+
+          tr.insert(at, refType.create({ label }));
+          // Mapped, not reused: inserting the marker shifted everything after
+          // it, and the footnote almost always sits after the caret.
+          const mapped = tr.mapping.map(definitionAt);
+          tr.insert(mapped, definitionType.create({ label }));
+          tr.setSelection(TextSelection.create(tr.doc, mapped + 1));
+          tr.scrollIntoView();
+
+          return true;
+        },
+    };
+  },
+
+  addKeyboardShortcuts() {
+    // `Mod-Alt-f` is the fold toggle; `Mod-Alt-6` is free, and the digit is a
+    // weak mnemonic for a numbered note.
+    return { 'Mod-Alt-6': () => this.editor.commands.insertFootnote() };
   },
 
   markdownTokenName: 'footnoteRef',

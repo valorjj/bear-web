@@ -320,6 +320,7 @@ export {
   Ban,
   FileText,
   Pencil,
+  Superscript,
   Inbox,
   ListTodo,
   Calendar,

@@ -7,6 +7,7 @@ import {
   Bold,
   ChevronDown,
   Code,
+  Superscript,
   Heading,
   Highlighter,
   Icon,
@@ -83,6 +84,7 @@ interface Action {
     | 'link'
     | 'code'
     | 'callout'
+    | 'footnote'
     | 'table';
   label: TranslationKey;
   glyph: LucideIcon;
@@ -110,7 +112,13 @@ interface Action {
    * unrelated reason to run. Reading a key off a subscribed object makes that
    * mistake unavailable rather than merely discouraged.
    */
-  active: keyof EditorFlags;
+  /**
+   * Omitted by an action that INSERTS rather than toggles — the footnote
+   * button. Such a control has no state to reflect, and pointing it at an
+   * unrelated flag so the field could stay required would make the button
+   * report something that is not about it.
+   */
+  active?: keyof EditorFlags;
 }
 
 /**
@@ -203,6 +211,15 @@ const ACTIONS: readonly Action[] = [
     active: 'link',
   },
   {
+    key: 'footnote',
+    label: 'editor.toolbar.footnote',
+    glyph: Superscript,
+    // One command on one transaction, so one undo restores the marker and its
+    // footnote together. See `Footnote.ts`.
+    run: (editor) => editor.chain().command(pinAllSelectionStep).focus().insertFootnote().run(),
+    // No `active`: a footnote is inserted, never toggled.
+  },
+  {
     key: 'code',
     label: 'editor.toolbar.code',
     glyph: Code,
@@ -288,7 +305,10 @@ export function BottomToolbar({
           <button
             type="button"
             aria-label={t(action.label)}
-            aria-pressed={flags[action.active] === true}
+            // `undefined`, not `false`, for an action with no toggle state:
+            // `aria-pressed="false"` announces a button that is currently OFF,
+            // which is a different claim from a button that does not toggle.
+            aria-pressed={action.active === undefined ? undefined : flags[action.active] === true}
             // `dialog` for the link popover, not `menu`: it holds a text
             // field and two buttons, and a screen reader announcing "menu"
             // there promises arrow-key navigation between items that do not

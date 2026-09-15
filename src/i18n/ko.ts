@@ -218,6 +218,7 @@ export const ko: Record<TranslationKey, string> = {
   'editor.linkPill.hint': '이 노트 열기',
 
   'editor.footnotes.section': '각주',
+  'editor.toolbar.footnote': '각주',
   'editor.footnotes.back': '본문으로 돌아가기',
   'editor.link.edit': '링크 편집',
   'editor.linkAutocomplete.listLabel': '노트 링크',

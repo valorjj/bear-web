@@ -1,4 +1,5 @@
 import { Extension } from '@tiptap/core';
+import { skipTrailingNodeMeta } from '@tiptap/extensions';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
@@ -272,7 +273,17 @@ export const FootnoteDecorations = Extension.create<FootnoteDecorationsOptions>(
               if (target.closest('[data-footnote-section-toggle]') !== null) {
                 event.preventDefault();
                 const collapsed = footnoteKey.getState(view.state)?.collapsed ?? false;
-                view.dispatch(view.state.tr.setMeta(footnoteKey, !collapsed));
+                // `skipTrailingNodeMeta` is load-bearing: this is a meta-only
+                // transaction, and `TrailingNode`'s `appendTransaction` is NOT
+                // gated on `docChanged`. Without it, collapsing the section on
+                // a note that ENDS in a footnote appends an empty paragraph —
+                // which autosave then writes back, editing a note the reader
+                // only looked at. Every note with footnotes ends in one.
+                view.dispatch(
+                  view.state.tr
+                    .setMeta(footnoteKey, !collapsed)
+                    .setMeta(skipTrailingNodeMeta, true),
+                );
                 return true;
               }
 
@@ -292,7 +303,11 @@ export const FootnoteDecorations = Extension.create<FootnoteDecorationsOptions>(
                 // unresolved `[[link]]` follows.
                 if (to === null) return false;
                 event.preventDefault();
-                if (collapsedNow(view)) view.dispatch(view.state.tr.setMeta(footnoteKey, false));
+                if (collapsedNow(view)) {
+                  view.dispatch(
+                    view.state.tr.setMeta(footnoteKey, false).setMeta(skipTrailingNodeMeta, true),
+                  );
+                }
                 jumpTo(view, to);
                 return true;
               }

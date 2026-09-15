@@ -205,4 +205,21 @@ describe('footnote navigation', () => {
 
     expect(serializeMarkdown(editor.getJSON())).toBe('Alpha[^why] beta.\n\n[^why]: Because.');
   });
+
+  /**
+   * `TrailingNode`'s `appendTransaction` is not gated on `docChanged`, so a
+   * meta-only dispatch without `skipTrailingNodeMeta` appends an empty
+   * paragraph — which autosave writes back. EVERY note with footnotes ends in
+   * one, so this would have fired on the first collapse of every such note.
+   */
+  it('collapsing does not touch a document that ends in a footnote', () => {
+    const { editor, el } = mounted('A[^a].\n\n[^a]: one', WITH_SECTION);
+    const before = serializeMarkdown(editor.getJSON());
+
+    el.querySelector<HTMLElement>('[data-footnote-section-toggle]')!.dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }),
+    );
+
+    expect(serializeMarkdown(editor.getJSON())).toBe(before);
+  });
 });
