@@ -228,6 +228,31 @@ export function RichEditor({
    * address from the middle of the text would re-link three characters and
    * leave the rest pointing at the old target.
    */
+  /**
+   * Opens the link editor on an EXPLICIT range — what the pencil
+   * (`LinkEdit.ts`) supplies. The selection is irrelevant here: the pointer
+   * can be over one link while the caret sits in another, and reading the
+   * selection would then edit the wrong one.
+   */
+  function openLinkMenuFor(from: number, to: number): void {
+    if (editor === null) return;
+    const mark = editor.state.doc
+      .resolve(from + 1)
+      .marks()
+      .find((candidate) => candidate.type.name === 'link');
+
+    setLinkTarget({
+      from,
+      to,
+      href: String(mark?.attrs.href ?? ''),
+      rect: posToDOMRect(editor.view, from, to),
+      // No opener element: the pencil is a ProseMirror widget, not a React
+      // node, and it is gone by the time the menu is placed — the widget is
+      // rendered only while its link is hovered or holds the caret.
+      opener: null,
+    });
+  }
+
   function openLinkMenu(opener: HTMLElement | null): void {
     if (editor === null) return;
     const { state } = editor;
@@ -302,6 +327,12 @@ export function RichEditor({
   // stays current.
   const imageRef = useRef(onImage);
   imageRef.current = onImage;
+
+  // Same discipline as `activateRef`, for `LinkEdit`'s `onEditLink`: the
+  // extension array is built once in the `useState` initializer below, so the
+  // plugin must capture a function whose IDENTITY never changes.
+  const editLinkRef = useRef<(from: number, to: number) => void>(() => {});
+  editLinkRef.current = openLinkMenuFor;
 
   // Same discipline as `activateRef` above, for `HeadingFold`'s `onOpenMenu`:
   // the extension array is built once in the `useState` initializer below, so
@@ -460,6 +491,11 @@ export function RichEditor({
       // state via `setLinkAutocompleteTitles`, pushed by the effect below,
       // exactly like `codeLabels`' sibling `LinkPill` does for its own
       // known-title set.
+      // Captured once at construction like every option here, so the callback
+      // goes through a ref whose identity never changes — same discipline as
+      // `activateRef` above.
+      onEditLink: (from: number, to: number) => editLinkRef.current(from, to),
+      linkEditLabel: t('editor.link.edit'),
       linkAutocompleteLabels: {
         listLabel: t('editor.linkAutocomplete.listLabel'),
         empty: t('editor.linkAutocomplete.empty'),

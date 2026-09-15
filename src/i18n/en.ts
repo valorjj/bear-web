@@ -236,6 +236,7 @@ export const en = {
   'editor.tagPill.hint': 'Filter by this tag',
   'editor.linkPill.hint': 'Open this note',
 
+  'editor.link.edit': 'Edit link',
   'editor.linkAutocomplete.listLabel': 'Link to note',
   'editor.linkAutocomplete.empty': 'No matching note',
   'editor.linkAutocomplete.headingListLabel': 'Link to heading',

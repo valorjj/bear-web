@@ -15,6 +15,7 @@ import {
   Heading4,
   Heading5,
   Heading6,
+  Pencil,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -222,6 +223,20 @@ const ICON_NODES = new Map<LucideIcon, IconNode>([
       ['line', { x1: '16', x2: '14', y1: '3', y2: '21' }],
     ],
   ],
+  // The external link's edit affordance (`LinkEdit.ts`), a `Decoration.widget`
+  // and so unable to render React — same reason as every entry around it.
+  [
+    Pencil,
+    [
+      [
+        'path',
+        {
+          d: 'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z',
+        },
+      ],
+      ['path', { d: 'm15 5 4 4' }],
+    ],
+  ],
   // The link-autocomplete popover's HEADING-mode row glyph
   // (`LinkAutocomplete.ts`). A plain `H`, not `Heading1`: the popover lists
   // headings of every level, and a glyph carrying a numeral would claim a
@@ -304,6 +319,7 @@ export type { LucideIcon };
 export {
   Ban,
   FileText,
+  Pencil,
   Inbox,
   ListTodo,
   Calendar,

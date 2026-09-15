@@ -785,10 +785,96 @@
   margin: 1.5em 0;
 }
 
+/*
+ * An external link. Accent text with a resting underline, and a pencil that
+ * appears on hover or under the caret (`LinkEdit.ts`).
+ *
+ * The underline STAYS, and that is a deliberate divergence from the reference
+ * app, which drops it. Unlike a `[[wikilink]]`, which carries its own `↗`, an
+ * external link has no resting glyph — so with the underline gone it would be
+ * distinguished from prose by COLOUR ALONE, which is the one thing
+ * `docs/rulings/accessibility.md` does not allow. The pencil is an addition,
+ * not a replacement.
+ *
+ * `cursor: pointer` because a click genuinely opens the URL — StarterKit's
+ * `link` ships `openOnClick: true` and nothing here overrides it. It computed
+ * to `text` until 2026-09-15, so the one affordance the link already had did
+ * not read as one.
+ */
 .ProseMirror a {
   color: var(--bear-accent);
+  cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 0.15em;
+}
+
+/*
+ * The edit pencil's holder. ZERO WIDTH and `position: relative`, so the button
+ * inside it is out of flow: revealing the affordance must not reflow the line
+ * the reader is pointing at.
+ *
+ * `height: 1em` is load-bearing, not decoration. An EMPTY zero-width
+ * inline-block has zero height as well, so its box collapses onto the
+ * baseline and an absolutely-positioned child starting at its top edge is
+ * drawn BELOW the line — which is exactly where the pencil landed first.
+ * Giving the holder the line's own height gives the button a box to centre
+ * itself in.
+ */
+.ProseMirror .bear-link-edit {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 1em;
+  vertical-align: -0.1em;
+}
+
+/*
+ * ABOVE the link, not after it, and this is the third placement tried.
+ *
+ * Inline-after-the-text is what the reference app does, but it can only work
+ * because its pencil is persistent and the space is reserved. Ours appears on
+ * hover, so reserving space would make the rest of the line JUMP sideways
+ * whenever the pointer crosses a link. Not reserving it — the first two
+ * attempts — draws the pencil on top of the following word, which reads as two
+ * glyphs colliding however opaque the chip is; measured by eye at
+ * `[CommonMark](…) for the spec`, where it landed squarely on the `fo`.
+ *
+ * Floating it into the line's own leading costs no reflow and covers no text.
+ * It is anchored to the link's END so that a line carrying three links leaves
+ * no doubt which one it belongs to.
+ */
+.ProseMirror .bear-link-edit button {
+  position: absolute;
+  inset-block-end: 100%;
+  margin-block-end: 0.05em;
+  inset-inline-start: -0.55em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.12em;
+  border: none;
+  border-radius: var(--bear-radius-sm);
+  /*
+   * OPAQUE, and that is the point. The holder is zero-width so that revealing
+   * the pencil cannot reflow the line — which means the button is drawn OVER
+   * whatever follows the link. On a transparent background that reads as two
+   * glyphs colliding; on a raised chip it reads as a control sitting above the
+   * text, which is what it is. The character underneath is covered for exactly
+   * as long as the pointer is on the link.
+   */
+  background-color: var(--bear-surface);
+  box-shadow: var(--bear-shadow-popover);
+  color: var(--bear-accent);
+  cursor: pointer;
+}
+
+.ProseMirror .bear-link-edit button:hover {
+  background-color: var(--bear-hover);
+}
+
+.ProseMirror .bear-link-edit svg {
+  width: 0.78em;
+  height: 0.78em;
 }
 
 .ProseMirror mark {

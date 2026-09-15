@@ -11,6 +11,7 @@ import { CodeCopy, type CodeCopyOptions } from './CodeCopy';
 import { CodeLanguageControls, type CodeLanguageControlsOptions } from './CodeLanguageControls';
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
 import { HeadingReveal } from './HeadingReveal';
+import { LinkEdit, type LinkEditOptions } from './LinkEdit';
 import { ContextMenu, type ContextMenuOptions } from './ContextMenu';
 import { TableHandles, type TableHandlesOptions } from './TableHandles';
 import { TableShortcuts } from './TableShortcuts';
@@ -45,6 +46,7 @@ function buildSupportedExtensions(
   options: Partial<
     TagPillOptions &
       LinkPillOptions &
+      LinkEditOptions &
       LinkAutocompleteOptions &
       TagAutocompleteOptions &
       HeadingFoldOptions &
@@ -172,6 +174,10 @@ function buildSupportedExtensions(
     // spreads every extension's options into ONE flat object, and an
     // extension that takes none cannot collide with anything.
     HeadingReveal,
+    // The external link's edit pencil. An `Extension`, not a mark change: it
+    // decorates the `link` mark StarterKit already registers and touches
+    // neither the schema nor the document. See `LinkEdit.ts`.
+    LinkEdit.configure(options),
     // Decoration only, exactly like `HeadingFold` above: it adds nothing to
     // the schema and mutates no document, so tables serialize identically
     // whether or not this runs. Without `labels` it registers no plugin at
@@ -248,6 +254,7 @@ export function buildEditorExtensions(
   options: Partial<
     TagPillOptions &
       LinkPillOptions &
+      LinkEditOptions &
       LinkAutocompleteOptions &
       TagAutocompleteOptions &
       HeadingFoldOptions &

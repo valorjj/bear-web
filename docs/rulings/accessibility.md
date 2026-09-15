@@ -667,6 +667,14 @@ does not as sharply.
   icon, never back into `item.textContent`, which would wipe the icon out of
   the row entirely.
 
+- **The link edit pencil is a real `<button>` with an injected
+  `aria-label`, and it is a POINTER-DEVICE affordance.** A phone has no hover
+  and a tap on a link opens its URL, so the caret is the touch route — which
+  is why the widget is rendered for the caret's link as well as the hovered
+  one, rather than for hover alone. Editing on a phone keeps its existing
+  routes (the toolbar's link button, the long-press menu), the same shape the
+  fold gutter and table handles already have in `touch.spec.ts`.
+
 ## The command palette's combobox contract
 
 - **A DEDICATED `<input role="combobox">` drives a real `<ul role="listbox">`

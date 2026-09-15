@@ -6,7 +6,8 @@ declared and applied before first paint, and how the panes, floating editor
 chrome and prose column are positioned.
 
 **Trigger:** any change to `src/styles/tokens.css`, `src/styles/index.css`,
-`src/styles/editor.css`, `src/styles/themes.ts` (`THEMES`, `DEFAULT_THEME_ID`,
+`src/styles/editor.css` (including `.ProseMirror a` and `.bear-link-edit`),
+`src/features/editor/LinkEdit.ts`, `src/styles/themes.ts` (`THEMES`, `DEFAULT_THEME_ID`,
 `SYSTEM_DARK_ID`), `src/app/theme.ts` (`applyTheme`, `readMirror`,
 `MIRROR_KEY`), the inline `<script>` and the `#boot` indicator in `index.html`,
 the `#boot` removal in `src/main.tsx`, `src/ui/Pane.tsx`,
@@ -1550,3 +1551,46 @@ bottom-3`), so the pill offsets are stated once together and cannot drift
   not folded into `Icon.tsx`: that file holds lucide's verbatim `__iconNode`
   arrays, walked by its own test as single-colour shapes taking their colour
   from `currentColor`, and a four-colour trademark does not fit that contract.
+
+## The external link and its edit pencil
+
+Added 2026-09-15, benchmarking the reference app's link treatment.
+
+- **The resting underline on `.ProseMirror a` STAYS, and that is a deliberate
+  divergence from the reference app, which drops it.** A `[[wikilink]]` can
+  afford colour-only styling because it carries its own `↗`; an external link
+  has no resting glyph, so without the underline it would be distinguished
+  from prose by COLOUR ALONE — the one thing `accessibility.md` does not
+  allow. The pencil is an ADDITION to the underline, never a replacement for
+  it. If the underline is ever dropped, a persistent glyph has to replace it
+  in the same commit.
+
+- **`cursor: pointer` on `.ProseMirror a` is a fix, not a flourish.** It
+  computed to `text` from M4 until 2026-09-15, while StarterKit's `link`
+  shipped `openOnClick: true` the whole time — so the one affordance the link
+  already had did not read as one. Verified in a browser, not assumed from the
+  package default.
+
+- **The pencil is rendered ONLY for the hovered link or the caret's link,
+  never for every link with the button hidden.** The two alternatives both
+  fail: `pointer-events: none` while hidden makes the button unreachable,
+  because leaving the link text is the only way to travel to it and that is
+  what hides it; leaving pointer events on puts an invisible click target
+  after every link, swallowing clicks on the following word. This is why the
+  hover lives in plugin state rather than in a CSS `:hover` rule.
+
+- **The holder is ZERO-WIDTH and the button floats ABOVE the link, and both
+  halves were arrived at by looking.** Reserving inline space — what the
+  reference app does — reflows the line every time the pointer crosses a link,
+  because our pencil is conditional where theirs is persistent. Not reserving
+  it draws the pencil over the following word, which reads as two glyphs
+  colliding however opaque the chip is; measured at
+  `[CommonMark](…) for the spec`, where it landed on the `fo`, twice, before
+  the placement moved into the line's leading. `e2e/linkEdit.spec.ts` asserts
+  the following text's bounding box is UNCHANGED when the pencil appears,
+  which is the assertion that would fail if anyone reserved space again.
+
+- **An empty zero-width inline-block has zero HEIGHT too.** Its box collapses
+  onto the baseline, so an absolutely-positioned child anchored to its top
+  edge is drawn below the line. `.bear-link-edit` carries `height: 1em` to
+  give the button a box to sit against.

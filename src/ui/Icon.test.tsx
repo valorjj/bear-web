@@ -14,6 +14,7 @@ import {
   Heading4,
   Heading5,
   Heading6,
+  Pencil,
   Search,
 } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
@@ -154,6 +155,8 @@ describe('renderIconMarkup', () => {
     ['FileText', FileText],
     // The same popover's heading-mode glyph, for the same reason.
     ['Heading', Heading],
+    // The external link's edit affordance (`LinkEdit.ts`), same drift guard.
+    ['Pencil', Pencil],
   ])('matches the real %s glyph', (_name, glyph) => {
     const { container: real } = render(<Icon glyph={glyph} />);
 
