@@ -364,8 +364,32 @@ export function createNotesRepository(deps: NotesRepositoryDeps): NotesRepositor
       // here, on the query side, so an un-normalized caller-supplied title
       // still finds what the index side stored normalized.
       const key = normalizeTitle(title);
-      const rows = await db.noteLinks.where('toTitle').equals(key).toArray();
-      const ids = [...new Set(rows.map((row) => row.noteId))];
+
+      // TWO queries, because the index stores a heading link's target RAW
+      // (`deploy checklist/rollback`). Splitting at index time was considered
+      // and rejected: it would make a note's derived rows depend on OTHER
+      // notes existing, so creating a note would have to retroactively
+      // re-split every indexed link. See the U spec.
+      //
+      // The separator is part of the prefix on purpose. `startsWith(key)`
+      // alone would also match a note titled `Deploy Checklist v2`;
+      // `startsWith(key + '/')` cannot.
+      const exact = await db.noteLinks.where('toTitle').equals(key).toArray();
+      const prefixed = await db.noteLinks.where('toTitle').startsWith(`${key}/`).toArray();
+
+      let heading = prefixed;
+      if (prefixed.length > 0) {
+        // A prefix hit whose FULL key names a note of its own is a link to
+        // THAT note, not a heading link into this one — a note titled
+        // `Deploy Checklist/Rollback` is an ordinary target. Guarded on
+        // `prefixed.length` so the common case (no slash links anywhere)
+        // costs nothing: the note index is read only when there is something
+        // to disambiguate.
+        const titles = new Set((await noteIndex()).map((n) => normalizeTitle(n.title)));
+        heading = prefixed.filter((row) => !titles.has(row.toTitle));
+      }
+
+      const ids = [...new Set([...exact, ...heading].map((row) => row.noteId))];
       const found = await db.notes.bulkGet(ids);
 
       return found.filter((note): note is Note => note !== undefined && note.trashedAt === null);
