@@ -6,7 +6,10 @@ import { parseMarkdown, serializeMarkdown } from './markdown';
 
 const createdEditors: Editor[] = [];
 
-const WITH_SECTION = buildEditorExtensions({ footnoteSectionLabel: '각주' });
+const WITH_SECTION = buildEditorExtensions({
+  footnoteSectionLabel: '각주',
+  footnoteBackLabel: 'Back to the reference',
+});
 
 function mounted(
   markdown: string,
@@ -128,5 +131,78 @@ describe('the 각주 section', () => {
     const { el } = mounted('A[^a].\n\n[^a]: one');
 
     expect(el.querySelectorAll('.bear-footnote-section')).toHaveLength(0);
+  });
+});
+
+describe('footnote navigation', () => {
+  const click = (element: Element | null) =>
+    element?.dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }),
+    );
+
+  const flashed = (el: HTMLElement) => el.querySelector('.bear-heading-revealed');
+
+  it('reveals the footnote when its marker is clicked', () => {
+    const { el } = mounted('Alpha[^why] beta.\n\n[^why]: Because.', WITH_SECTION);
+
+    click(el.querySelector('[data-footnote-ref]'));
+
+    expect(flashed(el)?.textContent).toContain('Because.');
+  });
+
+  it('reveals it when the visible NUMBER is clicked', () => {
+    // The number is a widget BESIDE the marker atom, not inside it, so a
+    // handler that only accepted the marker would ignore the one element a
+    // reader can actually see.
+    const { el } = mounted('Alpha[^why] beta.\n\n[^why]: Because.', WITH_SECTION);
+
+    click(el.querySelector('.bear-footnote-number'));
+
+    expect(flashed(el)?.textContent).toContain('Because.');
+  });
+
+  it('returns to the first marker from the back link', () => {
+    const { el } = mounted('A[^x] then B[^x] again.\n\n[^x]: Note.', WITH_SECTION);
+
+    click(el.querySelector('[data-footnote-back]'));
+
+    // The paragraph holding the FIRST reference.
+    expect(flashed(el)?.textContent).toContain('A');
+  });
+
+  it('gives no back link to a footnote nobody references', () => {
+    const { el } = mounted('[^orphan]: Nobody.', WITH_SECTION);
+
+    expect(el.querySelectorAll('[data-footnote-back]')).toHaveLength(0);
+  });
+
+  it('does nothing when a marker has no footnote yet', () => {
+    // Fail open, like an unresolved `[[link]]`: the click falls through and
+    // places a caret rather than being swallowed.
+    const { el } = mounted('Alpha[^ghost] beta.', WITH_SECTION);
+
+    click(el.querySelector('[data-footnote-ref]'));
+
+    expect(flashed(el)).toBeNull();
+  });
+
+  it('opens a collapsed section before jumping into it', () => {
+    // Otherwise the marker appears to do nothing: the footnote is revealed
+    // under `display: none`.
+    const { el } = mounted('Alpha[^why] beta.\n\n[^why]: Because.', WITH_SECTION);
+    click(el.querySelector('[data-footnote-section-toggle]'));
+    expect(el.querySelectorAll('.bear-fold-hidden')).toHaveLength(1);
+
+    click(el.querySelector('[data-footnote-ref]'));
+
+    expect(el.querySelectorAll('.bear-fold-hidden')).toHaveLength(0);
+  });
+
+  it('puts nothing into the document', () => {
+    const { editor, el } = mounted('Alpha[^why] beta.\n\n[^why]: Because.', WITH_SECTION);
+
+    click(el.querySelector('[data-footnote-ref]'));
+
+    expect(serializeMarkdown(editor.getJSON())).toBe('Alpha[^why] beta.\n\n[^why]: Because.');
   });
 });

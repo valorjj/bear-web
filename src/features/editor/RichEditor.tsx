@@ -498,6 +498,7 @@ export function RichEditor({
       // Read once at mount like every option here. The 각주 heading is chrome
       // and must never enter the document — see `FootnoteDecorations.ts`.
       footnoteSectionLabel: t('editor.footnotes.section'),
+      footnoteBackLabel: t('editor.footnotes.back'),
       linkEditLabel: t('editor.link.edit'),
       linkAutocompleteLabels: {
         listLabel: t('editor.linkAutocomplete.listLabel'),

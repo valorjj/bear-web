@@ -1271,6 +1271,16 @@
   color: var(--bear-text);
 }
 
+/* The way back to a footnote's first marker. */
+.ProseMirror .bear-footnote-back {
+  margin-inline-start: 0.4em;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--bear-accent);
+  cursor: pointer;
+}
+
 /* The definition's leading number, or its label when nobody references it. */
 .ProseMirror .bear-footnote-def-marker {
   color: var(--bear-faint);
