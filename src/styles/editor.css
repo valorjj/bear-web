@@ -952,47 +952,87 @@
 }
 
 /*
- * `[[title]]` rendered as a pill. Shares `--bear-tag-fill`/`--bear-accent`
- * with `.bear-tag` above rather than inventing a second colour family — a
- * link and a tag are the same kind of thing to the eye (a piece of inline
- * chrome over plain text), and this is the resolved, common case.
+ * `[[title]]` rendered as a link — accent-coloured text and a raised glyph,
+ * NOT a filled pill.
+ *
+ * It used to share `--bear-tag-fill` with `.bear-tag` above, on the reasoning
+ * that a link and a tag are the same kind of thing to the eye. They are not.
+ * A tag is an object dropped into the prose and reads correctly as a chip; a
+ * link is the prose, and a fill behind it adds padding mid-sentence and
+ * breaks the line's text continuity for no signal the colour was not already
+ * carrying. The reference app marks a link with colour alone for the same
+ * reason.
+ *
+ * What replaces the fill is `--bear-link-icon` on the title's `::after`
+ * (below), raised to the top-right. Colour alone would leave a link
+ * indistinguishable from any other accent-coloured run, and the app has no
+ * other cue that the text is clickable — the glyph is that cue, and it costs
+ * the line no horizontal rhythm because it is superscript rather than inline
+ * chrome.
  *
  * The brackets are collapsed for the same reason a tag's `#` is, and on the
  * same condition: only on a RESOLVED pill, and only while the caret is
  * outside it. See `linkSyntaxDecorations`.
+ *
+ * There is no `.ProseMirror .bear-link` base rule any more: everything it
+ * held (`border-radius`, `padding`, `box-decoration-break`) existed only to
+ * shape the fill, and with no background there is no box to round, pad or
+ * clone across a line break.
  */
-.ProseMirror .bear-link {
-  border-radius: var(--bear-radius-sm);
-  padding: 0.05em 0.15em;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-}
 
 /*
  * `[[` and `]]` on a RESOLVED pill, collapsed exactly as a tag's `#` is —
  * three spans here rather than two, since the brackets bracket the title.
  * Unresolved pills get no bracket decoration at all (`linkSyntaxDecorations`),
- * so their brackets stay visible: with no fill of their own, the brackets are
- * the only thing marking them as a link to a note that does not exist yet.
+ * so their brackets stay visible: with no colour of their own, the brackets
+ * are the only thing marking them as a link to a note that does not exist yet.
+ *
+ * `font-size: 0` removes the WIDTH without removing the characters, which are
+ * real document text and are still copied, serialized and exported — and are
+ * revealed the moment the caret enters the link, at which point
+ * `linkDecorations` suppresses the whole decoration anyway.
  */
 .ProseMirror .bear-link.bear-link__bracket {
   font-size: 0;
-  padding: 0;
-  background: none;
 }
 
 .ProseMirror .bear-link[data-resolved='true']:not(.bear-link__bracket) {
   color: var(--bear-accent);
-  background-color: var(--bear-tag-fill);
+}
+
+/*
+ * The glyph, after the last character of the title rather than before the
+ * first: a leading mark indents the link text, so a link that starts a line
+ * would sit out of step with the paragraph above it. `vertical-align` raises
+ * it to the top-right the way a footnote marker sits, which is what keeps it
+ * reading as a mark ON the text rather than as a character IN it.
+ *
+ * `currentColor` through the mask, so it takes `--bear-accent` from the rule
+ * above for free and inverts with the theme — the same mechanism as
+ * `.bear-tag`'s `::before`, and the reason neither glyph needs a token of its
+ * own per theme.
+ */
+.ProseMirror .bear-link[data-resolved='true']:not(.bear-link__bracket)::after {
+  content: '';
+  display: inline-block;
+  inline-size: 0.68em;
+  block-size: 0.68em;
+  margin-inline-start: 0.08em;
+  vertical-align: 0.3em;
+  background-color: currentColor;
+  mask-image: var(--bear-link-icon);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
 }
 
 /*
  * A link to a title with no matching note. Fail-open, not an error: the spec
  * is explicit that this is a normal way to work, so the pill stays legible
  * (the plugin still asks, the app declines, and the click places a caret)
- * rather than reading as broken. Muted text plus a dashed underline —
- * no fill at all — is what keeps it visually subordinate to a resolved link
- * without looking like a warning or an error.
+ * rather than reading as broken. Muted text plus a dashed underline — and no
+ * glyph — is what keeps it visually subordinate to a resolved link without
+ * looking like a warning or an error.
  */
 .ProseMirror .bear-link[data-resolved='false'] {
   color: var(--bear-muted);
@@ -1001,22 +1041,28 @@
 }
 
 /*
- * A RESOLVED link pill lights up on hover for the same reason a tag pill
- * does, and now on the same condition: a plain click opens the target, so
- * the affordance is unconditional rather than gated on a modifier the
- * gesture no longer needs. `[data-mod-held]` left this file with that
- * modifier, and `RichEditor`'s key listener left with it — these two rules
- * were the only things in the app that ever selected on the attribute.
+ * A RESOLVED link lights up on hover because a plain click opens the target —
+ * the affordance is unconditional rather than gated on a modifier the gesture
+ * no longer needs. `[data-mod-held]` left this file with that modifier, and
+ * `RichEditor`'s key listener left with it.
  *
- * An UNRESOLVED pill deliberately gets neither the pointer nor the lift.
+ * An UNDERLINE rather than `--bear-tag-fill-strong`, which is what this rule
+ * used while the link carried a fill to strengthen. With no fill there is
+ * nothing for a stronger tint to sit on, and re-introducing a background on
+ * hover alone would reinstate exactly the mid-sentence padding jump the fill
+ * was dropped to avoid.
+ *
+ * An UNRESOLVED pill deliberately gets neither the pointer nor the underline.
  * There is no note to open, `handleActivateLink` declines it, and the click
  * places a caret instead — which is honest for a link to a note that does
  * not exist yet, and is also the only way left to edit such a title in
- * place by pointer alone.
+ * place by pointer alone. Its dashed underline is a resting state, not a
+ * hover one, so the two cannot be confused.
  */
 .ProseMirror .bear-link[data-resolved='true']:not(.bear-link__bracket):hover {
   cursor: pointer;
-  background-color: var(--bear-tag-fill-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 /*

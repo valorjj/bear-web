@@ -19,7 +19,7 @@ tokens or the `.bear-tag` rules in `src/styles/editor.css`, and the suites
 `linkPill.test.ts` — the link pill's activation is a deliberate copy of this
 file's contract, not an independent design. Also `tagSyntaxDecorations` and
 `linkSyntaxDecorations`, the `bear-tag__hash` / `bear-link__bracket` classes,
-the `--bear-tag-icon` token, and any selector anywhere that counts
+the `--bear-tag-icon` and `--bear-link-icon` tokens, and any selector anywhere that counts
 `.bear-tag` or `.bear-link` elements. Also `src/features/editor/TagAutocomplete.ts`
 (`tagAutocompleteMatchAt`, `matchingTags`, `insertTag`, `openRows`, `openFrom`)
 and `tagAutocomplete.test.ts` — S4's autocomplete is the premise the plain-click
@@ -190,10 +190,12 @@ ruling below rests on.
   and too weak for a pill, which is a few characters of inline text and has to
   read as a discrete chip. At 0.11 the pill read as a highlighted word. Paper's
   fill is 0.16; Ink's 0.18 was already comfortable, so the two tokens coincide
-  there. **`--bear-tag-fill-strong` is a third token**, used by the two
-  `:hover` rules (a tag pill, and a RESOLVED link pill) that were
-  `[data-mod-held='true']` rules until each gesture lost its modifier, and
-  `--bear-selected` was rejected for that state because it is fainter than a
+  there. **`--bear-tag-fill-strong` is a third token**, used by the tag pill's
+  `:hover` rule — which was a `[data-mod-held='true']` rule until the gesture
+  lost its modifier. It had a second consumer, the RESOLVED link pill's hover,
+  until that pill lost its fill and its hover became an underline (see below);
+  do not read its single call site as dead-token evidence. `--bear-selected`
+  was rejected for that state because it is fainter than a
   resting pill in Paper and identical to it in Ink — the hover would look
   like the pill fading rather than lighting up. Both are tier-1 palette tokens, so every theme in the roster
   must define them; `scripts/sourceLint.test.ts` checks that per theme and
@@ -452,11 +454,45 @@ prose rather than as emphasis on it.
   while measuring nothing. `tagPill.test.ts`, `appearance.spec.ts` and
   `notes.spec.ts` all had to be corrected the same way.
 
-- **Link brackets collapse on a RESOLVED pill only.** An unresolved link
-  carries no fill — muted text plus a dashed underline — so its `[[ ]]` are
+- **Link brackets collapse on a RESOLVED pill only.** An unresolved link is
+  muted text plus a dashed underline and carries no glyph, so its `[[ ]]` are
   the only thing separating "a link to a note I have not written yet" from
   ordinary prose. Hiding them there deletes the signal; hiding them on a
-  filled pill costs nothing, because the fill IS the signal.
+  resolved link costs nothing, because the accent colour and the glyph ARE the
+  signal. (This bullet read "because the fill IS the signal" until
+  2026-09-15, when the fill was removed — the conclusion held, its stated
+  reason did not.)
+
+- **A resolved link is accent text plus a raised glyph, NOT a filled pill —
+  and it is the one place the link deliberately stops copying the tag.** The
+  fill it shared with `.bear-tag` was dropped on 2026-09-15. The reason is
+  what the two constructs ARE, not how they are drawn: a tag is an object
+  dropped into the prose and reads correctly as a chip, while a link IS the
+  prose, and a background behind it inserts padding mid-sentence and breaks
+  the line's text continuity for no signal the accent colour was not already
+  carrying. The reference app marks a link with colour alone.
+
+  Colour alone was still rejected here, and that is the whole of the
+  divergence from the reference: an accent-coloured run is not distinguishable
+  from any other accent-coloured run, and nothing else in the app says the
+  text is clickable. `--bear-link-icon` (lucide `ArrowUpRight`, masked over
+  `currentColor` exactly as `--bear-tag-icon` is) draws on the title span's
+  `::after`, raised by `vertical-align` to sit as a footnote marker does. It
+  is TRAILING, not leading, because a leading mark indents the link text and a
+  link that starts a line would then sit out of step with the paragraph above
+  it. Superscript, so it costs the line no horizontal rhythm.
+
+  Three consequences, none of them optional. `.ProseMirror .bear-link` has no
+  base rule left — `border-radius`, `padding` and `box-decoration-break`
+  existed only to shape the fill. The hover is an underline, because
+  `--bear-tag-fill-strong` has nothing to sit on and re-introducing a
+  background on hover alone would reinstate the very padding jump the fill was
+  dropped to avoid. And `e2e/contrast.spec.ts` lost its
+  `{ overlay: 'tag-fill', ground: 'bg', fg: 'accent', min: 3.0 }` row, which
+  existed for this pill alone: nothing paints accent on that fill any more, so
+  the row would have passed while measuring a combination the app does not
+  render. A link is `accent` on `bg`, already checked at 4.5 — stricter than
+  the 3.0 removed.
 
 - **`white-space: nowrap` on the pill is load-bearing, not tidying.** The
   glyph is drawn by the name span's `::before`, and

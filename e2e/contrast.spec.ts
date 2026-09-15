@@ -191,7 +191,16 @@ const OVERLAYS = [
    */
   { overlay: 'selected', ground: 'sidebar', fg: 'text', min: 4.5 },
   { overlay: 'hover', ground: 'sidebar', fg: 'text', min: 4.5 },
-  { overlay: 'tag-fill', ground: 'bg', fg: 'accent', min: 3.0 },
+  /*
+   * There is deliberately no `{ overlay: 'tag-fill', ground: 'bg', fg:
+   * 'accent' }` row. It existed for the RESOLVED link pill, which was the one
+   * place in the app that painted `accent` on that fill — the tag pill paints
+   * `text`. The link pill lost its fill when it became accent text plus a
+   * raised glyph, so that row would have kept passing while measuring a
+   * combination nothing renders: coverage in appearance only. A link is now
+   * `accent` on `bg`, which `{ fg: 'accent', grounds: ['bg', 'surface'] }`
+   * above already checks at 4.5 — a STRICTER bar than the 3.0 removed here.
+   */
   // A highlight is body text on a tinted page: the fill must not eat the text
   // it exists to draw attention to. `bg` is the ground because a highlight is
   // always inside the editor's own canvas, never on a sidebar or a popover.

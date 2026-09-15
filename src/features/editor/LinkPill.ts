@@ -153,11 +153,13 @@ export function linkDecorations(
  * can collapse them the way `bear-tag__hash` collapses a tag's `#`.
  *
  * Resolved only, and that is a deliberate divergence from the tag pill rather
- * than an oversight. An unresolved link carries no fill at all — muted text
- * plus a dashed underline (`editor.css`) — so its brackets are the only thing
+ * than an oversight. An unresolved link is muted text plus a dashed underline
+ * and gets no glyph (`editor.css`), so its brackets are the only thing
  * separating "a link to a note I have not written yet" from ordinary prose.
- * Hiding them there would delete the signal; hiding them on a filled pill
- * costs nothing, because the fill IS the signal.
+ * Hiding them there would delete the signal; hiding them on a resolved link
+ * costs nothing, because the accent colour and the raised glyph ARE the
+ * signal. (Until 2026-09-15 that signal was a fill, and this comment said so;
+ * the resolved link no longer carries one — see `docs/rulings/tag-pills.md`.)
  *
  * Derived from the pill decorations for the same reason `tagSyntaxDecorations`
  * is: suppression while the caret is inside the link then applies to the
