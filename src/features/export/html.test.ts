@@ -930,8 +930,8 @@ describe('footnotes in an export', () => {
     const why = html.indexOf('data-footnote-ref="why"');
     const when = html.indexOf('data-footnote-ref="when"');
 
-    expect(html.slice(why, why + 80)).toContain('>1</span>');
-    expect(html.slice(when, when + 80)).toContain('>2</span>');
+    expect(html.slice(why, why + 160)).toContain('>1</span>');
+    expect(html.slice(when, when + 160)).toContain('>2</span>');
   });
 
   it('numbers the definition to match its marker', () => {

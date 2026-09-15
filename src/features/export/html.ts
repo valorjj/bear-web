@@ -460,7 +460,15 @@ function numberFootnotes(host: Element, document_: ProseMirrorNode): void {
 
   for (const marker of host.querySelectorAll('[data-footnote-ref]')) {
     const label = marker.getAttribute('data-footnote-ref') ?? '';
-    marker.textContent = String(numbers.get(label) ?? label);
+    // Wrapped in `.bear-footnote-number`, the same class the editor's widget
+    // carries, so one stylesheet rule describes the number in both mediums.
+    // The editor CANNOT put the number inside the marker — a widget
+    // decoration cannot be placed inside an atom — so the class, not the
+    // element, is what the two have in common.
+    const number = marker.ownerDocument.createElement('span');
+    number.className = 'bear-footnote-number';
+    number.textContent = String(numbers.get(label) ?? label);
+    marker.replaceChildren(number);
   }
 
   for (const definition of host.querySelectorAll('[data-footnote-def]')) {

@@ -217,6 +217,7 @@ export const ko: Record<TranslationKey, string> = {
   'editor.tagPill.hint': '이 태그로 필터링',
   'editor.linkPill.hint': '이 노트 열기',
 
+  'editor.footnotes.section': '각주',
   'editor.link.edit': '링크 편집',
   'editor.linkAutocomplete.listLabel': '노트 링크',
   'editor.linkAutocomplete.empty': '일치하는 노트가 없습니다',

@@ -1207,16 +1207,18 @@
 }
 
 /*
- * A footnote marker. The `<sup>` carries NO text of its own: the number is
- * derived from the order of first reference and painted as a decoration here,
- * or written in by `renderNoteBody` for an export. See `footnoteNumbers`.
+ * A footnote marker's node carries NO text of its own — the number is derived
+ * (see `footnoteNumbers`) — so it is `.bear-footnote-number` below that is
+ * actually visible, and that class carries the superscript styling in BOTH
+ * mediums.
+ *
+ * The marker node cannot hold the number in the editor at all: a widget
+ * decoration cannot be placed INSIDE an atom, so the number renders as the
+ * atom's sibling. Styling the marker rather than the number is why the first
+ * attempt drew `CommonMark1` at full size on the baseline.
  */
 .ProseMirror .bear-footnote-ref {
-  color: var(--bear-accent);
   cursor: pointer;
-  font-size: 0.7em;
-  vertical-align: super;
-  line-height: 0;
 }
 
 /*
@@ -1231,12 +1233,42 @@
 }
 
 /*
- * The number itself, drawn INSIDE the marker by a widget decoration. The
- * marker node has no text of its own — see `Footnote.ts` — so this is the only
- * thing in it.
+ * The number itself. In the editor it is a widget beside the marker atom; in
+ * an export `numberFootnotes` writes it into a span of this same class inside
+ * the marker. One class, one appearance, whichever medium drew it.
  */
 .ProseMirror .bear-footnote-number {
+  color: var(--bear-accent);
+  cursor: pointer;
+  font-size: 0.7em;
+  vertical-align: super;
+  line-height: 0;
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The 각주 header. A widget above the first definition — the word itself is
+ * chrome and never enters the document, so it is styled here rather than
+ * inheriting from a heading node it deliberately is not.
+ */
+.ProseMirror .bear-footnote-section {
+  margin-block: 1.4em 0.4em;
+}
+
+.ProseMirror .bear-footnote-section button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--bear-faint);
+  cursor: pointer;
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ProseMirror .bear-footnote-section button:hover {
+  color: var(--bear-text);
 }
 
 /* The definition's leading number, or its label when nobody references it. */
