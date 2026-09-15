@@ -161,8 +161,17 @@ Two consumers learn to split instead:
 - **`buildGraph`** splits before its `byTitle.get(key)`. Without this, every
   heading link resolves to nothing and mints its own ghost node, so one real
   note would appear in the graph as several ghosts named after its headings.
-  With it, a heading link is an edge to the note, and a heading link to a
-  **missing** note makes one ghost for the note rather than one per heading.
+  With it, a heading link into an existing note is an edge to that note.
+
+  **A heading link into a note that does NOT exist still makes one ghost per
+  distinct target, and that is unchanged from today rather than fixed here.**
+  An earlier draft of this spec claimed such links would collapse into a
+  single ghost for the note; that is not achievable, because splitting
+  requires a known title and there is none by definition. `[[Missing/A]]` and
+  `[[Missing/B]]` are therefore two ghosts, exactly as they are now.
+  Heuristically splitting a ghost at the last `/` was considered and rejected
+  for the same reason approach 3 was rejected outright: it would render a
+  non-existent `[[A/B testing]]` as a ghost named `A`.
 
 ### Rendering
 
