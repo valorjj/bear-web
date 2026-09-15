@@ -1,7 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { skipTrailingNodeMeta } from '@tiptap/extensions';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 
 import { normalizeTitle } from '@/data';
 
@@ -17,6 +17,35 @@ import { headingSections } from './headingSections';
 export const REVEAL_MS = 1000;
 
 const headingRevealKey = new PluginKey<number | null>('headingReveal');
+
+/**
+ * Flashes whatever sits at `pos`, and clears the flash after `REVEAL_MS`.
+ *
+ * The reusable core, extracted for sub-project V: a footnote marker and its
+ * definition point at each other by POSITION, with no text to look up. U's
+ * `revealHeading` keeps its own text-to-position step on top of this — that
+ * lookup is the part specific to headings, and this part never was.
+ *
+ * Takes an `EditorView` rather than an `Editor` so a ProseMirror plugin can
+ * call it directly. Dispatching from inside a Tiptap command body is what
+ * throws `RangeError: Applying a mismatched transaction`; there is no command
+ * open here.
+ */
+export function revealPositionIn(view: EditorView, pos: number): void {
+  // `skipTrailingNodeMeta` for the same reason `setKnownNoteTitles` carries
+  // it: `TrailingNode`'s `appendTransaction` is NOT gated on `docChanged`, so
+  // a meta-only dispatch on a note ending in a list or a table would append an
+  // empty paragraph — which autosave then writes back, editing a note the user
+  // only looked at.
+  view.dispatch(view.state.tr.setMeta(headingRevealKey, pos).setMeta(skipTrailingNodeMeta, true));
+
+  setTimeout(() => {
+    if (view.isDestroyed) return;
+    view.dispatch(
+      view.state.tr.setMeta(headingRevealKey, null).setMeta(skipTrailingNodeMeta, true),
+    );
+  }, REVEAL_MS);
+}
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -64,22 +93,7 @@ export const HeadingReveal = Extension.create({
           if (section === undefined) return false;
           if (!dispatch) return true;
 
-          // `skipTrailingNodeMeta` for the same reason `setKnownNoteTitles`
-          // carries it: `TrailingNode`'s `appendTransaction` is NOT gated on
-          // `docChanged`, so a meta-only dispatch on a note ending in a list
-          // or a table would append an empty paragraph — which autosave then
-          // writes back, editing a note the user only looked at.
-          dispatch(
-            state.tr.setMeta(headingRevealKey, section.pos).setMeta(skipTrailingNodeMeta, true),
-          );
-
-          setTimeout(() => {
-            if (editor.isDestroyed) return;
-            editor.view.dispatch(
-              editor.state.tr.setMeta(headingRevealKey, null).setMeta(skipTrailingNodeMeta, true),
-            );
-          }, REVEAL_MS);
-
+          revealPositionIn(editor.view, section.pos);
           return true;
         },
     };
@@ -108,9 +122,15 @@ export const HeadingReveal = Extension.create({
             if (pos === null) return null;
 
             const node = state.doc.nodeAt(pos);
-            // The heading can be gone by now — deleted while the flash was
-            // up. Nothing to paint, and no error either.
-            if (node === null || node.type.name !== 'heading') return null;
+            // Whatever is there — a heading for U, a footnote or a paragraph
+            // for V. The type check this carried until V ("is it a heading?")
+            // was a leftover from when headings were the only caller, and it
+            // silently painted NOTHING for every other node: the extraction of
+            // `revealPositionIn` looked complete and the flash never appeared.
+            //
+            // The node being gone is still a real case — deleted while the
+            // flash was up — and is still nothing to paint and no error.
+            if (node === null) return null;
 
             return DecorationSet.create(state.doc, [
               Decoration.node(pos, pos + node.nodeSize, { class: 'bear-heading-revealed' }),

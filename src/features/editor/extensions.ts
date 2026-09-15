@@ -10,6 +10,8 @@ import { Callout, CalloutTitle, type CalloutOptions } from './Callout';
 import { CodeCopy, type CodeCopyOptions } from './CodeCopy';
 import { CodeLanguageControls, type CodeLanguageControlsOptions } from './CodeLanguageControls';
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
+import { FootnoteDefinition, FootnoteRef } from './Footnote';
+import { FootnoteDecorations, type FootnoteDecorationsOptions } from './FootnoteDecorations';
 import { HeadingReveal } from './HeadingReveal';
 import { LinkEdit, type LinkEditOptions } from './LinkEdit';
 import { ContextMenu, type ContextMenuOptions } from './ContextMenu';
@@ -47,6 +49,7 @@ function buildSupportedExtensions(
     TagPillOptions &
       LinkPillOptions &
       LinkEditOptions &
+      FootnoteDecorationsOptions &
       LinkAutocompleteOptions &
       TagAutocompleteOptions &
       HeadingFoldOptions &
@@ -174,6 +177,15 @@ function buildSupportedExtensions(
     // spreads every extension's options into ONE flat object, and an
     // extension that takes none cannot collide with anything.
     HeadingReveal,
+    // V's two nodes. No options, so no `.configure` and no entry in the
+    // options union — an extension that takes none cannot collide in the flat
+    // merge. See `Footnote.ts`.
+    FootnoteRef,
+    FootnoteDefinition,
+    // Paints their numbers. A separate Extension so the NODES stay free of
+    // view concerns — the numbers are decorations and must never reach the
+    // document.
+    FootnoteDecorations.configure(options),
     // The external link's edit pencil. An `Extension`, not a mark change: it
     // decorates the `link` mark StarterKit already registers and touches
     // neither the schema nor the document. See `LinkEdit.ts`.
@@ -255,6 +267,7 @@ export function buildEditorExtensions(
     TagPillOptions &
       LinkPillOptions &
       LinkEditOptions &
+      FootnoteDecorationsOptions &
       LinkAutocompleteOptions &
       TagAutocompleteOptions &
       HeadingFoldOptions &

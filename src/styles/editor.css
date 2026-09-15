@@ -1207,6 +1207,98 @@
 }
 
 /*
+ * A footnote marker's node carries NO text of its own — the number is derived
+ * (see `footnoteNumbers`) — so it is `.bear-footnote-number` below that is
+ * actually visible, and that class carries the superscript styling in BOTH
+ * mediums.
+ *
+ * The marker node cannot hold the number in the editor at all: a widget
+ * decoration cannot be placed INSIDE an atom, so the number renders as the
+ * atom's sibling. Styling the marker rather than the number is why the first
+ * attempt drew `CommonMark1` at full size on the baseline.
+ */
+.ProseMirror .bear-footnote-ref {
+  cursor: pointer;
+}
+
+/*
+ * A footnote itself. An ordinary editable block — the document is the note, so
+ * this is typed in directly rather than through a popover the app would have
+ * to reconcile with the file.
+ */
+.ProseMirror .bear-footnote-def {
+  display: block;
+  color: var(--bear-muted);
+  font-size: 0.92em;
+}
+
+/*
+ * The number itself. In the editor it is a widget beside the marker atom; in
+ * an export `numberFootnotes` writes it into a span of this same class inside
+ * the marker. One class, one appearance, whichever medium drew it.
+ */
+.ProseMirror .bear-footnote-number {
+  color: var(--bear-accent);
+  cursor: pointer;
+  font-size: 0.7em;
+  vertical-align: super;
+  line-height: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The 각주 header. A widget above the first definition — the word itself is
+ * chrome and never enters the document, so it is styled here rather than
+ * inheriting from a heading node it deliberately is not.
+ */
+.ProseMirror .bear-footnote-section {
+  margin-block: 1.4em 0.4em;
+}
+
+.ProseMirror .bear-footnote-section button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--bear-faint);
+  cursor: pointer;
+  font-family: var(--bear-font-sans);
+  font-size: var(--bear-text-ui-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ProseMirror .bear-footnote-section button:hover {
+  color: var(--bear-text);
+}
+
+/*
+ * A marker whose footnote is not written yet. Muted and dashed, exactly as an
+ * unresolved `[[link]]` is, and for the same reason: it is a normal state
+ * while writing, so it must read as incomplete rather than as broken.
+ */
+.ProseMirror .bear-footnote-number--orphan {
+  color: var(--bear-muted);
+  text-decoration: underline dashed;
+  text-underline-offset: 0.15em;
+}
+
+/* The way back to a footnote's first marker. */
+.ProseMirror .bear-footnote-back {
+  margin-inline-start: 0.4em;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--bear-accent);
+  cursor: pointer;
+}
+
+/* The definition's leading number, or its label when nobody references it. */
+.ProseMirror .bear-footnote-def-marker {
+  color: var(--bear-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
  * A folded section's blocks. `display: none` rather than `visibility` or a
  * height clamp: the block must take no space at all, and ProseMirror keeps the
  * positions regardless, since the document is untouched.

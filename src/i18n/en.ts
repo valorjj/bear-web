@@ -236,6 +236,9 @@ export const en = {
   'editor.tagPill.hint': 'Filter by this tag',
   'editor.linkPill.hint': 'Open this note',
 
+  'editor.footnotes.section': 'Footnotes',
+  'editor.toolbar.footnote': 'Footnote',
+  'editor.footnotes.back': 'Back to the reference',
   'editor.link.edit': 'Edit link',
   'editor.linkAutocomplete.listLabel': 'Link to note',
   'editor.linkAutocomplete.empty': 'No matching note',

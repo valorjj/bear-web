@@ -51,6 +51,11 @@ const CANONICAL: ReadonlyArray<{ name: string; markdown: string }> = [
   { name: 'stored image, width only', markdown: '![|640](files/abc123.webp)' },
   // Still a RAW inline, and must stay one — see the privacy ruling.
   { name: 'remote image', markdown: '![remote](https://example.com/a.png)' },
+  // V. Both halves, and a WORD label — the number is positional, so a label
+  // that is not a digit has to survive a round trip untouched.
+  { name: 'footnote marker', markdown: 'Alpha[^1] beta.' },
+  { name: 'footnote definition', markdown: '[^1]: Because.' },
+  { name: 'footnote pair', markdown: 'Alpha[^why] beta.\n\n[^why]: Because.' },
   { name: 'blockquote', markdown: '> Quoted text.' },
   { name: 'horizontal rule', markdown: '---' },
   { name: 'bullet list', markdown: '- first\n- second' },

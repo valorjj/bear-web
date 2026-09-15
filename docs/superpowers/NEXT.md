@@ -1923,3 +1923,46 @@ and its four callers.
   measured at 215 B and rejected. The user raised the ceiling to **361,000**,
   and the guard's docblock now also records the undocumented S4 raise it
   found sitting in the constant.
+
+### V. Footnotes (각주) — **SHIPPED 2026-09-15**
+
+`[^1]` renders as a superscript number, `[^1]: text` in a 각주 section that
+collapses, clicking jumps both ways, and a toolbar control (or `Mod-Alt-6`)
+inserts the pair with the caret in the new footnote.
+
+Spec: `docs/superpowers/specs/2026-09-15-v-footnotes-design.md`.
+Plan: `docs/superpowers/plans/2026-09-15-v-footnotes.md`.
+
+CommonMark's own form, stored exactly as written: two real nodes, no generated
+block, no synchronisation layer, no Dexie change. Numbers come from the order
+of first reference and are never stored.
+
+**What the work taught:**
+
+- **A block tokenizer's `start` is not a hint — marked uses it to CUT the
+  paragraph at the index you report.** Reporting every `[^` split
+  `Alpha[^why] beta.` in two, and did it to prose containing no footnote at
+  all.
+- **`computeRecognizedHtmlTags` claims a tag wholesale from any `parseHTML`
+  rule that mentions it.** `sup[data-footnote-ref]` claimed bare `<sup>` and
+  `H<sup>2</sup>O` in a note silently became `H2O`; `span` was worse. The
+  marker registers no `parseHTML` rule at all now.
+- **A widget decoration cannot be placed inside an atom**, so a marker's
+  number is its SIBLING — and the superscript styling, which sat on the
+  marker, was being applied to an empty span. Only a screenshot showed it.
+- **A meta-only dispatch on a note ending in a footnote appends a paragraph**
+  without `skipTrailingNodeMeta`, and every note with footnotes ends in one.
+  Probed directly rather than inherited from the existing rule.
+- **A fault injection that silently no-ops looks exactly like a test that
+  proves nothing.** One injection's target string had been reformatted by
+  Prettier; the `replace` had no assertion, so it did nothing and the test
+  "passed". Assert the match.
+- **The bundle fit, with 438 B to spare.** V cost 1,829 B against 2,267 B of
+  headroom — measured after task 1 (425 B), after task 5 (1,079 B) and after
+  task 7, as the spec committed to, rather than at the gate. No ceiling raise.
+
+**Known and accepted:** a footnote inserted BEFORE an existing one leaves the
+list out of numeric order, because `insertFootnote` appends after the last
+definition. Sorting would mean moving document nodes — the synchronisation
+layer the spec rejected. Placing the new definition by reference order instead
+is a possible follow-up.

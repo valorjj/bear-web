@@ -78,10 +78,11 @@ redirect stub instead of the app.
 | S4 tag autocomplete + plain-click filtering (absorbs S2)           | complete |
 | T table insert chords + the callout button                         | complete |
 | U heading links: `[[Note/Heading]]`                                | complete |
+| V footnotes (각주)                                                 | complete |
 
-3084 unit tests pass and 112 skip (the server integration tests, which skip
+3141 unit tests pass and 112 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
-`npm run test:pdf`), 306 end-to-end tests pass and 1 skips. `main` is always green and
+`npm run test:pdf`), 311 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**

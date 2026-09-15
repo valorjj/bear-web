@@ -906,3 +906,45 @@ describe('the export mirrors the editor typography', () => {
     expect(html).toContain('--bear-title-gap: 1.75em;');
   });
 });
+
+describe('footnotes in an export', () => {
+  /**
+   * The export is the half that fails SILENTLY.
+   *
+   * Numbers are decorations in the editor, and decorations never serialize —
+   * `CodeBlockLowlight` already shipped this project exports with a correct
+   * stylesheet applied to nothing. A test that only looked at the editor would
+   * pass against an export whose markers are all empty.
+   */
+  it('writes footnote numbers into the exported HTML', () => {
+    const html = renderNoteBody('Alpha[^why] and beta[^when].\n\n[^why]: a\n\n[^when]: b');
+
+    expect(html).toContain('>1</span>');
+    expect(html).toContain('>2</span>');
+  });
+
+  it('numbers by order of first reference, matching the editor', () => {
+    // `when` is defined first but referenced second, so it is number 2. The
+    // same `footnoteNumbers` decides this for both mediums.
+    const html = renderNoteBody('Alpha[^why] and beta[^when].\n\n[^when]: b\n\n[^why]: a');
+    const why = html.indexOf('data-footnote-ref="why"');
+    const when = html.indexOf('data-footnote-ref="when"');
+
+    expect(html.slice(why, why + 160)).toContain('>1</span>');
+    expect(html.slice(when, when + 160)).toContain('>2</span>');
+  });
+
+  it('numbers the definition to match its marker', () => {
+    const html = renderNoteBody('Alpha[^why].\n\n[^why]: a');
+    const definition = html.indexOf('data-footnote-def="why"');
+
+    expect(html.slice(definition, definition + 120)).toContain('1.');
+  });
+
+  it('leaves an unreferenced definition its label instead of a number', () => {
+    const html = renderNoteBody('[^orphan]: nobody points here');
+    const definition = html.indexOf('data-footnote-def="orphan"');
+
+    expect(html.slice(definition, definition + 140)).toContain('orphan');
+  });
+});
