@@ -233,6 +233,44 @@ test.describe('heading links', () => {
     await expect(editor).toContainText(`[[${TARGET}/Smoke tests]]`);
   });
 
+  /**
+   * The gap U shipped with, reported from production on 2026-09-15.
+   *
+   * The popover inserts `[[Title]]` CLOSED, so the only way to add a heading
+   * to a link it just wrote is to move back inside — and L2's closing-link
+   * guard refused exactly that position. The two halves of the feature could
+   * not be used together, which no test in the branch noticed because every
+   * one of them typed the title by hand and never let the popover close it.
+   */
+  test('a heading can be added to a link the popover already closed', async ({ page }) => {
+    await seed(page, `# ${SOURCE}\n\nbody`);
+    await page.getByRole('button', { name: rowNamed(SOURCE) }).click();
+    const editor = editorLocator(page);
+
+    await editor.click();
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.type(' [[Deploy');
+    const options = page.locator('.bear-link-autocomplete-list [role="option"]');
+    await expect(options).toHaveText([TARGET]);
+    await page.keyboard.press('Enter');
+    await expect(editor).toContainText(`[[${TARGET}]]`);
+
+    // Back inside the closed link, exactly where a reader would click.
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.type('/');
+
+    await expect(options).toHaveText(['Preflight', 'Rollback', 'Smoke tests']);
+    await page.keyboard.type('roll');
+    await page.keyboard.press('Enter');
+
+    // ONE pair of brackets. The guard existed because replacing through the
+    // caret alone stranded the original `]]`, so this is the assertion that
+    // matters: `closeTo` consumed them.
+    await expect(editor).toContainText(`[[${TARGET}/Rollback]]`);
+    await expect(editor).not.toContainText(']]]');
+  });
+
   test('a note whose own title contains a slash is not read as a heading link', async ({
     page,
   }) => {

@@ -67,6 +67,15 @@ export interface LinkAutocompleteMatch {
   to: number;
   /** Text typed since the opening `[[`, never containing `]` or a newline. */
   query: string;
+  /**
+   * Where a replacement must END so it does not leave stray brackets behind.
+   *
+   * Equal to `to` for a link still being typed. Two characters PAST `to` when
+   * the caret sits immediately before this link's own `]]` — the state the
+   * popover's own insert leaves behind, and the only way to add `/heading` to
+   * a link it has already closed.
+   */
+  closeTo: number;
 }
 
 /**
@@ -101,24 +110,35 @@ export function linkAutocompleteMatchAt(state: EditorState): LinkAutocompleteMat
   // boundary this grammar cannot see into.
   if (query.includes(']') || query.includes('\n') || query.includes(MASK)) return null;
 
+  const after = text.slice($from.parentOffset);
+
   // The caret sits INSIDE an already-complete `[[Title]]`. Nothing before the
   // caret can tell: the `]]` is on the far side of it, so every guard above
   // passes and the popover opens inside a finished link — where `Enter` runs
-  // `insertLink`, which replaces `[[` → caret and leaves the original tail
-  // behind, yielding `[[Full Title]] Title]]`. Refuse whenever the rest of the
-  // block closes this link, using the same `[^\]\n]*` title grammar
-  // `findLinkRanges` scans with.
+  // `insertLink`, which would replace `[[` → caret and leave the original tail
+  // behind, yielding `[[Full Title]] Title]]`.
   //
-  // Deliberately cheap, with one known and accepted false negative: opening a
-  // NEW link to the left of an existing one on the same line
-  // (`[[Be| and [[Alpha]]`) also sees a closing `]]` ahead and stays shut.
-  // Typing the closing brackets, or finishing the link on its own line, both
-  // work; the alternative is a real scan for the nearest opener, which is more
-  // machinery than this edge deserves.
-  if (/^[^\]\n]*\]\]/.test(text.slice($from.parentOffset))) return null;
+  // ONE position is exempt, and it is the one sub-project U's own flow needs:
+  // the caret immediately before this link's `]]`. That is where you land
+  // after moving back into a link the popover itself closed, and typing `/`
+  // there is the only way to turn `[[first note]]` into
+  // `[[first note/Heading]]`. Reported from production on 2026-09-15, because
+  // U shipped with the two halves of its own feature unable to meet.
+  //
+  // `insertLink` consumes those two characters via `closeTo`, so nothing is
+  // left behind — the exact failure this guard was written for.
+  //
+  // Everything else still refuses, including the case the guard exists for: a
+  // NEW link opened to the left of an existing one (`[[Be| and [[Alpha]]`)
+  // sees a `]]` ahead that belongs to the OTHER link, and `after` does not
+  // start with it. A caret mid-title (`[[first no|te]]`) refuses too —
+  // conservative, and it costs the reader one arrow key.
+  const closes = after.startsWith(']]');
+  if (!closes && /^[^\]\n]*\]\]/.test(after)) return null;
 
   const blockStart = $from.before() + 1;
-  return { from: blockStart + openAt, to: blockStart + upto.length, query };
+  const to = blockStart + upto.length;
+  return { from: blockStart + openAt, to, query, closeTo: closes ? to + 2 : to };
 }
 
 /**
@@ -351,7 +371,10 @@ function insertLink(
   // set, so `[[deploy check/roll]]` completes to `[[Deploy Checklist/Rollback]]`
   // with the casing each one actually has.
   const text = rows.mode === 'heading' && rows.title !== null ? `${rows.title}/${chosen}` : chosen;
-  const tr = view.state.tr.insertText(`[[${text}]]`, match.from, match.to);
+  // `closeTo`, not `to`: when the caret sat inside a link the popover had
+  // already closed, the replacement must swallow that link's own `]]` rather
+  // than leave a second pair stranded after the new one.
+  const tr = view.state.tr.insertText(`[[${text}]]`, match.from, match.closeTo);
   view.dispatch(tr);
   view.focus();
 }

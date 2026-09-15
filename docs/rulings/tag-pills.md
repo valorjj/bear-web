@@ -584,6 +584,22 @@ Added 2026-09-15, sub-project U. Spec:
   written into the link, and never found by the navigator. Do not reintroduce
   a second reader "for speed".
 
+- **`linkAutocompleteMatchAt` matches with the caret immediately before a
+  link's own `]]`, and `insertLink` consumes those brackets via `closeTo`.**
+  L2's guard refused any caret with a `]]` ahead of it on the line, because
+  replacing `[[`→caret alone stranded the original tail as
+  `[[Full Title]] Title]]`. U made that exact position load-bearing: the
+  popover inserts `[[Title]]` CLOSED, so adding `/heading` afterwards means
+  moving back inside — and the guard rejected there, leaving the two halves of
+  U unable to meet. **Shipped that way and reported from production on
+  2026-09-15**; every test in the branch typed the title by hand and never let
+  the popover close a link, which is why none of them saw it.
+
+  What still refuses, and must: a new link opened to the LEFT of an existing
+  one (`[[Be| and [[Alpha]]`) — the `]]` ahead belongs to the other link, and
+  `after` does not start with it — and a caret mid-title (`[[first no|te]]`),
+  which is conservative and costs one arrow key.
+
 - **Clicking a pill needs `data-resolved="true"` waited for, not assumed.**
   The known-title set reaches the plugin from an effect after
   `notes.allNoteTitles()` resolves, so a pill is briefly unresolved and a

@@ -114,11 +114,32 @@ describe('linkAutocompleteMatchAt', () => {
     editor.destroy();
   });
 
-  it('is null with the caret immediately before the closing ]]', () => {
+  /**
+   * REVERSED on 2026-09-15, and kept rather than deleted because the reversal
+   * is the informative part.
+   *
+   * This asserted `null` from L2 until sub-project U, on the reasoning in the
+   * docblock above. U made that position the one the feature depends on: the
+   * popover inserts `[[Title]]` closed, so the only way to add `/heading` is
+   * to move back in — and this guard rejected exactly there, leaving the two
+   * halves of U unable to meet. Reported from production.
+   *
+   * The failure the guard existed for is closed by `closeTo` instead, which
+   * makes the insert consume the brackets it finds. The cases that must still
+   * refuse are asserted in "re-entering a closed link" at the end of this
+   * file, including `[[Be| and [[Alpha]]`.
+   */
+  it('MATCHES with the caret immediately before the closing ]]', () => {
     const editor = editorWith('see [[Deploy Checklist]] here');
     const beforeClose = editor.state.doc.textContent.indexOf(']]') + 1;
     editor.commands.setTextSelection(beforeClose);
-    expect(linkAutocompleteMatchAt(editor.state)).toBeNull();
+
+    const match = linkAutocompleteMatchAt(editor.state);
+
+    expect(match?.query).toBe('Deploy Checklist');
+    // And it reports where the existing brackets end, so `insertLink` can
+    // replace through them rather than stranding a second pair.
+    expect(match?.closeTo).toBe((match?.to ?? 0) + 2);
     editor.destroy();
   });
 
@@ -551,6 +572,72 @@ describe('the / heading mode', () => {
     editor.commands.setTextSelection(editor.state.doc.content.size);
 
     expect(headingTargetTitle(editor.state)).toBeNull();
+    editor.destroy();
+  });
+});
+
+describe('re-entering a closed link', () => {
+  /**
+   * The gap sub-project U shipped with, reported from production on
+   * 2026-09-15: the popover inserts `[[Title]]` WITH its closing brackets, so
+   * the only way to add `/heading` afterwards is to move back inside — and
+   * L2's closing-link guard rejected exactly that position. The two halves of
+   * U could not be used together.
+   */
+  it('matches when the caret sits immediately before the closing brackets', () => {
+    const editor = editorWith('see [[first note/]] end');
+    // Caret between the `/` and the `]]`.
+    const at = editor.state.doc.textBetween(0, editor.state.doc.content.size).indexOf(']]') + 1;
+    editor.commands.setTextSelection(at);
+
+    const match = linkAutocompleteMatchAt(editor.state);
+
+    expect(match?.query).toBe('first note/');
+    editor.destroy();
+  });
+
+  it('reports where the closing brackets end, so the insert can consume them', () => {
+    const editor = editorWith('see [[first note/]] end');
+    const at = editor.state.doc.textBetween(0, editor.state.doc.content.size).indexOf(']]') + 1;
+    editor.commands.setTextSelection(at);
+
+    const match = linkAutocompleteMatchAt(editor.state)!;
+
+    // Two characters past the caret: the `]]` this link already carries.
+    expect(match.closeTo).toBe(match.to + 2);
+    editor.destroy();
+  });
+
+  it('reports closeTo === to when nothing closes the link', () => {
+    const editor = editorWith('see [[first note/');
+    editor.commands.setTextSelection(editor.state.doc.content.size);
+
+    const match = linkAutocompleteMatchAt(editor.state)!;
+
+    expect(match.closeTo).toBe(match.to);
+    editor.destroy();
+  });
+
+  /**
+   * The case the guard was WRITTEN for, and it must keep failing: a new link
+   * opened to the left of an existing one sees that link's `]]` ahead of it.
+   * Matching there would make Enter replace through someone else's brackets.
+   */
+  it('still refuses when the brackets ahead belong to another link', () => {
+    const editor = editorWith('see [[Be and [[Alpha]] end');
+    const at = editor.state.doc.textBetween(0, editor.state.doc.content.size).indexOf(' and') + 1;
+    editor.commands.setTextSelection(at);
+
+    expect(linkAutocompleteMatchAt(editor.state)).toBeNull();
+    editor.destroy();
+  });
+
+  it('still refuses mid-title, where the caret is not against the brackets', () => {
+    const editor = editorWith('see [[first note]] end');
+    const at = editor.state.doc.textBetween(0, editor.state.doc.content.size).indexOf(' note') + 1;
+    editor.commands.setTextSelection(at);
+
+    expect(linkAutocompleteMatchAt(editor.state)).toBeNull();
     editor.destroy();
   });
 });
