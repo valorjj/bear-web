@@ -57,8 +57,14 @@ export type {
 // consumer outside `src/data/` has any business calling it directly.
 export { canRenameTo, canWriteTag, findTagRanges, normalizeTag, parseTags } from './tags';
 export type { TagRange } from './tags';
-export { buildTitleIndex, findLinkRanges, normalizeTitle, parseLinks } from './links';
-export type { LinkRange, TitledNote } from './links';
+export {
+  buildTitleIndex,
+  findLinkRanges,
+  normalizeTitle,
+  parseLinks,
+  splitLinkTarget,
+} from './links';
+export type { LinkRange, LinkTarget, TitledNote } from './links';
 export type { DatabaseStatus, ResolveDatabaseDeps } from './open';
 /**
  * `createDiagramsRepository` is the only repository FACTORY exported from
