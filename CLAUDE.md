@@ -77,10 +77,11 @@ redirect stub instead of the app.
 | S1 tag rename and delete, across every note, trashed ones included | complete |
 | S4 tag autocomplete + plain-click filtering (absorbs S2)           | complete |
 | T table insert chords + the callout button                         | complete |
+| U heading links: `[[Note/Heading]]`                                | complete |
 
-2999 unit tests pass and 112 skip (the server integration tests, which skip
+3068 unit tests pass and 112 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
-`npm run test:pdf`), 294 end-to-end tests pass and 1 skips. `main` is always green and
+`npm run test:pdf`), 300 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**

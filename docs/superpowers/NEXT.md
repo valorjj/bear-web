@@ -1870,3 +1870,56 @@ store-only zip.
 
 The privacy half shipped early. What remains is cosmetic: the row currently
 shows the first stored image, and could show a smarter choice.
+
+### U. Heading links — **SHIPPED 2026-09-15**
+
+`[[Deploy Checklist/Rollback]]` links to a heading inside a note. The pill
+renders note, dimmed separator and heading; following it opens the note,
+unfolds the section if it was folded, scrolls the heading near the top and
+flashes it; typing `/` after a resolving title lists that note's headings.
+
+Spec: `docs/superpowers/specs/2026-09-15-u-heading-links-design.md`.
+Plan: `docs/superpowers/plans/2026-09-15-u-heading-links.md`.
+
+**The shape of the whole sub-project came from one answer: headings are not
+indexed.** A stale heading opens the note at the top rather than rendering as
+broken, so there is no `noteHeadings` table, no Dexie version, no migration,
+no sync change, and `reindexNote` is untouched. The alternative was put to the
+user with both costs and declined. What changed instead is one pure splitter
+and its four callers.
+
+**What the work taught, in the order it hurt:**
+
+- **The plan's Task 9 was to pin two heading readers to each other with an
+  agreement test. That test failed on its first run and the premise was
+  wrong.** `headingSections` reports a heading as RENDERED (`node.textContent`)
+  and the regex scanner reported it as WRITTEN, so `## Some **bold** step`
+  would have been offered by the popover, written into a link, and never found
+  by the navigator — a link that silently does nothing. The two CAN be
+  collapsed: `noteHeadings.ts` derives headings through the real parser, and
+  the scanner is deleted. One reader, no agreement test needed.
+- **Two tests that passed were proved vacuous by injection, not by reading.**
+  A single-click e2e test of the same-note reveal passed against an effect
+  keyed on the heading text instead of the nonce — only a repeat follow can
+  tell them apart. And the fold test used `toContainText`, which reads
+  `textContent`: a folded section's text is still in the DOM under
+  `display: none`, so it passed both against a fold that never happened and an
+  unfold that never happened.
+- **The persisted fold restore is asynchronous, and it silently undid the
+  unfold.** Reveal ran first against an empty fold set, removing nothing; the
+  restore then landed and folded the section straight back, so the link opened
+  the right note at a collapsed heading. `NoteEditor` gates `revealHeading` on
+  `foldsRestored` now. No unit test can see this — jsdom neither lays out nor
+  scrolls.
+- **jsdom implements no `scrollIntoView` at all.** The reveal effect threw
+  inside a passive effect and took out every `AppShell` test that follows a
+  link. Same shape as the `matchMedia` gap.
+- **Playwright's element screenshot scrolls its target into view**, which
+  reset the very scroll under test and made a working reveal look broken for
+  twenty minutes. Assert before screenshotting, and prefer a viewport shot.
+- **The bundle ceiling.** U costs **1,401 B** gzipped and landed 15 B over.
+  No `React.lazy` boundary was available (everything is reached from the
+  editor's extension array, built at mount); cutting the landing flash was
+  measured at 215 B and rejected. The user raised the ceiling to **361,000**,
+  and the guard's docblock now also records the undocumented S4 raise it
+  found sitting in the constant.

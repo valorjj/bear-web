@@ -483,8 +483,36 @@ import { describe, expect, it } from 'vitest';
  * is below this file's stated ~2.5-3 KB practice but in line with what recent
  * raises actually left (1,640 B, 775 B, 233 B, 455 B): the eager closure is
  * still functionally spent, and the fix is still not another raise.
+ *
+ * **A raise to 358,000 happened after that and was never recorded here.** The
+ * history above ends at 355,000 while the constant read 358,000; CLAUDE.md
+ * attributes the 358,000 to S4 on 2026-09-09. Its REASON is not written down
+ * anywhere, and it is not reconstructed here — inventing one would be worse
+ * than the gap. Noted because this docblock is the designated record, and a
+ * record with a silent hole in it is the "exists, unrun, silently stale"
+ * failure `docs/rulings/testing-and-tooling.md` warns about.
+ *
+ * **U (heading links) raises it to 361,000, decided BY THE USER on
+ * 2026-09-15.** Both sides measured with the guard's own walk: `main` at
+ * **356,614 B**, the finished branch at **358,015 B** — a true eager cost of
+ * **1,401 B** for `splitLinkTarget`, `HeadingReveal`, `keysRevealing`,
+ * `noteHeadings`, the popover's `/` mode, one lucide glyph and four i18n
+ * strings. That is **15 B** over the 358,000 in force.
+ *
+ * The two alternatives were measured rather than asserted, as this file's own
+ * rule requires. There is no `React.lazy` boundary available: every piece is
+ * reached from the editor's extension array, built at mount. Cutting the
+ * landing flash — the one genuinely severable piece — was measured at
+ * **357,800 B**, i.e. it saves **215 B** and would have fitted under the old
+ * ceiling with 200 B to spare; it was rejected because the flash is the
+ * behaviour the user chose when asked how arriving should look, and 200 B is
+ * not headroom.
+ *
+ * 361,000 follows the convention this file has used since K1: the measured
+ * closure plus ~3 KB for wiring. Headroom after U: **2,985 B**. That headroom
+ * is for wiring, not for the next feature.
  */
-const CEILING_BYTES = 358_000;
+const CEILING_BYTES = 361_000;
 
 interface ManifestChunk {
   file: string;

@@ -242,25 +242,40 @@ The heading extraction itself lives in `src/data/`, not `src/features/`,
 because the data layer may not import from features. It uses the existing
 `maskCode`, so a `#` inside a fence is not a heading.
 
-### The risk this design names rather than discovers
+### The risk this design named — and how implementation removed it
 
-This creates **two heading readers**: one over stored Markdown, for the
-popover, and one over the live ProseMirror document, for navigation. Two
-implementations of one grammar is this project's signature defect.
+**This section is kept as written, then corrected, because the correction is
+the useful part.**
 
-They cannot be collapsed — they read genuinely different inputs, a note you
-have not opened versus the document in front of you, and the second must be
-authoritative for what is actually on screen. What keeps them honest:
+The design above created **two heading readers**: one over stored Markdown for
+the popover, one over the live ProseMirror document for navigation. Two
+implementations of one grammar is this project's signature defect. The plan
+accepted them as uncollapsable — they read genuinely different inputs — and
+proposed pinning them together with an agreement test over the corpus.
 
-- both compare through `normalizeTitle`, so the key is shared even though the
-  scanners are not;
-- a test asserts the two agree across `e2e/fixtures/corpus.ts`'s notes — for
-  every corpus note, the Markdown scanner's headings equal the document
-  walker's, in order.
+**That test failed on its first run, and the failure was real:**
 
-If that test is ever deleted or weakened, the two will drift and the symptom
-will be a popover offering a heading the navigator cannot find, which presents
-as "the link does nothing."
+```
+expected [ 'Some **bold** and `code`' ] to equal [ 'Some bold and code' ]
+```
+
+`headingSections` reads `node.textContent`, so it reports a heading as
+RENDERED; the regex scanner reported it as WRITTEN. Any heading carrying
+inline formatting would have been offered by the popover, written into the
+link, and then never found by the navigator — a link that silently does
+nothing, with nothing on screen to explain it.
+
+Patching the scanner would have meant a second, partial inline-Markdown
+implementation whose failures look exactly like that one. So the premise was
+wrong: the two CAN be collapsed. `markdown.ts` gained `parseMarkdownDoc`,
+`noteHeadings.ts` derives headings through the real parser, and
+`notes.headingsOf` became `notes.textOf` — the data layer hands back text and
+knows nothing about heading grammar.
+
+There is now one heading reader, so the two cannot disagree. The cost is one
+parse of the target note when the reader types `/` after a resolving title —
+the same parse opening that note performs, once per target rather than per
+keystroke.
 
 ## Testing
 
