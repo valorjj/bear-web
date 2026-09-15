@@ -77,7 +77,14 @@ export interface NoteEditorProps {
    * pill. Returns whether the app acted on it; `false` falls through to
    * placing the caret — same contract as `onActivateTag`.
    */
-  onActivateLink?: (title: string) => boolean;
+  onActivateLink?: (title: string, heading: string | null) => boolean;
+  /**
+   * A heading to reveal after a `[[Note/Heading]]` link is followed. The
+   * `nonce` changes on every follow, so the same heading can be revealed
+   * twice — see `AppShell`'s own comment for why a read-once-at-mount prop
+   * (the shape `initialMarkdown` and `autoFocus` use) is not enough here.
+   */
+  revealHeading?: { text: string; nonce: number };
   /** Normalized tag keys the editor's autocomplete suggests from. */
   tagKeys?: string[];
   /**
@@ -131,6 +138,7 @@ export function NoteEditor({
   autoFocus = false,
   onActivateTag,
   onActivateLink,
+  revealHeading,
   tagKeys,
   onOpenNote,
   handleRef: externalHandleRef,
@@ -530,6 +538,7 @@ export function NoteEditor({
         updatedAt={note.updatedAt}
         onActivateTag={onActivateTag}
         onActivateLink={onActivateLink}
+        revealHeading={revealHeading}
         tagKeys={tagKeys}
         onExport={handleExport}
         onPublish={() => setPublishOpen(true)}

@@ -185,6 +185,27 @@ export function AppShell(): ReactElement {
     if (seed !== null && selectedNoteId !== seed.id) setSeed(null);
   }, [seed, selectedNoteId]);
 
+  /**
+   * The heading a just-followed `[[Note/Heading]]` link named, and a nonce
+   * that changes on every follow.
+   *
+   * The nonce is load-bearing, not indirection to be tidied away. The editor
+   * is keyed by note id, so following a link to ANOTHER note remounts it and
+   * a read-once-at-mount prop would be enough — but a link to a heading in
+   * the note you are ALREADY in remounts nothing, and without a changing
+   * value there is nothing for the editor's effect to react to. That case has
+   * no unit coverage available in jsdom (no layout, no scrolling), so it is
+   * made correct by construction rather than guarded after the fact.
+   *
+   * Cleared when the selection leaves the note it was set for, on exactly the
+   * same reasoning as `seed` above.
+   */
+  const [reveal, setReveal] = useState<{ id: string; text: string; nonce: number } | null>(null);
+
+  useEffect(() => {
+    if (reveal !== null && selectedNoteId !== reveal.id) setReveal(null);
+  }, [reveal, selectedNoteId]);
+
   // The note the app just created, so its editor can take the caret.
   //
   // A SEPARATE flag from `seed`, not a reuse of it: `seed` is only set for a
@@ -342,7 +363,7 @@ export function AppShell(): ReactElement {
   // `useLiveQuery` whenever the underlying data actually changes, and a
   // `[noteIndex]` dependency array would recompute this on every render the
   // query returns a result for anyway.
-  const handleActivateLink = (title: string): boolean => {
+  const handleActivateLink = (title: string, heading: string | null): boolean => {
     // `undefined` means the live query has not resolved yet — treated as
     // "not yet known", never as "no notes", the same discipline
     // `handleActivateTag` applies to `tree.nodes === undefined`.
@@ -351,6 +372,13 @@ export function AppShell(): ReactElement {
     const target = resolveLinkTarget(noteIndex, title);
     if (target === null) return false;
 
+    // `Date.now() + Math.random()` because two follows inside one millisecond
+    // must still differ. The value is never persisted, never compared for
+    // ordering, and never shown to anyone — it exists only to be unequal to
+    // the last one.
+    setReveal(
+      heading === null ? null : { id: target.id, text: heading, nonce: Date.now() + Math.random() },
+    );
     select(target.id);
     return true;
   };
@@ -861,6 +889,11 @@ export function AppShell(): ReactElement {
                       autoFocus={justCreatedId === selectedNote.id}
                       onActivateTag={handleActivateTag}
                       onActivateLink={handleActivateLink}
+                      revealHeading={
+                        reveal !== null && reveal.id === selectedNote.id
+                          ? { text: reveal.text, nonce: reveal.nonce }
+                          : undefined
+                      }
                       onOpenNote={select}
                       exportRef={exportRef}
                       tagKeys={tagKeys}

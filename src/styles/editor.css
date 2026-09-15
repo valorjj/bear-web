@@ -1083,6 +1083,44 @@
 }
 
 /*
+ * The landing flash after a `[[Note/Heading]]` link is followed.
+ *
+ * `--bear-tag-fill` rather than a colour of its own: this is the same
+ * "something is marked here" weight the pills carry, and a second fill token
+ * would have to be tuned across all sixteen themes to say the same thing.
+ *
+ * The animation is `forwards` and the decoration is removed when it ends
+ * (`REVEAL_MS` matches this duration), which is what lets a SECOND follow of
+ * the same link flash again instead of re-applying a class to an element whose
+ * animation has already finished.
+ */
+.ProseMirror .bear-heading-revealed {
+  border-radius: var(--bear-radius-sm);
+  animation: bear-heading-reveal 1s ease-out forwards;
+}
+
+@keyframes bear-heading-reveal {
+  from {
+    background-color: var(--bear-tag-fill-strong);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+/*
+ * Reduced motion gets the landing mark without the fade — removing the
+ * animation entirely would leave nothing at all to show where the link
+ * landed, which is the one thing this decoration exists to do.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ProseMirror .bear-heading-revealed {
+    animation: none;
+    background-color: var(--bear-tag-fill);
+  }
+}
+
+/*
  * A folded section's blocks. `display: none` rather than `visibility` or a
  * height clamp: the block must take no space at all, and ProseMirror keeps the
  * positions regardless, since the document is untouched.

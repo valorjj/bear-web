@@ -10,6 +10,7 @@ import { Callout, CalloutTitle, type CalloutOptions } from './Callout';
 import { CodeCopy, type CodeCopyOptions } from './CodeCopy';
 import { CodeLanguageControls, type CodeLanguageControlsOptions } from './CodeLanguageControls';
 import { HeadingFold, type HeadingFoldOptions } from './HeadingFold';
+import { HeadingReveal } from './HeadingReveal';
 import { ContextMenu, type ContextMenuOptions } from './ContextMenu';
 import { TableHandles, type TableHandlesOptions } from './TableHandles';
 import { TableShortcuts } from './TableShortcuts';
@@ -167,6 +168,10 @@ function buildSupportedExtensions(
     // the document and its Markdown are untouched. See `HeadingFold.ts` and
     // `headingFold.test.ts`.
     HeadingFold.configure(options),
+    // No options of its own, so no `.configure`: `buildEditorExtensions`
+    // spreads every extension's options into ONE flat object, and an
+    // extension that takes none cannot collide with anything.
+    HeadingReveal,
     // Decoration only, exactly like `HeadingFold` above: it adds nothing to
     // the schema and mutates no document, so tables serialize identically
     // whether or not this runs. Without `labels` it registers no plugin at
