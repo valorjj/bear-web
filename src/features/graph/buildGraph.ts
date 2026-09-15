@@ -1,4 +1,4 @@
-import { buildTitleIndex, normalizeTitle, type NoteLink, type TitledNote } from '@/data';
+import { buildTitleIndex, splitLinkTarget, type NoteLink, type TitledNote } from '@/data';
 
 /** Prefixes a ghost node's id, so it can never collide with a note id. */
 export const GHOST_PREFIX = 'ghost:';
@@ -58,7 +58,15 @@ export function buildGraph(index: readonly TitledNote[], rows: readonly NoteLink
     // notes table (a trash mid-read). Skip rather than mint a node for it.
     if (!nodes.has(row.noteId)) continue;
 
-    const key = normalizeTitle(row.toTitle);
+    // The `/` rule lives in exactly one place, and `byTitle` is already the
+    // known-title lookup it needs, so the predicate costs nothing here. A
+    // heading link is an edge to the NOTE — one edge, however many of its
+    // headings are linked.
+    //
+    // A heading link into a note that does not EXIST cannot be split (there
+    // is no known title to split on) and still mints one ghost per distinct
+    // target, exactly as it did before sub-project U.
+    const { title: key } = splitLinkTarget(row.toTitle, (candidate) => byTitle.has(candidate));
     const resolved = byTitle.get(key);
     let targetId: string;
 
