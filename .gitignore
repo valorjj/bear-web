@@ -23,3 +23,17 @@ server/.env.bak.*
 
 # JetBrains IDE settings — local, not project configuration.
 .idea/
+
+# The server's DEFAULT data roots, which live inside the repo when
+# PUBLISH_ROOT / IMAGE_ROOT are unset (`server/src/env.ts` defaults them to
+# ./data/... so local development boots with no configuration).
+#
+# Ignored as belt-and-braces, not as the fix. The fix is setting those
+# variables to host paths outside the repo — `server/.env.example` prescribes
+# both — because anything in here is deleted by `git clean -fdx`, which takes
+# every published page and every shared link with it. This entry only stops
+# the second failure: a published page, which is author content, being
+# COMMITTED. That already happened once (873bc6e, a stray Test Document that
+# rode along in an unrelated bundle-ceiling commit and is still in this public
+# repo's history).
+data/

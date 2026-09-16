@@ -119,6 +119,18 @@ out and name the reason in their accessible name.
   **`lsof -ti:8787 | xargs kill` no longer stops it** — launchd restarts it
   within ~10s and your local server then cannot bind. Run
   `npm run server:service:stop` before `server:dev:local`.
+- **`PUBLISH_ROOT` and `IMAGE_ROOT` default INSIDE the repo, and a published
+  page is the one piece of production data that is also author content.**
+  `env.ts` defaults them to `./data/images` and `./data/published` so local
+  development boots unconfigured — which means an unset variable puts live
+  data where `git clean -fdx` deletes it, taking every published page and
+  every shared link with it. `IMAGE_ROOT` was set correctly from the start;
+  `PUBLISH_ROOT` was not, and for months every published page was written into
+  the working tree. One of them was then COMMITTED — `873bc6e`, a stray
+  `Test Document` that rode along in an unrelated bundle-ceiling commit and is
+  still in this public repo's history. Both are now set to host paths per
+  `server/.env.example`, and `data/` is gitignored as belt-and-braces. The
+  gitignore is not the fix; the environment variables are.
 - **`server/.env` holds the production origins the live tunnel depends on, and
   the two servers cannot run at once.** Local development uses
   `server/.env.local` via `npm run server:dev:local`. See `server/README.md`.
