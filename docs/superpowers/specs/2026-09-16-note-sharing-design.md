@@ -241,9 +241,13 @@ rather than a comment.
 - **Importing the same link twice makes two notes, deliberately.**
   Deduplicating would mean recording provenance the recipient never asked for
   and cannot remove.
-- **A note whose images exceed what the device will hold.** The existing image
-  quota meter (L1) already covers the local side; the import surfaces the same
-  refusal rather than inventing a second one.
+- **A note whose images exceed what the device will hold.** Corrected during
+  plan review: there is **no local image quota** to surface. L1's meter
+  reports the SERVER's usage, and `FilesRepository.add` enforces nothing —
+  IndexedDB's own storage pressure is the only limit, and it surfaces as a
+  rejected write. The import therefore inherits exactly what a paste already
+  does, which is the right answer, but it is inherited rather than designed
+  and no task adds a check.
 
 ## Testing
 
