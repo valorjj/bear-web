@@ -12,6 +12,7 @@ import { exportRoutes } from './routes/export.ts';
 import { fileRoutes } from './routes/files.ts';
 import { publicPageRoutes } from './routes/publicPage.ts';
 import { publishRoutes } from './routes/publish.ts';
+import { shareRoutes } from './routes/share.ts';
 import { syncRoutes } from './routes/sync.ts';
 
 /** A parameterised SQL call. The only shape route code may use. */
@@ -149,6 +150,9 @@ export function createApp(deps: AppDeps): Hono {
   // no cookie has nothing else to key on, and this is the one route the
   // publish host actually serves.
   app.use('/p/*', rateLimit({ limit: 120, windowMs: 60_000, key: clientIp }));
+  // Matches `/p/*`'s limit and for the same reason: anonymous, and it reads a
+  // file from disk on every call.
+  app.use('/share/*', rateLimit({ limit: 120, windowMs: 60_000, key: clientIp }));
   app.use('*', rateLimit({ limit: 300, windowMs: 60_000, key: clientIp }));
 
   app.get('/health', (c) => c.json({ ok: true }));
@@ -160,6 +164,7 @@ export function createApp(deps: AppDeps): Hono {
   app.route('/', fileRoutes(deps));
   app.route('/', publishRoutes(deps));
   app.route('/', publicPageRoutes(deps));
+  app.route('/', shareRoutes(deps));
 
   return app;
 }
