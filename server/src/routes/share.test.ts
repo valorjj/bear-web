@@ -142,7 +142,9 @@ describe.skipIf(!url)('GET /share/:id', () => {
     const response = await app.request('/share/page-xss');
 
     expect(response.headers.get('content-type')).not.toMatch(/html/);
-    expect(response.headers.get('content-security-policy')).toBeTruthy();
+    const csp = response.headers.get('content-security-policy');
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain('sandbox');
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
   });
 });

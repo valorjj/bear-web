@@ -44,9 +44,17 @@ const ID = /^[A-Za-z0-9_-]+$/;
  *    `x-content-type-options: nosniff`, in case a browser or proxy ever
  *    reinterprets the content type anyway. `sandbox` with no allow-list
  *    denies scripts, forms, and top-level navigation from a document loaded
- *    this way — strictly stronger than `/p/:id`'s CSP, which has to allow
- *    inline styles and data URIs for a real reader; this route has no reader
- *    to serve, so nothing needs to render here at all. `x-robots-tag` and
+ *    this way. **Not strictly stronger than `/p/:id`'s CSP — the two are
+ *    different, not ordered.** `/p/:id` additionally sets `frame-ancestors
+ *    'none'`, `base-uri 'none'` and `form-action 'none'` explicitly, because
+ *    CSP3 does not fall those three back to `default-src` when omitted; this
+ *    route sets none of them, so framing genuinely is not restricted here.
+ *    `sandbox` covers forms and top-level navigation in practice, which is
+ *    most of what those three buy `/p/:id`, but not the frame-ancestors
+ *    case. The practical risk is nil — an opaque-origin, inert `text/plain`
+ *    body has nothing in it worth clickjacking — so this is left as is
+ *    rather than padded out to match; this route has no reader to serve, so
+ *    nothing needs to render here at all. `x-robots-tag` and
  *    `referrer-policy` mirror `/p/:id` for the same reason they exist there:
  *    these bytes are not meant to be indexed or to leak via Referer.
  *
