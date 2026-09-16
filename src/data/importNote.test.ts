@@ -113,4 +113,36 @@ describe('importNote', () => {
     const stored = await db.files.where('noteId').equals(note.id).toArray();
     expect(stored).toHaveLength(0);
   });
+
+  it('skips an image whose decode throws, keeps the others, and leaves no orphaned file row', async () => {
+    const flaky = async (b: Blob): Promise<{ width: number; height: number }> => {
+      if (b.size === 999) throw new Error('cannot decode this blob');
+      return { width: 800, height: 600 };
+    };
+
+    const note = await importNote(
+      {
+        title: 'Shared',
+        text: '![](files/good.webp)\n\n![](files/bad.webp)\n',
+        images: [
+          { path: 'files/good.webp', blob: blob(4) },
+          { path: 'files/bad.webp', blob: blob(999) },
+        ],
+      },
+      { createImageBitmap: flaky },
+    );
+
+    // The failed image's reference is untouched — same handling as an
+    // image never carried at all.
+    expect(note.text).toContain('files/bad.webp');
+    // The good image still made it in, rewritten to its new id.
+    expect(note.text).not.toContain('files/good.webp');
+
+    const stored = await db.files.where('noteId').equals(note.id).toArray();
+    // Exactly one file row: the good image. No orphan left behind for the
+    // one that threw partway through.
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.blob.size).toBe(4);
+    expect(note.text).toContain(`files/${stored[0]!.id}.webp`);
+  });
 });

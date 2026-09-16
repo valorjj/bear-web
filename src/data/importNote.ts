@@ -64,6 +64,25 @@ export const MAX_IMPORTED_IMAGE_BYTES = 25 * 1024 * 1024;
  * written rather than stripped: the sender's device did not hold those bytes
  * either, and deleting the reference would edit the note on their behalf.
  *
+ * A per-image failure — `measure` throws on a blob it cannot decode,
+ * `files.add` throws under storage pressure, or the size cap above rejects it
+ * — is handled the SAME way: caught, skipped, and its reference left
+ * untouched, exactly like an image the payload never carried. This is
+ * deliberate, not an oversight, and it is why the loop below can never throw.
+ * The alternative — let the loop throw and leave `notes.save` unrun — would
+ * leave the note holding the sender's original `files/<their-id>.webp` paths
+ * while any image `files.add` DID complete on an earlier iteration sits in
+ * `db.files`, marked dirty and queued to upload, with nothing in the saved
+ * text pointing at it: an orphan. Catching per image means the loop always
+ * finishes and `notes.save` always runs, so no such split state exists. A
+ * `files.add` that itself throws is not reachable here in a half-written
+ * state — Dexie's own `add` either commits the whole record or nothing — and
+ * any file this function skips outright (the size cap, or a caught
+ * `files.add` from an unrelated cause) leaves no row behind for
+ * `runStartupFileSweep` to have to reclaim. A Dexie transaction was
+ * considered and rejected for this: a transaction does not survive the
+ * `await` on `measure` (`createImageBitmap`), which runs outside it.
+ *
  * `notes.create` and `files.add` each call `markDirty` already, so a
  * signed-in device uploads the import on its next push with no sync work
  * here. **Nothing in this file may touch `syncedRev`** — an earlier import
@@ -90,17 +109,25 @@ export async function importNote(
     // payload never carried at all.
     if (image.blob.size > MAX_IMPORTED_IMAGE_BYTES) continue;
 
-    const bitmap = await measure(image.blob);
-    const record = await files.add(note.id, image.blob, {
-      mime: image.blob.type,
-      width: bitmap.width,
-      height: bitmap.height,
-    });
-    bitmap.close?.();
+    // Caught per image, not let propagate: see the module doc's failure-mode
+    // paragraph. A thrown `measure` or `files.add` must not abandon the loop
+    // with the note's text left unrewritten and an earlier image's file row
+    // orphaned — it is handled exactly like an image never carried at all.
+    try {
+      const bitmap = await measure(image.blob);
+      const record = await files.add(note.id, image.blob, {
+        mime: image.blob.type,
+        width: bitmap.width,
+        height: bitmap.height,
+      });
+      bitmap.close?.();
 
-    // `split`/`join` rather than a regex: the path comes from outside and
-    // would need escaping, and every occurrence must move, not the first.
-    text = text.split(image.path).join(storedImagePath(record.id));
+      // `split`/`join` rather than a regex: the path comes from outside and
+      // would need escaping, and every occurrence must move, not the first.
+      text = text.split(image.path).join(storedImagePath(record.id));
+    } catch {
+      // Skipped, same as an image the payload never carried — see above.
+    }
   }
 
   return text === payload.text ? note : notes.save(note.id, text);

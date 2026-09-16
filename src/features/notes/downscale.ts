@@ -1,4 +1,11 @@
-/** A mis-paste guard, not a storage budget: the downscale runs after it. */
+/**
+ * A mis-paste guard, not a storage budget: the downscale runs after it.
+ *
+ * `src/data/importNote.ts`'s `MAX_IMPORTED_IMAGE_BYTES` hand-copies this
+ * same number for the same reason on the import path; `src/data/` cannot
+ * import this file (`src/data/` must not import `src/features/`), so nothing
+ * enforces the two staying equal — if this value changes, check that one too.
+ */
 export const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
 
 /** Long edge. A 2048px WebP is sharp on every display this app runs on. */
