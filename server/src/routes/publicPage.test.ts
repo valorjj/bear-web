@@ -93,7 +93,8 @@ describe.skipIf(!url)('GET /p/:id', () => {
     const response = await app.request('/p/abc', { headers: PUBLISH_HOST });
 
     expect(response.status).toBe(200);
-    expect(await response.text()).toBe('<!doctype html><p>hi</p>');
+    // The stored bytes, plus the import banner injected on the way out.
+    expect(await response.text()).toContain('<!doctype html><p>hi</p>');
     expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
   });
 
@@ -220,5 +221,52 @@ describe.skipIf(!url)('GET /p/:id', () => {
     // would be the app's origin leaking onto the anonymous host.
     expect(response.headers.get('access-control-allow-origin')).toBeNull();
     expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('offers an import link pointing at the app', async () => {
+    await seedPage('page-import', '<!doctype html><html lang="en"><body>hi</body></html>');
+
+    const response = await app.request('/p/page-import', { headers: PUBLISH_HOST });
+    const html = await response.text();
+
+    expect(html).toContain(`href="${APP_ORIGIN}/?import=page-import"`);
+  });
+
+  it('hashes the ETag over the SERVED body, not the stored bytes', async () => {
+    // The banner is injected between reading the file and sending it. An
+    // ETag over the stored bytes would 304 a reader into content they never
+    // received — blank or stale, with nothing in any log.
+    await seedPage('page-etag', '<!doctype html><html lang="en"><body>hi</body></html>');
+
+    const first = await app.request('/p/page-etag', { headers: PUBLISH_HOST });
+    const body = await first.text();
+    const etag = first.headers.get('etag')!;
+
+    expect(body).toContain('?import=page-etag');
+
+    const second = await app.request('/p/page-etag', {
+      headers: { ...PUBLISH_HOST, 'if-none-match': etag },
+    });
+    expect(second.status).toBe(304);
+  });
+
+  it('writes the banner in the document’s own language', async () => {
+    await seedPage('page-ko', '<!doctype html><html lang="ko"><body>hi</body></html>');
+
+    const response = await app.request('/p/page-ko', { headers: PUBLISH_HOST });
+
+    expect(await response.text()).toContain('내 메모에 추가');
+  });
+
+  it('escapes the app origin it writes into the href', async () => {
+    // The origin comes from the environment, not from a user — but it is
+    // still interpolated into markup, and a value with a quote in it would
+    // break out of the attribute. Escaping it costs nothing and removes the
+    // question.
+    await seedPage('page-esc', '<!doctype html><html lang="en"><body>hi</body></html>');
+
+    const response = await app.request('/p/page-esc', { headers: PUBLISH_HOST });
+
+    expect(await response.text()).not.toContain('href="http://localhost:5173/?import=page-esc"x');
   });
 });

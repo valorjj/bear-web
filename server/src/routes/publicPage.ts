@@ -75,6 +75,62 @@ function matchesEtag(header: string | undefined, etag: string): boolean {
   });
 }
 
+/**
+ * The import banner's label, in the document's own language.
+ *
+ * The server has no access to the app's i18n bundles — `server/` may import
+ * nothing from `src/` but `src/data/types.ts` — so these two strings live
+ * here. They are the only user-facing copy the server owns, and the `lang`
+ * attribute the export already writes is what selects between them. A
+ * document in any other language gets English, which is the same fallback
+ * `src/i18n` applies.
+ */
+const IMPORT_LABEL: Record<string, string> = {
+  en: 'Add to my notes',
+  ko: '내 메모에 추가',
+};
+
+/** Attribute-safe. The origin comes from the environment, but it is still markup. */
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * The import affordance, injected into the page rather than baked into the
+ * file on disk.
+ *
+ * Injected because the button is a property of BEING PUBLISHED, not of the
+ * document: the app's origin should not be frozen into every file written
+ * before it last changed.
+ *
+ * A plain anchor with NO JavaScript, which is not a simplification — it is
+ * the only form the page's CSP permits. `default-src 'none'` blocks every
+ * script, and relaxing it on a host that serves author-authored HTML to make
+ * a button work would trade the whole reason that header is there. Styling is
+ * inline, which `style-src 'unsafe-inline'` already allows.
+ *
+ * Appended before `</body>` when there is one, and to the end otherwise: a
+ * document on disk was written by this app's own exporter and always has a
+ * body, but a malformed one must still serve rather than lose its banner.
+ */
+function withImportBanner(html: string, appOrigin: string, id: string): string {
+  const lang = /<html[^>]*\blang="([^"]*)"/i.exec(html)?.[1]?.toLowerCase() ?? 'en';
+  const label = IMPORT_LABEL[lang] ?? IMPORT_LABEL.en!;
+  const href = `${escapeAttribute(appOrigin)}/?import=${escapeAttribute(id)}`;
+
+  const banner =
+    `<a href="${href}" style="position:fixed;right:16px;bottom:16px;z-index:2147483647;` +
+    `display:inline-block;padding:12px 16px;border-radius:8px;background:#5b4bdb;color:#fff;` +
+    `font:600 14px/1.2 system-ui,sans-serif;text-decoration:none">${label}</a>`;
+
+  const close = html.lastIndexOf('</body>');
+  return close === -1 ? html + banner : html.slice(0, close) + banner + html.slice(close);
+}
+
 /** The one route an anonymous reader can reach. No session, no cookie, no CORS. */
 export function publicPageRoutes(deps: AppDeps): Hono {
   const app = new Hono();
@@ -93,7 +149,11 @@ export function publicPageRoutes(deps: AppDeps): Hono {
     // so a crash between them leaves exactly that. Same 404 as an unknown id.
     if (html === null) return c.body(null, 404);
 
-    const etag = `"${createHash('sha256').update(html).digest('hex')}"`;
+    // Injected BEFORE the hash. The ETag must describe what is sent, not what
+    // is on disk — otherwise a reader holding a tag for the stored bytes gets
+    // a 304 for content they never received.
+    const body = withImportBanner(html, deps.env.appOrigin, id);
+    const etag = `"${createHash('sha256').update(body).digest('hex')}"`;
 
     c.header('content-security-policy', CSP);
     c.header('x-content-type-options', 'nosniff');
@@ -105,7 +165,7 @@ export function publicPageRoutes(deps: AppDeps): Hono {
       return c.body(null, 304);
     }
 
-    return c.body(html, 200, { 'content-type': 'text/html; charset=utf-8' });
+    return c.body(body, 200, { 'content-type': 'text/html; charset=utf-8' });
   });
 
   return app;
