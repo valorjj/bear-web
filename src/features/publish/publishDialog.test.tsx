@@ -26,6 +26,29 @@ describe('PublishDialog', () => {
     expect(screen.getByText(/Published /)).toBeInTheDocument();
   });
 
+  it('offers Republish, not Publish, once a page exists', async () => {
+    /*
+     * A published page is a SNAPSHOT, so "the note changed and the page did
+     * not" is this feature's characteristic failure, and pressing this button
+     * is the only cure. Labelled `publish.open` it read as a description of
+     * what the user had already done rather than as the way to refresh it,
+     * and a stale page was opened, read and closed without being republished
+     * twice in one session while we were chasing exactly that staleness.
+     *
+     * Both assertions matter: the second is what makes this a RENAME rather
+     * than an addition, and it is the one that fails if someone restores the
+     * old string alongside the new one.
+     */
+    const onPublish = vi.fn(async () => PAGE);
+    renderDialog(<PublishDialog page={PAGE} onPublish={onPublish} />);
+
+    const republish = screen.getByRole('button', { name: 'Republish' });
+    expect(screen.queryByRole('button', { name: 'Publish to web' })).toBeNull();
+
+    await userEvent.click(republish);
+    expect(onPublish).toHaveBeenCalledTimes(1);
+  });
+
   it('names the reason when publishing fails', async () => {
     const onPublish = vi.fn(async () => {
       throw new PublishError('offline');

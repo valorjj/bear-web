@@ -157,9 +157,17 @@ export const en = {
   // Sub-project M: a public, unguessable link to one note's rendered HTML.
   // `publish.requiresSignIn` doubles as both the menu item's disabled reason
   // AND the `unauthorized` failure sentence — the two situations read the
-  // same to a user. `publish.open` likewise doubles as the republish action:
-  // both send the same snapshot.
+  // same to a user.
+  //
+  // `publish.open` USED to double as the republish action on the grounds that
+  // both send the same snapshot. They do — but that button sits in a view
+  // that already shows the note's live URL, where "Publish to web" reads as a
+  // description of what the user has done rather than as the way to refresh
+  // it. A page whose content had gone stale was opened, read and closed
+  // without being republished, twice in one session, while we were chasing
+  // exactly that staleness. `publish.republish` is that button now.
   'publish.open': 'Publish to web',
+  'publish.republish': 'Republish',
   'publish.requiresSignIn': 'Sign in to publish',
   'publish.title': 'Published to the web',
   'publish.unpublish': 'Unpublish',

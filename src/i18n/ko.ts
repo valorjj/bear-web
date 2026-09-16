@@ -153,6 +153,7 @@ export const ko: Record<TranslationKey, string> = {
   'export.failed.unavailable': '지금은 PDF 내보내기를 사용할 수 없습니다.',
 
   'publish.open': '웹에 게시',
+  'publish.republish': '다시 게시',
   'publish.requiresSignIn': '게시하려면 로그인하세요',
   'publish.title': '웹에 게시됨',
   'publish.unpublish': '게시 취소',

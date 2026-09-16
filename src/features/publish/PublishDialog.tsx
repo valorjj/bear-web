@@ -336,7 +336,14 @@ export function PublishDialog({
                 aria-busy={pending ? 'true' : undefined}
                 onClick={() => void handlePublish()}
               >
-                {t('publish.open')}
+                {/* Not `publish.open`: this button sits BESIDE the note's
+                    live URL, where "Publish to web" reads as a label for what
+                    already happened rather than as the way to refresh it. The
+                    action is identical — the same snapshot is sent — but a
+                    published page IS a snapshot, so "the note changed and the
+                    page did not" is this feature's characteristic failure and
+                    pressing this is the only cure. */}
+                {t('publish.republish')}
               </button>
               <button type="button" className={DANGER_BUTTON} onClick={() => setConfirming(true)}>
                 {t('publish.unpublish')}
