@@ -410,6 +410,48 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   reasoning is the three bullets above. This is why the stylesheet already
   says its reasoning lives in this file.
 
+## Tag and link pills are re-applied, not serialized
+
+- **`decoratePills` is the THIRD instance of the decoration problem**, after
+  `highlightCodeBlocks` and `numberFootnotes`. Tag and link pills live in the
+  `EditorView`, so `DOMSerializer` never walks them and an export built by
+  serializing the document alone carries the literal `#test` and
+  `[[first note]]` a reader was never meant to see. It went unnoticed longer
+  than the other two because the failure is not an empty element but a
+  plausible-looking one — raw source that renders as ordinary text — and it
+  reached a real published page before anyone reported it.
+
+- **It walks the SERIALIZED DOM and skips code by ELEMENT, not by masking.**
+  `findTagRanges` and `findLinkRanges` both mask code spans in Markdown, but
+  by this point the backticks are gone and a `#test` inside `<code>` looks
+  bare. `closest('code, pre')` is the question that still has an answer at
+  this stage.
+
+- **The grammar is shared, never reimplemented.** The same two functions the
+  pills, the index and the note-list preview use decide what a tag is here, so
+  the mediums cannot disagree: an all-numeric `#42` is prose in both, and a
+  tag in a code span is prose in both.
+
+- **The class structure mirrors the editor exactly** — `.bear-tag` with
+  `.bear-tag__hash`, `.bear-link` with `.bear-link__bracket` — so one rule per
+  medium describes both, the arrangement `.hljs-*` and `.bear-footnote-number`
+  already have. The export stylesheet collapses the `#` and the `[[`/`]]` to
+  `font-size: 0` the way `editor.css` does: the characters stay in the
+  document, so selecting a tag still copies `#test`, and they take no width.
+
+- **`--bear-tag-icon` is in `EXPORT_TOKEN_NAMES` because the `#` is DRAWN.**
+  The character itself is zero-width; the glyph is a `mask-image`. Without
+  that token the pill renders as a bare name and reads as a highlight rather
+  than a tag. The callout icons had already established that a mask data URI
+  survives an export, the containerised PDF renderer included.
+
+- **Nothing is made clickable, and that is a decision rather than an
+  omission.** The export cannot know whether a link's target is itself
+  published, so an `href` would be a guess. The accent colour says the author
+  referenced another note; nothing promises the reader can open it. Decided
+  with the user on 2026-09-16, against the alternatives of plain text (which
+  loses the reference entirely) and leaving the raw brackets.
+
 ## Footnote numbers are written in, not serialized (V)
 
 - **`numberFootnotes` exists for the same reason `highlightCodeBlocks` does.**

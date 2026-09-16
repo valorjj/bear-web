@@ -958,6 +958,69 @@ describe('footnotes in an export', () => {
   });
 });
 
+describe('pills in an exported document', () => {
+  // Tag and link pills are ProseMirror DECORATIONS: they live in the
+  // `EditorView` and `DOMSerializer` never walks them, so an export built by
+  // serializing the document alone carries the raw `#tag` and `[[link]]`
+  // source a reader was never meant to see. This is the third instance of
+  // that shape — `highlightCodeBlocks` and `numberFootnotes` are the other
+  // two — and it reached a real published page before anyone noticed.
+
+  it('wraps a tag the way the editor decorates it', () => {
+    const body = renderNoteBody('Note\n\n#test\n');
+
+    // The same two classes the editor applies, so ONE rule per medium serves
+    // both: `.bear-tag` over the whole range and `.bear-tag__hash` over the
+    // `#`, which the stylesheet collapses to zero width.
+    expect(body).toContain('<span class="bear-tag bear-tag__hash">#</span>');
+    expect(body).toContain('<span class="bear-tag">test</span>');
+    // And the raw source is gone as a bare text run.
+    expect(body).not.toContain('<p>#test</p>');
+  });
+
+  it('wraps a link, brackets included, the way the editor decorates it', () => {
+    const body = renderNoteBody('Note\n\n[[first note]]\n');
+
+    expect(body).toContain('<span class="bear-link bear-link__bracket">[[</span>');
+    expect(body).toContain('<span class="bear-link">first note</span>');
+    expect(body).toContain('<span class="bear-link bear-link__bracket">]]</span>');
+    expect(body).not.toContain('<p>[[first note]]</p>');
+  });
+
+  it('keeps the surrounding prose intact', () => {
+    const body = renderNoteBody('Note\n\nsee [[first note]] and #test now\n');
+
+    expect(body).toContain('see ');
+    expect(body).toContain(' and ');
+    expect(body).toContain(' now');
+  });
+
+  it('leaves a tag inside code alone, exactly as the editor does', () => {
+    // `findTagRanges` masks code, and the editor draws no pill there either.
+    // Walking the serialized DOM must reach the same answer.
+    const body = renderNoteBody('Note\n\n`#test`\n');
+
+    expect(body).not.toContain('bear-tag');
+    expect(body).toContain('#test');
+  });
+
+  it('leaves a link inside a fenced block alone', () => {
+    const body = renderNoteBody('Note\n\n```\n[[first note]]\n```\n');
+
+    expect(body).not.toContain('bear-link');
+    expect(body).toContain('[[first note]]');
+  });
+
+  it('does not treat an all-numeric hash as a tag', () => {
+    // `normalizeTag` rejects it, so the editor draws no pill — sharing the
+    // grammar is what keeps the two mediums from disagreeing.
+    const body = renderNoteBody('Note\n\nissue #42 today\n');
+
+    expect(body).not.toContain('bear-tag');
+    expect(body).toContain('#42');
+  });
+});
+
 describe('the importable payload', () => {
   it('keeps data-src on an inlined image so an importer can match it to the text', () => {
     const images = new Map([['abc123', 'data:image/webp;base64,AAAA']]);

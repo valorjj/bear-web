@@ -2,6 +2,8 @@ import { getSchema } from '@tiptap/core';
 import { DOMSerializer, Node as ProseMirrorNode } from '@tiptap/pm/model';
 
 import { storedImageId } from '@/data/images';
+import { findLinkRanges } from '@/data/links';
+import { findTagRanges } from '@/data/tags';
 /*
  * The LEAF modules, never the `@/features/editor` barrel, for two measured
  * reasons.
@@ -56,6 +58,7 @@ export const EXPORT_TOKEN_NAMES = [
   '--bear-hover',
   '--bear-selected',
   '--bear-tag-fill',
+  '--bear-tag-icon',
   '--bear-table-stripe',
   '--bear-table-header',
   '--bear-hl-blue',
@@ -164,6 +167,7 @@ const FALLBACKS: Record<ExportTokenName, string> = {
   // the ELEMENT, so a missing icon would draw a solid square where the
   // glyph should be. An absent mask with `none` collapses to nothing, and
   // the header keeps its words.
+  '--bear-tag-icon': 'none',
   '--bear-cal-icon-info': 'none',
   '--bear-cal-icon-tip': 'none',
   '--bear-cal-icon-success': 'none',
@@ -486,6 +490,104 @@ function numberFootnotes(host: Element, document_: ProseMirrorNode): void {
   }
 }
 
+/**
+ * Re-applies the tag and link pills the editor draws as DECORATIONS.
+ *
+ * The third instance of a shape this file has already answered twice.
+ * `highlightCodeBlocks` and `numberFootnotes` exist because decorations live
+ * in the `EditorView` and `DOMSerializer` never walks them; pills are the same
+ * story and went unnoticed longer, because the failure is not an empty element
+ * but a plausible-looking one — an export carried the literal `#test` and
+ * `[[first note]]` a reader was never meant to see, and it reached a real
+ * published page.
+ *
+ * It walks the SERIALIZED DOM rather than the document, for the reason
+ * `highlightCodeBlocks` does: by this point the Markdown has already become
+ * elements, and the text a reader sees is what must be decorated.
+ *
+ * The grammar is SHARED, not reimplemented. `findTagRanges` and
+ * `findLinkRanges` are the same functions the pills, the index and the preview
+ * use, which is what stops the two mediums disagreeing about what a tag is —
+ * an all-numeric `#42` is prose in both, and a tag in a code span is prose in
+ * both. A hand-rolled pattern here would be the duplicated-grammar defect this
+ * project has already paid for once.
+ *
+ * Code is skipped by ELEMENT rather than by masking. Both grammars mask code
+ * spans in Markdown, but the input here is one text node whose surrounding
+ * backticks are long gone, so a `#test` inside `<code>` would look bare.
+ * Asking the DOM which ancestor it sits in is the question that still has an
+ * answer at this stage.
+ *
+ * The class structure mirrors the editor exactly — `.bear-tag` over the whole
+ * range with `.bear-tag__hash` on the `#`, `.bear-link` with
+ * `.bear-link__bracket` on each `[[`/`]]` — so ONE rule per medium serves
+ * both, and the export stylesheet collapses the syntax to zero width the same
+ * way `editor.css` does. Nothing is made clickable: the export cannot know
+ * whether a link's target is published, so an `href` would be a guess.
+ */
+function decoratePills(host: HTMLElement, doc: Document): void {
+  const walker = doc.createTreeWalker(host, 4 /* NodeFilter.SHOW_TEXT */);
+  const texts: Text[] = [];
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    // `closest` on the parent, not a manual climb: a tag can sit inside a
+    // heading, a list item or a blockquote and must still pill there.
+    if ((node.parentElement?.closest('code, pre') ?? null) !== null) continue;
+    texts.push(node as Text);
+  }
+
+  for (const text of texts) {
+    const value = text.nodeValue ?? '';
+    const spans: { start: number; end: number; parts: [number, number, string][] }[] = [];
+
+    for (const range of findTagRanges(value)) {
+      spans.push({
+        start: range.start,
+        end: range.end,
+        // The `#` first, then the name — two elements, because the editor's
+        // two decorations merge into exactly this pair.
+        parts: [
+          [range.start, range.start + 1, 'bear-tag bear-tag__hash'],
+          [range.start + 1, range.end, 'bear-tag'],
+        ],
+      });
+    }
+    for (const range of findLinkRanges(value)) {
+      spans.push({
+        start: range.start,
+        end: range.end,
+        parts: [
+          [range.start, range.start + 2, 'bear-link bear-link__bracket'],
+          [range.start + 2, range.end - 2, 'bear-link'],
+          [range.end - 2, range.end, 'bear-link bear-link__bracket'],
+        ],
+      });
+    }
+    if (spans.length === 0) continue;
+
+    spans.sort((a, b) => a.start - b.start);
+
+    const fragment = doc.createDocumentFragment();
+    let at = 0;
+    for (const span of spans) {
+      // A tag cannot legitimately sit inside a link's target, but neither
+      // grammar knows about the other, so overlaps are dropped rather than
+      // nested — a half-wrapped range would corrupt the text.
+      if (span.start < at) continue;
+      if (span.start > at) fragment.append(value.slice(at, span.start));
+      for (const [from, to, className] of span.parts) {
+        const element = doc.createElement('span');
+        element.className = className;
+        element.textContent = value.slice(from, to);
+        fragment.append(element);
+      }
+      at = span.end;
+    }
+    if (at < value.length) fragment.append(value.slice(at));
+
+    text.replaceWith(fragment);
+  }
+}
+
 export function renderNoteBody(
   text: string,
   images: Map<string, string> = new Map(),
@@ -513,6 +615,9 @@ export function renderNoteBody(
   replaceMermaidBlocks(host, document, diagrams);
   highlightCodeBlocks(host, document);
   inlineImages(host, images);
+  // BEFORE `numberFootnotes`, which prepends marker text of its own: running
+  // after it would hand the walker a text node this file just invented.
+  decoratePills(host, document);
   numberFootnotes(host, document_);
   return host.innerHTML;
 }
@@ -845,6 +950,83 @@ ${declarations}
       border-radius: 0;
       padding: 0;
       font-size: inherit;
+    }
+
+    /*
+     * Tag and link pills, mirroring src/styles/editor.css's .ProseMirror
+     * rules. The CLASSES are shared (decoratePills writes the same ones the
+     * editor's decorations carry), so these are the second half of one
+     * description rather than a second description -- the same arrangement
+     * .hljs-* and .bear-footnote-number already have.
+     *
+     * The syntax collapses rather than disappears: font-size: 0 on the # and
+     * on each [[ / ]] keeps the characters in the document (so selecting and
+     * copying a tag still yields "#test") while giving them no width. That is
+     * exactly what the editor does, and it is why the rules below can be
+     * this short.
+     */
+    .bear-tag {
+      color: var(--bear-text);
+      background-color: var(--bear-tag-fill);
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+    }
+
+    .bear-tag.bear-tag__hash {
+      font-size: 0;
+      padding: 0;
+      background: none;
+    }
+
+    .bear-tag:not(.bear-tag__hash) {
+      font-size: 1.15em;
+      border-radius: 999px;
+      padding: 0.16em 0.66em 0.16em 0.5em;
+      /*
+       * A pill does not break across lines. The glyph below lives in this
+       * span's ::before, so a break between it and the name would leave a box
+       * holding nothing but the glyph at the end of one line -- it reads as
+       * two pills, one of them empty. editor.css carries the same rule for
+       * the same measured reason.
+       */
+      white-space: nowrap;
+    }
+
+    /*
+     * The # is drawn, not typed: the character itself is collapsed to zero
+     * width above, and this mask paints the glyph the editor paints. It needs
+     * --bear-tag-icon in EXPORT_TOKEN_NAMES, which is why that token is
+     * there; without it the pill renders as a bare name and looks like a
+     * highlight rather than a tag. The callout icons already established that
+     * a mask-image data URI survives an export -- including the containerised
+     * PDF renderer, verified by npm run shots:pdf.
+     */
+    .bear-tag:not(.bear-tag__hash)::before {
+      content: '';
+      display: inline-block;
+      inline-size: 0.82em;
+      block-size: 0.82em;
+      margin-inline-end: 0.26em;
+      vertical-align: -0.08em;
+      background-color: currentColor;
+      mask-image: var(--bear-tag-icon);
+      mask-size: contain;
+      mask-repeat: no-repeat;
+      mask-position: center;
+    }
+
+    /*
+     * Not clickable, and no href anywhere: the export cannot know whether a
+     * link's target is itself published, so an address would be a guess. The
+     * accent colour says the author referenced another note; nothing promises
+     * the reader can open it.
+     */
+    .bear-link {
+      color: var(--bear-accent);
+    }
+
+    .bear-link.bear-link__bracket {
+      font-size: 0;
     }
 
     /*
