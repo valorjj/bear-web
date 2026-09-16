@@ -27,7 +27,13 @@ export function InfoPanel({ text, createdAt, updatedAt, now }: InfoPanelProps): 
     // A floating popover rather than a bar in the flow: the control that opens
     // it now floats too, and a full-width strip appearing under a floating pill
     // reads as a second, unrelated piece of chrome. Placed by `RichEditor`.
-    <dl className="flex shrink-0 items-center gap-6 rounded-lg bg-surface px-4 py-2 text-ui-sm text-faint shadow-popover">
+    // `flex-wrap` and the split gaps are what keep this on a phone. The four
+    // pairs are ~330px of text, and the pill is anchored to the pane's RIGHT
+    // edge by `items-end` — so on a 390px viewport the row did not truncate,
+    // it ran off the LEFT of the screen, taking the `Words` label with it and
+    // wrapping `Aug 14, 2026` onto three lines. Wrapping costs a desktop
+    // nothing: there the row has never come close to its width.
+    <dl className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-x-6 gap-y-1 rounded-lg bg-surface px-4 py-2 text-ui-sm text-faint shadow-popover">
       <div className="flex gap-2">
         <dt>{t('editor.info.words')}</dt>
         <dd className="text-text">{countWords(text)}</dd>

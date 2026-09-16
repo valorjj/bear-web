@@ -999,7 +999,7 @@ export function RichEditor({
          * pill: the wrapper spans the pane's full width, so without this it
          * would swallow every click on the first line of prose beneath it.
          */}
-        <div className="pointer-events-auto flex flex-col items-end gap-2">
+        <div className="pointer-events-auto flex min-w-0 max-w-full flex-col items-end gap-2">
           <TopControls
             editor={editor}
             flags={flags}

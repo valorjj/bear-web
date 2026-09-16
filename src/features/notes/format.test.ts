@@ -134,6 +134,31 @@ describe('deriveSnippet', () => {
     expect(deriveSnippet(`Note\n${body}`)).toBe(expected);
   });
 
+  it.each([
+    ['a wikilink, keeping its title', 'see [[first note]] now', 'see first note now'],
+    [
+      'a heading wikilink, keeping the whole target',
+      'see [[first note/Who knows]] now',
+      'see first note/Who knows now',
+    ],
+    ['two wikilinks on one line', '[[a]] and [[b]]', 'a and b'],
+    ['a footnote marker', 'there is a reason[^1] for it', 'there is a reason for it'],
+  ])('strips %s', (_what, body, expected) => {
+    expect(deriveSnippet(`Note\n${body}`)).toBe(expected);
+  });
+
+  it('leaves a wikilink inside a code span wrapped, because the editor draws no pill there', () => {
+    // `findLinkRanges` masks code, so the preview and the editor agree about
+    // what a link is. The code span's own backticks still go.
+    expect(deriveSnippet('Note\nwrite `[[first note]]` to link')).toBe(
+      'write [[first note]] to link',
+    );
+  });
+
+  it('keeps a footnote definition text and drops only its label', () => {
+    expect(deriveSnippet('Note\n[^1]: 출처는 여기.')).toBe('출처는 여기.');
+  });
+
   it('leaves an unpaired delimiter alone rather than eating the line', () => {
     // A half-typed `**` is text the user is in the middle of writing, not
     // syntax. Deleting one side of a pair would silently drop characters.

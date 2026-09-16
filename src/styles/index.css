@@ -235,8 +235,28 @@ body {
  */
 @layer utilities {
   @media (pointer: coarse) {
-    .touch-target,
-    .touch-target-y {
+    /*
+     * `:not(…)` rather than a bare `position: relative`, and it is
+     * load-bearing.
+     *
+     * The rule only exists to give the `::after` below a positioned ancestor,
+     * and an element that already carries `absolute`, `fixed` or `sticky` HAS
+     * one. Without the exclusion this utility silently overrode Tailwind's
+     * `.absolute` — same layer, same specificity, so the cascade was decided
+     * by emission order and this rule happened to win. `NoteListItem`'s pin
+     * is `touch-target absolute bottom-2 left-2`; on a phone it therefore
+     * dropped out of its absolute slot beside the date and into normal flow
+     * BELOW the row's button, adding 25px to every row in the list and
+     * stranding the pin under a date still indented by `pl-6` for the slot it
+     * had left. Shipped from J2a until 2026-09-16, invisible on every desktop
+     * because the rule is `(pointer: coarse)` only and the pin is hidden at
+     * rest there.
+     *
+     * See `docs/rulings/design-tokens-and-layout.md`: "not this utility" is
+     * expressed by not emitting it, never by an overriding declaration.
+     */
+    .touch-target:not(.absolute, .fixed, .sticky),
+    .touch-target-y:not(.absolute, .fixed, .sticky) {
       position: relative;
     }
 

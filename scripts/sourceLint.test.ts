@@ -621,8 +621,19 @@ describe('the spacing scale', () => {
    */
   const PERMITTED = new Set(['0', '0.5', '1', '2', '3', '4', '6', '8', '12', 'px', 'auto', 'full']);
 
+  /*
+   * Longest prefix FIRST in the alternation, which is load-bearing because
+   * the captured step accepts `-`. Alternation is ordered, and it only
+   * backtracks when the rest of the pattern fails: `px-2` backtracks from `p`
+   * to `px` because `[\w.%[\]()-]` cannot match the `-` that `p` would need
+   * next — but `gap-x-6` does NOT, because after `gap` the `-` is there and
+   * the capture happily swallows `x-6`. So the bare `gap` alternative
+   * reported every `gap-x-*` and `gap-y-*` as an off-scale step named `x-6`,
+   * whatever the real step was. Latent until 2026-09-16 simply because no
+   * component had used an axis-specific gap.
+   */
   const UTILITY =
-    /(?:^|[\s'"`{])(?:p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|gap|gap-x|gap-y|space-x|space-y)-(\[?[\w.%[\]()-]+)/g;
+    /(?:^|[\s'"`{])(?:px|py|pt|pb|pl|pr|p|mx|my|mt|mb|ml|mr|m|gap-x|gap-y|gap|space-x|space-y)-(\[?[\w.%[\]()-]+)/g;
 
   /**
    * Off-scale values with a stated reason, in the shape of the focus-outline

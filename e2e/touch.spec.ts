@@ -173,6 +173,43 @@ test.describe('on a touch device', () => {
     ).toBeVisible();
   });
 
+  test('the pin stays in its absolute slot beside the date', async ({ page }) => {
+    /*
+     * `touch-target` sets `position: relative` so its `::after` has a
+     * positioned ancestor — and the pin is `touch-target absolute`. Same
+     * layer, same specificity, so before 2026-09-16 the utility silently won
+     * and the pin fell into normal flow BELOW the row's button: every row in
+     * the list grew 25px and the pin sat under a date still indented by
+     * `pl-6` for the slot it had left.
+     *
+     * Asserted as GEOMETRY rather than as a computed `position`, because the
+     * defect is what the reader sees. Two independent facts: the row is no
+     * taller than its button (so the pin costs no layout), and the pin's box
+     * overlaps the button's (so it is drawn inside the row, not under it).
+     */
+    const row = page.getByRole('button', { name: /Touch parity/ });
+    const pin = page.getByRole('button', { name: 'Pin note', exact: true }).first();
+
+    const rowBox = (await row.boundingBox())!;
+    const pinBox = (await pin.boundingBox())!;
+
+    expect(pinBox.y).toBeGreaterThanOrEqual(rowBox.y);
+    expect(pinBox.y + pinBox.height).toBeLessThanOrEqual(rowBox.y + rowBox.height);
+
+    // The list item itself — the row's button plus the absolutely positioned
+    // pin — is exactly as tall as the button. In the broken state it was the
+    // button's height plus the pin's, which is what made every row grow.
+    const heights = await page.evaluate(() => {
+      const li = document.querySelector('li')!;
+      const button = li.querySelector('button')!;
+      return {
+        li: li.getBoundingClientRect().height,
+        button: button.getBoundingClientRect().height,
+      };
+    });
+    expect(heights.li).toBeCloseTo(heights.button, 0);
+  });
+
   test('menu items are at least 44px tall', async ({ page }) => {
     const row = page.getByRole('button', { name: /Touch parity/ });
     const box = (await row.boundingBox())!;
