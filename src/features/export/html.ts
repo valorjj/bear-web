@@ -59,6 +59,7 @@ export const EXPORT_TOKEN_NAMES = [
   '--bear-selected',
   '--bear-tag-fill',
   '--bear-tag-icon',
+  '--bear-link-icon',
   '--bear-table-stripe',
   '--bear-table-header',
   '--bear-hl-blue',
@@ -168,6 +169,7 @@ const FALLBACKS: Record<ExportTokenName, string> = {
   // glyph should be. An absent mask with `none` collapses to nothing, and
   // the header keeps its words.
   '--bear-tag-icon': 'none',
+  '--bear-link-icon': 'none',
   '--bear-cal-icon-info': 'none',
   '--bear-cal-icon-tip': 'none',
   '--bear-cal-icon-success': 'none',
@@ -1027,6 +1029,34 @@ ${declarations}
 
     .bear-link.bear-link__bracket {
       font-size: 0;
+    }
+
+    /*
+     * The same raised glyph the editor draws, on the title rather than on
+     * each bracket, so it appears once at the end of the link.
+     *
+     * editor.css says the glyph's job there is to signal that the text is
+     * CLICKABLE, and here it is not — so this is a deliberate re-reading
+     * rather than a copy: on a published page the glyph marks the run as a
+     * reference to another note. It earns that job because colour alone
+     * cannot do it in this medium, where headings are accent-coloured too
+     * and a bare accent run is indistinguishable from one.
+     *
+     * Superscript rather than inline, so it costs the line no horizontal
+     * rhythm — the same reason the editor raises it.
+     */
+    .bear-link:not(.bear-link__bracket)::after {
+      content: '';
+      display: inline-block;
+      inline-size: 0.68em;
+      block-size: 0.68em;
+      margin-inline-start: 0.08em;
+      vertical-align: 0.3em;
+      background-color: currentColor;
+      mask-image: var(--bear-link-icon);
+      mask-size: contain;
+      mask-repeat: no-repeat;
+      mask-position: center;
     }
 
     /*

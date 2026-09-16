@@ -452,6 +452,26 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   with the user on 2026-09-16, against the alternatives of plain text (which
   loses the reference entirely) and leaving the raw brackets.
 
+- **The link glyph is carried across, and it MEANS something different here.**
+  `editor.css` states the arrow's job in the editor plainly: "the app has no
+  other cue that the text is clickable — the glyph is that cue." In an export
+  the link is not clickable, so copying it is a re-reading rather than a copy:
+  here the glyph marks the run as a REFERENCE to another note. It earns that
+  job because colour alone cannot do it in this medium — a published page
+  renders headings in the accent too, so a bare accent run says nothing. The
+  trade is stated rather than hidden: a reader may try to click it and nothing
+  will happen. Requested by the user on 2026-09-16 after seeing the export
+  without it, with the clickability objection put to them first.
+
+- **The glyph sits on the title span, not on the brackets**
+  (`.bear-link:not(.bear-link__bracket)::after`), so it appears once at the
+  end. The editor reaches the same place by a different route — `__tail` plus
+  `data-resolved='true'` — because it distinguishes resolved from unresolved
+  links and splits `[[Note/Heading]]` into parts. The export does neither: it
+  has no note index to resolve against, and a heading link renders as one
+  undivided run. That divergence is deliberate and is the one place the two
+  mediums' pill markup is not identical.
+
 ## Footnote numbers are written in, not serialized (V)
 
 - **`numberFootnotes` exists for the same reason `highlightCodeBlocks` does.**
