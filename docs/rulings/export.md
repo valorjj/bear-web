@@ -410,6 +410,45 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   reasoning is the three bullets above. This is why the stylesheet already
   says its reasoning lives in this file.
 
+## Publishing refuses to run from a stale build (2026-09-16)
+
+- **`isStaleBuild` guards `PublishDialogContainer.handlePublish`, before
+  `buildHtml`.** Publishing uploads a RENDERED SNAPSHOT, so a tab running
+  superseded code bakes the old stylesheet into a page that looks wrong until
+  it is republished — and nothing on the page says so. It happened three times
+  during sub-project W: pills missing, then the tag glyph present but the link
+  glyph missing, each discovered only by diffing the served HTML.
+
+- **The cause is not this app's.** GitHub Pages serves `index.html` with a
+  fixed `max-age=600` and permits no custom headers, so for ten minutes after
+  a deploy a browser keeps loading the previous bundle, and a tab opened
+  before a deploy keeps it indefinitely. `markflowing.com` is not proxied
+  through Cloudflare (only `api.` and `pub.` are), so there is no edge rule to
+  fix it with today.
+
+- **The asset hash IS the build identity**, so the check needs no
+  `version.json`, no injected SHA and no build configuration: it compares the
+  entry `<script>` the running page was loaded from against the one the server
+  serves now. `cache: 'no-store'` is load-bearing — without it the request is
+  answered from the very cache that caused the problem and the comparison is
+  against itself.
+
+- **It fails OPEN in every branch** — offline, non-OK, no entry tag either
+  side. A check that cannot run is not evidence of staleness, and this must
+  only ever add a refusal the user can clear by reloading, never take away the
+  ability to publish. Turning a cosmetic problem into an outage is the one way
+  this feature could be worse than nothing.
+
+- **The test that matters asserts `publishNote` was NOT called**, not merely
+  that a message appeared: a version that warned and uploaded anyway would
+  pass the message assertion and fail the user in exactly the original way.
+
+- **What it does NOT cover, stated so it is not assumed:** publishing within
+  ten minutes of a deploy, where the `no-store` fetch may still be answered by
+  an edge cache holding the old `index.html`. It catches the far more common
+  case — a tab loaded before the deploy. Closing the remaining window needs
+  Cloudflare in front of the apex, which was offered and deferred.
+
 ## Tag and link pills are re-applied, not serialized
 
 - **`decoratePills` is the THIRD instance of the decoration problem**, after

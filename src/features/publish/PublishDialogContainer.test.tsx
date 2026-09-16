@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,13 +10,26 @@ import { PublishDialogContainer } from './PublishDialogContainer';
 import type { PublishedInfo } from './PublishDialog';
 
 const listPublished = vi.fn();
+const publishNote = vi.fn();
+const isStaleBuild = vi.fn();
 
 vi.mock('./requestPublish', () => ({
   listPublished: (...args: unknown[]) => listPublished(...args),
-  publishNote: vi.fn(),
+  publishNote: (...args: unknown[]) => publishNote(...args),
   unpublishNote: vi.fn(),
-  PublishError: class extends Error {},
+  // Carries `reason`, unlike a bare `class extends Error`: the dialog's
+  // `failureText` switches on it, so a stub without it would render the
+  // generic message and this file could not tell one failure from another.
+  PublishError: class extends Error {
+    readonly reason: string;
+    constructor(reason: string) {
+      super(reason);
+      this.reason = reason;
+    }
+  },
 }));
+
+vi.mock('./staleBuild', () => ({ isStaleBuild: () => isStaleBuild() }));
 
 /**
  * Mirrors how `NoteEditor` actually uses this component: `page` is state
@@ -49,6 +63,9 @@ function Host({
 describe('PublishDialogContainer', () => {
   beforeEach(() => {
     listPublished.mockReset();
+    publishNote.mockReset();
+    isStaleBuild.mockReset();
+    isStaleBuild.mockResolvedValue(false);
   });
 
   it('shows the published view for a note whose state came from the server, not local state', async () => {
@@ -70,6 +87,48 @@ describe('PublishDialogContainer', () => {
     // And Unpublish is reachable — the whole point: without the lookup this
     // note would show the never-published view with no route to Unpublish.
     expect(screen.getByRole('button', { name: 'Unpublish' })).toBeInTheDocument();
+  });
+
+  it('refuses to publish from a stale build, and uploads nothing', async () => {
+    /*
+     * The failure this exists to stop: `publish` uploads a RENDERED
+     * SNAPSHOT, so a tab running superseded code bakes the old stylesheet
+     * into a page that then looks wrong until it is republished. It happened
+     * three times during sub-project W before anyone noticed the pattern.
+     *
+     * `publishNote` not being called is the load-bearing assertion. Asserting
+     * only the message would pass against a version that warned and uploaded
+     * anyway, which is the failure mode worth guarding.
+     */
+    listPublished.mockResolvedValue([]);
+    isStaleBuild.mockResolvedValue(true);
+
+    render(<Host noteId="note-1" />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Publish to web' }));
+
+    expect(await screen.findByText(/Reload before publishing/)).toBeInTheDocument();
+    expect(publishNote).not.toHaveBeenCalled();
+  });
+
+  it('publishes normally when the build is current', async () => {
+    // The other direction, so the guard cannot pass by refusing everything.
+    listPublished.mockResolvedValue([]);
+    isStaleBuild.mockResolvedValue(false);
+    publishNote.mockResolvedValue({
+      id: 'new-1',
+      url: `${PUBLISH_ORIGIN}/p/new-1`,
+      publishedAt: 1_700_000_000_000,
+    });
+
+    render(<Host noteId="note-1" />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Publish to web' }));
+
+    expect(await screen.findByRole('textbox', { name: 'Published to the web' })).toHaveValue(
+      `${PUBLISH_ORIGIN}/p/new-1`,
+    );
+    expect(publishNote).toHaveBeenCalledTimes(1);
   });
 
   it('does not call listPublished when the caller already knows the page', () => {

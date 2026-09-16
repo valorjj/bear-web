@@ -187,6 +187,7 @@ function failureText(t: ReturnType<typeof useT>, reason: PublishFailure, limit?:
   }
   if (reason === 'tooLarge') return t('publish.failed.tooLarge');
   if (reason === 'offline') return t('publish.failed.offline');
+  if (reason === 'staleBuild') return t('publish.failed.staleBuild');
   return t('publish.failed');
 }
 

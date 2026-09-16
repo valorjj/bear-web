@@ -161,6 +161,8 @@ export const ko: Record<TranslationKey, string> = {
   'publish.failed': '이 메모를 게시할 수 없습니다.',
   'publish.failed.offline': '게시하려면 인터넷 연결이 필요합니다.',
   'publish.failed.quotaExceeded': '게시 한도({limit})에 도달했습니다.',
+  'publish.failed.staleBuild':
+    '앱이 업데이트되었습니다. 보이는 그대로 게시되도록 새로고침한 뒤 다시 게시하세요.',
   'publish.failed.tooLarge': '이 메모는 게시하기에 너무 큽니다.',
 
   'import.title': '이 메모를 추가할까요?',

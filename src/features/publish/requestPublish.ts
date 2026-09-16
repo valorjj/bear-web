@@ -23,6 +23,13 @@ import { API_ORIGIN } from '@/data/sync/config';
  * act on.
  */
 export type PublishFailure =
+  /**
+   * The tab is running a build the server has replaced, so publishing would
+   * upload a snapshot rendered by superseded code. Raised BEFORE the request,
+   * by `staleBuild.ts` — it is the one failure in this union that never
+   * reaches the network.
+   */
+  | 'staleBuild'
   | 'offline'
   | 'unauthorized'
   | 'tooLarge'

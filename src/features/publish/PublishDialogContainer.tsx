@@ -3,7 +3,8 @@ import { type ReactElement, useCallback, useEffect, useRef } from 'react';
 import { PUBLISH_ORIGIN } from '@/data/sync/config';
 
 import { PublishDialog, type PublishedInfo } from './PublishDialog';
-import { listPublished, publishNote, unpublishNote } from './requestPublish';
+import { listPublished, PublishError, publishNote, unpublishNote } from './requestPublish';
+import { isStaleBuild } from './staleBuild';
 
 export interface PublishDialogContainerProps {
   onClose: () => void;
@@ -92,6 +93,14 @@ export function PublishDialogContainer({
   }, [noteId, page]);
 
   const handlePublish = useCallback(async (): Promise<PublishedInfo> => {
+    // BEFORE `buildHtml`, because publishing uploads a rendered SNAPSHOT: a
+    // stale tab bakes superseded code into a page that then looks wrong
+    // forever, and re-rendering it afterwards is not possible without
+    // republishing. `isStaleBuild` fails open, so this can only ever add a
+    // refusal the user can clear by reloading -- never block them because a
+    // check could not run. See `staleBuild.ts`.
+    if (await isStaleBuild()) throw new PublishError('staleBuild');
+
     const html = await buildHtml();
     const result = await publishNote(html, noteId, title);
     onPage(result);

@@ -168,6 +168,8 @@ export const en = {
   'publish.failed': 'This note could not be published.',
   'publish.failed.offline': 'Publishing needs a connection.',
   'publish.failed.quotaExceeded': 'You have reached the publishing limit ({limit}).',
+  'publish.failed.staleBuild':
+    'This page has been updated. Reload before publishing, so the published note matches what you see.',
   'publish.failed.tooLarge': 'This note is too large to publish.',
 
   // Sub-project W: accepting a note shared from somebody else's app.
