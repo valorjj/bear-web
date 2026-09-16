@@ -1966,3 +1966,124 @@ list out of numeric order, because `insertFootnote` appends after the last
 definition. Sorting would mean moving document nodes — the synchronisation
 layer the spec rejected. Placing the new definition by reference order instead
 is a possible follow-up.
+
+### W. Note sharing: a published note others can add to their own notes — **SHIPPED 2026-09-16**
+
+A visitor to a published note (sub-project M) sees a link to add it to their
+own notes; choosing to costs nothing more than confirming a sheet, and works
+whether they sign in or continue as a guest.
+
+Spec: `docs/superpowers/specs/2026-09-16-note-sharing-design.md`.
+Plan: `docs/superpowers/plans/2026-09-16-w-note-sharing.md`.
+Ledger: `.superpowers/sdd/2026-09-16-w-note-sharing/progress.md`.
+
+**The payload rides inside the published document itself, as an inert
+`<script type="application/json" id="bear-source">{"title","text"}</script>`,
+rather than in a table of its own** — and the alternative was tried first and
+does not work. `server/src/app.ts` deliberately skips its CORS headers on the
+publish host: a published page is not a credentialed response, and stamping
+the app's origin and `allow-credentials` onto it would leak the app's CORS
+posture onto an anonymous, unauthenticated surface. A separate lookup table
+(`GET /publish/:id/payload` or similar) would need the browser to read that
+response cross-origin from `pub.markflowing.com`, which is exactly the
+request `publishHostOnly` exists to 404 before it goes anywhere near a route.
+Embedding the payload in the document the browser has ALREADY fetched sidesteps
+the question entirely — nothing new crosses an origin the app does not already
+serve credential-free. It is also why `GET /share/:id` (the API host, not the
+publish host) exists for `fetchSharedPage` to hit instead: same bytes, but from
+a host that carries the app's CORS headers, `credentials: 'omit'` deliberately
+because the capability is the id, not a session.
+
+Every inlined `<img>` also keeps its `data-src="files/<id>.webp"` attribute,
+which `inlineImages` used to strip once an image was inlined — see the
+correction to `docs/rulings/export.md` alongside this entry. That attribute is
+the only thing that matches a decoded blob back to its place in the note's
+Markdown; document order is true but silently wrong the moment a renderer ever
+reorders anything.
+
+**`createImageBitmap` is injected into `importNote`'s deps for the same reason
+`downscale.ts` injects it: jsdom implements neither `createImageBitmap` nor
+`OffscreenCanvas`, so the unit suite must supply a fake.** `files.add` needs an
+image's real dimensions before it can reserve the node view's box, so
+`importNote` cannot skip the measurement — and cannot call the real browser API
+directly from a file the unit suite exercises. The real path (a browser
+actually running the import) never passes the override; `e2e/import.spec.ts` is
+the only test that runs the real `createImageBitmap`, in a real Chromium.
+
+**The Google sign-in round trip needed a stash written from `App.tsx`, not from
+`ImportGate`.** The first cut wrote `?import=<id>` to `sessionStorage` only
+inside `ImportGate`'s own mount effect, which is correct for the guest path but
+wrong for the other landing exit: `ImportGate` renders only in `App.tsx`'s
+POST-landing branch (`AppShell`'s branch of the same ternary the landing screen
+occupies), so for a first-time visitor — which every link recipient is by
+definition — it is simply not mounted yet when "Sign in with Google" is
+clicked. That click is a real `window.location.assign` to Google
+(`startGoogleSignIn`), which ends the JS context outright; the server's OAuth
+callback then redirects back to `${appOrigin}/` with no query string at all
+(`server/src/auth/routes.ts`), so by the time `ImportGate` next gets a chance to
+mount, `?import=` is already gone with nothing left to recover it from. The fix
+moved `stashPendingImportId()` into an effect in `App.tsx` that runs
+UNCONDITIONALLY, on every render regardless of which branch of the landing
+ternary is showing — `ImportGate`'s own call to the same function is now a
+no-op repeat on the guest path (writing the same value twice) rather than the
+only write. `sessionStorage`, not `localStorage`: it is per-tab and expires
+with the tab, which is the right lifetime for an import interrupted by a
+navigation the visitor may simply abandon.
+
+**What the work taught, in the order it hurt:**
+
+- **A plan's own test sketch called a function that does not exist the way it
+  is called.** Task 8's brief wrote `const result = await exportNote(...)` and
+  read a string back; `exportNote` returns `Promise<void>` — it downloads.
+  `buildExportHtml(note, locale, deps) => Promise<string>` is the function that
+  returns the document, already exported from `@/features/export` for exactly
+  this reuse. Caught before writing any code, by checking the real signature
+  against the plan rather than trusting it — the same failure mode CLAUDE.md
+  already records repo-wide.
+- **The brief's e2e clicked a button that does not exist ("Get started"), and
+  the fix is not cosmetic.** The landing screen offers `landing.signIn` ("Sign
+  in with Google") and `landing.guest` ("Continue as guest") only. Both landing
+  clicks in the round-trip test go through the guest path — the case this
+  feature exists to serve, and the one a recipient with no account actually
+  takes.
+- **Two `page.evaluate` blocks importing `/src/data/index.ts` only resolve
+  under Vite's dev server, and `playwright.config.ts`'s webServer runs the
+  built preview (`npm run build && npm run preview`) instead.** Fixed by
+  driving the sender's export through the app's own `Export note` → `HTML`
+  menu item (the same UI `e2e/imageExport.spec.ts` already drives, captured
+  via `page.waitForEvent('download')` and `saveAs`) and by reading the
+  recipient's IndexedDB back through the RAW `indexedDB.open('bear-web', 60)`
+  API rather than the app's repository modules — the same version number
+  `e2e/fixtures/seed.ts` uses, for the identical reason (Dexie's declared
+  version 6, times ten).
+- **A second, unstated defect in the brief's own sketch: two pages opened from
+  the same `BrowserContext` share that origin's `localStorage` and IndexedDB.**
+  The brief created the recipient with `context.newPage()` on the SAME context
+  the sender had already used to dismiss the landing gate and write a note —
+  so the "recipient" would have inherited the sender's landing-seen flag and
+  existing notes before ever loading `?import=`, and the "first-time visitor"
+  half of the test would have silently tested nothing. Fixed by giving the
+  recipient its own `browser.newContext({ storageState: { cookies: [],
+  origins: [] } })` — a genuinely separate device, which is what a real
+  recipient is.
+- **The fault injection that matters most for a round-trip test is the path
+  rewrite itself, not the parser or the writer alone**: `importNote` was
+  temporarily changed to return `note` unconditionally (never rewriting
+  `files/<their-id>.webp` to the copy's own id), which reproduced exactly
+  `image path points at nothing` — confirming the unit tests upstream of it
+  (parser-agrees-with-parser, writer-agrees-with-writer) could never have
+  caught this class of bug, only the round trip can.
+- **The bundle ceiling was exhausted three ways before the user was asked.**
+  `ImportSheet` pulls `Dialog` and `Button` into the same eager graph
+  `ExportMenu` already sits in, so a `React.lazy` boundary around it made the
+  eager closure WORSE (+82 B) rather than better — Rolldown extracted those
+  shared components into their own chunk and gzip's per-file overhead
+  exceeded the saving. Server-side rendering does not apply; the gate logic is
+  entirely a browser-side URL read. `scripts/bundleSize.test.ts`'s docblock
+  records the raise (365,000 B) with the measurements, as every prior raise
+  does.
+- **A stash-ordering guarantee that is easy to state is not automatically
+  asserted.** The regression this guards against — `ImportGate` moving inside
+  the landing branch, so a sheet could appear behind the gate — has no test
+  that opens the landing screen with a pending import and asserts
+  `queryByRole('dialog')` is absent. Left open rather than fixed here.

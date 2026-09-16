@@ -87,9 +87,14 @@ test('an HTML export carries the image inside the file', async ({ page }) => {
 
     const html = execFileSync('cat', [path], { encoding: 'utf8' });
     expect(html).toContain('data:image/webp;base64,');
-    // The relative path must be gone: an exported file that still points at
-    // `files/…` is broken everywhere it is opened.
-    expect(html).not.toMatch(/src="files\//);
+    // The rendered `src` must be gone: an exported file whose `<img>` still
+    // POINTS AT `files/…` for its actual source is broken everywhere it is
+    // opened. `data-src="files/…"` is a different attribute and stays on
+    // purpose (sub-project W's import path matches an inlined blob back to
+    // its place in the note's text through it) — a bare `src="files\//`
+    // regex would also match inside `data-src="files/…`, which is why this
+    // asserts on the attribute NAME, not merely on the substring "src=".
+    expect(html).not.toMatch(/(?<!data-)src="files\//);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

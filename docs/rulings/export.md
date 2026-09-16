@@ -2,7 +2,7 @@
 
 Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline renders it, what the exported document is allowed to change, and how it gets its colours and its print behaviour.
 
-**Trigger:** any change under `src/features/export/` — `html.ts` (`renderNoteBody`, `renderNoteHtml`, `readExportTokens`, `EXPORT_TOKEN_NAMES`, `FALLBACKS`, the inline `<style>` block, `collectDiagramSources`, `replaceMermaidBlocks`), `exportNote.ts` (`exportNote`, `MIME`, `collectDiagrams`), `requestPdf.ts` (`requestPdf`, `PdfFailure`, `BY_STATUS`), `filename.ts`, `ExportMenu.tsx`, `useExportRunner.ts`; `NoteEditor.handleExport` in `src/features/notes/NoteEditor.tsx` and the export group in `src/features/notes/NoteRowMenu.tsx`; `server/src/routes/export.ts`, `server/pdf/` (`render.ts`'s `emulateMedia`/`preferCSSPageSize`, `inspectPdf.ts`, `fidelity.test.ts`, `mermaid.ts`, `mermaidTheme.ts`); the `export.*` keys in `src/i18n/en.ts` / `ko.ts` and the `ALLOWED_IDENTICAL` list in `i18n.test.tsx`; the export blocks in `e2e/notes.spec.ts` and `e2e/pdfExport.spec.ts`; and any new import of `marked` or `@tiptap/markdown` outside `src/features/editor/markdown.ts`; `src/features/publish/` (`PublishDialogContainer.handlePublish`'s `buildHtml`, `requestPublish.ts`), `server/src/routes/publish.ts` and `server/src/routes/publicPage.ts`.
+**Trigger:** any change under `src/features/export/` — `html.ts` (`renderNoteBody`, `renderNoteHtml`, `readExportTokens`, `EXPORT_TOKEN_NAMES`, `FALLBACKS`, the inline `<style>` block, `collectDiagramSources`, `replaceMermaidBlocks`, `inlineImages`, `sourcePayload`), `exportNote.ts` (`exportNote`, `buildExportHtml`, `MIME`, `collectDiagrams`), `requestPdf.ts` (`requestPdf`, `PdfFailure`, `BY_STATUS`), `filename.ts`, `ExportMenu.tsx`, `useExportRunner.ts`; `NoteEditor.handleExport` in `src/features/notes/NoteEditor.tsx` and the export group in `src/features/notes/NoteRowMenu.tsx`; `server/src/routes/export.ts`, `server/pdf/` (`render.ts`'s `emulateMedia`/`preferCSSPageSize`, `inspectPdf.ts`, `fidelity.test.ts`, `mermaid.ts`, `mermaidTheme.ts`); the `export.*` keys in `src/i18n/en.ts` / `ko.ts` and the `ALLOWED_IDENTICAL` list in `i18n.test.tsx`; the export blocks in `e2e/notes.spec.ts` and `e2e/pdfExport.spec.ts`; and any new import of `marked` or `@tiptap/markdown` outside `src/features/editor/markdown.ts`; `src/features/publish/` (`PublishDialogContainer.handlePublish`'s `buildHtml`, `requestPublish.ts`), `server/src/routes/publish.ts` and `server/src/routes/publicPage.ts`.
 
 - **Export renders through the EDITOR'S OWN SCHEMA, never a second Markdown
   pipeline.** `renderNoteBody` parses with `parseMarkdown` — the single importer
@@ -246,11 +246,22 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
 
 ## Images in export (K3)
 
-- **HTML and PDF INLINE their images as `data:` URIs.** Not a convenience: the
-  renderer's browser cannot resolve ANY host — `--host-resolver-rules=MAP *
-  ~NOTFOUND` at launch — so it could not fetch `files/<id>.webp` even if the
-  path were absolute. Inlining is what lets that isolation stay intact while
-  the image still arrives.
+- **HTML and PDF INLINE their images as `data:` URIs, and the relative
+  `files/<id>.webp` path is NOT simply discarded once that happens.** Not a
+  convenience: the renderer's browser cannot resolve ANY host —
+  `--host-resolver-rules=MAP * ~NOTFOUND` at launch — so it could not fetch
+  `files/<id>.webp` even if the path were absolute. Inlining is what lets that
+  isolation stay intact while the image still arrives.
+
+  **Corrected, because this bullet described the OLD behaviour.** Until
+  sub-project W, `inlineImages` deleted the `data-src` attribute once an
+  `<img>` was inlined, so the relative path really was gone from the
+  rendered document at that point — asserted in `html.test.ts` and echoed in
+  a comment in `e2e/imageExport.spec.ts` ("The relative path must be gone").
+  Task 1 reversed that (`inlineImages` now keeps `data-src` on purpose, and
+  `html.test.ts`'s assertion was flipped to match), but this file was never
+  updated to say so, which is exactly the gap Task 1's own reviewer flagged.
+  See the ruling immediately below for why the path survives now.
 
   **Stated precisely, because an earlier version of this bullet was not.** It
   read "a container with deliberately no route off the host (G's control 4
@@ -260,6 +271,15 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   actually rests on. The two statements sat in one file for a day; a security
   property asserted in one place and denied in another is worse than either
   answer alone.
+
+- **`inlineImages` must not remove `data-src`, and `renderNoteHtml` must keep
+  emitting `#bear-source`.** Both look like leftovers — an attribute the
+  renderer no longer needs, and a block no reader sees — and both are the
+  entire import path (sub-project W). The attribute is what matches an
+  inlined blob back to its `files/<id>.webp` in the note's text; without it
+  the only correspondence is document order. Removing either does not fail a
+  gate on the export side: the document still renders identically, and only
+  `e2e/import.spec.ts` can see it.
 
 - **An image whose bytes are missing is REMOVED from the output**, never left
   pointing at a dead path. A note synced before its image arrived still
