@@ -170,6 +170,23 @@ export const en = {
   'publish.failed.quotaExceeded': 'You have reached the publishing limit ({limit}).',
   'publish.failed.tooLarge': 'This note is too large to publish.',
 
+  // Sub-project W: accepting a note shared from somebody else's app.
+  // `import.images` is plural-agnostic on purpose — Korean has no plural
+  // agreement and English reads fine with a count in front of a bare noun
+  // here ("3 images"), which is cheaper than an ICU plural rule for one
+  // string nobody reads twice.
+  'import.title': 'Add this note?',
+  'import.body': 'This will be added to your notes as a new note you own.',
+  'import.images': '{count} images',
+  // `{count}` is substituted at the call site with `.replace`. `useT` is
+  // `(key: TranslationKey) => string` and takes no interpolation argument —
+  // every placeholder in this app works that way (`PublishDialog` does it for
+  // `{limit}` and `{when}`).  Do not add a second mechanism for one string.
+  'import.skipped': '{count} images could not be read and will be missing.',
+  'import.confirm': 'Add to my notes',
+  'import.cancel': 'Cancel',
+  'import.failed': 'This note could not be added.',
+
   // The two edge handles' accessible names, and the label of the menu each
   // one opens — one string covers both, since the button's whole job is
   // "open this menu". Used to read "Insert row/column here", back when a

@@ -163,6 +163,14 @@ export const ko: Record<TranslationKey, string> = {
   'publish.failed.quotaExceeded': '게시 한도({limit})에 도달했습니다.',
   'publish.failed.tooLarge': '이 메모는 게시하기에 너무 큽니다.',
 
+  'import.title': '이 메모를 추가할까요?',
+  'import.body': '내 메모에 새 메모로 추가됩니다.',
+  'import.images': '이미지 {count}개',
+  'import.skipped': '이미지 {count}개를 읽지 못해 빠집니다.',
+  'import.confirm': '내 메모에 추가',
+  'import.cancel': '취소',
+  'import.failed': '이 메모를 추가할 수 없습니다.',
+
   'editor.table.rowHandle': '행 옵션',
   'editor.table.columnHandle': '열 옵션',
   'editor.table.deleteRow': '행 삭제',
