@@ -424,7 +424,12 @@ function inlineImages(host: HTMLElement, images: Map<string, string>): void {
     }
 
     element.setAttribute('src', dataUri);
-    element.removeAttribute('data-src');
+    // data-src is KEPT, deliberately, where it used to be removed here.
+    // It is the only thing that lets an importer match an inlined blob back
+    // to its files/<id>.webp path in the Markdown -- the alternative is
+    // document order, which is true but silently wrong the first time a
+    // renderer reorders anything. It costs one attribute per image and a
+    // reader never sees it. See sub-project W.
 
     // The display width, carried through as an inline style so the export
     // lays out the way the editor did. `data-width` is the node's own
@@ -510,6 +515,27 @@ export function renderNoteBody(
   inlineImages(host, images);
   numberFootnotes(host, document_);
   return host.innerHTML;
+}
+
+/**
+ * The note's own Markdown, carried inside the document it renders to.
+ *
+ * type="application/json" is never executed by any browser, so the
+ * published page's CSP (default-src 'none') neutralises nothing here and
+ * needs no change to permit it -- it is inert data in the DOM, which is
+ * exactly what an importer wants and what a reader never sees.
+ *
+ * Only the CLOSING tag is escaped, and that is sufficient: an HTML parser
+ * ends a script element at the first closing script tag, and nothing else
+ * inside a script element is markup. JSON.stringify has already dealt with
+ * quotes, backslashes and control characters.
+ */
+function sourcePayload(note: RenderableNote): string {
+  const json = JSON.stringify({ title: note.title, text: note.text }).replace(
+    /<\/script/gi,
+    String.raw`<\/script`,
+  );
+  return `<script type="application/json" id="bear-source">${json}</script>`;
 }
 
 /**
@@ -1060,6 +1086,7 @@ ${declarations}
   </head>
   <body>
 ${renderNoteBody(note.text, images, diagrams)}
+${sourcePayload(note)}
   </body>
 </html>
 `;

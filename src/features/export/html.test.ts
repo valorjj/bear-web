@@ -208,12 +208,16 @@ describe('renderNoteHtml', () => {
 
   it('renders the note body through the editor schema, so export matches the editor', () => {
     const html = renderNoteHtml(note, tokens);
+    // Checked against the rendered body only — the bear-source payload
+    // carries the note's raw Markdown verbatim, literal task-list syntax
+    // included, which is the whole point of that block.
+    const renderedBody = html.split('<script type="application/json"')[0]!;
 
-    expect(html).toContain('<h1>US market daily</h1>');
-    expect(html).toContain('<strong>bold</strong>');
+    expect(renderedBody).toContain('<h1>US market daily</h1>');
+    expect(renderedBody).toContain('<strong>bold</strong>');
     // A task list is real markup, not a literal "- [ ]".
-    expect(html).toContain('data-type="taskList"');
-    expect(html).not.toContain('- [ ] one');
+    expect(renderedBody).toContain('data-type="taskList"');
+    expect(renderedBody).not.toContain('- [ ] one');
   });
 
   it('titles the document from the note', () => {
@@ -655,20 +659,25 @@ describe('stored images', () => {
     );
 
     expect(html).toContain('src="data:image/webp;base64,AAA"');
-    // The relative path must be GONE. An exported file still pointing at
-    // `files/abc123.webp` is broken in every reader — and the PDF renderer
-    // could not fetch it even in principle, because it has no route off the
-    // host by design.
-    expect(html).not.toContain('files/abc123.webp');
+    // The relative path is KEPT, in `data-src`, alongside the inlined data
+    // URI — since sub-project W it is what lets an importer match this blob
+    // back to its `files/<id>.webp` path in the note's Markdown. It must not
+    // appear anywhere else (as a bare, un-attributed `src`, say), which is
+    // what would make the image broken in a reader that ignores `data-src`.
+    expect(html).toContain('data-src="files/abc123.webp"');
   });
 
   it('drops an image whose bytes are missing rather than emitting a dead path', () => {
     // A note synced before its image arrived must still export, without a
-    // broken-image icon in the middle of it.
+    // broken-image icon in the middle of it. Checked against the rendered
+    // body only — the bear-source payload carries the note's raw text
+    // verbatim, and that text still names the missing path even though no
+    // <img> for it ever reaches the DOM.
     const html = renderNoteHtml(note('Note\n\n![](files/gone.webp)'), tokens, 'en', new Map());
+    const renderedBody = html.split('<script type="application/json"')[0]!;
 
-    expect(html).not.toContain('files/gone.webp');
-    expect(html).not.toContain('<img');
+    expect(renderedBody).not.toContain('files/gone.webp');
+    expect(renderedBody).not.toContain('<img');
   });
 
   it('carries the display width through as an inline style', () => {
@@ -946,5 +955,61 @@ describe('footnotes in an export', () => {
     const definition = html.indexOf('data-footnote-def="orphan"');
 
     expect(html.slice(definition, definition + 140)).toContain('orphan');
+  });
+});
+
+describe('the importable payload', () => {
+  it('keeps data-src on an inlined image so an importer can match it to the text', () => {
+    const images = new Map([['abc123', 'data:image/webp;base64,AAAA']]);
+    const html = renderNoteHtml(
+      { title: 'Note', text: 'Note\n\n![](files/abc123.webp)\n' },
+      {},
+      'en',
+      images,
+    );
+
+    expect(html).toContain('data-src="files/abc123.webp"');
+    expect(html).toContain('src="data:image/webp;base64,AAAA"');
+  });
+
+  it('carries the note title and text as an inert JSON block', () => {
+    const html = renderNoteHtml({ title: 'Note', text: 'Note\n\nbody\n' }, {}, 'en');
+
+    const match = /<script type="application\/json" id="bear-source">([\s\S]*?)<\/script>/.exec(
+      html,
+    );
+    expect(match).not.toBeNull();
+    expect(JSON.parse(match![1]!)).toEqual({ title: 'Note', text: 'Note\n\nbody\n' });
+  });
+
+  it('escapes a closing script tag in the note text', () => {
+    // Without this the payload block terminates early and the rest of the
+    // note becomes markup in the document.
+    const text = 'Note\n\n</script><b>x</b>\n';
+    const html = renderNoteHtml({ title: 'Note', text }, {}, 'en');
+
+    const match = /<script type="application\/json" id="bear-source">([\s\S]*?)<\/script>/.exec(
+      html,
+    );
+    expect(match).not.toBeNull();
+    expect(JSON.parse(match![1]!).text).toBe(text);
+  });
+
+  it('still drops an image whose bytes are absent', () => {
+    // Unchanged behaviour, pinned here because this task edits the branch
+    // that decides it: a note synced before its image arrived must export
+    // without a broken-image icon. Checked against the rendered body only —
+    // the bear-source payload now carries the note's raw text verbatim, and
+    // that text still names the missing path even though no <img> for it
+    // ever reaches the DOM.
+    const html = renderNoteHtml(
+      { title: 'Note', text: 'Note\n\n![](files/missing.webp)\n' },
+      {},
+      'en',
+      new Map(),
+    );
+    const renderedBody = html.split('<script type="application/json"')[0]!;
+
+    expect(renderedBody).not.toContain('files/missing.webp');
   });
 });
