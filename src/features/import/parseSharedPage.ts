@@ -9,6 +9,18 @@ import { storedImageId } from '@/data';
  */
 const MAX_TEXT = 1_000_000;
 
+/**
+ * The longest title this will accept.
+ *
+ * `text` was already bounded; `title` was only shape-checked. `ImportSheet`
+ * renders it directly into a `<p>` in an unconstrained-width `Dialog`, so an
+ * attacker-chosen 200,000-character title would push the sheet's own Cancel
+ * button off-screen — a layout defect with a security-shaped cause. A few
+ * hundred characters is far past any real note title; `line-clamp-2` in
+ * `ImportSheet` is the belt to this cap's braces.
+ */
+const MAX_TITLE = 500;
+
 export interface SharedImage {
   /** The `files/<id>.webp` path exactly as it appears in `text`. */
   path: string;
@@ -79,7 +91,7 @@ export function parseSharedPage(html: string): SharedPayload | null {
   if (typeof parsed !== 'object' || parsed === null) return null;
   const { title, text } = parsed as Record<string, unknown>;
   if (typeof title !== 'string' || typeof text !== 'string') return null;
-  if (text.length > MAX_TEXT) return null;
+  if (text.length > MAX_TEXT || title.length > MAX_TITLE) return null;
 
   const images: SharedImage[] = [];
   const seen = new Set<string>();

@@ -53,6 +53,16 @@ describe('parseSharedPage', () => {
     expect(parseSharedPage(page('x'.repeat(1_000_001)))).toBeNull();
   });
 
+  it('returns null for a title past its own length cap', () => {
+    // `text` was already bounded; `title` was shape-checked only, so an
+    // attacker-chosen 200,000-character title could reach the confirmation
+    // sheet and push its Cancel button off-screen.
+    const json = JSON.stringify({ title: 'x'.repeat(501), text: 'body' });
+    const html = `<!doctype html><html><body><script type="application/json" id="bear-source">${json}</script></body></html>`;
+
+    expect(parseSharedPage(html)).toBeNull();
+  });
+
   it('counts an image it cannot read rather than dropping it silently', () => {
     // A note that quietly loses a picture is worse than one that says it did.
     const img = '<img data-src="files/abc.webp" src="https://example.com/x.webp">';

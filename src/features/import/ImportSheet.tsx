@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 
+import { deriveTitle } from '@/data';
 import { useT } from '@/i18n';
 import { Button } from '@/ui/Button';
 import { Dialog } from '@/ui/Dialog';
@@ -44,6 +45,15 @@ export function ImportSheet({
 
   if (payload === null && !failed) return null;
 
+  // The imported note's title comes from `notes.create`'s own
+  // `deriveTitle(text)`, not from `payload.title` — `importNote` ignores the
+  // payload's title entirely. Showing `payload.title` here would let an
+  // attacker-chosen string sit on the one screen whose job is telling the
+  // user what they are about to accept, while the write path shows them
+  // something else. Derived here, not stored on the payload, so it always
+  // reflects the exact text that will be imported.
+  const displayTitle = payload === null ? '' : deriveTitle(payload.text);
+
   return (
     <Dialog open onClose={onCancel} label={failed ? t('import.failed') : t('import.title')}>
       <div className="flex flex-col gap-4 p-4">
@@ -51,8 +61,8 @@ export function ImportSheet({
           <p className="text-ui text-text">{t('import.failed')}</p>
         ) : (
           <>
-            <p className="text-ui-md font-semibold text-text">
-              {payload.title === '' ? t('note.untitled') : payload.title}
+            <p className="line-clamp-2 break-words text-ui-md font-semibold text-text">
+              {displayTitle === '' ? t('note.untitled') : displayTitle}
             </p>
             <p className="text-ui-sm text-muted">{t('import.body')}</p>
             {payload.images.length > 0 && (

@@ -116,17 +116,17 @@ test('a shared document imports as a note with its image', async ({ page, browse
   // same, because Playwright's own download path carries no extension and
   // some readers key off one. A plain string read is all this test needs.
   const dir = await mkdtemp(join(tmpdir(), 'bear-import-'));
-  let document: string;
+  let exported: string;
   try {
     const path = join(dir, 'note.html');
     await file.saveAs(path);
-    document = await readFile(path, 'utf8');
+    exported = await readFile(path, 'utf8');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 
-  expect(document).toContain('id="bear-source"');
-  expect(document).toContain('data-src="files/');
+  expect(exported).toContain('id="bear-source"');
+  expect(exported).toContain('data-src="files/');
 
   // The recipient's side: a FRESH browser context — a different device, not
   // a second page in the sender's — whose `/share/<id>` answers with the
@@ -135,7 +135,7 @@ test('a shared document imports as a note with its image', async ({ page, browse
   try {
     const recipient = await recipientContext.newPage();
     await recipient.route('**/share/page-abc', (route) =>
-      route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: document }),
+      route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: exported }),
     );
 
     await recipient.goto('/?import=page-abc');
@@ -157,14 +157,15 @@ test('a shared document imports as a note with its image', async ({ page, browse
     // index.ts')` — that specifier only resolves under Vite's dev server,
     // and `playwright.config.ts`'s webServer runs the built preview instead
     // (`npm run build && npm run preview`), where a bare `/src/...` import
-    // 404s. `e2e/fixtures/seed.ts` reads and writes this same database the
-    // same way, opening at version 60 (Dexie's declared version 6, times
-    // ten) for the identical reason.
+    // 404s. Opened with no version, unlike `e2e/fixtures/seed.ts`'s pinned
+    // version 60: that pin exists because `seed.ts` writes BEFORE the app
+    // ever opens the database, and only that first open may choose the
+    // version. Here the app has already opened it by the time this runs, so
+    // an unversioned open simply joins the existing connection.
     interface Check {
       ok: boolean;
       why?: string;
       sizes?: number[];
-      noteId?: string;
     }
 
     // Both images' paths must resolve, and to blobs of DIFFERING sizes — a
@@ -172,7 +173,7 @@ test('a shared document imports as a note with its image', async ({ page, browse
     // one that simply matched by document order (see `pasteImage`'s doc).
     const check = await recipient.evaluate(async (): Promise<Check> => {
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open('bear-web', 60);
+        const request = indexedDB.open('bear-web');
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
         request.onblocked = () => reject(new Error('database blocked'));
@@ -209,7 +210,7 @@ test('a shared document imports as a note with its image', async ({ page, browse
 
       database.close();
 
-      return { ok: true, sizes, noteId: imported.id };
+      return { ok: true, sizes };
     });
 
     expect(check.ok, check.why).toBe(true);

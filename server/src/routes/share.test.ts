@@ -130,4 +130,19 @@ describe.skipIf(!url)('GET /share/:id', () => {
 
     expect(response.headers.get('access-control-allow-origin')).toBe(APP_ORIGIN);
   });
+
+  it('is not renderable as HTML by a browser navigated here directly', async () => {
+    // A plain GET, reachable by anyone, on the API host that holds the
+    // session cookie and serves `/sync`, `/files`, `/account`, `/publish`.
+    // `fetchSharedPage` calls `response.text()` and `parseSharedPage` passes
+    // `'text/html'` to `DOMParser` explicitly, so it never looks at this
+    // header — but a browser must not render these bytes as markup.
+    await publish('page-xss', '<!doctype html><script>alert(1)</script><p>hi</p>');
+
+    const response = await app.request('/share/page-xss');
+
+    expect(response.headers.get('content-type')).not.toMatch(/html/);
+    expect(response.headers.get('content-security-policy')).toBeTruthy();
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+  });
 });

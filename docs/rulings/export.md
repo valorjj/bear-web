@@ -277,9 +277,16 @@ Governs how a note leaves the app as Markdown, HTML or PDF: which pipeline rende
   renderer no longer needs, and a block no reader sees — and both are the
   entire import path (sub-project W). The attribute is what matches an
   inlined blob back to its `files/<id>.webp` in the note's text; without it
-  the only correspondence is document order. Removing either does not fail a
-  gate on the export side: the document still renders identically, and only
-  `e2e/import.spec.ts` can see it.
+  the only correspondence is document order. **The unit suite pins both**:
+  `html.test.ts`'s `keeps data-src on an inlined image…` and `carries the
+  note title and text as an inert JSON block` fail immediately if either is
+  removed — this ruling used to claim neither gate could see it, which was
+  false and would lead a developer who deletes one as a leftover, sees
+  `html.test.ts` go red, and concludes the failing test is the stale thing.
+  What the unit suite cannot see is the pairing surviving a REAL round trip
+  through the exporter, the network, and the importer — the document still
+  LOOKS identical to a reader either way — and that is what
+  `e2e/import.spec.ts` is for.
 
 - **An image whose bytes are missing is REMOVED from the output**, never left
   pointing at a dead path. A note synced before its image arrived still

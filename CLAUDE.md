@@ -81,7 +81,7 @@ redirect stub instead of the app.
 | V footnotes (각주)                                                 | complete |
 | W share: a published note others can add to their own notes        | complete |
 
-3188 unit tests pass and 122 skip (the server integration tests, which skip
+3190 unit tests pass and 124 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
 `npm run test:pdf`), 313 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.

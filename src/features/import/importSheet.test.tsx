@@ -48,6 +48,25 @@ describe('ImportSheet', () => {
     expect(screen.getByText('Shared')).toBeInTheDocument();
   });
 
+  it('shows the title the write path will actually use, not the payload’s own', () => {
+    // `importNote` never reads `payload.title` — `notes.create` derives the
+    // title from `text` alone. The confirmation sheet's whole job is telling
+    // the user what they are about to accept, so it must show what will
+    // really be written, not an attacker-controlled string riding along in
+    // the payload.
+    renderSheet({
+      payload: {
+        title: 'Attacker-chosen title',
+        text: 'Real first line\nbody',
+        images: [],
+        skipped: 0,
+      },
+    });
+
+    expect(screen.getByText('Real first line')).toBeInTheDocument();
+    expect(screen.queryByText('Attacker-chosen title')).toBeNull();
+  });
+
   it('says how many images are coming', () => {
     renderSheet({
       payload: {

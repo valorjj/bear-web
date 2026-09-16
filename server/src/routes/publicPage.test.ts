@@ -250,6 +250,21 @@ describe.skipIf(!url)('GET /p/:id', () => {
     expect(second.status).toBe(304);
   });
 
+  it('falls back to English for a prototype-key lang rather than an inherited function', async () => {
+    // `lang` comes straight from the stored document. `IMPORT_LABEL` is a
+    // plain object literal, so `<html lang="constructor">` resolves via the
+    // prototype chain to `Object` — truthy, so a bare `?? fallback` would
+    // never trigger — and would render the banner as the function's own
+    // source text.
+    await seedPage('page-proto', '<!doctype html><html lang="constructor"><body>hi</body></html>');
+
+    const response = await app.request('/p/page-proto', { headers: PUBLISH_HOST });
+    const html = await response.text();
+
+    expect(html).toContain('Add to my notes');
+    expect(html).not.toContain('[native code]');
+  });
+
   it('writes the banner in the document’s own language', async () => {
     await seedPage('page-ko', '<!doctype html><html lang="ko"><body>hi</body></html>');
 
@@ -258,15 +273,41 @@ describe.skipIf(!url)('GET /p/:id', () => {
     expect(await response.text()).toContain('내 메모에 추가');
   });
 
-  it('escapes the app origin it writes into the href', async () => {
+  it('escapes a hostile app origin rather than breaking out of the attribute', async () => {
     // The origin comes from the environment, not from a user — but it is
     // still interpolated into markup, and a value with a quote in it would
-    // break out of the attribute. Escaping it costs nothing and removes the
-    // question.
+    // break out of the attribute. This deliberately configures a hostile
+    // `appOrigin` (a value `escapeAttribute` must neutralise) rather than
+    // asserting on the real one, which no implementation could ever corrupt
+    // into containing a quote — that assertion would pass whether or not
+    // `escapeAttribute` exists at all.
     await seedPage('page-esc', '<!doctype html><html lang="en"><body>hi</body></html>');
+    const hostileOrigin = 'http://evil.example"><script>alert(1)</script>';
 
-    const response = await app.request('/p/page-esc', { headers: PUBLISH_HOST });
+    const hostileApp = createApp({
+      env: {
+        appOrigin: hostileOrigin,
+        apiOrigin: 'http://localhost:8787',
+        databaseUrl: url ?? '',
+        googleClientId: 'id',
+        googleClientSecret: 'secret',
+        pdfRendererUrl: 'http://127.0.0.1:8788',
+        imageRoot: join(root, 'images'),
+        publishOrigin: PUBLISH_ORIGIN,
+        publishRoot: root,
+      },
+      query: pool.query,
+      transaction: pool.transaction,
+      fetch: globalThis.fetch,
+      secureCookies: false,
+    });
 
-    expect(await response.text()).not.toContain('href="http://localhost:5173/?import=page-esc"x');
+    const response = await hostileApp.request('/p/page-esc', { headers: PUBLISH_HOST });
+    const html = await response.text();
+
+    expect(html).toContain(
+      'href="http://evil.example&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;/?import=page-esc"',
+    );
+    expect(html).not.toContain(`href="${hostileOrigin}/?import=page-esc"`);
   });
 });

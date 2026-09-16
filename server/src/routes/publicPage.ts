@@ -119,7 +119,13 @@ function escapeAttribute(value: string): string {
  */
 function withImportBanner(html: string, appOrigin: string, id: string): string {
   const lang = /<html[^>]*\blang="([^"]*)"/i.exec(html)?.[1]?.toLowerCase() ?? 'en';
-  const label = IMPORT_LABEL[lang] ?? IMPORT_LABEL.en!;
+  // `lang` comes from the stored document, so `Object.hasOwn` — not a bare
+  // index or `in` — is what stops `<html lang="constructor">` (or
+  // `toString`, `valueOf`, `hasOwnProperty`) from resolving to a value the
+  // object inherits from `Object.prototype` rather than one it actually
+  // defines. A plain `IMPORT_LABEL[lang] ?? IMPORT_LABEL.en` would return
+  // that inherited function, which is truthy, so `??` would never fall back.
+  const label = Object.hasOwn(IMPORT_LABEL, lang) ? IMPORT_LABEL[lang]! : IMPORT_LABEL.en!;
   const href = `${escapeAttribute(appOrigin)}/?import=${escapeAttribute(id)}`;
 
   const banner =
