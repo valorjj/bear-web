@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -83,7 +83,14 @@ describe('PublishDialog', () => {
 
   it('actually unpublishes once the confirmation is accepted', async () => {
     const onUnpublish = vi.fn(async () => {});
-    renderDialog(<PublishDialog page={PAGE} onUnpublish={onUnpublish} />);
+    // `onPublish` supplied because PRODUCTION always supplies it
+    // (`PublishDialogContainer` passes both unconditionally), and because the
+    // last assertion is about the publish button coming back. Without it this
+    // test used to pass against an inert button: the dialog rendered one with
+    // no handler, which accepted a click and did nothing at all. Omitting the
+    // prop here was what let that ship.
+    const onPublish = vi.fn(async () => PAGE);
+    renderDialog(<PublishDialog page={PAGE} onPublish={onPublish} onUnpublish={onUnpublish} />);
     await userEvent.click(screen.getByRole('button', { name: 'Unpublish' }));
     // Two "Unpublish"-named controls exist now: the trigger and the
     // confirmation's own destructive button. The confirmation's is the one
@@ -94,6 +101,29 @@ describe('PublishDialog', () => {
     expect(onUnpublish).toHaveBeenCalledWith('abc');
     // Back to the not-yet-published view.
     expect(screen.getByRole('button', { name: 'Publish to web' })).toBeInTheDocument();
+  });
+
+  it('renders no publish button at all when publishing is not available', async () => {
+    /*
+     * The rule this pins is already written down for `BottomToolbar`'s
+     * `onPickImages` and `ExportMenu`'s items: a control that silently does
+     * nothing is worse than one that is not there. This dialog broke it —
+     * `handlePublish` opened with a bare `if (onPublish === undefined)
+     * return`, so the button rendered, accepted the click, issued no request,
+     * showed no error and left the dialog looking untouched.
+     *
+     * Asserted in BOTH views, because the button exists in both and only one
+     * of them was obvious.
+     */
+    renderDialog(<PublishDialog page={null} />);
+    expect(screen.queryByRole('button', { name: 'Publish to web' })).toBeNull();
+
+    cleanup();
+
+    renderDialog(<PublishDialog page={PAGE} />);
+    expect(screen.queryByRole('button', { name: 'Republish' })).toBeNull();
+    // The dialog is still useful — the URL is what a reader came for.
+    expect(screen.getByRole('textbox', { name: 'Published to the web' })).toBeInTheDocument();
   });
 
   it('names the reason when unpublish fails, and leaves the published view intact', async () => {

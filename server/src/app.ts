@@ -5,6 +5,7 @@ import { authRoutes } from './auth/routes.ts';
 import type { Env } from './env.ts';
 import { originGuard } from './middleware/origin.ts';
 import { publishHostOnly } from './middleware/publishHost.ts';
+import { requestLog } from './middleware/requestLog.ts';
 import { clientIp, rateLimit } from './middleware/rateLimit.ts';
 import { accountRoutes } from './routes/account.ts';
 import { diagramRoutes } from './routes/diagram.ts';
@@ -55,6 +56,12 @@ export interface AppDeps {
  */
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
+
+  // FIRST, so it times and records the whole stack — a request refused by
+  // `publishHostOnly` or by the rate limiter below is exactly the kind this
+  // exists to make visible. Writes and failures only, and neither identity
+  // nor content; see the middleware's own doc.
+  app.use('*', requestLog());
 
   // The publish host serves only `GET /health` and `GET /p/*`, and never a
   // credentialed response — so it must never carry the app's CORS headers

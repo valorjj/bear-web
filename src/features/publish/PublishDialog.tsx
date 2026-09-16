@@ -256,6 +256,16 @@ export function PublishDialog({
   const [confirming, setConfirming] = useState(false);
 
   const handlePublish = async (): Promise<void> => {
+    // A TYPE NARROW, not a behaviour. Both buttons that reach this are now
+    // rendered only when `onPublish` is defined, so an undefined one cannot
+    // be clicked — and it must not be reachable, because this used to be a
+    // bare `return`: the button appeared, accepted the click, issued no
+    // request, showed no error and left the dialog looking untouched. That is
+    // the exact failure this feature spent a whole session producing at the
+    // other end of the wire, and the project's own rule for it is already
+    // written down — `BottomToolbar`'s `onPickImages` and `ExportMenu`'s
+    // items both omit the control rather than render an inert one, because a
+    // control that silently does nothing is worse than one that is not there.
     if (onPublish === undefined) return;
     setPending(true);
     setError(null);
@@ -299,15 +309,17 @@ export function PublishDialog({
     <>
       <Modal open={open} onClose={onClose} label={t('publish.title')}>
         {current === null ? (
-          <button
-            type="button"
-            className={DEFAULT_BUTTON}
-            disabled={pending}
-            aria-busy={pending ? 'true' : undefined}
-            onClick={() => void handlePublish()}
-          >
-            {t('publish.open')}
-          </button>
+          onPublish === undefined ? null : (
+            <button
+              type="button"
+              className={DEFAULT_BUTTON}
+              disabled={pending}
+              aria-busy={pending ? 'true' : undefined}
+              onClick={() => void handlePublish()}
+            >
+              {t('publish.open')}
+            </button>
+          )
         ) : (
           <>
             {/* No separate copy button or "Copied" feedback — `autoFocus` plus
@@ -329,22 +341,24 @@ export function PublishDialog({
               )}
             </p>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={DEFAULT_BUTTON}
-                disabled={pending}
-                aria-busy={pending ? 'true' : undefined}
-                onClick={() => void handlePublish()}
-              >
-                {/* Not `publish.open`: this button sits BESIDE the note's
+              {onPublish !== undefined && (
+                <button
+                  type="button"
+                  className={DEFAULT_BUTTON}
+                  disabled={pending}
+                  aria-busy={pending ? 'true' : undefined}
+                  onClick={() => void handlePublish()}
+                >
+                  {/* Not `publish.open`: this button sits BESIDE the note's
                     live URL, where "Publish to web" reads as a label for what
                     already happened rather than as the way to refresh it. The
                     action is identical — the same snapshot is sent — but a
                     published page IS a snapshot, so "the note changed and the
                     page did not" is this feature's characteristic failure and
                     pressing this is the only cure. */}
-                {t('publish.republish')}
-              </button>
+                  {t('publish.republish')}
+                </button>
+              )}
               <button type="button" className={DANGER_BUTTON} onClick={() => setConfirming(true)}>
                 {t('publish.unpublish')}
               </button>
