@@ -62,6 +62,17 @@ describe('parseSharedPage', () => {
     expect(result!.skipped).toBe(1);
   });
 
+  it('counts an image whose base64 payload is corrupt', () => {
+    // Matches DATA_URI (a well-formed `data:...;base64,` prefix) so this
+    // reaches `atob` itself, unlike the remote-URL and traversal cases above,
+    // which are rejected before `atob` is ever called.
+    const img = '<img data-src="files/abc.webp" src="data:image/webp;base64,!!!not-valid!!!">';
+    const result = parseSharedPage(page('Note\n\n![](files/abc.webp)\n', img));
+
+    expect(result!.images).toEqual([]);
+    expect(result!.skipped).toBe(1);
+  });
+
   it('ignores an img with no data-src', () => {
     // Not an image this app stored — it is a remote URL the author wrote, and
     // it stays in the text as a remote URL. Nothing to import, nothing lost.
