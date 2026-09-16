@@ -12,6 +12,8 @@ export {
   storedImageIds,
   storedImagePath,
 } from './images';
+export { importNote, MAX_IMPORTED_IMAGE_BYTES } from './importNote';
+export type { ImportableNote, ImportNoteDeps } from './importNote';
 export { hasSignedInBefore, SESSION_HINT_KEY } from './sync/config';
 export { newId } from './ids';
 export { compareNotes, DEFAULT_NOTE_ORDER, isNoteOrder, NOTE_ORDER_FIELDS } from './order';
