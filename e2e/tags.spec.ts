@@ -171,6 +171,48 @@ test('a plain click on a tag pill re-scopes the note list', async ({ page }) => 
   await expect(scopeButton).toHaveText('economy/rates');
 });
 
+test('a click just past a tag pill places the caret instead of re-scoping', async ({ page }) => {
+  /*
+   * The bug this pins: `tagRangeAt` matches inclusively at BOTH edges
+   * (`pos >= from && pos <= to`), which is right for deciding whether the pill
+   * should lift while the caret is inside it, and wrong for deciding whether
+   * the user CLICKED it. `posAtCoords` resolves a click in the gap after the
+   * pill to exactly `hit.to`, so every attempt to put the caret after a tag
+   * activated it instead and the only way to type there was the keyboard.
+   *
+   * Driven as a real click at real coordinates, because that is the only thing
+   * that can see a hit test — the unit suite has no layout engine, and jsdom
+   * resolves every Range rect to zero.
+   */
+  await page.getByRole('button', { name: /US market daily/ }).click();
+  const editor = editorLocator(page);
+  const pill = editor.locator('.bear-tag', { hasText: 'economy/rates' });
+  await expect(pill).toBeVisible();
+
+  // Focus the editor first, on plain prose well away from any pill. Without
+  // this the note was merely SELECTED from the list and the editor holds no
+  // caret, so the click under test has nothing to move and the typing below
+  // would fail for a reason that has nothing to do with the pill — which is
+  // exactly how this test failed when it was first written.
+  await editor.getByText('Why it matters', { exact: false }).click();
+
+  const box = (await pill.boundingBox())!;
+  // 3px past the pill's right edge, vertically centred: outside the ink and
+  // still inside the line box. Further out lands in the block's padding,
+  // where ProseMirror places no caret at all.
+  await page.mouse.click(box.x + box.width + 3, box.y + box.height / 2);
+
+  // The scope must NOT have moved — this is the assertion the fix is for.
+  await expect(page.getByRole('button', { name: 'List options: Notes' })).toBeVisible();
+
+  // And the caret must have LANDED, not merely failed to activate. Typing is
+  // what proves it: asserting the scope alone would pass equally against a
+  // click that was silently swallowed, which is the near-vacuous shape this
+  // repo keeps finding.
+  await page.keyboard.type('Z');
+  await expect(editor).toContainText('economy/ratesZ');
+});
+
 test.describe('on a touch device', () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
 

@@ -175,6 +175,42 @@ ruling below rests on.
   Markdown-sourced corpus entry could catch it and why its fixtures in
   `tagAgreement.test.ts` are built node-wise.
 
+- **A pill's HIT AREA is its drawn element, not its document range.** Both
+  `mousedown` handlers test `event.target.closest('.bear-tag' / '.bear-link')`
+  before doing anything else, and that test is what makes a pill possible to
+  type after.
+
+  `tagRangeAt`/`linkRangeAt` match inclusively at BOTH edges
+  (`pos >= from && pos <= to`), which is correct for the question they were
+  written for — "should the pill lift, given where the caret is?" — because a
+  caret at either edge is inside. Reusing them to answer "did the user CLICK
+  the pill?" conflates two different questions, and the position just past the
+  closing bracket is exactly where a caret goes to continue the sentence.
+  `posAtCoords` resolves a click in the gap after a pill to that position, so
+  **every attempt to place the caret after a tag or a link activated it
+  instead**, and the keyboard was the only way to type there. Reported from
+  real use on 2026-09-16, after shipping since S4/L2.
+
+  This is J2's rule seen from the other side: there the danger was targets too
+  SMALL to hit, here a target wider than its ink stole the character beside
+  it. An oversized target turning a near-miss into the wrong action is the
+  same defect either way.
+
+  **The geometry decides whether a test can see this, and the first two
+  attempts could not.** A pill with prose after it on the same line does NOT
+  reproduce it — a click in the following space resolves past `to`, so even
+  the old code fell through. It bites only where the pill ENDS ITS LINE, where
+  `posAtCoords` clamps back onto the last position in the textblock. Both
+  regression tests therefore use a line-ending pill
+  (`e2e/tags.spec.ts`, `e2e/backlinks.spec.ts`'s own seeded fixture), and both
+  were demonstrated failing against the unfixed handlers.
+
+  Consequence for the unit tests: a synthetic `new MouseEvent` that is never
+  dispatched has `target === null`, which is an event no browser produces at
+  those coordinates. The three helpers now attach the real element ProseMirror
+  rendered. Sixteen tests passed before this change while exercising a hit
+  path the browser could not produce.
+
 - **The pill lifts while the cursor is inside its tag.** Without it, typing
   `#w`, `#wo`, `#wor` re-pills on every keystroke and character widths jump
   under the cursor. Intersection, not containment: a caret at either edge

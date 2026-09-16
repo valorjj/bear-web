@@ -386,6 +386,15 @@ function activateFirstTag(editor: Editor): {
     button: 0,
     ...(isMacOS() ? { metaKey: true } : { ctrlKey: true }),
   });
+  // A `target` inside the drawn pill, because the plugin now tests the
+  // POINTER's element rather than the resolved document position — a pill's
+  // range includes the position just past it, where a caret belongs, and using
+  // the range as the hit area made every pill impossible to type after with a
+  // mouse. A bare `new MouseEvent` that is never dispatched has
+  // `target === null`, an event no browser produces at these coordinates.
+  const pillElement = editor.view.dom.querySelector('.bear-tag');
+  if (pillElement !== null) Object.defineProperty(event, 'target', { value: pillElement });
+
   const at = hit.from + 1;
   const posAtCoords = vi.fn(() => ({ pos: at, inside: at }));
   const view = { state: editor.state, posAtCoords };

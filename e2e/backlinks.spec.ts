@@ -197,3 +197,98 @@ test.describe('backlinks', () => {
     await expect(editor).not.toContainText('Rewrite the seed helper');
   });
 });
+
+/**
+ * A link that ENDS ITS LINE, which the shared corpus has none of — and the
+ * geometry is the whole point, so this seeds its own note rather than reusing
+ * the corpus pair.
+ *
+ * Its own `describe` at file scope, not a test inside the one above: that
+ * block's `beforeEach` already seeds and navigates, and `seedDatabase` works
+ * through `page.addInitScript`, so a second call inside a test adds a SECOND
+ * init script rather than replacing the first. Both then run on the next
+ * navigation and the notes collide.
+ */
+test.describe('a line-ending link pill', () => {
+  const LINE_END_CORPUS = {
+    ...CORPUS,
+    notes: [
+      {
+        id: 'n-lineend',
+        title: 'Line end link',
+        // A paragraph AFTER the link, purely so the test has somewhere safe
+        // to click to focus the editor. Clicking next to the link itself puts
+        // the caret at its edge, `linkRangeAt` counts an edge as inside, the
+        // pill LIFTS, and `.bear-link` stops existing — which presented as an
+        // intermittent `boundingBox()` of null rather than as anything to do
+        // with pills.
+        text: `Line end link\n\nSee [[${SPRINT_TITLE}]]\n\nSomewhere safe to focus.\n`,
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+        pinned: false,
+        trashedAt: null,
+        archivedAt: null,
+      },
+      ...CORPUS.notes,
+    ],
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await page.clock.setFixedTime(FIXED_NOW);
+    await seedDatabase(page, LINE_END_CORPUS);
+    await page.goto('/');
+    await expect(page.getByRole('region', { name: 'Note list' })).toBeVisible();
+  });
+
+  test('a click past it places the caret instead of navigating', async ({ page }) => {
+    /*
+     * The bug this pins, reported from real use: `linkRangeAt` matches
+     * inclusively at BOTH edges (`pos >= from && pos <= to`), which is right
+     * for deciding whether the pill should lift while the caret is inside it
+     * and wrong for deciding whether the user CLICKED it. Every attempt to put
+     * the caret after a link navigated away, leaving the keyboard as the only
+     * route to typing there.
+     *
+     * A link with prose AFTER it on the same line does NOT reproduce this — a
+     * click in the following space resolves past `hit.to`, so the old code
+     * already fell through. It bites only where the link ends the line:
+     * `posAtCoords` then clamps back to the last position in the textblock,
+     * which is exactly `hit.to`. The first version of this test clicked 3px
+     * past a mid-line pill, passed against the unfixed code, and proved
+     * nothing.
+     */
+    await page.getByRole('button', { name: rowNamed('Line end link') }).click();
+    const editor = editorLocator(page);
+    await expect(editor).toContainText('Line end link');
+
+    const pill = editor.locator('.bear-link', { hasText: SPRINT_TITLE });
+    await expect(pill).toHaveAttribute('data-resolved', 'true');
+
+    // Focus the editor first, in a DIFFERENT BLOCK from the link. The note is
+    // only SELECTED at this point and holds no caret, so without this the
+    // typing below fails for a reason unrelated to the pill — and focusing
+    // next to the link instead lifts the pill out of existence (see the
+    // fixture's own comment).
+    await editor.getByText('Somewhere safe to focus.').click();
+
+    // Read AFTER focusing, and assert rather than `!`: a null box here means
+    // the pill lifted, which is a different bug wearing this one's clothes.
+    await expect(pill).toBeVisible();
+    const box = await pill.boundingBox();
+    expect(box, 'the link pill must still be drawn before we click past it').not.toBeNull();
+    // Well past the pill's right edge, on its line: the empty run after a
+    // line-ending link, where a caret belongs and where the old code
+    // navigated instead.
+    await page.mouse.click(box!.x + box!.width + 40, box!.y + box!.height / 2);
+
+    // It must NOT have navigated — text unique to the TARGET note's body is
+    // the value that would change if it had.
+    await expect(editor).not.toContainText('Rewrite the seed helper');
+    await expect(editor).toContainText('Line end link');
+
+    // And the caret must have LANDED. Asserting only that we did not navigate
+    // would pass equally against a click that was silently swallowed.
+    await page.keyboard.type('Z');
+    await expect(editor).toContainText(`${SPRINT_TITLE}]]Z`);
+  });
+});

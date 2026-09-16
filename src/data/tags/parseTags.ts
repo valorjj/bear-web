@@ -8,7 +8,12 @@
  * grammar and the rulings behind it.
  */
 
-import { MASK, maskCode } from '../markdown/mask';
+// The `.ts` extension is required, not stylistic: `src/data/derive.ts` imports
+// this file, and `scripts/corpus.test.ts` imports THAT — which pulls both into
+// the `node` tsconfig project, where `module: nodenext` demands an explicit
+// extension. See `derive.ts`'s own note. `mask.ts` imports nothing, so the
+// cascade stops here.
+import { MASK, maskCode } from '../markdown/mask.ts';
 
 /**
  * Content starting with one of these is thrown away whole rather than trimmed,

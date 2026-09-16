@@ -17,6 +17,33 @@ describe('deriveTitle', () => {
     expect(deriveTitle('\n\n   \n# Real title')).toBe('Real title');
   });
 
+  it('skips a line that is nothing but tags', () => {
+    // Creating a note inside a tag scope seeds `\n#a/b` — a deliberately
+    // empty title line with the tag below it (`AppShell`'s create handler).
+    // `deriveTitle` skipped the blank line and landed on the tag, so the row
+    // was titled `#a/b` and the note the user had not named yet looked named.
+    expect(deriveTitle('\n#a/b')).toBe('');
+    expect(deriveTitle('#work')).toBe('');
+    expect(deriveTitle('  #work   #later  ')).toBe('');
+  });
+
+  it('keeps a line that carries a tag AND prose', () => {
+    // Only a line with NOTHING else is skipped. A tag the user wrote beside
+    // real words is part of what the line says, and the title is the line as
+    // written — the same rule the note body follows everywhere else.
+    expect(deriveTitle('#work Rewrite the seed helper')).toBe('#work Rewrite the seed helper');
+    expect(deriveTitle('Groceries #later')).toBe('Groceries #later');
+  });
+
+  it('falls through a tag-only line to the next real line', () => {
+    expect(deriveTitle('#a/b\nThe actual title')).toBe('The actual title');
+  });
+
+  it('does not mistake a heading for a tag-only line', () => {
+    // `# work` is a heading (hash, space); `#work` is a tag. One space apart.
+    expect(deriveTitle('# work')).toBe('work');
+  });
+
   it('trims surrounding whitespace', () => {
     expect(deriveTitle('   Padded title   \nbody')).toBe('Padded title');
   });

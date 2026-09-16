@@ -391,6 +391,17 @@ function mousedownAt(
   init: MouseEventInit,
 ): { handled: boolean; defaultPrevented: boolean } {
   const event = new MouseEvent('mousedown', { cancelable: true, button: 0, ...init });
+  // The synthetic event needs a `target` inside the drawn pill, because the
+  // plugin now tests the POINTER's element rather than the resolved document
+  // position — a pill's range includes the position just past it, where a
+  // caret belongs, and using the range as the hit area made every pill
+  // impossible to type after with a mouse. A bare `new MouseEvent` that is
+  // never dispatched has `target === null`, which is an event no browser
+  // produces at these coordinates, so the helper supplies the real element
+  // ProseMirror rendered.
+  const pillElement = editor.view.dom.querySelector('.bear-tag');
+  if (pillElement !== null) Object.defineProperty(event, 'target', { value: pillElement });
+
   const view = { state: editor.state, posAtCoords: () => ({ pos, inside: pos }) };
   const handled =
     editor.view.someProp('handleDOMEvents', (handlers) =>
@@ -709,6 +720,17 @@ describe('tag activation', () => {
       button: 0,
       ...(isMacOS() ? { metaKey: true } : { ctrlKey: true }),
     });
+    // The synthetic event needs a `target` inside the drawn pill, because the
+    // plugin now tests the POINTER's element rather than the resolved document
+    // position — a pill's range includes the position just past it, where a
+    // caret belongs, and using the range as the hit area made every pill
+    // impossible to type after with a mouse. A bare `new MouseEvent` that is
+    // never dispatched has `target === null`, which is an event no browser
+    // produces at these coordinates, so the helper supplies the real element
+    // ProseMirror rendered.
+    const pillElement = editor.view.dom.querySelector('.bear-tag');
+    if (pillElement !== null) Object.defineProperty(event, 'target', { value: pillElement });
+
     const view = { state: editor.state, posAtCoords: () => ({ pos: 5, inside: 5 }) };
     const mousedown = plugin!.props.handleDOMEvents!.mousedown as unknown as (
       view: unknown,

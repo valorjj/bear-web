@@ -335,6 +335,43 @@ export const LinkPill = Extension.create<LinkPillOptions>({
               // the menu belongs to.
               if (isMacOS() && event.ctrlKey) return false;
 
+              // The POINTER must be over the pill's own ink, not merely over
+              // a document position the pill's range contains. Those are not
+              // the same question, and conflating them is what made a pill
+              // impossible to type after with a mouse.
+              //
+              // `tagRangeAt`/`linkRangeAt` match inclusively at BOTH edges
+              // (`pos >= from && pos <= to`), which is right for deciding
+              // whether the pill should lift while the caret is inside it —
+              // a caret at either edge is inside. It is wrong for deciding
+              // whether the user CLICKED the pill: the position just past the
+              // closing bracket is where a caret goes to continue the
+              // sentence, and `posAtCoords` resolves a click in the gap after
+              // the pill to exactly that position. So every attempt to put
+              // the caret after a pill activated it instead, and the only way
+              // through was the keyboard.
+              //
+              // Testing the event's target instead makes the hit area equal
+              // the drawn pill. This is J2's rule from the other side: there
+              // the danger was targets too SMALL to hit, here a target wider
+              // than its ink stole the character next to it — and an
+              // oversized target turning a near-miss into the wrong action is
+              // the same defect either way.
+              //
+              // Duck-typed rather than `instanceof HTMLElement`: the handler
+              // is exercised under jsdom, and this project has been bitten by
+              // `instanceof` across realms before (see `vitest.setup.ts`'s
+              // Blob swap).
+              const hitElement = event.target;
+              if (
+                hitElement === null ||
+                typeof hitElement !== 'object' ||
+                !('closest' in hitElement)
+              ) {
+                return false;
+              }
+              if ((hitElement as Element).closest('.bear-link') === null) return false;
+
               const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
               if (at === null) return false;
 
