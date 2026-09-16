@@ -511,8 +511,59 @@ import { describe, expect, it } from 'vitest';
  * 361,000 follows the convention this file has used since K1: the measured
  * closure plus ~3 KB for wiring. Headroom after U: **2,985 B**. That headroom
  * is for wiring, not for the next feature.
+ *
+ * ### W Task 7 (the import gate) raises it to 365,000, decided BY THE USER
+ * on 2026-09-16
+ *
+ * `main` at `83d27a2` (the commit right before this task) measures
+ * **360,964 B** — only **36 B** of headroom under the 361,000 ceiling, most
+ * of which the sub-project's own Tasks 1-6 had already spent. Task 7 wired
+ * `ImportGate` eagerly into `App.tsx`, exactly as its brief specifies:
+ * **361,991 B**, a true eager cost of **1,027 B**, **991 B** over the
+ * ceiling in force.
+ *
+ * **Going lazier was tried and measured WORSE, and the mechanism is worth
+ * naming because it is the file's usual first answer failing for a reason
+ * specific to this component.** Wrapping `ImportGate` in `React.lazy` plus
+ * `Suspense`, the same shape as `GraphView` and `CommandPalette`, measured
+ * **362,073 B** — **82 B WORSE** than eager, not better. `ImportSheet` is
+ * built from `Dialog` and `Button`, both of which the eager graph already
+ * holds (e.g. `ConfirmDialog`, the note-list header). Introducing a new
+ * async boundary that ALSO needs them gives Rolldown a module shared across
+ * the eager/dynamic split, so it extracts `Dialog` and `Button` into their
+ * own standalone chunks instead of inlining them at either call site — the
+ * same effect Q's entry above measured for `ThemeDialog` and S1's measured
+ * for `rewriteTagEngine`. The extraction's per-chunk gzip overhead costs
+ * more than the split saves. Lazy-loading is a real answer for a component
+ * built from otherwise-unshared code; it is not one for a component built
+ * out of primitives the eager graph already pays for.
+ *
+ * Server-side does not apply: this is `?import=` URL-gate logic that has to
+ * run in the browser before anything else does. Cutting the feature is not
+ * on the table either — this is the task that makes the whole of
+ * sub-project W reachable from a URL; every task before it was inert.
+ *
+ * So `CEILING_BYTES` moves to **365,000**, decided BY THE USER on
+ * 2026-09-16, on the record above — not by Task 7 or by whoever executed
+ * it. This follows the same ~3 KB-for-wiring convention as every raise
+ * before it: 361,991 measured plus headroom for Task 8 and the final
+ * whole-branch review, leaving **~3,009 B**. The ceiling remains FROZEN
+ * under the same rule as every raise before it; this does not reopen
+ * routine ratcheting.
+ *
+ * **Worth saying plainly, because the last several entries in this file all
+ * say it and it is more true here than anywhere above: the eager closure is
+ * due a real audit, not another raise.** `main` had only 36 B of headroom
+ * left BEFORE this task touched anything — the smallest margin recorded in
+ * this file's whole history — and this is now the sixth consecutive raise
+ * with the closure landing within a few hundred (now barely a few thousand)
+ * bytes of whatever ceiling was current. Something already eager (the
+ * `themes-*` chunk's real contents — Tiptap, ProseMirror, React and
+ * lowlight, per Q's entry above — remain the obvious candidate) needs to
+ * move behind a boundary, or the next feature after Task 8 will be asking
+ * for a seventh raise before it has written a line of its own code.
  */
-const CEILING_BYTES = 361_000;
+const CEILING_BYTES = 365_000;
 
 interface ManifestChunk {
   file: string;

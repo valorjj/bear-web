@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 
 import type { DatabaseStatus } from '@/data';
+import { ImportGate } from '@/features/import';
 import { Landing, useLandingGate } from '@/features/landing';
 import { I18nProvider } from '@/i18n';
 
@@ -25,6 +26,12 @@ export default function App({ status }: { status: DatabaseStatus }): ReactElemen
             <div className="min-h-0 flex-1">
               <AppShell />
             </div>
+            {/*
+              AFTER the landing gate, deliberately. A link recipient is by
+              definition a first-time visitor, so mounting this in the other
+              branch would open a modal behind the landing screen.
+            */}
+            <ImportGate />
           </div>
         )}
       </DatabaseStatusProvider>
