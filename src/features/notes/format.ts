@@ -1,4 +1,4 @@
-import { findTagRanges } from '@/data';
+import { findLinkRanges, findTagRanges } from '@/data';
 
 import { hasQuery, normalizeForSearch } from './search';
 
@@ -84,6 +84,10 @@ const BLOCK_MARKERS: readonly RegExp[] = [
   // word rather than the roster — an unrecognised marker is syntax in a
   // preview too, whatever it means elsewhere.
   /^\[![^\]\n]+\]\s?/,
+  // A footnote DEFINITION's label (`[^1]: …`). The definition's text is kept:
+  // it is prose the user wrote, and a note whose body is mostly footnotes
+  // would otherwise preview as nothing at all. The label is syntax.
+  /^\[\^[^\]\s^]+\]:[ \t]*/,
 ];
 
 /**
@@ -119,6 +123,10 @@ const SENTINEL = '\u0000';
  */
 const INLINE_RULES: readonly (readonly [RegExp, string])[] = [
   [/(`+)([\s\S]*?)\1(?!`)/g, '$2'],
+  // A footnote MARKER, removed whole. Its label is a bookkeeping number, not
+  // prose — a preview reading `이유가 있다[^1]` shows the reader a `[^1]`
+  // that means nothing without the definition it points at.
+  [/\[\^[^\]\s^]+\]/g, ''],
   [/<((?:https?|mailto):[^>\s]+)>/g, '$1'],
   [/<\/?[a-zA-Z][^<>]*>/g, ''],
   [/\[([^\][]*)\]\([^()]*\)/g, '$1'],
@@ -197,11 +205,44 @@ function stripTags(line: string): string {
   return out + line.slice(at);
 }
 
+/**
+ * Unwraps every `[[…]]` on a line to the text the editor draws inside its
+ * pill, using the SAME grammar the pills, the index and the graph use.
+ *
+ * Sharing `findLinkRanges` rather than writing a `\[\[[^\]]*\]\]` here is the
+ * same rule `stripTags` follows, and for the same reason: that regex would
+ * unwrap a `[[…]]` inside a code span, where the editor draws no pill either,
+ * and it would disagree with the index about an empty target.
+ *
+ * The inner text is KEPT, not dropped. `[[first note]]` renders in the editor
+ * as a pill reading `first note`, and `[[first note/Who knows]]` as one
+ * reading `first note/Who knows` — the note's own words, which is exactly
+ * what a preview should carry. What was shipped before this dropped nothing
+ * at all: `INLINE_RULES`' link patterns both require a `(` or a second `[`
+ * after the closing bracket, so a wikilink matched neither and the row
+ * printed the raw `[[first note]]`, brackets and all.
+ */
+function stripLinks(line: string): string {
+  const ranges = findLinkRanges(line);
+  if (ranges.length === 0) return line;
+
+  let out = '';
+  let at = 0;
+  for (const range of ranges) {
+    out += line.slice(at, range.start) + range.raw;
+    at = range.end;
+  }
+  return out + line.slice(at);
+}
+
 /** Turns one Markdown line into the prose a preview should show, or `''`. */
 function previewLine(line: string): string {
   if (TABLE_LINE.test(line) || FENCE_LINE.test(line) || PLACEHOLDER_LINE.test(line)) return '';
 
-  let text = stripTags(line);
+  // Links are unwrapped BEFORE the tags are removed, and both before the
+  // markers: each recomputes its own ranges over the string it is handed, so
+  // the order only decides which grammar sees the raw text first.
+  let text = stripTags(stripLinks(line));
   for (const marker of BLOCK_MARKERS) text = text.replace(marker, '');
   // Images are removed BEFORE the inline rules, not after: the link rule would
   // otherwise take `![a](url)` down to a bare `!`.
