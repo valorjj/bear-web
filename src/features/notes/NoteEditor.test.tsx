@@ -905,6 +905,15 @@ describe('PDF export progress', () => {
     });
     expect(screen.getByTestId('progress-probe')).toHaveAttribute('data-pending', 'true');
 
+    // `exportNote` is now reached through `await import('./exportNote')`
+    // inside `useExportRunner`, so `resolveExport` is not assigned the
+    // instant `onExport` runs — it is assigned only once that dynamic
+    // import settles and the mocked implementation actually runs. Poll for
+    // it rather than assuming a single microtask is enough.
+    await waitFor(() => {
+      expect(resolveExport).toBeDefined();
+    });
+
     await act(async () => {
       resolveExport?.();
       await Promise.resolve();
