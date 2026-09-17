@@ -1,0 +1,206 @@
+# The editor leaves the critical path
+
+**No letter assigned.** The lettering is `docs/superpowers/NEXT.md`'s to
+hand out, not this file's; CLAUDE.md is explicit that the lettered rows in
+its status table are that document's scheme.
+
+**Date:** 2026-09-17
+**Status:** design proposed, not approved; plan not yet written
+
+## The problem
+
+A cold first load takes **2,482 ms to show the note list on Slow 4G**. The
+browser downloads 364,303 B of gzipped JavaScript before anything appears,
+and roughly 70% of that is a rich text editor the note list does not use.
+
+This is a first-visit cost, not a per-launch cost — the browser caches the
+JS afterwards — so it is paid once per person, and again after each deploy.
+That softens it, but it is still the only moment this app can feel slow:
+everything after boot is IndexedDB and instant.
+
+## What the measurement actually says
+
+`npm run measure:load` (added 2026-09-17) times a cold load across CPU and
+network. Its finding reframes the problem:
+
+| CPU | Network | First note visible |
+| --- | --- | --- |
+| 4x | Slow 4G | 2,482 ms |
+| 1x | Slow 4G | 2,469 ms |
+| 4x | Fast 4G | 905 ms |
+| 4x | WiFi | 243 ms |
+| 1x | WiFi | 199 ms |
+
+**The network dominates and the CPU barely matters.** Throttling the
+processor 4x moves first-note by about 30 ms; changing the connection moves
+it by 2.3 seconds. The eager bundle is a TRANSFER cost, not a
+parse-and-execute one — the opposite of the usual mobile-web assumption, and
+the reason this sub-project is about bytes on the critical path rather than
+about making the app do less work.
+
+The caveat, recorded so nobody over-reads the table: CDP's CPU throttling is
+a multiplier on this machine's processor, so 4x on an M-series Mac is still
+quicker than a real budget Android. The CPU column understates a cheap
+handset. It cannot be understating it by two seconds.
+
+## Where the bytes are
+
+Attributed by decoding the chunk's own sourcemap (raw bytes, `themes-*`):
+
+| | raw | share |
+| --- | --- | --- |
+| our own `src/` | 166,209 | 21.9% |
+| prosemirror-view | 97,834 | 12.9% |
+| @tiptap/core | 76,194 | 10.0% |
+| highlight.js | 70,708 | 9.3% |
+| prosemirror-model | 44,733 | 5.9% |
+| marked | 40,793 | 5.4% |
+| prosemirror-tables | 34,199 | 4.5% |
+| prosemirror-transform | 31,172 | 4.1% |
+| lowlight | 22,459 | 3.0% |
+| @tiptap/extension-list | 20,200 | 2.7% |
+| …16 more | | |
+
+**Our own code is a long tail with nothing to trim** — the largest single
+file is `RichEditor.tsx` at 9,521 B raw, and the next twenty are between 2
+and 9 KB each. There is no application-code win here, which is what six
+previous ceiling raises had been implicitly hoping for.
+
+## The finding
+
+**The note list does not need the editor, and loads all of it anyway.**
+
+`src/features/notes/preview.ts` has no imports at all. Only two modules in
+the whole of `src/` reach `@/features/editor`: `NoteEditor.tsx`, and
+`export/html.ts`.
+
+The split was MEASURED rather than estimated, and the first two attempts are
+the instructive part.
+
+**Attempt 1 — `React.lazy` around `NoteEditor`: 86 bytes.** The editor came
+straight back through `export/html.ts`, which `NoteRowMenu`, `NoteList`,
+`palette/commands.ts` and `AppShell` all import for the export item.
+
+**Attempt 2 — closing that door as well: still nothing.** The real culprit
+was `src/features/notes/index.ts`, which re-exports `NoteEditor`. **A barrel
+re-export defeats the split**: importing anything at all from
+`@/features/notes` pulls the entire editor stack in statically, and `AppShell`
+imports from that barrel. This is the same class of hazard as the runtime
+import cycle recorded in CLAUDE.md — a barrel that looks like an organising
+convenience and is load-bearing for the module graph.
+
+**With all three doors closed:**
+
+| | eager gzip | Slow 4G first note |
+| --- | --- | --- |
+| `main` at `765e63b` | 364,303 | 2,482 ms |
+| split | 234,807 | 1,979 ms |
+| | **−129,496 (−36%)** | **−503 ms (−20%)** |
+
+Fast 4G and WiFi were unchanged, which is expected: they were never
+transfer-bound.
+
+## Scope
+
+Three changes, and none of them is the `React.lazy` line everyone expects to
+be the whole job.
+
+**1. `NoteEditor` leaves the `@/features/notes` barrel.** Callers import it
+by path. Without this, nothing else in this spec has any effect — measured
+twice, at 86 B and at 0 B. A test should pin it: a barrel that re-exports the
+editor again is a silent regression of the whole sub-project.
+
+**2. The export path becomes dynamic.** Export is always user-initiated —
+a menu item, a palette command — so `import()` at the call site is natural
+rather than contorted. Four call sites: `NoteRowMenu`, `NoteList`,
+`palette/commands.ts`, `AppShell`. The already-lazy `PublishDialogContainer`
+is the shape to copy.
+
+**3. `NoteEditor` is wrapped in `React.lazy` with a real fallback.** Not
+`null`: on desktop the editor pane is visible immediately, and an empty pane
+that fills in reads as a bug. The pane's existing empty state is the obvious
+candidate, but see the open question below.
+
+## The decision this sub-project must take first
+
+**Which win are we buying: first PAINT, or first USABLE EDITOR?**
+
+The 503 ms is the note list appearing sooner. The editor chunk then streams
+in behind it. For a reader opening the app to find a note, that is the whole
+win. For a writer who opens the app to type immediately — and on desktop a
+note may already be selected — the editor may now arrive LATER than it does
+today, because it starts downloading after the shell rather than alongside it.
+
+**Recommendation: buy first paint, and hide the cost with a preload.** Issue
+the editor chunk's `import()` as soon as the shell has painted, rather than
+when the editor first renders. The list is interactive at 1,979 ms and the
+editor arrives during the time the reader spends choosing a note — which is
+seconds, not milliseconds. This keeps the win without trading it for a
+regression on the writer's path.
+
+**The alternative, if measurement disagrees:** keep the editor eager and
+accept 2,482 ms. That is a legitimate outcome for an app whose main screen
+IS the editor, and this spec should not be read as assuming otherwise.
+
+**This must be verified, not assumed.** `measure:load` currently waits for
+the note list. The sub-project needs a second scenario that waits for the
+editor to be typeable, measured on both sides, or it will ship a number that
+looks good and a writer's experience that got worse.
+
+## What this deliberately does not touch
+
+**highlight.js stays eager.** Its registration in
+`src/features/editor/lowlight.ts` is ruled (`5c04dee`, 2026-08-24): lazy
+saved 14,614 B but the spike produced a build that compiled, ran, and
+highlighted nothing at all, because the registry tree-shook to nothing. That
+ruling stands and this sub-project does not reopen it. At ~73 ms on Slow 4G
+it is not where the money is; the 129 KB above is.
+
+**No dependency is removed.** `marked` arrives with `@tiptap/markdown` and
+`prosemirror-tables` is the table feature. Both move behind the boundary
+along with everything else, which is the point — they stop being a
+first-paint cost without ceasing to exist.
+
+## Risks
+
+**Rolldown may extract shared primitives and eat some of the saving.** This
+is measured behaviour here, not a hypothetical: sub-project W found
+`React.lazy` around `ImportSheet` measured 82 B WORSE than eager, because
+`Dialog` and `Button` were shared across the new boundary and got pulled into
+their own chunks. The saving above (129,496 B) is large enough that
+per-chunk overhead cannot plausibly consume it, but the final number must be
+measured on the finished branch rather than inherited from this spec.
+
+**`AppShell.test.tsx` mocks `NoteEditor` through the barrel** and will need
+rewiring. It was the only typecheck failure the spike hit.
+
+**A `Suspense` boundary changes mount timing**, and this codebase has a
+documented history of races around `NoteEditor`'s seed and remount
+(`docs/rulings/notes-lifecycle.md`). Expect the e2e suite to find them, and
+read a failure there as a real race rather than a flake — the toolbar-focus
+bug on 2026-09-17 is the cautionary example.
+
+## What the guard should do afterwards
+
+The eager ceiling is 368,000 with the closure at 364,303. If this lands at
+~235,000, **the ceiling should be lowered to match** — around 238,000, on the
+same ~3 KB-for-wiring convention every raise has used. A budget left at
+368,000 after a 129 KB saving would hand back the entire win to the next six
+features without anyone deciding to spend it, which is precisely the ratchet
+`scripts/bundleSize.test.ts`'s docblock spent seven entries warning about.
+
+Lowering a ceiling is the user's decision on the same terms as raising one.
+
+## Evidence
+
+Every number here came from a throwaway spike on 2026-09-17, reverted in
+full. The method, for whoever executes this:
+
+- sourcemap attribution: build with `build.sourcemap: true`, decode the
+  chunk's mappings and attribute generated byte spans per source
+  (`source-map-explorer` refuses Rolldown's maps — "generated column
+  Infinity")
+- closure measurement: sum the gzipped entry chunk's transitive STATIC
+  `imports` from `dist/.vite/manifest.json`, exactly as
+  `scripts/bundleSize.test.ts` does
+- timing: `npm run measure:load`
