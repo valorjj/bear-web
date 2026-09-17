@@ -12,7 +12,8 @@ import type { Editor } from '@tiptap/react';
 
 import { deriveTitle, files, folds, notes, storedImagePath } from '@/data';
 import type { Note } from '@/data';
-import { buildExportHtml, useExportRunner, type ExportFormat } from '@/features/export';
+import { useExportRunner, type ExportFormat } from '@/features/export';
+import { buildExportHtml } from '@/features/export/exportNote';
 import { downscaleImage } from './downscale';
 import {
   EMPTY_DOCUMENT_MARKDOWN,

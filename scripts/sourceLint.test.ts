@@ -944,4 +944,22 @@ describe('the editor stays off the first-paint path', () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  /*
+   * The SECOND barrel edge, and the one the plan missed. `export/index.ts`
+   * re-exported `exportNote` and `renderNoteHtml` as values; both reach
+   * `html.ts`, which imports `@/features/editor`. Because `AppShell` imports
+   * `ExportProgressProvider` from that same barrel, the whole Tiptap stack
+   * stayed statically eager even after the notes barrel was fixed —
+   * measured at 348,748 B against a predicted 234,800 B.
+   *
+   * A value re-export is the hazard; `export type` is erased and is fine.
+   */
+  it('keeps the editor-reaching exporters out of the export barrel', () => {
+    const barrel = readFileSync('src/features/export/index.ts', 'utf8');
+    const valueLines = barrel
+      .split('\n')
+      .filter((line) => line.startsWith('export {') || line.startsWith('export *'));
+    expect(valueLines.join('\n')).not.toMatch(/from '\.\/(exportNote|html)'/);
+  });
 });
