@@ -932,10 +932,7 @@ describe('the editor stays off the first-paint path', () => {
     expect(barrel).not.toMatch(/from '\.\/NoteEditor'/);
   });
 
-  // Skipped until Task 3 turns AppShell's import into `import(...)`. The
-  // barrel edge is gone (the case above proves it); this one guards the
-  // remaining static edge and is false by construction until then.
-  it.skip('lets only AppShell reach NoteEditor, and only lazily', () => {
+  it('lets only AppShell reach NoteEditor, and only lazily', () => {
     const offenders: string[] = [];
     for (const path of walk('src', ['.ts', '.tsx'])) {
       if (/\.test\.tsx?$/.test(path)) continue;

@@ -21,6 +21,7 @@ export const en = {
 
   'editor.empty.title': 'No note selected',
   'editor.empty.body': 'Choose a note from the list, or create one.',
+  'editor.loading': 'Opening the note…',
 
   'smartList.label': 'Lists',
   'smartList.all': 'Notes',

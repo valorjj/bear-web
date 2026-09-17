@@ -514,6 +514,22 @@ export function RichEditor({
     }),
   );
 
+  // Never mount this component (or anything that renders it) behind a
+  // `React.lazy()` + `<Suspense>` boundary. `useEditor`'s survival strategy
+  // for React StrictMode's synchronous phantom double-mount is a 1ms
+  // `setTimeout` debounce around its real `destroy()` — fine for StrictMode,
+  // which really is synchronous, but Suspense's own reveal ALWAYS mounts a
+  // boundary's children through React's `reconnectPassiveEffects` (an
+  // Offscreen connect, not a plain mount — true even on a component's very
+  // first-ever reveal), whose disconnect/reconnect pair is not synchronous
+  // the same way. Measured: the gap reliably exceeds 1ms, the debounced
+  // destroy actually fires, and the reconnect then re-runs every
+  // `editor.commands...` effect below against the now-dead instance —
+  // 100% reproducible, in the production build too, not just React's dev
+  // double-invoke. `src/app/AppShell.tsx` hit this wrapping `NoteEditor` and
+  // works around it with a manually cached `import()` instead of `lazy()`;
+  // see its comment and `.superpowers/sdd/2026-09-17-editor-code-splitting/
+  // task-3-report.md` for the full trace.
   const editor = useEditor({
     extensions,
     content: parseMarkdown(initialMarkdown),

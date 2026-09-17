@@ -28,7 +28,6 @@ import {
   useNotes,
   useSmartListCounts,
 } from '@/features/notes';
-import { NoteEditor } from '@/features/notes/NoteEditor';
 import {
   hasTag,
   type TagNode,
@@ -52,6 +51,7 @@ import { Pane } from '@/ui/Pane';
 import { ProgressBar } from '@/ui/ProgressBar';
 import { Resizer } from '@/ui/Resizer';
 
+import { EditorLoading } from './EditorLoading';
 import { maxPaneWidth, MIN_PANE_WIDTH } from './paneWidths';
 import { resolveLinkTarget } from './resolveLinkTarget';
 import { SidebarContent } from './SidebarContent';
@@ -75,6 +75,68 @@ const isBoolean = (value: unknown): value is boolean => typeof value === 'boolea
 const GraphView = lazy(() => import('@/features/graph/GraphView'));
 
 /**
+ * Off the first-paint path — the whole point of this sub-project — but
+ * loaded through a plain module-scope cache and a state-gated conditional
+ * render, deliberately NOT through `lazy()` + `Suspense`.
+ *
+ * `lazy()`/`Suspense` was tried first, exactly as planned, and it broke the
+ * editor deterministically: every first reveal of a Suspense boundary in
+ * this React version runs its children's passive-effect mount through
+ * `reconnectPassiveEffects` (an Offscreen connect, not a plain mount — this
+ * is also what `GraphView`'s boundary above goes through, harmlessly,
+ * because `d3-force` has no fragile teardown timing to race). `useEditor`
+ * (`@tiptap/react`) survives React's OWN StrictMode phantom double-mount by
+ * debouncing its destroy behind a 1ms `setTimeout`, betting that a
+ * synchronous cleanup-then-remount arrives inside that window. Suspense's
+ * connect/disconnect pair is not synchronous the same way: passive effects
+ * for an Offscreen boundary are flushed as their own scheduled work, and the
+ * gap between disconnect and reconnect measured on this machine exceeded
+ * 1ms on every single reveal — so the 1ms timer fired first, really
+ * destroyed the editor, and the later reconnect re-ran every
+ * `editor.commands...` effect against the dead instance with a stale,
+ * non-null closure value. Reproduced with `onCreate`/`onDestroy` logging:
+ * create, then destroy ~1-4ms later, on EVERY mount, in the production
+ * build too (not just React's dev-mode double-invoke) — confirmed in
+ * `docs`... see task-3-report.md for the full trace. This module-scope
+ * cache plus a manual `import()` in an effect produces the exact same
+ * `dynamicImports` manifest entry (chunking is decided by the `import()`
+ * call, not by which API consumes its promise) without ever touching
+ * React's Suspense/Offscreen machinery, so there is no reconnect pass to
+ * race against.
+ */
+// Not a top-level `import type { NoteEditorProps } from '.../NoteEditor'`:
+// `scripts/sourceLint.test.ts`'s "lets only AppShell reach NoteEditor, and
+// only lazily" flags any STATIC import line from that module, type-only or
+// not, on purpose — the guard is a grep, not a type checker, and cannot tell
+// an erased type import from the real static edge it exists to catch. This
+// inline form never produces a top-level `import ... from` line at all.
+type NoteEditorComponentType = (
+  props: import('@/features/notes/NoteEditor').NoteEditorProps,
+) => ReactElement;
+
+let cachedNoteEditor: NoteEditorComponentType | null = null;
+
+function useNoteEditorComponent(): NoteEditorComponentType | null {
+  const [Component, setComponent] = useState<NoteEditorComponentType | null>(
+    () => cachedNoteEditor,
+  );
+
+  useEffect(() => {
+    if (Component !== null) return;
+    let cancelled = false;
+    void import('@/features/notes/NoteEditor').then((module) => {
+      cachedNoteEditor = module.NoteEditor;
+      if (!cancelled) setComponent(() => module.NoteEditor);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [Component]);
+
+  return Component;
+}
+
+/**
  * Lazy, and structurally so — not an optimisation.
  *
  * `scripts/bundleSize.test.ts` caps the main bundle at 340,000 B gzipped and
@@ -88,6 +150,7 @@ const CommandPalette = lazy(() => import('@/features/palette/CommandPalette'));
 export function AppShell(): ReactElement {
   const t = useT();
   const widths = usePaneWidths();
+  const NoteEditorComponent = useNoteEditorComponent();
 
   const [scope, setScope] = useState<NoteScope>(ACTIVE_SCOPE);
 
@@ -878,11 +941,13 @@ export function AppShell(): ReactElement {
                   )}
                   {selectedNote === undefined ? null : selectedNote === null ? (
                     <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
+                  ) : // `key` is load-bearing, not an optimisation: it remounts the editor
+                  // on every switch, so an instance only ever writes to one note and
+                  // its unmount cleanup is the flush-on-switch.
+                  NoteEditorComponent === null ? (
+                    <EditorLoading />
                   ) : (
-                    // `key` is load-bearing, not an optimisation: it remounts the editor
-                    // on every switch, so an instance only ever writes to one note and
-                    // its unmount cleanup is the flush-on-switch.
-                    <NoteEditor
+                    <NoteEditorComponent
                       key={selectedNote.id}
                       note={selectedNote}
                       seedText={seed?.id === selectedNote.id ? seed.text : undefined}
