@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, notes, tags } from '@/data';
 import { I18nProvider } from '@/i18n';
 import { en } from '@/i18n/en';
-import type { NoteEditorProps } from '@/features/notes';
+import type { NoteEditorProps } from '@/features/notes/NoteEditor';
 
 import { AppShell } from './AppShell';
 
@@ -66,6 +66,32 @@ const scopeHistory = vi.hoisted(() => [] as Array<import('@/features/notes').Not
 vi.mock('@/features/notes', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/features/notes')>();
 
+  return {
+    ...actual,
+    // Records the scope argument on every render — see `scopeHistory` above
+    // for why this, and not a DOM assertion, is what can catch a scope that
+    // was set and then reverted within a single synchronous test flush.
+    // `...rest`, not just `scope`: this wrapper swallowed every later argument
+    // until A added the ScopeQuery, at which point the sort silently never
+    // reached `listForScope` and the list simply never re-ordered under test.
+    // Forward everything; record only what this spy exists to record.
+    useNotes: (
+      scope: import('@/features/notes').NoteScope,
+      ...rest: [import('@/features/notes').ScopeQuery?]
+    ) => {
+      scopeHistory.push(scope);
+      return actual.useNotes(scope, ...rest);
+    },
+  };
+});
+
+// `NoteEditor` no longer lives on the `@/features/notes` barrel (Task 2), so
+// `AppShell` imports it from `@/features/notes/NoteEditor` directly and this
+// mock has to target that module instead to still intercept the component
+// `AppShell` actually renders.
+vi.mock('@/features/notes/NoteEditor', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/notes/NoteEditor')>();
+
   function TestNoteEditor(props: NoteEditorProps) {
     useEffect(() => {
       capturedActivateTag.current = props.onActivateTag;
@@ -86,20 +112,6 @@ vi.mock('@/features/notes', async (importOriginal) => {
   return {
     ...actual,
     NoteEditor: TestNoteEditor,
-    // Records the scope argument on every render — see `scopeHistory` above
-    // for why this, and not a DOM assertion, is what can catch a scope that
-    // was set and then reverted within a single synchronous test flush.
-    // `...rest`, not just `scope`: this wrapper swallowed every later argument
-    // until A added the ScopeQuery, at which point the sort silently never
-    // reached `listForScope` and the list simply never re-ordered under test.
-    // Forward everything; record only what this spy exists to record.
-    useNotes: (
-      scope: import('@/features/notes').NoteScope,
-      ...rest: [import('@/features/notes').ScopeQuery?]
-    ) => {
-      scopeHistory.push(scope);
-      return actual.useNotes(scope, ...rest);
-    },
   };
 });
 

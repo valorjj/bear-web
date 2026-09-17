@@ -1,7 +1,11 @@
 export { BacklinksPanel } from './BacklinksPanel';
 export type { BacklinksPanelProps } from './BacklinksPanel';
-export { NoteEditor } from './NoteEditor';
-export type { NoteEditorProps } from './NoteEditor';
+// `NoteEditor` is deliberately NOT re-exported here. It reaches the whole
+// Tiptap/ProseMirror stack, and a barrel re-export makes that stack a
+// STATIC dependency of anything importing from `@/features/notes` — which
+// includes `AppShell`, which is the entry path. `AppShell` imports it
+// lazily by path instead. `scripts/sourceLint.test.ts` fails if this comes
+// back. See docs/superpowers/specs/2026-09-17-editor-code-splitting-design.md.
 export { NoteList } from './NoteList';
 export type { NoteListProps } from './NoteList';
 export {

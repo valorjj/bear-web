@@ -20,7 +20,6 @@ import {
   isPreviewSize,
   type PreviewSize,
   filterByQuery,
-  NoteEditor,
   NoteList,
   type NoteScope,
   scopeKey,
@@ -29,6 +28,7 @@ import {
   useNotes,
   useSmartListCounts,
 } from '@/features/notes';
+import { NoteEditor } from '@/features/notes/NoteEditor';
 import {
   hasTag,
   type TagNode,

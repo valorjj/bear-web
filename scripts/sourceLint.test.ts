@@ -912,3 +912,39 @@ describe('the floating-surface idiom', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('the editor stays off the first-paint path', () => {
+  /*
+   * `src/features/notes/index.ts` re-exported `NoteEditor`, and that single
+   * line defeated every attempt to code-split the editor: importing anything
+   * at all from `@/features/notes` pulls `NoteEditor` in statically, and with
+   * it Tiptap, ProseMirror, highlight.js and marked — about 130 KB gzipped on
+   * the critical path of a note list that never uses any of it. Measured
+   * twice during the 2026-09-17 spike: with this edge present, a `React.lazy`
+   * boundary around the editor saved 86 bytes, and closing the export door as
+   * well saved nothing at all.
+   *
+   * A grep rather than a byte check because the byte check cannot say WHY it
+   * regressed, and this is the one line that does it.
+   */
+  it('keeps NoteEditor out of the notes barrel', () => {
+    const barrel = readFileSync('src/features/notes/index.ts', 'utf8');
+    expect(barrel).not.toMatch(/from '\.\/NoteEditor'/);
+  });
+
+  // Skipped until Task 3 turns AppShell's import into `import(...)`. The
+  // barrel edge is gone (the case above proves it); this one guards the
+  // remaining static edge and is false by construction until then.
+  it.skip('lets only AppShell reach NoteEditor, and only lazily', () => {
+    const offenders: string[] = [];
+    for (const path of walk('src', ['.ts', '.tsx'])) {
+      if (/\.test\.tsx?$/.test(path)) continue;
+      if (path.endsWith('src/features/notes/NoteEditor.tsx')) continue;
+      const source = readFileSync(path, 'utf8');
+      // A STATIC import of the module is the regression; `import(...)` is the
+      // shape this sub-project exists to establish.
+      if (/^import[^\n]*from '[^']*notes\/NoteEditor'/m.test(source)) offenders.push(path);
+    }
+    expect(offenders).toEqual([]);
+  });
+});
