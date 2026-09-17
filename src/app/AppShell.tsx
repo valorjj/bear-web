@@ -80,29 +80,25 @@ const GraphView = lazy(() => import('@/features/graph/GraphView'));
  * render, deliberately NOT through `lazy()` + `Suspense`.
  *
  * `lazy()`/`Suspense` was tried first, exactly as planned, and it broke the
- * editor deterministically: every first reveal of a Suspense boundary in
- * this React version runs its children's passive-effect mount through
- * `reconnectPassiveEffects` (an Offscreen connect, not a plain mount — this
- * is also what `GraphView`'s boundary above goes through, harmlessly,
- * because `d3-force` has no fragile teardown timing to race). `useEditor`
- * (`@tiptap/react`) survives React's OWN StrictMode phantom double-mount by
- * debouncing its destroy behind a 1ms `setTimeout`, betting that a
- * synchronous cleanup-then-remount arrives inside that window. Suspense's
- * connect/disconnect pair is not synchronous the same way: passive effects
- * for an Offscreen boundary are flushed as their own scheduled work, and the
- * gap between disconnect and reconnect measured on this machine exceeded
- * 1ms on every single reveal — so the 1ms timer fired first, really
- * destroyed the editor, and the later reconnect re-ran every
- * `editor.commands...` effect against the dead instance with a stale,
- * non-null closure value. Reproduced with `onCreate`/`onDestroy` logging:
- * create, then destroy ~1-4ms later, on EVERY mount, in the production
- * build too (not just React's dev-mode double-invoke) — confirmed in
- * `docs`... see task-3-report.md for the full trace. This module-scope
- * cache plus a manual `import()` in an effect produces the exact same
- * `dynamicImports` manifest entry (chunking is decided by the `import()`
- * call, not by which API consumes its promise) without ever touching
- * React's Suspense/Offscreen machinery, so there is no reconnect pass to
- * race against.
+ * editor deterministically: `useEditor` (`@tiptap/react`) survives React
+ * StrictMode's synchronous phantom double-mount by debouncing its real
+ * `destroy()` behind a literal `setTimeout(…, 1)`, betting that a
+ * synchronous cleanup-then-remount arrives inside that 1ms window — measured
+ * to reliably not hold when the mount instead goes through a `<Suspense>`
+ * boundary's reveal, so the debounced destroy actually fired and a later
+ * pass re-ran `editor.commands...` effects against the now-dead instance.
+ * Full measured trace, and what is and is not established by it, in
+ * `docs/superpowers/specs/2026-09-17-editor-code-splitting-design.md`'s task
+ * 3 addendum. This module-scope cache plus a manual `import()` in an effect
+ * produces the exact same `dynamicImports` manifest entry (chunking is
+ * decided by the `import()` call, not by which API consumes its promise)
+ * without ever touching React's Suspense/Offscreen machinery, so there is no
+ * reconnect pass to race against.
+ *
+ * The chunk request can still fail (a stale tab outliving a deploy — see
+ * `src/features/publish/staleBuild.ts`), so `useNoteEditorComponent` below
+ * tracks that failure explicitly rather than leaving the gate stuck `null`
+ * forever with no error and no way to retry.
  */
 // Not a top-level `import type { NoteEditorProps } from '.../NoteEditor'`:
 // `scripts/sourceLint.test.ts`'s "lets only AppShell reach NoteEditor, and
@@ -116,24 +112,52 @@ type NoteEditorComponentType = (
 
 let cachedNoteEditor: NoteEditorComponentType | null = null;
 
-function useNoteEditorComponent(): NoteEditorComponentType | null {
+export interface NoteEditorLoad {
+  Component: NoteEditorComponentType | null;
+  /** `true` once the chunk request has rejected — see `EditorLoading`. */
+  failed: boolean;
+  /** Clears `failed` and lets the next render's effect try the import again. */
+  retry: () => void;
+}
+
+function useNoteEditorComponent(): NoteEditorLoad {
   const [Component, setComponent] = useState<NoteEditorComponentType | null>(
     () => cachedNoteEditor,
   );
+  const [failed, setFailed] = useState(false);
+  // Bumped by `retry()` to re-run the load effect below even though
+  // `Component` and `failed` both stay at their old values in the same
+  // render that calls it (`failed` only flips back to `false` once the
+  // retry effect actually starts) — its own value is never read, it exists
+  // purely to change on every retry so the effect's dependency array sees a
+  // new identity.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (Component !== null) return;
     let cancelled = false;
-    void import('@/features/notes/NoteEditor').then((module) => {
-      cachedNoteEditor = module.NoteEditor;
-      if (!cancelled) setComponent(() => module.NoteEditor);
-    });
+    setFailed(false);
+    void import('@/features/notes/NoteEditor').then(
+      (module) => {
+        cachedNoteEditor = module.NoteEditor;
+        if (!cancelled) setComponent(() => module.NoteEditor);
+      },
+      () => {
+        // Never cached, and the gate is left retryable: a failed chunk
+        // request (stale tab past a deploy, a dropped connection) must not
+        // strand the editor pane on the loading copy forever with no way
+        // out. See `EditorLoading`'s docblock.
+        if (!cancelled) setFailed(true);
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [Component]);
+  }, [Component, attempt]);
 
-  return Component;
+  const retry = useCallback(() => setAttempt((current) => current + 1), []);
+
+  return { Component, failed, retry };
 }
 
 /**
@@ -150,7 +174,11 @@ const CommandPalette = lazy(() => import('@/features/palette/CommandPalette'));
 export function AppShell(): ReactElement {
   const t = useT();
   const widths = usePaneWidths();
-  const NoteEditorComponent = useNoteEditorComponent();
+  const {
+    Component: NoteEditorComponent,
+    failed: noteEditorFailed,
+    retry: retryNoteEditor,
+  } = useNoteEditorComponent();
 
   const [scope, setScope] = useState<NoteScope>(ACTIVE_SCOPE);
 
@@ -941,12 +969,14 @@ export function AppShell(): ReactElement {
                   )}
                   {selectedNote === undefined ? null : selectedNote === null ? (
                     <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
-                  ) : // `key` is load-bearing, not an optimisation: it remounts the editor
-                  // on every switch, so an instance only ever writes to one note and
-                  // its unmount cleanup is the flush-on-switch.
-                  NoteEditorComponent === null ? (
+                  ) : noteEditorFailed ? (
+                    <EditorLoading onRetry={retryNoteEditor} />
+                  ) : NoteEditorComponent === null ? (
                     <EditorLoading />
                   ) : (
+                    // `key` is load-bearing, not an optimisation: it remounts the editor
+                    // on every switch, so an instance only ever writes to one note and
+                    // its unmount cleanup is the flush-on-switch.
                     <NoteEditorComponent
                       key={selectedNote.id}
                       note={selectedNote}

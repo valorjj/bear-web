@@ -212,3 +212,75 @@ full. The method, for whoever executes this:
   `imports` from `dist/.vite/manifest.json`, exactly as
   `scripts/bundleSize.test.ts` does
 - timing: `npm run measure:load`
+
+## Addendum, task 3 (2026-09-17): the planned `lazy()`/`Suspense` boundary crashed the editor
+
+This spec's own Step 3 plan (and this sub-project's task-3 brief, which
+carried the same snippet forward) called for wrapping `NoteEditor` in
+`React.lazy()` + `<Suspense>`. Implemented exactly as planned, it crashed the
+app on the very first mount of any note — 100% reproducible in the dev
+server, in a production preview build (`npm run build && npm run preview`),
+and under Playwright, not a React-dev-mode-only artifact.
+
+**Symptom:** the `EditorLoading` fallback showed briefly, then the whole app
+went blank. Console: `TypeError: Cannot read properties of null (reading
+'commands')`, thrown from `@tiptap/core`'s `Editor.get commands`, inside a
+passive effect with no error boundary above it anywhere in `src/` — React
+tears down the whole root on an uncaught error in a passive effect with
+nothing to catch it, which is why the entire page went blank rather than
+just the editor pane.
+
+**Root cause**, confirmed by reading `@tiptap/react`'s source
+(`node_modules/@tiptap/react/dist/index.js`, `EditorInstanceManager`) and by
+temporary `onCreate`/`onDestroy`/effect logging in `RichEditor.tsx` (removed
+before committing):
+
+`useEditor` survives React StrictMode's synchronous phantom double-mount by
+debouncing its real `destroy()` behind a literal `setTimeout(…, 1)` in
+`scheduleDestroy()`: on unmount it sets `isComponentMounted = false` and
+schedules the destroy; if the component remounts before the 1ms timer fires,
+the mount effect clears the timeout and nothing is destroyed. That
+assumption — disconnect and reconnect land inside the same synchronous
+tick — holds for StrictMode's phantom double-invoke, which really is
+synchronous.
+
+It did not hold here. Every mount produced this sequence (captured via the
+temporary logging, one real pair even in the production build with no
+StrictMode double-invoke):
+
+```
+editor onCreate
+editor onDestroy        (~1-4ms later)
+noteTitles effect { editor: Editor, isDestroyed: true, noteTitles: undefined }
+→ TypeError: Cannot read properties of null (reading 'commands')
+```
+
+`scheduleDestroy()` calls `currentEditor.destroy()` then `this.setEditor(null)`
+once the debounce window has passed without a remount; the crash is the
+unique path that produces exactly this error shape once that has happened,
+and the reviewer who checked this diagnosis at the dependency level
+confirmed that path directly against `@tiptap/react/dist/index.js:486–500`.
+
+What is measured, and what is not: the 1ms window was reliably exceeded on
+this machine, with this React and `@tiptap/react` version pair, every time
+this specific boundary was mounted. That the mechanism is specifically
+Suspense's `reconnectPassiveEffects`/Offscreen connect path (rather than
+some other source of delay between `useEditor`'s disconnect and reconnect)
+is the least-certain part of this diagnosis — plausible from the stack trace
+and from reading React's fiber-commit code, but not independently isolated
+from the timing race itself. Treat "a component that owns `useEditor` should
+not be mounted behind `lazy()`/`Suspense`" as a measured, version- and
+timing-dependent risk to re-check if `@tiptap/react` or React change, not as
+a structural law of Suspense — `GraphView`'s own `lazy()`/`<Suspense>`
+boundary in `AppShell.tsx` goes through the same boundary machinery
+unaffected, because `d3-force` has no comparable debounced-teardown
+assumption to race.
+
+**The fix landed instead:** `AppShell.tsx` loads `NoteEditor` through a
+manually cached `import()` and a `useState` gate, with no `React.lazy()` and
+no `<Suspense>` for this boundary. This produces the identical
+`NoteEditor-*.js` entry under `dynamicImports` in
+`dist/.vite/manifest.json` — code-splitting is decided by the `import()`
+call itself, not by which API consumes its promise — without ever touching
+React's Suspense/Offscreen machinery, so there is no reconnect pass for
+`useEditor`'s destroy timer to race.

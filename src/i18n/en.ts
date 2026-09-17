@@ -22,6 +22,8 @@ export const en = {
   'editor.empty.title': 'No note selected',
   'editor.empty.body': 'Choose a note from the list, or create one.',
   'editor.loading': 'Opening the note…',
+  'editor.loadError': 'The note could not be opened. Reload the page if this keeps happening.',
+  'editor.loadError.retry': 'Try again',
 
   'smartList.label': 'Lists',
   'smartList.all': 'Notes',
