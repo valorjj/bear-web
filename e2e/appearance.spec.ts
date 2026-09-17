@@ -594,6 +594,63 @@ test('every formatting toolbar control is reachable at a narrow viewport', async
   expect(wide.scrollWidth).toBeLessThanOrEqual(wide.clientWidth);
 });
 
+test('the formatting strip fits at every width, collapsing only when it must', async ({ page }) => {
+  /*
+   * The breakpoint this replaced was `mode !== 'desktop'`, and the band it
+   * got wrong is the point of this test. Measured on the shipped strip: it
+   * needs 510px at a fine pointer, and the editor pane gives it 510 at 1280,
+   * 452 at 1100 and 376 at 1024 — so a 13" laptop carried roughly three
+   * controls behind the same silent horizontal scroll that this sub-project
+   * removed from phones, on the far side of a breakpoint named `desktop`.
+   *
+   * Asserted as an invariant across widths rather than a table of expected
+   * control counts, because the counts are what changes when a control is
+   * added and the invariant is what must not: the strip never scrolls, and
+   * it collapses ONLY where the full set genuinely does not fit.
+   */
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note' }).click();
+
+  const toolbar = page.getByRole('toolbar', { name: 'Formatting toolbar' });
+  await expect(toolbar).toBeVisible();
+
+  /*
+   * The expected collapse per width, from the measurement above. Polled
+   * rather than read once — the decision runs in a layout effect driven by a
+   * `ResizeObserver`, so the frame right after `setViewportSize` still holds
+   * the PREVIOUS width's answer. Reading `fits` alone was not enough and
+   * failed intermittently under parallel load: a strip that is still
+   * collapsed from the narrower width also fits, so the single read caught a
+   * true-but-stale state.
+   *
+   * Polling for the expected value does not weaken this. A strip that
+   * collapsed at 1600, or never collapsed at 1024, never reaches the value
+   * and the poll fails — which is the whole assertion.
+   */
+  const EXPECTED: Record<number, boolean> = {
+    390: true,
+    800: true,
+    1024: true,
+    1100: true,
+    1280: false,
+    1600: false,
+  };
+
+  for (const width of Object.keys(EXPECTED).map(Number)) {
+    await page.setViewportSize({ width, height: 900 });
+
+    await expect
+      .poll(
+        async () => ({
+          fits: await toolbar.evaluate((el) => el.scrollWidth <= el.clientWidth),
+          collapsed: (await toolbar.getByRole('button', { name: 'More formatting' }).count()) === 1,
+        }),
+        { message: `at ${width}px` },
+      )
+      .toEqual({ fits: true, collapsed: EXPECTED[width] });
+  }
+});
+
 test('the prose column is measured on a wide window', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/');

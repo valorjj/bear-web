@@ -1041,6 +1041,20 @@ export function RichEditor({
       </div>
 
       <div
+        /*
+         * `data-toolbar-space`: the element whose width IS the room the
+         * formatting strip has to fit into, which `BottomToolbar` measures
+         * against to decide whether its overflow sheet is needed.
+         *
+         * It has to be THIS element and not the strip's own parent, and the
+         * reason is a feedback loop rather than a preference: every closer
+         * ancestor takes its width FROM the strip, so observing one would
+         * make the measurement depend on its own outcome — collapse the
+         * strip, the parent narrows, the strip now "fits", expand it again.
+         * This one is `absolute` with `inset-x-3`, so its width comes from
+         * the pane and never from the toolbar.
+         */
+        data-toolbar-space=""
         className="pointer-events-none absolute inset-x-3 bottom-3 z-10 flex justify-center"
         // Lifted clear of the virtual keyboard (J3).
         //

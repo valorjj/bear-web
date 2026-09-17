@@ -1,8 +1,7 @@
 import type { Editor } from '@tiptap/react';
-import { Fragment, type ReactElement, useEffect, useRef, useState } from 'react';
+import { Fragment, type ReactElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n';
-import { useLayoutMode } from '@/lib/useLayoutMode';
 import { useVisibleViewport } from '@/lib/visibleViewport';
 import type { TranslationKey } from '@/i18n';
 import {
@@ -313,25 +312,82 @@ export function BottomToolbar({
 }: BottomToolbarProps): ReactElement {
   const t = useT();
   const picker = useRef<HTMLInputElement | null>(null);
-  const mode = useLayoutMode();
+  const stripRef = useRef<HTMLDivElement | null>(null);
   const [overflowAnchor, setOverflowAnchor] = useState<{
     rect: DOMRect;
     opener: HTMLElement;
   } | null>(null);
 
   /*
-   * The split is by LAYOUT WIDTH, not by pointer coarseness, because what
-   * runs out is horizontal room rather than fingers: a tablet at 768px has a
-   * fine pointer and still cannot seat 15 controls beside a note. `desktop`
-   * is where `appearance.spec.ts` already pins `scrollWidth === clientWidth`
-   * for the full strip, so that is the boundary.
+   * The split is decided by MEASUREMENT, not by a breakpoint, because a
+   * breakpoint cannot see the thing that actually runs out.
    *
-   * Residual case, named rather than papered over: at exactly 1024 the
-   * editor pane is ~424px and the fine-pointer strip is ~540, so the widest
-   * `desktop` layouts still scroll a little. That predates this and is a far
-   * milder miss than 8 controls off a phone; if it is worth closing, the fix
-   * is measuring the strip rather than adding a third breakpoint.
+   * It was `mode !== 'desktop'` first, and the numbers say why that was
+   * wrong. The strip needs 510px at a fine pointer. At 1280 the editor pane
+   * gives it exactly 510 and everything fits; at 1100 it gives 452 and at
+   * 1024 only 376 — so a 13" laptop had roughly three controls behind the
+   * same silent horizontal scroll this sub-project removed from phones,
+   * on the `desktop` side of the breakpoint where nothing looked for it.
+   * `appearance.spec.ts` checks the fit at 1280, where it passes.
+   *
+   * The cycle is: render everything, measure before paint, collapse if it
+   * did not fit. `useLayoutEffect` is what makes that free — it runs after
+   * layout and BEFORE the browser paints, so the one frame in which a
+   * 720px strip exists on a 350px phone is never shown. A `useEffect` here
+   * would flash the overflowing strip on every load.
+   *
+   * `probe` re-runs that cycle rather than a boolean, because the honest
+   * question on a resize is "would everything fit NOW", which can only be
+   * answered by rendering everything and looking. Setting `compact` to
+   * false alone would not re-run the measurement when it was already false.
    */
+  const [probe, setProbe] = useState(0);
+  const [compact, setCompact] = useState(false);
+
+  useLayoutEffect(() => {
+    const strip = stripRef.current;
+    if (strip === null) return;
+    // `clientWidth` is the room available whenever the content exceeds it,
+    // because the strip is capped at `max-w-full`; when the content fits,
+    // the two are equal and the comparison is false either way.
+    setCompact(strip.scrollWidth > strip.clientWidth);
+  }, [probe]);
+
+  const spaceWidth = useRef(-1);
+  useEffect(() => {
+    const space = stripRef.current?.closest('[data-toolbar-space]');
+    if (space == null) return;
+
+    // Observing the space rather than the strip is what keeps this from
+    // oscillating; see `data-toolbar-space` in `RichEditor`. It catches the
+    // pane resizer and a rotation as well as a window resize, none of which
+    // a media query on the viewport would distinguish correctly anyway.
+    //
+    // Seeded BEFORE observing, and re-probed only when the width really
+    // changed. A `ResizeObserver` fires once on its first observation by
+    // design, so without this the mount path ran the measure-then-collapse
+    // cycle a second time for a width the layout effect below had already
+    // decided — two wasted renders of the editor's chrome on every note
+    // opened.
+    //
+    // It is NOT a fix for the intermittent e2e failures that prompted it,
+    // and the record should not imply otherwise: those were chased with a
+    // four-run comparison against the base commit and fail at the same rate
+    // there (two of four, same test), so they are pre-existing and
+    // load-related. This stands on its own as avoided work.
+    spaceWidth.current = space.getBoundingClientRect().width;
+
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      if (width === spaceWidth.current) return;
+      spaceWidth.current = width;
+      setCompact(false);
+      setProbe((n) => n + 1);
+    });
+    observer.observe(space);
+    return () => observer.disconnect();
+  }, []);
+
   /*
    * The sheet closes when the keyboard opens or shuts.
    *
@@ -352,8 +408,6 @@ export function BottomToolbar({
   useEffect(() => {
     setOverflowAnchor(null);
   }, [keyboardInset]);
-
-  const compact = mode !== 'desktop';
   const stripActions = compact ? ACTIONS.filter((action) => action.overflow !== true) : ACTIONS;
   const sheetActions = compact ? ACTIONS.filter((action) => action.overflow === true) : [];
 
@@ -458,6 +512,7 @@ export function BottomToolbar({
   return (
     <>
       <div
+        ref={stripRef}
         role="toolbar"
         aria-label={t('editor.toolbar.bottom')}
         // `touch:h-14` grows the strip so its buttons can be 44px of real INK

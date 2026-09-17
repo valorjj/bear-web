@@ -24,6 +24,14 @@ const DEFAULT_TEST_VIEWPORT_WIDTH = 1280;
  * and adding the DOM lib to this project to silence it would erase the
  * boundary.
  */
+interface ResizeObserverStub {
+  new (callback: () => void): {
+    observe: () => void;
+    unobserve: () => void;
+    disconnect: () => void;
+  };
+}
+
 interface MediaQueryListStub {
   readonly matches: boolean;
   media: string;
@@ -39,6 +47,15 @@ declare global {
   var __setViewportWidth: (width: number) => void;
   var __setPointerCoarse: (coarse: boolean) => void;
   var matchMedia: (query: string) => MediaQueryListStub;
+  /*
+   * Declared here rather than taken from the DOM lib, for the same reason
+   * `MediaQueryListStub` is: this file belongs to the `node` tsconfig project
+   * (`lib: ["ES2023"]`, `types: ["node"]`, no DOM), precisely so browser and
+   * Node globals cannot leak into each other. `typeof globalThis.ResizeObserver`
+   * is therefore an error here, not a shortcut. `src/` gets the real type from
+   * the `app` project, which does load the DOM lib.
+   */
+  var ResizeObserver: ResizeObserverStub;
 }
 
 // jsdom's `Blob` isn't recognized by Node's built-in `structuredClone`, which
@@ -143,6 +160,30 @@ globalThis.matchMedia = (query: string): MediaQueryListStub => ({
   removeListener: (handler: () => void) => void mediaListeners.delete(handler),
   dispatchEvent: () => false,
 });
+
+/**
+ * jsdom implements no `ResizeObserver` at all — the constructor is absent, so
+ * a component that observes an element throws `ReferenceError: ResizeObserver
+ * is not defined` and React reports it as "An error occurred in the
+ * <BottomToolbar> component" with nothing naming the missing API. 182 tests
+ * failed on one `new ResizeObserver` before this existed.
+ *
+ * A no-op rather than a fake that fires: jsdom has no layout engine, so every
+ * box it could report would be zero, and a stub that delivered zeroes would
+ * let a test assert a collapse decision that the real browser would make
+ * differently. Silent is the honest answer here — the decision this drives is
+ * geometry, which `e2e/appearance.spec.ts` measures in a real Chromium.
+ *
+ * Consequence, deliberately: a component's INITIAL measurement still runs
+ * (the layout effect is not stubbed) and reads zeroes, so unit tests see the
+ * pre-collapse state. That is the right default — it is what a wide window
+ * shows.
+ */
+globalThis.ResizeObserver = class {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+};
 
 afterEach(() => {
   viewportWidth = DEFAULT_TEST_VIEWPORT_WIDTH;
