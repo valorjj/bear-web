@@ -5,6 +5,7 @@ import { useT } from '@/i18n';
 import { Bold, Download, Icon, Info, Italic } from '@/ui/Icon';
 
 import type { EditorFlags } from './editorState';
+import { keepEditorFocus } from './keepEditorFocus';
 import { pinAllSelectionStep } from './toolbarSelection';
 
 export interface TopControlsProps {
@@ -54,6 +55,7 @@ export function TopControls({
     >
       <button
         type="button"
+        onMouseDown={keepEditorFocus}
         aria-label={t('editor.toolbar.bold')}
         aria-pressed={flags.bold}
         disabled={editor === null}
@@ -64,6 +66,7 @@ export function TopControls({
       </button>
       <button
         type="button"
+        onMouseDown={keepEditorFocus}
         aria-label={t('editor.toolbar.italic')}
         aria-pressed={flags.italic}
         disabled={editor === null}
@@ -75,6 +78,7 @@ export function TopControls({
       {onToggleExport !== undefined && (
         <button
           type="button"
+          onMouseDown={keepEditorFocus}
           aria-label={t('export.open')}
           aria-haspopup="menu"
           aria-expanded={exportOpen ?? false}
@@ -86,6 +90,7 @@ export function TopControls({
       )}
       <button
         type="button"
+        onMouseDown={keepEditorFocus}
         aria-label={t('editor.info.show')}
         aria-expanded={infoOpen}
         onClick={onToggleInfo}

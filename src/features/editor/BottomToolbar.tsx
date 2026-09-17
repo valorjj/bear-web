@@ -27,6 +27,7 @@ import type { LucideIcon } from '@/ui/Icon';
 
 import type { EditorFlags } from './editorState';
 import type { HighlightColor } from './Highlight';
+import { keepEditorFocus } from './keepEditorFocus';
 import { pinAllSelectionStep } from './toolbarSelection';
 import { ToolbarOverflowSheet } from './ToolbarOverflowSheet';
 
@@ -415,6 +416,7 @@ export function BottomToolbar({
     onPickImages === undefined ? null : (
       <button
         type="button"
+        onMouseDown={keepEditorFocus}
         aria-label={t('editor.toolbar.image')}
         disabled={editor === null}
         onClick={() => picker.current?.click()}
@@ -429,6 +431,7 @@ export function BottomToolbar({
       <Fragment key={action.key}>
         <button
           type="button"
+          onMouseDown={keepEditorFocus}
           aria-label={t(action.label)}
           // `undefined`, not `false`, for an action with no toggle state:
           // `aria-pressed="false"` announces a button that is currently OFF,
@@ -488,6 +491,7 @@ export function BottomToolbar({
         {action.key === 'highlight' && (
           <button
             type="button"
+            onMouseDown={keepEditorFocus}
             aria-label={t('editor.toolbar.highlightColor')}
             aria-haspopup="menu"
             aria-expanded={colorMenuOpen}
@@ -537,6 +541,7 @@ export function BottomToolbar({
         {compact && (
           <button
             type="button"
+            onMouseDown={keepEditorFocus}
             aria-label={t('editor.toolbar.more')}
             aria-haspopup="menu"
             aria-expanded={overflowAnchor !== null}
