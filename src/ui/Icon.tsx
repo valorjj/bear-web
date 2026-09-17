@@ -378,4 +378,5 @@ export {
   Minus,
   Maximize2,
   Waypoints,
+  Ellipsis,
 } from 'lucide-react';

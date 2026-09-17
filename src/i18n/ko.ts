@@ -126,6 +126,7 @@ export const ko: Record<TranslationKey, string> = {
   'editor.highlight.remove': '형광펜 지우기',
   'editor.toolbar.link': '링크',
   'editor.toolbar.image': '이미지 삽입',
+  'editor.toolbar.more': '서식 더보기',
   'editor.toolbar.code': '코드 블록',
   'editor.toolbar.table': '표',
   'editor.toolbar.callout': '인용 또는 콜아웃',

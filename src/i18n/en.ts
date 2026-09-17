@@ -128,6 +128,7 @@ export const en = {
   'editor.highlight.remove': 'Remove highlight',
   'editor.toolbar.link': 'Link',
   'editor.toolbar.image': 'Insert image',
+  'editor.toolbar.more': 'More formatting',
   'editor.toolbar.code': 'Code block',
   'editor.toolbar.table': 'Table',
   'editor.toolbar.callout': 'Quote or callout',

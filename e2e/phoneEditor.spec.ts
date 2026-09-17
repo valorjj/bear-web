@@ -10,6 +10,9 @@ import { seedDatabase } from './fixtures/seed.ts';
 
 const PHONE = { width: 390, height: 844 };
 
+/** The inset this file's other keyboard tests already use. */
+const KEYBOARD = 336;
+
 /** Four columns, which is what squeezed to mid-word breaks before J3. */
 const CORPUS: Corpus = {
   notes: [
@@ -170,19 +173,35 @@ test.describe('the editor on a phone', () => {
     expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
   });
 
-  test('the toolbar still fits the screen and still scrolls', async ({ page }) => {
+  /*
+   * REWRITTEN, and the inversion is deliberate rather than a stale
+   * expectation edited to match new output.
+   *
+   * J3 wrote this as `scrollWidth > clientWidth` — "growing every button to
+   * 44px must not have turned a scrolling strip into one that silently hides
+   * its overflow" — which accepted the scroll and only asked that it stay
+   * honest. Measured later at 390x844: `scrollWidth` 720 against
+   * `clientWidth` 350, with 8 of 15 controls behind that scroll, every insert
+   * control added since J3 among them. The overflow sheet removes the scroll
+   * rather than annotating it, so the contract this test pins is now the
+   * opposite one, and it is stated as a rule instead of a control count: any
+   * control added to the strip fails HERE rather than quietly scrolling off
+   * the end.
+   */
+  test('the toolbar fits the screen with nothing scrolled off', async ({ page }) => {
     await openNote(page);
     const box = (await toolbar(page).boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    expect(box.x + box.width).toBeLessThanOrEqual(PHONE.width);
 
-    // Growing every button to 44px must not have turned a scrolling strip into
-    // one that silently hides its overflow.
     const scroll = await toolbar(page).evaluate((el) => ({
       scrollWidth: el.scrollWidth,
       clientWidth: el.clientWidth,
     }));
-    expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+    expect(
+      scroll.scrollWidth,
+      'the strip does not scroll horizontally on a phone',
+    ).toBeLessThanOrEqual(scroll.clientWidth);
   });
 
   test('the toolbar does not cover the prose it reserved space for', async ({ page }) => {
@@ -312,6 +331,88 @@ test.describe('the editor on a phone', () => {
     // Without the wrapper's scroll listener this measures ~120 — the handle
     // left behind over the prose while its column moved away underneath.
     expect(drift).toBeLessThan(4);
+  });
+
+  /*
+   * The overflow controls are REACHABLE and they WORK — not merely present
+   * in the accessibility tree. `drive-the-app's-own-path`: the failure this
+   * guards against is a sheet whose buttons render and whose commands never
+   * reach the editor, which a presence assertion cannot tell from a working
+   * one.
+   */
+  test('a control in the overflow sheet applies to the note', async ({ page }) => {
+    await openNote(page);
+
+    await expect(page.getByRole('button', { name: 'More formatting' })).toBeVisible();
+    await page.getByRole('button', { name: 'More formatting' }).click();
+
+    const sheet = page.getByRole('menu', { name: 'More formatting' });
+    await expect(sheet).toBeVisible();
+
+    // The caret has to be in the prose for an insert to land somewhere.
+    await expect(page.locator('.ProseMirror table')).toHaveCount(1);
+    await sheet.getByRole('button', { name: 'Table' }).click();
+
+    // A second table, inserted by the sheet's own button.
+    await expect(page.locator('.ProseMirror table')).toHaveCount(2);
+    // And the sheet closed behind the choice.
+    await expect(sheet).toBeHidden();
+  });
+
+  test('every control is reachable from the strip or the sheet', async ({ page }) => {
+    await openNote(page);
+
+    const strip = await toolbar(page)
+      .getByRole('button')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+
+    await page.getByRole('button', { name: 'More formatting' }).click();
+    const sheet = await page
+      .getByRole('menu', { name: 'More formatting' })
+      .getByRole('button')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+
+    // Every control the desktop strip carries, across the two surfaces, and
+    // none of them in both.
+    const all = [...strip, ...sheet].filter((label) => label !== 'More formatting');
+    expect(new Set(all).size, 'no control appears in both surfaces').toBe(all.length);
+    expect(all).toHaveLength(15);
+  });
+
+  /*
+   * The sheet survives the keyboard, which is the one condition that breaks
+   * it and the one no static reading catches.
+   *
+   * `RichEditor` translates the toolbar's wrapper when the keyboard is up
+   * (J3), and a transformed ancestor becomes the containing block for
+   * `position: fixed` — so `useAnchoredMenu` clamps correctly against the
+   * viewport and the browser then applies those coordinates against the
+   * toolbar. Measured before the portal that fixes it: the hook said
+   * `top: 284px`, correct against a visible bottom of 508, and the sheet
+   * rendered at 686 with its right edge at 406 on a 390px screen. Every
+   * number in the hook was right and the sheet was off the side of the phone.
+   */
+  test('the overflow sheet stays on screen with the keyboard up', async ({ page }) => {
+    await openNote(page);
+    await setKeyboardInset(page, KEYBOARD);
+
+    await page.getByRole('button', { name: 'More formatting' }).click();
+    const sheet = page.getByRole('menu', { name: 'More formatting' });
+    await expect(sheet).toBeVisible();
+
+    // Polled, for the reason `appearance.spec.ts`'s sibling assertion is:
+    // the hook paints at the anchor and corrects after measuring, so one
+    // frame of a flipping sheet is legitimately out of bounds.
+    await expect
+      .poll(async () => {
+        const box = (await sheet.boundingBox())!;
+        return {
+          left: box.x >= 0,
+          right: box.x + box.width <= PHONE.width,
+          clearOfKeyboard: box.y + box.height <= PHONE.height - KEYBOARD,
+        };
+      })
+      .toEqual({ left: true, right: true, clearOfKeyboard: true });
   });
 
   test('tapping a tag pill shows the filtered list', async ({ page }) => {

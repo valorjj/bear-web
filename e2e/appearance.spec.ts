@@ -513,37 +513,27 @@ test('the formatting toolbar is icons, not letters', async ({ page }) => {
 });
 
 test('every formatting toolbar control is reachable at a narrow viewport', async ({ page }) => {
-  // 390px — a phone. This test ran at 900px until J1, where three panes put
-  // the editor at its 300px minimum; at 900 the shell is now a two-pane tablet
-  // with the sidebar in a drawer, so the editor is ~556px and the toolbar no
-  // longer overflows at all. The DEFECT this guards has not gone away, it
-  // moved: at 390 the editor pane is ~374px against a toolbar needing ~408, so
-  // the premise below holds again. The test's own vacuity guards
-  // (`scrollWidth > clientWidth`, `clipped`) are what caught the move rather
-  // than letting it pass silently.
-  //
-  // Uniform icon-only buttons need ~408px, so Link, Code block and Quote
-  // overflow the toolbar's width. The fix is a horizontal scroll on the toolbar itself
-  // (`overflow-x-auto` in BottomToolbar.tsx), not a responsive collapse —
-  // that decision is explicitly out of scope for this milestone. This test
-  // proves nothing is unreachable, not that the layout looks any particular
-  // way.
-  //
-  // Deliberately NOT `toBeInViewport()` and NOT a plain `.click()`: the
-  // editor pane's own `overflow-y-auto` computes its `overflow-x` to `auto`
-  // too (the CSS rule that a `visible` axis paired with a non-visible one
-  // becomes `auto`), so even the UN-fixed toolbar remains scrollable and
-  // clickable via the *pane's* scrollbar — Playwright's auto-scrolling
-  // `.click()` reaches it either way, and so does `toBeInViewport()` (both
-  // verified to pass against the un-fixed toolbar). That is the exact "only
-  // reachable by discovering horizontal scroll with no affordance" defect
-  // named in the brief: technically scrollable, by the wrong element, with
-  // no visible cue. The fix scopes the scroll to the toolbar itself
-  // (`overflow-x-auto` in BottomToolbar.tsx) so only the button row moves,
-  // not the note's prose along with it — which is what this test verifies
-  // by driving `scrollLeft` on the toolbar element directly and checking
-  // that a clipped button actually enters ITS bounds, not just the
-  // viewport's.
+  /*
+   * REWRITTEN, and the contract is inverted on purpose.
+   *
+   * The original proved reachability THROUGH the strip's own horizontal
+   * scroll, and said so explicitly: "The fix is a horizontal scroll on the
+   * toolbar itself, not a responsive collapse — that decision is explicitly
+   * out of scope for this milestone." The responsive collapse is now in
+   * scope and shipped, so the mechanism it pinned is gone; what it was
+   * really guarding — that no control is unreachable at 390px — is what this
+   * keeps.
+   *
+   * It is a stronger test than its predecessor, not a weaker one. That one
+   * accepted "technically scrollable, with no affordance" as a pass; this
+   * requires the strip not to scroll at all AND every hidden control to be
+   * one tap away at full touch size.
+   *
+   * The vacuity guards are kept in the same spirit: the sheet must actually
+   * hold controls, and the named control must actually be absent from the
+   * strip, or "reachable in the sheet" would pass on a strip that still
+   * carried everything.
+   */
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.getByRole('button', { name: 'New note' }).click();
@@ -551,51 +541,52 @@ test('every formatting toolbar control is reachable at a narrow viewport', async
   const toolbar = page.getByRole('toolbar', { name: 'Formatting toolbar' });
   await expect(toolbar).toBeVisible();
 
-  // The last control in the strip, and therefore the one clipped first at
-  // 390px. It was Quote until the callout button replaced it at that end of
-  // the row; what this test needs is only that the button it names really
-  // does start outside the toolbar's box, which the assertions below check
-  // rather than assume.
-  const quote = toolbar.getByRole('button', { name: 'Quote or callout' });
+  const fit = await toolbar.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+  }));
+  expect(fit.scrollWidth, 'the strip fits without scrolling').toBeLessThanOrEqual(fit.clientWidth);
 
-  const before = await toolbar.evaluate(
-    (element, target) => {
-      const toolbarBox = element.getBoundingClientRect();
-      const buttonBox = (target as HTMLElement).getBoundingClientRect();
+  // Not in the strip — the premise of everything below.
+  await expect(toolbar.getByRole('button', { name: 'Quote or callout' })).toHaveCount(0);
+
+  await toolbar.getByRole('button', { name: 'More formatting' }).click();
+  const sheet = page.getByRole('menu', { name: 'More formatting' });
+  await expect(sheet).toBeVisible();
+
+  const quote = sheet.getByRole('button', { name: 'Quote or callout' });
+  await expect(quote).toBeVisible();
+
+  /*
+   * POLLED, not read once. `useAnchoredMenu` paints at the anchor and
+   * corrects in an effect after measuring, so the first frame of a sheet
+   * that has to flip above its anchor really is off the bottom of the
+   * screen — a single `boundingBox()` here read 889 against an 844px
+   * viewport and reported a bug that lasts one frame.
+   */
+  await expect
+    .poll(async () => {
+      const box = (await quote.boundingBox())!;
       return {
-        scrollWidth: element.scrollWidth,
-        clientWidth: element.clientWidth,
-        clipped: buttonBox.right > toolbarBox.right,
+        left: box.x >= 0,
+        right: box.x + box.width <= 390,
+        bottom: box.y + box.height <= 844,
       };
-    },
-    await quote.elementHandle(),
-  );
+    })
+    .toEqual({ left: true, right: true, bottom: true });
 
-  // The toolbar must actually be narrower than its content at this width,
-  // and that button must actually start outside it — otherwise the scroll check
-  // below would pass vacuously because there was nothing to reach.
-  expect(before.scrollWidth).toBeGreaterThan(before.clientWidth);
-  expect(before.clipped).toBe(true);
+  // Touch INK is deliberately not asserted here. This test resizes the
+  // window without `hasTouch`, so the pointer is fine and `coarse:size-11`
+  // correctly does not apply — a 390px desktop window is not a phone. The
+  // 44px rule belongs to the touch-emulated tests that can see it:
+  // `e2e/phoneEditor.spec.ts` and `e2e/link.spec.ts`'s phone block both
+  // assert it on this same sheet.
 
-  const after = await toolbar.evaluate(
-    (element, target) => {
-      element.scrollLeft = element.scrollWidth;
-      const toolbarBox = element.getBoundingClientRect();
-      const buttonBox = (target as HTMLElement).getBoundingClientRect();
-      return { withinToolbar: buttonBox.right <= toolbarBox.right + 1 };
-    },
-    await quote.elementHandle(),
-  );
-
-  // Scrolling the TOOLBAR's own `scrollLeft` — not the pane's, not the
-  // page's — must bring Quote inside it. If the toolbar itself is not the
-  // scrolling container (the un-fixed state), setting its `scrollLeft` is a
-  // no-op and Quote's position never changes.
-  expect(after.withinToolbar).toBe(true);
-
-  // No regression at a comfortable width: `overflow-x-auto` must not
-  // introduce a visible scrollbar or gap when there is nothing to scroll.
+  // No regression at a comfortable width: the full strip returns and still
+  // needs no scrollbar.
   await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(toolbar.getByRole('button', { name: 'Quote or callout' })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'More formatting' })).toHaveCount(0);
   const wide = await toolbar.evaluate((element) => ({
     scrollWidth: element.scrollWidth,
     clientWidth: element.clientWidth,

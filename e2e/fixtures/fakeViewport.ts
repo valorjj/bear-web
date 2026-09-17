@@ -26,11 +26,32 @@ import type { Page } from '@playwright/test';
 export async function installFakeViewport(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const listeners = new Map<string, Set<() => void>>();
-    const state = { height: globalThis.innerHeight, offsetTop: 0 };
+    /*
+     * `inset`, not an absolute `height`, and that is a FIX rather than a
+     * preference.
+     *
+     * This ran as `{ height: globalThis.innerHeight }` and seeded at
+     * `document_start`, where an emulated mobile page reports an
+     * `innerHeight` of **2121** rather than the configured 844 — so
+     * `visibleBottom()` returned 2121 for the whole of any test that never
+     * called `setKeyboardInset`, and every "does this fit below the anchor"
+     * decision in `useAnchoredMenu` answered yes against a screen two and a
+     * half times taller than the phone. Found when a menu anchored to the
+     * bottom toolbar refused to flip upward and rendered 128px below the
+     * bottom of the viewport while every number the hook computed was
+     * internally consistent.
+     *
+     * Deriving the height on READ instead means the fake tracks whatever
+     * `innerHeight` really is by the time the app asks, and an inset of 0 is
+     * honestly "no keyboard" rather than "a 2121px screen". The tests that
+     * set an explicit inset were unaffected either way — `__setKeyboardInset`
+     * overwrote the bad seed — which is exactly why this went unnoticed.
+     */
+    const state = { inset: 0, offsetTop: 0 };
 
     const fake = {
       get height() {
-        return state.height;
+        return globalThis.innerHeight - state.inset;
       },
       get width() {
         return globalThis.innerWidth;
@@ -69,7 +90,7 @@ export async function installFakeViewport(page: Page): Promise<void> {
 
     Object.defineProperty(globalThis, '__setKeyboardInset', {
       value: (inset: number) => {
-        state.height = globalThis.innerHeight - inset;
+        state.inset = inset;
         for (const handler of [...(listeners.get('resize') ?? [])]) handler();
       },
       configurable: true,

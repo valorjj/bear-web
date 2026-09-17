@@ -174,18 +174,24 @@ test.describe('on a phone', () => {
     await expect(field).toHaveCSS('font-size', '16px');
   });
 
-  test('the image picker is reachable in the scrolling strip', async ({ page }) => {
+  test('the image picker is reachable through the overflow sheet', async ({ page }) => {
     await noteWithWord(page);
-    const button = page
-      .getByRole('toolbar', { name: 'Formatting toolbar' })
-      .getByRole('button', { name: 'Insert image' });
 
-    // `scrollIntoViewIfNeeded`, because the strip scrolls by design at this
-    // width — 14 controls do not fit 390px and are not meant to. What must
-    // hold is that the control is REACHABLE, and 44px of real ink once it is.
-    await button.scrollIntoViewIfNeeded();
+    // It is no longer in the strip: 15 controls do not fit 390px, so the
+    // insert controls live one tap behind `More formatting`. This used to
+    // call `scrollIntoViewIfNeeded` and assert only that the control existed
+    // somewhere in a strip that scrolled by design.
+    const toolbar = page.getByRole('toolbar', { name: 'Formatting toolbar' });
+    await expect(toolbar.getByRole('button', { name: 'Insert image' })).toHaveCount(0);
+
+    await toolbar.getByRole('button', { name: 'More formatting' }).click();
+    const button = page
+      .getByRole('menu', { name: 'More formatting' })
+      .getByRole('button', { name: 'Insert image' });
     await expect(button).toBeVisible();
 
+    // Still 44px of real ink, which is the part of the old assertion worth
+    // keeping — and now without needing a scroll to see it.
     const box = (await button.boundingBox())!;
     expect(Math.round(box.width)).toBeGreaterThanOrEqual(44);
     expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
