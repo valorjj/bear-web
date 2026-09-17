@@ -4,6 +4,8 @@ import { useT } from '@/i18n';
 import { MENU_GAP, useAnchoredMenu } from '@/lib/useAnchoredMenu';
 import { Icon, type LucideIcon, SquarePen, Trash2 } from '@/ui/Icon';
 
+import { MENU_ITEM_BASE, MENU_SURFACE } from '@/ui/menuStyles';
+
 /** What the menu was opened on, and where. */
 export interface TagRowMenuRequest {
   tag: string;
@@ -46,9 +48,7 @@ function Item({
       type="button"
       role="menuitem"
       onClick={onSelect}
-      className={`hover:bg-hover ease-bear flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-ui transition-colors duration-[var(--bear-duration-fast)] ${
-        danger ? 'text-danger' : 'text-text'
-      }`}
+      className={`${MENU_ITEM_BASE} hover:bg-hover ${danger ? 'text-danger' : 'text-text'}`}
     >
       <span className="text-faint">
         <Icon glyph={glyph} size="sm" />
@@ -103,7 +103,7 @@ export function TagRowMenu({ request, onAction, onClose }: TagRowMenuProps): Rea
       // viewport rect, so the DOM parent buys them nothing, while moving them
       // would thread menu state through `SidebarDrawer` and `SidebarContent`
       // and leave the desktop pane rendering a second copy.
-      className="bg-surface border-border shadow-popover fixed z-[60] min-w-48 overflow-y-auto rounded-md border p-1"
+      className={`${MENU_SURFACE} fixed z-[60] min-w-48 overflow-y-auto`}
     >
       <Item glyph={SquarePen} label={t('tags.menu.rename')} onSelect={() => act('rename')} />
       <Item glyph={Trash2} label={t('tags.menu.delete')} onSelect={() => act('delete')} danger />

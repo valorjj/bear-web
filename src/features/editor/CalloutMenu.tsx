@@ -6,6 +6,8 @@ import { useAnchoredMenu } from '@/lib/useAnchoredMenu';
 
 import { CALLOUT_TYPES, type CalloutType } from './callouts';
 
+import { MENU_ITEM, MENU_SURFACE } from '@/ui/menuStyles';
+
 export interface CalloutMenuProps {
   /** The type under the cursor; `null` is a plain quote. */
   current: CalloutType | null;
@@ -92,7 +94,7 @@ export function CalloutMenu({
       aria-label={t('editor.callout.menu')}
       onKeyDown={onKeyDown}
       style={{ top: position.top, left: position.left }}
-      className="bg-surface shadow-popover fixed z-20 flex min-w-36 flex-col gap-0.5 rounded-lg p-1"
+      className={`${MENU_SURFACE} fixed z-20 min-w-36`}
     >
       {CHOICES.map((choice) => (
         <button
@@ -102,7 +104,7 @@ export function CalloutMenu({
           role="menuitemradio"
           aria-checked={choice.type === current}
           onClick={() => onChoose(choice.type)}
-          className="flex items-center gap-2 rounded-sm px-2 py-1 text-left text-ui text-text transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-checked:bg-selected"
+          className={`${MENU_ITEM} aria-checked:bg-selected`}
         >
           {/*
             The same glyph the block itself draws, from the same tokens — a

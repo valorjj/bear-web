@@ -6,6 +6,8 @@ import { useAnchoredMenu } from '@/lib/useAnchoredMenu';
 
 import type { HeadingMenuRequest } from './HeadingFold';
 
+import { MENU_ITEM, MENU_SEPARATOR, MENU_SURFACE } from '@/ui/menuStyles';
+
 const LEVELS = [1, 2, 3, 4, 5, 6] as const;
 
 export interface HeadingMenuProps {
@@ -52,7 +54,7 @@ export function HeadingMenu({
       aria-label={t('editor.fold.level')}
       onKeyDown={onKeyDown}
       style={{ top: position.top, left: position.left }}
-      className="bg-surface border-border shadow-popover fixed z-20 min-w-48 rounded-md border p-1"
+      className={`${MENU_SURFACE} fixed z-20 min-w-48`}
     >
       {LEVELS.map((level) => (
         <button
@@ -68,7 +70,7 @@ export function HeadingMenu({
             if (level !== request.level) onSetLevel(level);
             onClose();
           }}
-          className="text-ui-sm text-text hover:bg-hover flex w-full items-center justify-between gap-4 rounded px-2 py-1 text-left"
+          className={`${MENU_ITEM} justify-between`}
         >
           <span>
             {t('editor.fold.headingLevel')} {level}
@@ -77,7 +79,7 @@ export function HeadingMenu({
         </button>
       ))}
 
-      <div className="bg-border my-1 h-px" role="separator" />
+      <div className={MENU_SEPARATOR} role="separator" />
 
       <button
         type="button"
@@ -86,7 +88,7 @@ export function HeadingMenu({
           onToggleFold();
           onClose();
         }}
-        className="text-ui-sm text-text hover:bg-hover w-full rounded px-2 py-1 text-left"
+        className={MENU_ITEM}
       >
         {t('editor.fold.toggle')}
       </button>
@@ -97,7 +99,7 @@ export function HeadingMenu({
           onFoldAll();
           onClose();
         }}
-        className="text-ui-sm text-text hover:bg-hover w-full rounded px-2 py-1 text-left"
+        className={MENU_ITEM}
       >
         {t('editor.fold.foldAll')}
       </button>
@@ -108,7 +110,7 @@ export function HeadingMenu({
           onUnfoldAll();
           onClose();
         }}
-        className="text-ui-sm text-text hover:bg-hover w-full rounded px-2 py-1 text-left"
+        className={MENU_ITEM}
       >
         {t('editor.fold.unfoldAll')}
       </button>

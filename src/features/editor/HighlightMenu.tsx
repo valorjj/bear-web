@@ -5,6 +5,8 @@ import { useT } from '@/i18n';
 import type { HighlightColor } from './Highlight';
 import { HIGHLIGHT_CHOICES } from './highlightChoices';
 
+import { MENU_ITEM, MENU_SURFACE } from '@/ui/menuStyles';
+
 export interface HighlightMenuProps {
   /** The colour currently under the cursor, or `null` for the default tint. */
   current: HighlightColor | null;
@@ -47,11 +49,7 @@ export function HighlightMenu({ current, onChoose, onDismiss }: HighlightMenuPro
   }, [onDismiss]);
 
   return (
-    <div
-      role="menu"
-      aria-label={t('editor.highlight.menu')}
-      className="flex min-w-36 flex-col gap-0.5 rounded-lg bg-surface p-1 shadow-popover"
-    >
+    <div role="menu" aria-label={t('editor.highlight.menu')} className={`${MENU_SURFACE} min-w-36`}>
       {HIGHLIGHT_CHOICES.map((choice) => (
         <button
           key={choice.color ?? 'default'}
@@ -60,7 +58,7 @@ export function HighlightMenu({ current, onChoose, onDismiss }: HighlightMenuPro
           role="menuitemradio"
           aria-checked={choice.color === current}
           onClick={() => onChoose(choice.color)}
-          className="flex items-center gap-2 rounded-sm px-2 py-1 text-left text-ui text-text transition-colors duration-[var(--bear-duration-fast)] ease-bear hover:bg-hover aria-checked:bg-selected"
+          className={`${MENU_ITEM} aria-checked:bg-selected`}
         >
           <span
             aria-hidden="true"

@@ -7,6 +7,8 @@ import { Download, FileCode, FileText, Icon, Link, LoaderCircle, type LucideIcon
 import type { ExportFormat } from './exportNote';
 import { useExportProgress } from './ExportProgressContext';
 
+import { MENU_ITEM_BASE, MENU_SURFACE } from '@/ui/menuStyles';
+
 export interface ExportMenuProps {
   onChoose: (format: ExportFormat) => void;
   /**
@@ -73,11 +75,7 @@ export function ExportMenu({ onChoose, onPublish, onDismiss }: ExportMenuProps):
   }, [onDismiss]);
 
   return (
-    <div
-      role="menu"
-      aria-label={t('export.label')}
-      className="flex min-w-40 flex-col gap-0.5 rounded-lg bg-surface p-1 shadow-popover"
-    >
+    <div role="menu" aria-label={t('export.label')} className={`${MENU_SURFACE} min-w-40`}>
       {choices.map((choice, index) => {
         // `busy` is the PDF item specifically: the flag is global (one
         // render can only ever have one PDF in flight from the user's point
@@ -107,7 +105,7 @@ export function ExportMenu({ onChoose, onPublish, onDismiss }: ExportMenuProps):
               if (choice.format !== undefined) onChoose(choice.format);
               else onPublish?.();
             }}
-            className={`flex items-center gap-2 rounded-sm px-2 py-1 text-left text-ui transition-colors duration-[var(--bear-duration-fast)] ease-bear ${disabled ? 'text-faint' : 'text-text hover:bg-hover'}`}
+            className={`${MENU_ITEM_BASE} ${disabled ? 'text-faint' : 'text-text hover:bg-hover'}`}
           >
             <span className="text-faint">
               {busy ? (

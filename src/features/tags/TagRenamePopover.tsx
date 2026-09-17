@@ -4,6 +4,8 @@ import { canRenameTo, normalizeTag } from '@/data';
 import { useT } from '@/i18n';
 import { MENU_GAP, useAnchoredMenu } from '@/lib/useAnchoredMenu';
 
+import { PANEL_SURFACE } from '@/ui/menuStyles';
+
 export interface TagRenamePopoverProps {
   /** The tag being renamed. Seeds the field. */
   tag: string;
@@ -71,7 +73,7 @@ export function TagRenamePopover({
       // carries it: below desktop this popover opens over the tag tree inside
       // `SidebarDrawer`'s `Dialog`, while being rendered as a sibling of it.
       // See `TagRowMenu.tsx` for the full account.
-      className="bg-surface border-border shadow-popover fixed z-[60] w-64 rounded-md border p-2"
+      className={`${PANEL_SURFACE} fixed z-[60] w-64 p-2`}
     >
       <label className="text-ui-sm text-muted block pb-1" htmlFor="tag-rename-field">
         {t('tags.rename.field')}

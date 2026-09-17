@@ -29,6 +29,8 @@ import {
   Trash2,
 } from '@/ui/Icon';
 
+import { MENU_ITEM, MENU_ITEM_DESTRUCTIVE, MENU_SEPARATOR, MENU_SURFACE } from '@/ui/menuStyles';
+
 import type { ContextMenuRequest } from './ContextMenu';
 import type { EditorFlags } from './editorState';
 import type { HighlightChoiceResult } from './HighlightPalette';
@@ -73,11 +75,6 @@ export interface EditorContextMenuProps {
   onSetHighlight: (result: HighlightChoiceResult) => void;
   onClose: () => void;
 }
-
-const ITEM_CLASS =
-  'text-ui-sm text-text hover:bg-hover flex w-full items-center gap-2 rounded px-2 py-1 text-left';
-const DESTRUCTIVE_CLASS =
-  'text-ui-sm text-danger hover:bg-hover flex w-full items-center gap-2 rounded px-2 py-1 text-left';
 
 /**
  * The editor's right-click (and `Shift-F10`/`ContextMenu`-key) menu.
@@ -156,11 +153,11 @@ export function EditorContextMenu({
       // `overflow-y-auto` is what makes the `maxHeight` above a scrollable
       // clamp rather than a silent, unreachable crop — every row stays
       // reachable by scrolling the menu itself.
-      className="bg-surface border-border shadow-popover fixed z-20 min-w-56 overflow-y-auto rounded-md border p-1"
+      className={`${MENU_SURFACE} fixed z-20 min-w-56 overflow-y-auto`}
     >
       {/* 1. Heading — an inline glyph row, then a labelled paragraph row. */}
-      <div role="group" aria-label={t('editor.fold.level')} className="p-1">
-        <div className="flex items-center gap-1">
+      <div role="group" aria-label={t('editor.fold.level')}>
+        <div className="flex items-center gap-1 px-2 py-0.5">
           {HEADING_LEVELS.map((level, index) => {
             const Glyph = HEADING_GLYPHS[index];
             return (
@@ -188,23 +185,23 @@ export function EditorContextMenu({
             onSetHeading(0);
             onClose();
           }}
-          className={ITEM_CLASS}
+          className={MENU_ITEM}
         >
           <Icon glyph={Pilcrow} size="sm" />
           {t('editor.context.paragraph')}
         </button>
       </div>
 
-      <div className="bg-border my-1 h-px" role="separator" />
+      <div className={MENU_SEPARATOR} role="separator" />
 
       {/* 2. Inline format — independent toggles. */}
-      <div role="group" aria-label={t('editor.context.format')} className="p-1">
+      <div role="group" aria-label={t('editor.context.format')}>
         <button
           type="button"
           role="menuitemcheckbox"
           aria-checked={flags.bold}
           onClick={() => act('bold')}
-          className={ITEM_CLASS}
+          className={MENU_ITEM}
         >
           <Icon glyph={Bold} size="sm" />
           {t('editor.toolbar.bold')}
@@ -214,7 +211,7 @@ export function EditorContextMenu({
           role="menuitemcheckbox"
           aria-checked={flags.italic}
           onClick={() => act('italic')}
-          className={ITEM_CLASS}
+          className={MENU_ITEM}
         >
           <Icon glyph={Italic} size="sm" />
           {t('editor.toolbar.italic')}
@@ -224,7 +221,7 @@ export function EditorContextMenu({
           role="menuitemcheckbox"
           aria-checked={flags.strike}
           onClick={() => act('strike')}
-          className={ITEM_CLASS}
+          className={MENU_ITEM}
         >
           <Icon glyph={Strikethrough} size="sm" />
           {t('editor.toolbar.strike')}
@@ -234,14 +231,14 @@ export function EditorContextMenu({
           role="menuitemcheckbox"
           aria-checked={flags.link}
           onClick={() => act('link')}
-          className={ITEM_CLASS}
+          className={MENU_ITEM}
         >
           <Icon glyph={Link} size="sm" />
           {t('editor.toolbar.link')}
         </button>
       </div>
 
-      <div className="bg-border my-1 h-px" role="separator" />
+      <div className={MENU_SEPARATOR} role="separator" />
 
       {/* 3. Highlight — inline swatch row, exactly as `HighlightPalette`
           renders it, reporting through `onSetHighlight` rather than
@@ -249,7 +246,7 @@ export function EditorContextMenu({
       <div
         role="group"
         aria-label={t('editor.highlight.palette')}
-        className="flex items-center gap-1 p-2"
+        className="flex items-center gap-1 px-2 py-1"
       >
         {HIGHLIGHT_CHOICES.map((choice) => (
           <button
@@ -280,16 +277,16 @@ export function EditorContextMenu({
         </button>
       </div>
 
-      <div className="bg-border my-1 h-px" role="separator" />
+      <div className={MENU_SEPARATOR} role="separator" />
 
       {/* 4. Blocks — independent toggles, same as inline format. */}
-      <div role="group" aria-label={t('editor.context.blocks')} className="p-1">
+      <div role="group" aria-label={t('editor.context.blocks')}>
         <button
           type="button"
           role="menuitemcheckbox"
           aria-checked={flags.bulletList}
           onClick={() => act('bulletList')}
-          className={ITEM_CLASS}
+          className={MENU_ITEM}
         >
           <Icon glyph={List} size="sm" />
           {t('editor.toolbar.bulletList')}
@@ -299,7 +296,7 @@ export function EditorContextMenu({
           role="menuitemcheckbox"
           aria-checked={flags.orderedList}
           onClick={() => act('orderedList')}
-          className={ITEM_CLASS}
+          className={MENU_ITEM}
         >
           <Icon glyph={ListOrdered} size="sm" />
           {t('editor.toolbar.orderedList')}
@@ -309,7 +306,7 @@ export function EditorContextMenu({
           role="menuitemcheckbox"
           aria-checked={flags.taskList}
           onClick={() => act('taskList')}
-          className={ITEM_CLASS}
+          className={MENU_ITEM}
         >
           <Icon glyph={ListTodo} size="sm" />
           {t('editor.toolbar.checklist')}
@@ -319,7 +316,7 @@ export function EditorContextMenu({
           role="menuitemcheckbox"
           aria-checked={flags.codeBlock}
           onClick={() => act('codeBlock')}
-          className={ITEM_CLASS}
+          className={MENU_ITEM}
         >
           <Icon glyph={Code} size="sm" />
           {t('editor.toolbar.code')}
@@ -329,7 +326,7 @@ export function EditorContextMenu({
           role="menuitemcheckbox"
           aria-checked={flags.blockquote}
           onClick={() => act('blockquote')}
-          className={ITEM_CLASS}
+          className={MENU_ITEM}
         >
           <Icon glyph={Quote} size="sm" />
           {t('editor.toolbar.quote')}
@@ -343,14 +340,14 @@ export function EditorContextMenu({
           widget), and this menu answers Shift+F10. */}
       {flags.section && (
         <>
-          <div className="bg-border my-1 h-px" role="separator" />
-          <div role="group" aria-label={t('editor.section.group')} className="p-1">
+          <div className={MENU_SEPARATOR} role="separator" />
+          <div role="group" aria-label={t('editor.section.group')}>
             <button
               type="button"
               role="menuitem"
               disabled={!flags.sectionUp}
               onClick={() => act('moveSectionUp')}
-              className={ITEM_CLASS}
+              className={MENU_ITEM}
             >
               <Icon glyph={ArrowUp} size="sm" />
               {t('editor.section.moveUp')}
@@ -360,7 +357,7 @@ export function EditorContextMenu({
               role="menuitem"
               disabled={!flags.sectionDown}
               onClick={() => act('moveSectionDown')}
-              className={ITEM_CLASS}
+              className={MENU_ITEM}
             >
               <Icon glyph={ArrowDown} size="sm" />
               {t('editor.section.moveDown')}
@@ -374,13 +371,13 @@ export function EditorContextMenu({
           danger token, matching what the old floating bar did. */}
       {flags.table && (
         <>
-          <div className="bg-border my-1 h-px" role="separator" />
-          <div role="group" aria-label={t('editor.context.table')} className="p-1">
+          <div className={MENU_SEPARATOR} role="separator" />
+          <div role="group" aria-label={t('editor.context.table')}>
             <button
               type="button"
               role="menuitem"
               onClick={() => act('addRowBefore')}
-              className={ITEM_CLASS}
+              className={MENU_ITEM}
             >
               <Icon glyph={Rows3} size="sm" />
               {t('editor.table.addRowBefore')}
@@ -392,7 +389,7 @@ export function EditorContextMenu({
               type="button"
               role="menuitem"
               onClick={() => act('addRowAfter')}
-              className={ITEM_CLASS}
+              className={MENU_ITEM}
             >
               <Icon glyph={Rows3} size="sm" />
               {t('editor.table.addRowAfter')}
@@ -404,7 +401,7 @@ export function EditorContextMenu({
               type="button"
               role="menuitem"
               onClick={() => act('addColumnBefore')}
-              className={ITEM_CLASS}
+              className={MENU_ITEM}
             >
               <Icon glyph={Columns3} size="sm" />
               {t('editor.table.addColumnBefore')}
@@ -416,7 +413,7 @@ export function EditorContextMenu({
               type="button"
               role="menuitem"
               onClick={() => act('addColumnAfter')}
-              className={ITEM_CLASS}
+              className={MENU_ITEM}
             >
               <Icon glyph={Columns3} size="sm" />
               {t('editor.table.addColumnAfter')}
@@ -429,7 +426,7 @@ export function EditorContextMenu({
               role="menuitem"
               data-destructive=""
               onClick={() => act('deleteRow')}
-              className={DESTRUCTIVE_CLASS}
+              className={MENU_ITEM_DESTRUCTIVE}
             >
               <Icon glyph={Trash2} size="sm" />
               {t('editor.table.deleteRow')}
@@ -439,7 +436,7 @@ export function EditorContextMenu({
               role="menuitem"
               data-destructive=""
               onClick={() => act('deleteColumn')}
-              className={DESTRUCTIVE_CLASS}
+              className={MENU_ITEM_DESTRUCTIVE}
             >
               <Icon glyph={Trash2} size="sm" />
               {t('editor.table.deleteColumn')}
@@ -449,7 +446,7 @@ export function EditorContextMenu({
               role="menuitem"
               data-destructive=""
               onClick={() => act('deleteTable')}
-              className={DESTRUCTIVE_CLASS}
+              className={MENU_ITEM_DESTRUCTIVE}
             >
               <Icon glyph={Trash2} size="sm" />
               {t('editor.table.deleteTable')}

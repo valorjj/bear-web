@@ -853,3 +853,62 @@ describe('the sync runner', () => {
     expect(barrel).not.toMatch(/^export \{[^}]*\buseSync\b[^}]*\} from '\.\/useSync';$/m);
   });
 });
+
+describe('the floating-surface idiom', () => {
+  /*
+   * Ten menus and panels each spelled the same surface slightly differently —
+   * `rounded-md` in six and `rounded-lg` in four, no border at all in four
+   * (invisible in `high-contrast`, where the popover shadow IS the border),
+   * `text-ui` rows in five against `text-ui-sm` in three, two row radii, and
+   * a hover transition on some. None of it was decided; it accumulated one
+   * menu at a time, which is exactly the shape of drift the spacing-scale
+   * guard above already catches for padding.
+   *
+   * `src/ui/menuStyles.ts` is now the single spelling. This guard is what
+   * stops the eleventh surface from starting the drift again: a component
+   * reaching for `shadow-popover` directly is either a new floating surface
+   * that should compose the constants, or a deliberate exception that says so
+   * here.
+   */
+  const SURFACE_SOURCE = 'src/ui/menuStyles.ts';
+
+  /** Surfaces that carry the shadow for a reason other than being a menu. */
+  const ALLOWED: Record<string, string> = {
+    'src/ui/Pane.tsx': 'a pane is elevated chrome, not a floating surface; see its `elevated` prop',
+    'src/features/appearance/ThemeDialog.tsx': 'the shadow is a hover/selected state on a card',
+    'src/features/notes/NoteList.tsx': "the phone's floating New note button",
+    'src/features/editor/BottomToolbar.tsx': 'a pill-shaped toolbar strip, not a menu',
+    'src/features/editor/TopControls.tsx': 'a pill-shaped toolbar strip, not a menu',
+    'src/features/editor/HighlightPalette.tsx': 'a pill-shaped swatch strip, not a menu',
+    'src/features/editor/InfoPanel.tsx': 'an inline status readout, not a floating surface',
+  };
+
+  it('has a shared surface module to point at', () => {
+    // Guards the guard: if the module is renamed away, the scan below must
+    // not quietly become a check that nothing uses a constant nothing defines.
+    const source = readFileSync(SURFACE_SOURCE, 'utf8');
+    expect(source).toContain('export const MENU_SURFACE');
+    expect(source).toContain('export const PANEL_SURFACE');
+    expect(source).toContain('export const MENU_ITEM');
+  });
+
+  it('spells the floating surface only in menuStyles.ts', () => {
+    const offenders: string[] = [];
+
+    for (const path of walk('src', ['.tsx'])) {
+      if (path in ALLOWED) continue;
+      if (/\.test\.tsx?$/.test(path)) continue;
+      const source = readFileSync(path, 'utf8');
+      source.split('\n').forEach((line, index) => {
+        // `className` regions only: the prose in a docblock may name the
+        // utility while explaining why a component does NOT use it, which is
+        // the case `Pane.tsx` makes at length.
+        if (!/class(Name)?=/.test(line) && !/^\s*'/.test(line)) return;
+        if (!line.includes('shadow-popover')) return;
+        offenders.push(`${path}:${index + 1}`);
+      });
+    }
+
+    expect(offenders).toEqual([]);
+  });
+});

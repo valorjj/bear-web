@@ -4,6 +4,8 @@ import { useT } from '@/i18n';
 import { useAnchoredMenu } from '@/lib/useAnchoredMenu';
 import { Button } from '@/ui/Button';
 
+import { PANEL_SURFACE } from '@/ui/menuStyles';
+
 export interface LinkMenuProps {
   /**
    * Where to put it: the SELECTION's viewport rectangle, and the toolbar
@@ -145,7 +147,7 @@ export function LinkMenu({
       // clamp has a real number to work with before the field has any content
       // — an intrinsically-sized popover would jump sideways as the user
       // types. `max-w-[calc(100vw-8px)]` keeps that honest below 296px.
-      className="bg-surface shadow-popover fixed z-20 flex w-72 max-w-[calc(100vw-8px)] flex-col gap-2 rounded-lg p-2"
+      className={`${PANEL_SURFACE} fixed z-20 flex w-72 max-w-[calc(100vw-8px)] flex-col gap-2 p-2`}
     >
       <label id={labelId} htmlFor={`${labelId}-field`} className="px-1 text-ui-xs text-faint">
         {t('editor.link.address')}

@@ -18,6 +18,8 @@ import {
   Trash2,
 } from '@/ui/Icon';
 
+import { MENU_ITEM_BASE, MENU_SEPARATOR, MENU_SURFACE } from '@/ui/menuStyles';
+
 /** What the menu was opened on, and where. */
 export interface NoteRowMenuRequest {
   noteId: string;
@@ -61,7 +63,7 @@ const EXPORT_CHOICES: readonly ExportChoice[] = [
 ];
 
 function Separator(): ReactElement {
-  return <div role="separator" className="border-border my-1 border-t" />;
+  return <div role="separator" className={MENU_SEPARATOR} />;
 }
 
 function GroupLabel({ children }: { children: ReactNode }): ReactElement {
@@ -91,7 +93,7 @@ function Item({
       type="button"
       role="menuitem"
       onClick={onSelect}
-      className={`hover:bg-hover ease-bear flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-ui transition-colors duration-[var(--bear-duration-fast)] ${
+      className={`${MENU_ITEM_BASE} hover:bg-hover ${
         // Only the WORD takes the danger colour; the fill stays quiet. Matches
         // "Move to trash" in the note-list header and the delete rows in
         // `EditorContextMenu` — see `docs/rulings/accessibility.md`.
@@ -159,7 +161,7 @@ export function NoteRowMenu({
         // the viewport as it actually is right now.
         maxHeight: `calc(100dvh - ${MENU_GAP * 2}px)`,
       }}
-      className="bg-surface border-border shadow-popover fixed z-20 min-w-48 overflow-y-auto rounded-md border p-1"
+      className={`${MENU_SURFACE} fixed z-20 min-w-48 overflow-y-auto`}
     >
       <Item
         glyph={Pin}
@@ -194,9 +196,7 @@ export function NoteRowMenu({
               onExport(choice.format);
               onClose();
             }}
-            className={`ease-bear flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-ui transition-colors duration-[var(--bear-duration-fast)] ${
-              disabled ? 'text-faint' : 'hover:bg-hover text-text'
-            }`}
+            className={`${MENU_ITEM_BASE} ${disabled ? 'text-faint' : 'hover:bg-hover text-text'}`}
           >
             <span className="text-faint">
               <Icon

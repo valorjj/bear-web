@@ -7,6 +7,8 @@ import {
   useRef,
 } from 'react';
 
+import { MENU_SURFACE } from './menuStyles';
+
 export interface PopoverProps {
   open: boolean;
   onClose: () => void;
@@ -150,7 +152,7 @@ export function Popover({
       // `faint`, `border`, `hover`, `selected` and `scrollbar` on it — so its
       // borders and secondary text would resolve light-on-light. See
       // `tokens.css`.
-      className={`bear-app-palette border-border bg-surface shadow-popover rounded-lg border p-1 ${className}`}
+      className={`${MENU_SURFACE} ${className}`}
       style={style}
     >
       {children}

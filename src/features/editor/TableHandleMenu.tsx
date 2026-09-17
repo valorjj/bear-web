@@ -7,6 +7,8 @@ import { useAnchoredMenu } from '@/lib/useAnchoredMenu';
 import type { TableHandleAction, TableHandleMenuRequest } from './TableHandles';
 import { type TableShortcutAction, tableShortcutHint } from './TableShortcuts';
 
+import { MENU_ITEM, MENU_ITEM_DESTRUCTIVE, MENU_SEPARATOR, MENU_SURFACE } from '@/ui/menuStyles';
+
 export interface TableHandleMenuProps {
   request: TableHandleMenuRequest;
   onAction: (action: TableHandleAction) => void;
@@ -74,7 +76,7 @@ export function TableHandleMenu({
       aria-label={label}
       onKeyDown={onKeyDown}
       style={{ top: position.top, left: position.left }}
-      className="bg-surface border-border shadow-popover fixed z-20 min-w-48 rounded-md border p-1"
+      className={`${MENU_SURFACE} fixed z-20 min-w-48`}
     >
       <button
         type="button"
@@ -83,7 +85,7 @@ export function TableHandleMenu({
           onAction(beforeAction);
           onClose();
         }}
-        className="text-ui-sm text-text hover:bg-hover flex w-full items-center rounded px-2 py-1 text-left"
+        className={MENU_ITEM}
       >
         {t(beforeLabelKey)}
         <span className="text-faint ml-auto pl-4">{tableShortcutHint(beforeAction, mac)}</span>
@@ -95,13 +97,13 @@ export function TableHandleMenu({
           onAction(afterAction);
           onClose();
         }}
-        className="text-ui-sm text-text hover:bg-hover flex w-full items-center rounded px-2 py-1 text-left"
+        className={MENU_ITEM}
       >
         {t(afterLabelKey)}
         <span className="text-faint ml-auto pl-4">{tableShortcutHint(afterAction, mac)}</span>
       </button>
 
-      <div className="bg-border my-1 h-px" role="separator" />
+      <div className={MENU_SEPARATOR} role="separator" />
 
       <button
         type="button"
@@ -111,7 +113,7 @@ export function TableHandleMenu({
           onAction(deleteAction);
           onClose();
         }}
-        className="text-ui-sm text-danger hover:bg-hover w-full rounded px-2 py-1 text-left"
+        className={MENU_ITEM_DESTRUCTIVE}
       >
         {t(deleteLabelKey)}
       </button>
