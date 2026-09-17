@@ -562,8 +562,47 @@ import { describe, expect, it } from 'vitest';
  * lowlight, per Q's entry above — remain the obvious candidate) needs to
  * move behind a boundary, or the next feature after Task 8 will be asking
  * for a seventh raise before it has written a line of its own code.
+ *
+ * ### The seventh raise, to 368,000, decided BY THE USER on 2026-09-17 —
+ * ### and the first with no feature behind it
+ *
+ * It is worth being exact about how this one differs, because the entry
+ * above predicted it almost word for word and the shape of a raise is what
+ * this file exists to record.
+ *
+ * Every raise before this measured a specific change on both sides: a
+ * feature cost N bytes, N did not fit, and the ceiling moved by N plus
+ * wiring. **There is no such change here.** `main` measured **364,303 B**
+ * with **697 B** of headroom and nothing pending; the raise was requested
+ * outright, to give the deferred on-focus update banner room it does not
+ * yet occupy. By the rule stated above — "a change that would exceed it
+ * does not raise it BY ITSELF" — this is the ratchet that rule forbids, and
+ * it is recorded as one rather than dressed up as a measurement.
+ *
+ * The three ways out were weighed and none applies to a raise with no
+ * feature attached: there is no code to move behind a `React.lazy`
+ * boundary, nothing to push to the server, and no feature to cut. What
+ * WOULD apply is the audit, and the audit was run far enough to size it:
+ *
+ *     241,182 B  themes-*      (Tiptap, ProseMirror, React, lowlight)
+ *      67,950 B  index-*
+ *      42,009 B  EmptyState-*
+ *      13,162 B  i18n-*
+ *     364,303 B  total
+ *
+ * **66% of the eager closure is one vendor chunk**, which confirms the entry
+ * above rather than adding to it: no amount of application-code trimming
+ * reaches it, and the only real lever is moving something out of `themes-*`.
+ * That is a sub-project, not a step in another task — and it stays
+ * OUTSTANDING. This raise buys time; it does not answer the question, and
+ * the next session should not read it as having done so.
+ *
+ * 368,000 follows the same ~3 KB-for-wiring convention as every raise
+ * before it (364,303 + ~3,700 B). A larger number was offered and declined
+ * on purpose: the budget has shaped L2, L4 and W, and a ceiling with ten
+ * kilobytes of slack stops shaping anything.
  */
-const CEILING_BYTES = 365_000;
+const CEILING_BYTES = 368_000;
 
 interface ManifestChunk {
   file: string;

@@ -904,15 +904,17 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
   after L3 shipped was **1,884 B** (main moved 337,259 → 338,116 B gzipped).
   **Both numbers are historical, not current** — the ceiling has since been
   raised several times (`scripts/bundleSize.test.ts`'s docblock carries every
-  raise with its reason) and stands at **365,000 B** as of 2026-09-16 — the
-  SIXTH raise, taken by the user when sub-project W's `?import=` gate measured
-  991 B over the 361,000 B then in force and `React.lazy` measured WORSE
-  (362,073 B against 361,991 eager: `ImportSheet` shares `Dialog` and `Button`
-  with the eager graph, so a new async boundary makes Rolldown extract them
-  into their own chunks and gzip's per-file overhead exceeds the saving).
-  `main` had **36 B** of headroom before that raise. Read the docblock's own
-  closing note before asking for a seventh: the eager closure is due an audit,
-  not another bump. The pattern this
+  raise with its reason) and stands at **368,000 B** as of 2026-09-17 — the
+  SEVENTH raise, and the first with NO feature behind it: `main` measured
+  364,303 B with 697 B free and nothing pending, and the user took the raise
+  outright to leave room for the deferred update banner. It is recorded in
+  the docblock as the ratchet the rule forbids rather than dressed up as a
+  measurement. **The audit it defers is now sized and still outstanding:
+  241,182 B of the 364,303 — 66% — is the single `themes-*` vendor chunk
+  (Tiptap, ProseMirror, React, lowlight), so no application-code trimming
+  reaches it and the only real lever is moving something out of that chunk.
+  That is a sub-project. Do not read the seventh raise as having answered
+  it.** The pattern this
   bullet exists to establish still holds: check the CURRENT number
   (`npx vitest run scripts/bundleSize.test.ts`, or gzip the built file
   yourself) before adding to the main chunk, never a number written down
