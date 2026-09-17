@@ -37,7 +37,7 @@ brand hex literals in `src/features/landing/GoogleMark.tsx`; any use of the
 `bg-sidebar` or `bear-sidebar-scope` class, and the `.bear-sidebar-scope` /
 `.bear-app-palette` blocks in `tokens.css`; and the outermost class list of
 `src/features/notes/NoteEditor.tsx` and `src/ui/Pane.tsx` (`h-full` versus
-`min-h-0 flex-1`).
+`min-h-0 flex-1`).; `src/features/editor/BottomToolbar.tsx`'s `overflow` flags and its measure-then-collapse cycle, `ToolbarOverflowSheet.tsx`, `RichEditor.tsx`'s `data-toolbar-space`, `src/ui/menuStyles.ts`
 
 - **Tokens sit in THREE TIERS, and the split is what the theme system rests
   on.** Tier 1, palette (16 tokens): `bg` `surface` `sidebar` `canvas` `text`
@@ -1633,3 +1633,39 @@ Added 2026-09-15, benchmarking the reference app's link treatment.
   mean moving document nodes, which is the synchronisation layer the spec
   rejected; placing the new definition by reference order instead is a
   possible follow-up, not a defect to patch around.
+
+- **The formatting strip never scrolls horizontally, and what does not fit
+  goes to the overflow sheet.** J3 accepted the scroll and added a mask fade
+  to admit it; by 2026-09-17 that meant 8 of 15 controls sat off a 390px
+  phone (`scrollWidth` 720 against a `clientWidth` of 350), every insert
+  control added since J3 among them. The fade said "there is more"; it never
+  made the more reachable in one gesture. `e2e/appearance.spec.ts` and
+  `e2e/phoneEditor.spec.ts` both assert `scrollWidth <= clientWidth` now, so
+  a control added to the strip fails a test rather than quietly scrolling off
+  the end.
+
+- **Which controls overflow is a choice about FREQUENCY, not about what
+  happens to fit.** The incidental split gave Numbered list and Strikethrough
+  prime position while Link — reached for constantly — sat off-screen.
+  Structure and emphasis stay in the strip; insertion goes one tap behind the
+  `⋯`. The cost, taken deliberately, is that toggling an overflow control
+  twice is four taps rather than a scroll and two: paid because the scroll is
+  a gesture most people never make, and a control nobody finds is worse than
+  one two taps away.
+
+- **The collapse is decided by MEASUREMENT, never by a breakpoint, and the
+  breakpoint version is why.** `mode !== 'desktop'` shipped first and left
+  1024–1200 broken: the strip needs 510px at a fine pointer and the editor
+  pane gives it 376 at 1024 and 452 at 1100, so a 13" laptop kept the exact
+  defect the phone had just lost, on the side of the line named `desktop`
+  where nothing was looking. The cycle is render everything, measure in a
+  `useLayoutEffect` (which runs after layout and BEFORE paint, so the
+  overflowing frame is never shown), collapse if it did not fit.
+
+- **Measure against an element whose width is content-INDEPENDENT, or the
+  measurement feeds back on itself.** `RichEditor` marks one with
+  `data-toolbar-space`; it is `absolute inset-x-3`, so its width comes from
+  the pane. Every closer ancestor takes its width from the strip, and
+  observing one of those gives: collapse, parent narrows, it "fits", expand,
+  repeat. Seed the observed width before observing and re-probe only on a
+  real change — a `ResizeObserver` fires once on first observation by design.

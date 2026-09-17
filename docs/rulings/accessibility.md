@@ -5,7 +5,8 @@ affordances a control must keep at rest.
 
 **Trigger:** any diff touching `aria-label`, `aria-hidden`, `aria-current`,
 `aria-pressed`, `aria-disabled` or an accessible-name assertion;
-`src/features/export/ExportMenu.tsx`'s disabled PDF item; `src/features/editor/EditorContextMenu.tsx`
+`src/features/export/ExportMenu.tsx`'s disabled PDF item; `src/features/editor/keepEditorFocus.ts` and any `onMouseDown` on editor
+chrome; `src/features/editor/EditorContextMenu.tsx`
 (the `menuitemcheckbox`/`menuitemradio`/`menuitem` roles and the `Shift+F10`
 route into it) and `src/features/editor/HighlightPalette.tsx`; `src/ui/Icon.tsx` (the sole
 `lucide-react` importer, which stamps `aria-hidden` on every glyph);
@@ -805,3 +806,30 @@ does not as sharply.
   A control a user reaches for and cannot press explains nothing about why.
   Pressing it at the defaults is a no-op the user can see the result of, which
   is better feedback than a greyed-out button.
+
+- **A chrome control that runs an editor command must not take DOM focus on
+  mouse press.** Chromium focuses a `<button>` synchronously on mousedown,
+  while Tiptap's `focus()` defers the real `view.focus()` to a
+  `requestAnimationFrame` — so between the click handler returning and the
+  next frame the BUTTON holds the keyboard, and a `Space` or `Enter` there
+  activates it again rather than reaching the note. For an insert command
+  each extra activation inserts again. `src/features/editor/keepEditorFocus.ts`
+  is the shared `onMouseDown` handler; both toolbars carry it on every button.
+
+  It costs a keyboard user nothing, which is why it is the right fix rather
+  than a trade: `preventDefault` on mousedown suppresses the browser's
+  focus-on-mouse-press default only, so Tab still reaches the control and
+  Space still activates it once genuinely focused.
+
+  **Do not conflate this with `pinAllSelectionStep`.** That keeps the
+  editor's SELECTION honest across a click on chrome and is unrelated — the
+  selection already survived; DOM focus did not.
+  `HighlightPalette.tsx` carries a comment concluding `preventDefault` "would
+  be wrong here"; that reasoning is about the caret and remains true, and it
+  simply does not address focus. Menus are exempt because their buttons
+  unmount on choose.
+
+  Guarded by `e2e/toolbarFocus.spec.ts`, which is deterministic BY
+  CONSTRUCTION rather than by being fast enough: both tests stub
+  `requestAnimationFrame` to never call back, freezing the app inside the
+  window the race opens. Neither can pass for timing reasons.
