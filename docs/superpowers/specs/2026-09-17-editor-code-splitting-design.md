@@ -5,7 +5,7 @@ hand out, not this file's; CLAUDE.md is explicit that the lettered rows in
 its status table are that document's scheme.
 
 **Date:** 2026-09-17
-**Status:** design proposed, not approved; plan not yet written
+**Status:** design APPROVED by the user on 2026-09-17; plan to follow
 
 ## The problem
 
@@ -131,7 +131,10 @@ win. For a writer who opens the app to type immediately — and on desktop a
 note may already be selected — the editor may now arrive LATER than it does
 today, because it starts downloading after the shell rather than alongside it.
 
-**Recommendation: buy first paint, and hide the cost with a preload.** Issue
+**DECIDED by the user on 2026-09-17: buy first paint, and hide the cost with
+a preload.** The recommendation below was taken as written.
+
+Issue
 the editor chunk's `import()` as soon as the shell has painted, rather than
 when the editor first renders. The list is interactive at 1,979 ms and the
 editor arrives during the time the reader spends choosing a note — which is
@@ -189,7 +192,12 @@ same ~3 KB-for-wiring convention every raise has used. A budget left at
 features without anyone deciding to spend it, which is precisely the ratchet
 `scripts/bundleSize.test.ts`'s docblock spent seven entries warning about.
 
-Lowering a ceiling is the user's decision on the same terms as raising one.
+Lowering a ceiling is the user's decision on the same terms as raising one,
+and **it was taken on 2026-09-17, in advance: the ceiling comes down once
+this lands.** The exact number follows the finished measurement rather than
+this spec's estimate — ~3 KB of wiring headroom above whatever the branch
+actually measures, the same convention every raise used. This is the first
+time the guard has moved DOWN.
 
 ## Evidence
 
