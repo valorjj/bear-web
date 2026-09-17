@@ -158,16 +158,17 @@ publishHost.ts`) uses it to decide which incoming `Host` is the anonymous
   one and 404s every public page silently. A loud crash at boot beats either
   of those failing quietly at request time.
 
-**Six further Playwright entry points exist and are deliberately not in that
+**Seven further Playwright entry points exist and are deliberately not in that
 count, because they assert nothing.** `shots` and `measure` drive the fixed
 corpus in `e2e/fixtures/corpus.ts`, as does `shots:pdf`; `shots:mermaid`,
 `shots:image` and `shots:mobile` each carry their own small local fixture
 instead, deliberately kept out of that shared corpus — a diagram note added
 there would change note-list geometry and drag `measure.spec.ts`'s committed
-`measurements.md` into an unrelated diff. `grepInvert` on `@shots|@measure`
-in `playwright.config.ts` keeps all six out of `npm run test:e2e`.
+`measurements.md` into an unrelated diff. `measure:load` carries its own fixture too, and
+measures TIME rather than pixels. `grepInvert` on `@shots|@measure|@load`
+in `playwright.config.ts` keeps all seven out of `npm run test:e2e`.
 
-**Enumerate them from `package.json`, never from this list** — two of the six
+**Enumerate them from `package.json`, never from this list** — two of them
 went unrecorded here for weeks:
 `node -e "const s=require('./package.json').scripts;Object.keys(s).filter(k=>/^(shots|measure)/.test(k)).forEach(k=>console.log(k))"`.
 
@@ -237,6 +238,36 @@ went unrecorded here for weeks:
   the theme's ink — in all eight light themes, live for a day, with
   `contrast.spec.ts` reporting 33/33 throughout. Run this when you touch
   anything the phone renders, and count the four files.
+
+- `npm run measure:load` → `e2e/load.spec.ts` times a COLD first load across
+  five CPU/network combinations and writes `docs/design/load.md`
+  (gitignored — unlike `measurements.md` these move with the machine and
+  would be pure churn). It is the third leg of the harness and was missing
+  for the project's whole life: `measure` answers "what is it, in numbers",
+  `shots` answers "what does it look like", and nothing answered **"how long
+  before a person can read their first note"** — so the eager-JS budget in
+  `scripts/bundleSize.test.ts` was anchored to itself through seven raises,
+  a proxy with no measurement of what it is a proxy FOR.
+
+  **What it found, on 2026-09-17: the network dominates and the CPU barely
+  matters.** First note visible at **2,482ms** on Slow 4G against **243ms**
+  on WiFi, while dropping CPU throttling from 4x to 1x moved it by ~30ms in
+  both cases. The 364 KB eager closure is a TRANSFER cost, not a
+  parse-and-execute one, which is the opposite of the usual mobile-web
+  assumption and changes what the ceiling protects: at 1.6 Mbps a 3 KB raise
+  is ~15ms and irrelevant, while the 86 KB grown since sub-project C is
+  ~430ms and was spent one "it is only 1 KB" at a time. The `themes-*` chunk
+  alone is ~1.6s of Slow 4G, which is what makes that audit worth more than
+  any further tightening. Cold load is paid on a FIRST visit and again after
+  each deploy, not on every launch.
+
+  **Two things made an earlier version of it lie, and both are in its
+  header:** `Network.enable` must be sent BEFORE
+  `Network.emulateNetworkConditions` or the throttle is silently ignored (the
+  giveaway was a 1ms TTFB against a configured 150ms latency), and the HTTP
+  cache must be disabled or only the first of three runs is a cold load.
+  It cannot see a real budget phone's CPU — CDP throttling is a multiplier on
+  THIS machine — so read it for the shape, not as a promise about a handset.
 
 They exist because **nothing in the test suite can see "renders wrong"**: the unit
 suite has no layout engine and `e2e/appearance.spec.ts` is deliberately relative.

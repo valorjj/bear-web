@@ -13,6 +13,10 @@ test-results/
 # deliberately if a review needs one.
 docs/design/shots/
 
+# Cold-load timings from `npm run measure:load`. Deliberately not committed:
+# unlike measurements.md these move with the machine and would be pure churn.
+docs/design/load.md
+
 # Provider secrets. server/.env.example carries the shape; these carry the
 # values and must never be committed. The `.bak` glob matters: a timestamped
 # backup of a secrets file is still a secrets file, and it is untracked rather

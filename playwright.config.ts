@@ -10,7 +10,7 @@ export default defineConfig({
    * `npm run shots` and `npm run measure` set PW_HARNESS to turn the exclusion
    * off.
    */
-  grepInvert: process.env.PW_HARNESS ? undefined : /@shots|@measure/,
+  grepInvert: process.env.PW_HARNESS ? undefined : /@shots|@measure|@load/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

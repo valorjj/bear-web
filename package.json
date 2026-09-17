@@ -24,6 +24,7 @@
     "shots:mermaid": "PW_HARNESS=1 playwright test e2e/shots-mermaid.spec.ts",
     "shots:pdf": "PW_HARNESS=1 playwright test e2e/shots-pdf.spec.ts",
     "measure": "PW_HARNESS=1 playwright test --grep @measure",
+    "measure:load": "PW_HARNESS=1 playwright test e2e/load.spec.ts --workers=1 --grep @load",
     "measure:check": "npm run measure && git diff --exit-code docs/design/measurements.md docs/design/measurements.json",
     "server:dev": "tsx watch --env-file=server/.env server/src/index.ts",
     "server:dev:local": "tsx watch --env-file=server/.env.local server/src/index.ts",
