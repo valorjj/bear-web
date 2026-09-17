@@ -540,6 +540,145 @@ git commit -m "perf(editor): mount the editor lazily, off the first-paint path"
 
 ---
 
+### Task 3b: the export barrel stops pinning the editor eager
+
+**Inserted on 2026-09-17, after Task 3 measured 348,748 B instead of the
+~234,800 B the plan predicted.** The plan had a defect: it assumed Task 1
+(making `useExportRunner` load `exportNote` dynamically) closed the export
+door. It did not. `src/features/export/index.ts` re-exports `exportNote`,
+`buildExportHtml` and `renderNoteHtml` as VALUES from modules that import
+`@/features/editor`, and `AppShell.tsx` imports `ExportProgressProvider` and
+`useExportProgress` from that same barrel — so the entire
+Tiptap/ProseMirror/highlight.js stack (~208 KB gzipped) is still a STATIC
+dependency of the entry chunk.
+
+This is structurally identical to the barrel edge Task 2 removed from
+`src/features/notes/index.ts`. The 2026-09-17 spike measured 234,807 B only
+because it ablated `html.ts`'s editor imports outright, which masked this
+second edge — the spike was right about the prize and wrong about the route.
+
+**Files:**
+
+- Modify: `src/features/export/index.ts`
+- Modify: every non-test module that imports the moved values from
+  `@/features/export` — find them, do not assume the list
+- Test: `scripts/sourceLint.test.ts`
+
+**Interfaces:**
+
+- Consumes: Task 2's pattern for the same problem; Task 3's lazy gate.
+- Produces: the eager closure should fall to roughly **235,000 B**. Task 5
+  measures and Task 6 sets the ceiling from it.
+
+- [ ] **Step 1: Find every consumer, and write the list into your report**
+
+```bash
+grep -rn "from '@/features/export'" src --include='*.ts' --include='*.tsx' | grep -v '\.test\.'
+```
+
+For each hit, note WHICH symbols it takes. The split you need is: symbols
+that reach the editor (`exportNote`, `buildExportHtml`, `renderNoteHtml`,
+`readExportTokens`, `EXPORT_TOKEN_NAMES`) versus symbols that do not
+(`ExportMenu`, `ExportProgressProvider`, `useExportProgress`,
+`useExportRunner`, `exportFilename`, `requestPdf`, `PdfExportError`, and
+every `export type`). Verify that split by reading the modules rather than
+trusting this list — a symbol that looks harmless may import `html.ts`.
+
+- [ ] **Step 2: Write the failing test**
+
+Add to the `describe('the editor stays off the first-paint path', …)` block
+that Task 2 created in `scripts/sourceLint.test.ts`:
+
+```ts
+  /*
+   * The SECOND barrel edge, and the one the plan missed. `export/index.ts`
+   * re-exported `exportNote` and `renderNoteHtml` as values; both reach
+   * `html.ts`, which imports `@/features/editor`. Because `AppShell` imports
+   * `ExportProgressProvider` from that same barrel, the whole Tiptap stack
+   * stayed statically eager even after the notes barrel was fixed —
+   * measured at 348,748 B against a predicted 234,800 B.
+   *
+   * A value re-export is the hazard; `export type` is erased and is fine.
+   */
+  it('keeps the editor-reaching exporters out of the export barrel', () => {
+    const barrel = readFileSync('src/features/export/index.ts', 'utf8');
+    const valueLines = barrel
+      .split('\n')
+      .filter((line) => line.startsWith('export {') || line.startsWith('export *'));
+    expect(valueLines.join('\n')).not.toMatch(/from '\.\/(exportNote|html)'/);
+  });
+```
+
+- [ ] **Step 3: Run it to verify it fails**
+
+Run: `npx vitest run scripts/sourceLint.test.ts`
+Expected: FAIL, naming the new case. If it passes, the barrel already differs
+from what this brief describes — stop and report rather than proceeding.
+
+- [ ] **Step 4: Remove the value re-exports and repoint consumers**
+
+In `src/features/export/index.ts`, drop the VALUE exports that come from
+`./exportNote` and `./html`, keeping the `export type` lines (types are
+erased and carry no runtime edge). Leave a comment in their place in the
+same voice as the one Task 2 left in `src/features/notes/index.ts`,
+explaining that these reach the editor and that a barrel re-export makes the
+whole stack a static dependency of anything importing from here.
+
+Repoint each consumer found in Step 1 at the leaf module by path
+(`@/features/export/exportNote`, `@/features/export/html`). A consumer that
+only needs the value at call time — as `useExportRunner` already does —
+should use `await import()` instead; prefer that where the call site is a
+user action.
+
+- [ ] **Step 5: Run the test and the gates**
+
+Run: `npx vitest run scripts/sourceLint.test.ts` — expect PASS.
+
+Then the full set: `npm run typecheck`, `npm run lint`, `npm run format`,
+`npm test -- --run --maxWorkers=4`, `npm run build`, and
+`lsof -ti:4173 | xargs -r kill -9; npm run test:e2e`.
+
+**Export must still work.** `e2e/` has export coverage — if any of it fails,
+you have moved a value that was needed eagerly, and the fix is to reach it by
+path rather than to revert the barrel change.
+
+- [ ] **Step 6: Measure**
+
+```bash
+npm run build >/dev/null 2>&1 && node -e "
+const fs=require('fs'),zlib=require('zlib');
+const m=JSON.parse(fs.readFileSync('dist/.vite/manifest.json','utf8'));
+const seen=new Set(); const walk=k=>{if(seen.has(k))return;seen.add(k);(m[k].imports||[]).forEach(walk)};
+walk(Object.keys(m).find(k=>m[k].isEntry));
+let t=0; for(const k of seen){const f='dist/'+m[k].file; if(f.endsWith('.js')) t+=zlib.gzipSync(fs.readFileSync(f)).length;}
+console.log('eager gzip', t);
+"
+```
+
+Expected: roughly **235,000 B**, down from 348,748 B. Report the real number.
+
+If it is still near 348,000, a third static edge exists. Find it before
+reporting done:
+
+```bash
+node -e "
+const fs=require('fs');
+const m=JSON.parse(fs.readFileSync('dist/.vite/manifest.json','utf8'));
+const seen=new Set(); const walk=k=>{if(seen.has(k))return;seen.add(k);(m[k].imports||[]).forEach(walk)};
+walk(Object.keys(m).find(k=>m[k].isEntry));
+[...seen].forEach(k=>console.log(m[k].file, '<-', k));
+"
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add -A
+git commit -m "perf(export): the export barrel stops pinning the editor eager"
+```
+
+---
+
 ### Task 4: Preload the editor once the shell has painted
 
 This is the decision the user took on 2026-09-17: buy first paint, and hide
