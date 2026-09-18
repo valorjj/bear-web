@@ -944,7 +944,11 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
   enough to matter. **That audit is now answered, and the answer was not the
   vendor chunk's contents.** The editor-code-splitting branch moved the
   editor itself (Tiptap, ProseMirror, the extensions built on them) behind a
-  `React.lazy` boundary mounted only once a note is opened, cutting the
+  lazy load mounted only once a note is opened — a plain module-scope cache
+  plus a manual `import()` in an effect (`AppShell.tsx`'s
+  `useNoteEditorComponent`), deliberately NOT `React.lazy`/`Suspense`, which
+  broke the editor deterministically (see the "Toolchain surprises" bullet
+  on `useEditor`'s debounced `destroy()`) — cutting the
   eager closure to **140,796 B** — a 223,507 B reduction traced to two barrel
   re-exports (`src/features/notes/index.ts`, then `src/features/export/
 index.ts`) that pinned the editor eager, not to anything inside `themes-*`.
@@ -1028,6 +1032,27 @@ export/index`), latent for the same reason N's was: the order happened to
   backtick runs — that attempt mangled four comments into
   `` ```` ``````markdown` `` and needed a restore from backup; replace exact
   literals one at a time.
+
+- **`@tiptap/react`'s `useEditor` cannot survive a `React.lazy`/`Suspense`
+  reveal, and this is why the editor is loaded through a plain module-scope
+  cache instead (`AppShell.tsx`'s `useNoteEditorComponent`).** `useEditor`
+  survives React StrictMode's synchronous phantom double-mount by debouncing
+  its real `destroy()` — a literal `setTimeout(…, 1)` in `scheduleDestroy`
+  that then calls `setEditor(null)` — betting that a synchronous
+  cleanup-then-remount lands inside that 1ms window. Mounting the editor
+  behind `React.lazy`/`Suspense` was tried first, exactly as planned, and it
+  broke deterministically: a `<Suspense>` boundary's disconnect→reconnect
+  gap measured reliably longer than 1ms, so the debounced destroy actually
+  fired, and a later render then called `editor.commands...` against the now
+  -dead instance — `Cannot read properties of null (reading 'commands')`.
+  Attributing that gap specifically to React's Offscreen/
+  `reconnectPassiveEffects` path is the least-established part of this: what
+  was actually measured is only that the gap exceeded 1ms on every reveal,
+  not which internal mechanism produces it. Full trace in
+  `docs/superpowers/specs/2026-09-17-editor-code-splitting-design.md`'s task
+  3 addendum. Do not "simplify" `useNoteEditorComponent` back into
+  `React.lazy(() => import(...))` plus `<Suspense>` — that is the exact
+  primitive this branch replaced, for this reason.
 
 ## Architecture boundaries
 

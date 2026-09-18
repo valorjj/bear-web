@@ -114,10 +114,16 @@ let cachedNoteEditor: NoteEditorComponentType | null = null;
 
 export interface NoteEditorLoad {
   Component: NoteEditorComponentType | null;
-  /** `true` once the chunk request has rejected — see `EditorLoading`. */
+  /**
+   * `true` once the chunk request has rejected — see `EditorLoading`. There
+   * is deliberately no `retry()` here: per HTML's "fetch a single module
+   * script", a failed fetch leaves a `null` entry in the browser's module
+   * map for that specifier, so a later `import()` of the SAME URL resolves
+   * from that map without ever making a network request. Re-running this
+   * effect could not succeed in either failure case it is meant to cover —
+   * see `EditorLoading`'s docblock for the fix, a page reload.
+   */
   failed: boolean;
-  /** Clears `failed` and lets the next render's effect try the import again. */
-  retry: () => void;
 }
 
 function useNoteEditorComponent(): NoteEditorLoad {
@@ -125,13 +131,6 @@ function useNoteEditorComponent(): NoteEditorLoad {
     () => cachedNoteEditor,
   );
   const [failed, setFailed] = useState(false);
-  // Bumped by `retry()` to re-run the load effect below even though
-  // `Component` and `failed` both stay at their old values in the same
-  // render that calls it (`failed` only flips back to `false` once the
-  // retry effect actually starts) — its own value is never read, it exists
-  // purely to change on every retry so the effect's dependency array sees a
-  // new identity.
-  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (Component !== null) return;
@@ -143,21 +142,17 @@ function useNoteEditorComponent(): NoteEditorLoad {
         if (!cancelled) setComponent(() => module.NoteEditor);
       },
       () => {
-        // Never cached, and the gate is left retryable: a failed chunk
-        // request (stale tab past a deploy, a dropped connection) must not
-        // strand the editor pane on the loading copy forever with no way
-        // out. See `EditorLoading`'s docblock.
+        // Never cached. See the `failed` docblock above for why this has no
+        // retry action of its own — `EditorLoading` offers a reload instead.
         if (!cancelled) setFailed(true);
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [Component, attempt]);
+  }, [Component]);
 
-  const retry = useCallback(() => setAttempt((current) => current + 1), []);
-
-  return { Component, failed, retry };
+  return { Component, failed };
 }
 
 /**
@@ -174,11 +169,7 @@ const CommandPalette = lazy(() => import('@/features/palette/CommandPalette'));
 export function AppShell(): ReactElement {
   const t = useT();
   const widths = usePaneWidths();
-  const {
-    Component: NoteEditorComponent,
-    failed: noteEditorFailed,
-    retry: retryNoteEditor,
-  } = useNoteEditorComponent();
+  const { Component: NoteEditorComponent, failed: noteEditorFailed } = useNoteEditorComponent();
 
   const [scope, setScope] = useState<NoteScope>(ACTIVE_SCOPE);
 
@@ -970,7 +961,7 @@ export function AppShell(): ReactElement {
                   {selectedNote === undefined ? null : selectedNote === null ? (
                     <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
                   ) : noteEditorFailed ? (
-                    <EditorLoading onRetry={retryNoteEditor} />
+                    <EditorLoading failed />
                   ) : NoteEditorComponent === null ? (
                     <EditorLoading />
                   ) : (

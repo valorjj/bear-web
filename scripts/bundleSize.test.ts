@@ -608,7 +608,10 @@ import { describe, expect, it } from 'vitest';
  * Every entry above moved this number up. This one does not: the
  * editor-code-splitting branch moves the rich text editor itself — Tiptap,
  * ProseMirror, and the extensions built on them — out of the eager closure,
- * behind a `React.lazy` boundary mounted only once a note is opened. `main`
+ * behind a lazy load mounted only once a note is opened — a module-scope
+ * cache plus a manual `import()`, deliberately NOT `React.lazy`/`Suspense`,
+ * which broke the editor deterministically (see CLAUDE.md's "Toolchain
+ * surprises" for the mechanism: `useEditor`'s debounced `destroy()`). `main`
  * measured **364,303 B**; this branch, finished, measures **140,796 B** —
  * a reduction of **223,507 B**, not a feature's cost being absorbed.
  *

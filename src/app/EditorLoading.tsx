@@ -5,12 +5,13 @@ import { Button } from '@/ui/Button';
 
 export interface EditorLoadingProps {
   /**
-   * Present only once the editor chunk's `import()` has rejected. Renders an
-   * explicit failure state with a retry action instead of the quiet loading
-   * copy — see the docblock below for why silence is wrong once loading has
-   * actually failed.
+   * `true` once the editor chunk's `import()` has rejected. Renders an
+   * explicit failure state with a reload action instead of the quiet
+   * loading copy — see the docblock below for why silence is wrong once
+   * loading has actually failed, and why the action is a reload rather than
+   * a retry.
    */
-  onRetry?: () => void;
+  failed?: boolean;
 }
 
 /**
@@ -31,16 +32,28 @@ export interface EditorLoadingProps {
  * the entry chunk and in memory, so a failure here is a new way for a user
  * to lose the ability to edit any note. Silently staying on the loading copy
  * forever would hide that entirely; this renders an explicit message and a
- * retry button instead.
+ * reload button instead.
+ *
+ * The button reloads the page rather than re-running the same `import()`.
+ * Per HTML's "fetch a single module script", a failed fetch leaves a
+ * `null` entry in the browser's module map for that URL, and every later
+ * `import()` of the same specifier resolves from that map without ever
+ * making a network request — so a "try again" that re-runs the identical
+ * import can never succeed, in either failure case this guards against: a
+ * stale tab after a deploy (the hashed chunk is gone from the server for
+ * good) or a transient dropped connection (the browser will not re-fetch a
+ * URL it already recorded as failed). `location.reload()` is the one action
+ * that actually re-requests `index.html` and, with it, a correct chunk URL —
+ * so it is offered directly instead of being left in the prose below it.
  */
-export function EditorLoading({ onRetry }: EditorLoadingProps): ReactElement {
+export function EditorLoading({ failed = false }: EditorLoadingProps): ReactElement {
   const t = useT();
 
-  if (onRetry !== undefined) {
+  if (failed) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
         <p className="text-ui text-faint">{t('editor.loadError')}</p>
-        <Button onClick={onRetry} variant="soft">
+        <Button onClick={() => window.location.reload()} variant="soft">
           {t('editor.loadError.retry')}
         </Button>
       </div>

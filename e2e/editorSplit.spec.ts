@@ -34,6 +34,14 @@ test('the note list paints before the editor chunk has loaded, and the pane show
   // `editor.loading` assertion below both depend on the block having
   // actually intercepted a real request, so either one failing here means
   // the block did nothing, not that the note list failed to paint.
+  // The hash is inside the `*` so an unrelated build change is fine, but if
+  // Rolldown ever renames or merges this chunk (e.g. into a shared vendor
+  // chunk), this glob matches nothing, `chunkRequested` stays false, the
+  // route never fires, the editor loads normally, and this test fails on
+  // the `editor.loading` assertion below — a failure that reads as a broken
+  // note list rather than as a renamed chunk. If this spec ever fails there,
+  // check `dist/assets` for the real chunk name before assuming a real
+  // regression.
   let chunkRequested = false;
   await page.route('**/assets/NoteEditor-*.js', async () => {
     chunkRequested = true;

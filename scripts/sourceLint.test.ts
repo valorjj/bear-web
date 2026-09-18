@@ -932,6 +932,17 @@ describe('the editor stays off the first-paint path', () => {
     expect(barrel).not.toMatch(/from '\.\/NoteEditor'/);
   });
 
+  // This is DIAGNOSIS, not detection — it cannot be made complete and is not
+  // the thing that catches a regression. It only sees a top-level
+  // `import ... from '.../notes/NoteEditor'` line, so a re-export from a new
+  // barrel module (exactly the shape both real regressions here took — the
+  // notes barrel, then the export barrel) is invisible to it until someone
+  // adds a case for that specific module, and a Prettier-wrapped multi-line
+  // import defeats the single-line regex outright. What actually catches a
+  // regression is `scripts/bundleSize.test.ts`, which measures the real
+  // eager closure with ~3,204 B of headroom against a ~130 KB breach — this
+  // test exists only to say WHICH LINE did it, once the bundle guard has
+  // already said something did.
   it('lets only AppShell reach NoteEditor, and only lazily', () => {
     const offenders: string[] = [];
     for (const path of walk('src', ['.ts', '.tsx'])) {
@@ -954,6 +965,16 @@ describe('the editor stays off the first-paint path', () => {
    * measured at 348,748 B against a predicted 234,800 B.
    *
    * A value re-export is the hazard; `export type` is erased and is fine.
+   *
+   * This too is DIAGNOSIS, not detection, and cannot be made complete: the
+   * filter only matches a line that STARTS WITH `export {` or `export *`, so
+   * a Prettier-wrapped multi-line statement reduces to a bare `"export {"`
+   * that matches nothing, and an eager module reaching `@/features/export/
+   * html` or `@/features/editor/*` directly — skipping this barrel
+   * entirely — is invisible to it either way. `scripts/bundleSize.test.ts`
+   * is the net that actually catches a regression, by measuring the real
+   * eager closure; this test only says which barrel line did it, once the
+   * bundle guard has already said something did.
    */
   it('keeps the editor-reaching exporters out of the export barrel', () => {
     const barrel = readFileSync('src/features/export/index.ts', 'utf8');

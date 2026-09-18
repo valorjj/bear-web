@@ -64,21 +64,41 @@ describe('the editor pane when its chunk fails to load', () => {
     expect(screen.queryByText(en['editor.loading'])).not.toBeInTheDocument();
   });
 
-  it('retries the import when the retry button is clicked', async () => {
-    const user = userEvent.setup();
-    renderShell();
-
-    await user.click(screen.getByRole('button', { name: 'New note' }));
-    const retryButton = await screen.findByRole('button', {
-      name: en['editor.loadError.retry'],
+  it('reloads the page when the reload button is clicked, rather than re-running the same import', async () => {
+    // Per HTML's "fetch a single module script", a failed dynamic import
+    // leaves a `null` entry in the browser's module map for that specifier,
+    // so a later `import()` of the SAME url resolves from that map without
+    // ever making a network request — re-running the import can never
+    // succeed. The only action that can actually recover is a full page
+    // reload, which is what the button must trigger. A `toHaveBeenCalled`
+    // assertion on a spied `location.reload` is the one thing that
+    // distinguishes this from a no-op or from a real retry: both a
+    // do-nothing button and a "call the import again" button would leave
+    // this spy uncalled.
+    const reload = vi.fn();
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, reload },
     });
 
-    // The mock rejects every time, so clicking retry cannot reach a working
-    // editor here — but it must genuinely attempt the import again rather
-    // than being a no-op, which the failure message disappearing and then
-    // reappearing (a fresh loading→failed cycle, not the same stale one)
-    // demonstrates.
-    await user.click(retryButton);
-    expect(await screen.findByText(en['editor.loadError'])).toBeInTheDocument();
+    try {
+      const user = userEvent.setup();
+      renderShell();
+
+      await user.click(screen.getByRole('button', { name: 'New note' }));
+      const reloadButton = await screen.findByRole('button', {
+        name: en['editor.loadError.retry'],
+      });
+
+      expect(reload).not.toHaveBeenCalled();
+      await user.click(reloadButton);
+      expect(reload).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
   });
 });
