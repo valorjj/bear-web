@@ -81,9 +81,9 @@ redirect stub instead of the app.
 | V footnotes (각주)                                                 | complete |
 | W share: a published note others can add to their own notes        | complete |
 
-3218 unit tests pass and 124 skip (the server integration tests, which skip
+3225 unit tests pass and 124 skip (the server integration tests, which skip
 when `TEST_DATABASE_URL` is unset; 71 renderer tests sit behind
-`npm run test:pdf`), 321 end-to-end tests pass and 1 skips. `main` is always green and
+`npm run test:pdf`), 323 end-to-end tests pass and 1 skips. `main` is always green and
 auto-deploys.
 
 **The per-sub-project narrative moved out of this file on 2026-08-27.**
@@ -933,19 +933,25 @@ mismatched transaction`.** `editor.commands.X()` already opens its own outer
   not fit the remaining headroom: converting the import to eager was
   measured at 346,435 B against the 340,000 B ceiling then in force. Headroom
   after L3 shipped was **1,884 B** (main moved 337,259 → 338,116 B gzipped).
-  **Both numbers are historical, not current** — the ceiling has since been
-  raised several times (`scripts/bundleSize.test.ts`'s docblock carries every
-  raise with its reason) and stands at **368,000 B** as of 2026-09-17 — the
-  SEVENTH raise, and the first with NO feature behind it: `main` measured
-  364,303 B with 697 B free and nothing pending, and the user took the raise
-  outright to leave room for the deferred update banner. It is recorded in
-  the docblock as the ratchet the rule forbids rather than dressed up as a
-  measurement. **The audit it defers is now sized and still outstanding:
-  241,182 B of the 364,303 — 66% — is the single `themes-*` vendor chunk
-  (Tiptap, ProseMirror, React, lowlight), so no application-code trimming
-  reaches it and the only real lever is moving something out of that chunk.
-  That is a sub-project. Do not read the seventh raise as having answered
-  it.** The pattern this
+  **Both numbers are historical, not current** — the ceiling was raised seven
+  times (`scripts/bundleSize.test.ts`'s docblock carries every raise with its
+  reason), reaching **368,000 B** on 2026-09-17 as the seventh raise and the
+  first with NO feature behind it: `main` measured 364,303 B with 697 B free
+  and nothing pending, and the user took the raise outright to leave room for
+  the deferred update banner. That seventh-raise entry named an outstanding
+  audit — 241,182 B of the 364,303, 66%, sitting in the single `themes-*`
+  vendor chunk (Tiptap, ProseMirror, React, lowlight) — as the only lever big
+  enough to matter. **That audit is now answered, and the answer was not the
+  vendor chunk's contents.** The editor-code-splitting branch moved the
+  editor itself (Tiptap, ProseMirror, the extensions built on them) behind a
+  `React.lazy` boundary mounted only once a note is opened, cutting the
+  eager closure to **140,796 B** — a 223,507 B reduction traced to two barrel
+  re-exports (`src/features/notes/index.ts`, then `src/features/export/
+index.ts`) that pinned the editor eager, not to anything inside `themes-*`.
+  The ceiling came DOWN to match, for the first time ever, to **144,000 B**
+  — decided by the user on 2026-09-17, in advance, as part of approving that
+  sub-project's spec. Do not go looking for the `themes-*` audit again; it is
+  closed. The pattern this
   bullet exists to establish still holds: check the CURRENT number
   (`npx vitest run scripts/bundleSize.test.ts`, or gzip the built file
   yourself) before adding to the main chunk, never a number written down
