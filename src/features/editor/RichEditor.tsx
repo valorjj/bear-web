@@ -514,6 +514,26 @@ export function RichEditor({
     }),
   );
 
+  // Measured (2026-09-17, sub-project editor-code-splitting task 3): mounting
+  // this component behind a `React.lazy()` + `<Suspense>` boundary reliably
+  // destroyed the editor moments after creating it, in the dev server, in a
+  // production preview build, and under Playwright — not React-dev-mode-only.
+  // `@tiptap/react`'s `useEditor` (`node_modules/@tiptap/react/dist/index.js`,
+  // `EditorInstanceManager.scheduleDestroy`) survives React StrictMode's
+  // synchronous phantom double-mount with a literal `setTimeout(…, 1)`
+  // debounce around its real `destroy()`, then calls `setEditor(null)`. On
+  // this machine, with this React/tiptap version pair, wrapping the mount in
+  // `<Suspense>` made the gap between the component's disconnect and
+  // reconnect passive-effect passes exceed that 1ms window on every mount, so
+  // the debounced destroy actually fired, and the reconnect pass then re-ran
+  // every `editor.commands...` effect below against the now-dead instance —
+  // this is what produced `Cannot read properties of null (reading
+  // 'commands')`. This is a measured timing race against a 1ms timer, not a
+  // proven structural law of Suspense — treat it as a documented risk to
+  // re-check if `@tiptap/react` or React change, not an invariant. Full trace
+  // in `docs/superpowers/specs/2026-09-17-editor-code-splitting-design.md`.
+  // `src/app/AppShell.tsx` hit this wrapping `NoteEditor` and works around it
+  // with a manually cached `import()` instead of `lazy()`; see its comment.
   const editor = useEditor({
     extensions,
     content: parseMarkdown(initialMarkdown),

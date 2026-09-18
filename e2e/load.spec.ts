@@ -86,6 +86,7 @@ interface Sample {
   domContentLoaded: number;
   jsNetwork: number;
   firstNote: number;
+  editorReady: number;
 }
 
 async function throttle(page: Page, cpu: number, net: keyof typeof PROFILES): Promise<void> {
@@ -103,7 +104,7 @@ async function throttle(page: Page, cpu: number, net: keyof typeof PROFILES): Pr
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpu });
 }
 
-async function readTimings(page: Page): Promise<Omit<Sample, 'firstNote'>> {
+async function readTimings(page: Page): Promise<Omit<Sample, 'firstNote' | 'editorReady'>> {
   return page.evaluate(() => {
     const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
     const fcp = performance.getEntriesByName('first-contentful-paint')[0]?.startTime ?? -1;
@@ -139,7 +140,15 @@ for (const { cpu, net } of SCENARIOS) {
       await page.getByRole('button', { name: /Note 0,/ }).waitFor();
       const firstNote = Date.now() - started;
 
-      samples.push({ ...(await readTimings(page)), firstNote });
+      // The WRITER's path, which the split could regress while improving the
+      // number above: the list appearing sooner is worth nothing to someone
+      // who opened the app to type. Measured to the point the editor is
+      // actually mounted, not merely requested.
+      await page.getByRole('button', { name: /Note 0,/ }).click();
+      await page.getByRole('textbox', { name: 'Note text' }).waitFor();
+      const editorReady = Date.now() - started;
+
+      samples.push({ ...(await readTimings(page)), firstNote, editorReady });
       await page.goto('about:blank');
     }
 
@@ -148,7 +157,7 @@ for (const { cpu, net } of SCENARIOS) {
 
     rows.push(
       `| ${cpu}x | ${net} | ${median('fcp')} | ${median('domContentLoaded')} | ` +
-        `${median('jsNetwork')} | **${median('firstNote')}** |`,
+        `${median('jsNetwork')} | **${median('firstNote')}** | **${median('editorReady')}** |`,
     );
     console.log(`${cpu}x ${net}: first note in ${median('firstNote')}ms`);
   });
@@ -167,8 +176,8 @@ test.afterAll(() => {
       'machine. Read the SHAPE, not the absolute values; see the header of',
       '`e2e/load.spec.ts` for what this cannot see.',
       '',
-      '| CPU | Network | FCP | DOMContentLoaded | JS transfer | First note visible |',
-      '| --- | --- | --- | --- | --- | --- |',
+      '| CPU | Network | FCP | DOMContentLoaded | JS transfer | First note visible | Editor ready |',
+      '| --- | --- | --- | --- | --- | --- | --- |',
       ...rows,
       '',
     ].join('\n'),

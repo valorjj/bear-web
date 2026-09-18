@@ -20,7 +20,6 @@ import {
   isPreviewSize,
   type PreviewSize,
   filterByQuery,
-  NoteEditor,
   NoteList,
   type NoteScope,
   scopeKey,
@@ -52,6 +51,7 @@ import { Pane } from '@/ui/Pane';
 import { ProgressBar } from '@/ui/ProgressBar';
 import { Resizer } from '@/ui/Resizer';
 
+import { EditorLoading } from './EditorLoading';
 import { maxPaneWidth, MIN_PANE_WIDTH } from './paneWidths';
 import { resolveLinkTarget } from './resolveLinkTarget';
 import { SidebarContent } from './SidebarContent';
@@ -75,6 +75,87 @@ const isBoolean = (value: unknown): value is boolean => typeof value === 'boolea
 const GraphView = lazy(() => import('@/features/graph/GraphView'));
 
 /**
+ * Off the first-paint path — the whole point of this sub-project — but
+ * loaded through a plain module-scope cache and a state-gated conditional
+ * render, deliberately NOT through `lazy()` + `Suspense`.
+ *
+ * `lazy()`/`Suspense` was tried first, exactly as planned, and it broke the
+ * editor deterministically: `useEditor` (`@tiptap/react`) survives React
+ * StrictMode's synchronous phantom double-mount by debouncing its real
+ * `destroy()` behind a literal `setTimeout(…, 1)`, betting that a
+ * synchronous cleanup-then-remount arrives inside that 1ms window — measured
+ * to reliably not hold when the mount instead goes through a `<Suspense>`
+ * boundary's reveal, so the debounced destroy actually fired and a later
+ * pass re-ran `editor.commands...` effects against the now-dead instance.
+ * Full measured trace, and what is and is not established by it, in
+ * `docs/superpowers/specs/2026-09-17-editor-code-splitting-design.md`'s task
+ * 3 addendum. This module-scope cache plus a manual `import()` in an effect
+ * produces the exact same `dynamicImports` manifest entry (chunking is
+ * decided by the `import()` call, not by which API consumes its promise)
+ * without ever touching React's Suspense/Offscreen machinery, so there is no
+ * reconnect pass to race against.
+ *
+ * The chunk request can still fail (a stale tab outliving a deploy — see
+ * `src/features/publish/staleBuild.ts`), so `useNoteEditorComponent` below
+ * tracks that failure explicitly rather than leaving the gate stuck `null`
+ * forever with no error and no way to retry.
+ */
+// Not a top-level `import type { NoteEditorProps } from '.../NoteEditor'`:
+// `scripts/sourceLint.test.ts`'s "lets only AppShell reach NoteEditor, and
+// only lazily" flags any STATIC import line from that module, type-only or
+// not, on purpose — the guard is a grep, not a type checker, and cannot tell
+// an erased type import from the real static edge it exists to catch. This
+// inline form never produces a top-level `import ... from` line at all.
+type NoteEditorComponentType = (
+  props: import('@/features/notes/NoteEditor').NoteEditorProps,
+) => ReactElement;
+
+let cachedNoteEditor: NoteEditorComponentType | null = null;
+
+export interface NoteEditorLoad {
+  Component: NoteEditorComponentType | null;
+  /**
+   * `true` once the chunk request has rejected — see `EditorLoading`. There
+   * is deliberately no `retry()` here: per HTML's "fetch a single module
+   * script", a failed fetch leaves a `null` entry in the browser's module
+   * map for that specifier, so a later `import()` of the SAME URL resolves
+   * from that map without ever making a network request. Re-running this
+   * effect could not succeed in either failure case it is meant to cover —
+   * see `EditorLoading`'s docblock for the fix, a page reload.
+   */
+  failed: boolean;
+}
+
+function useNoteEditorComponent(): NoteEditorLoad {
+  const [Component, setComponent] = useState<NoteEditorComponentType | null>(
+    () => cachedNoteEditor,
+  );
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (Component !== null) return;
+    let cancelled = false;
+    setFailed(false);
+    void import('@/features/notes/NoteEditor').then(
+      (module) => {
+        cachedNoteEditor = module.NoteEditor;
+        if (!cancelled) setComponent(() => module.NoteEditor);
+      },
+      () => {
+        // Never cached. See the `failed` docblock above for why this has no
+        // retry action of its own — `EditorLoading` offers a reload instead.
+        if (!cancelled) setFailed(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [Component]);
+
+  return { Component, failed };
+}
+
+/**
  * Lazy, and structurally so — not an optimisation.
  *
  * `scripts/bundleSize.test.ts` caps the main bundle at 340,000 B gzipped and
@@ -88,6 +169,7 @@ const CommandPalette = lazy(() => import('@/features/palette/CommandPalette'));
 export function AppShell(): ReactElement {
   const t = useT();
   const widths = usePaneWidths();
+  const { Component: NoteEditorComponent, failed: noteEditorFailed } = useNoteEditorComponent();
 
   const [scope, setScope] = useState<NoteScope>(ACTIVE_SCOPE);
 
@@ -878,11 +960,15 @@ export function AppShell(): ReactElement {
                   )}
                   {selectedNote === undefined ? null : selectedNote === null ? (
                     <EmptyState title={t('editor.empty.title')} body={t('editor.empty.body')} />
+                  ) : noteEditorFailed ? (
+                    <EditorLoading failed />
+                  ) : NoteEditorComponent === null ? (
+                    <EditorLoading />
                   ) : (
                     // `key` is load-bearing, not an optimisation: it remounts the editor
                     // on every switch, so an instance only ever writes to one note and
                     // its unmount cleanup is the flush-on-switch.
-                    <NoteEditor
+                    <NoteEditorComponent
                       key={selectedNote.id}
                       note={selectedNote}
                       seedText={seed?.id === selectedNote.id ? seed.text : undefined}

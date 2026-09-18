@@ -23,6 +23,9 @@ export const ko: Record<TranslationKey, string> = {
 
   'editor.empty.title': '선택된 메모 없음',
   'editor.empty.body': '목록에서 메모를 선택하거나 새로 만드세요.',
+  'editor.loading': '노트를 여는 중…',
+  'editor.loadError': '노트를 열지 못했습니다.',
+  'editor.loadError.retry': '페이지 새로고침',
 
   'smartList.label': '목록',
   'smartList.all': '메모',

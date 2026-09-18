@@ -912,3 +912,75 @@ describe('the floating-surface idiom', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('the editor stays off the first-paint path', () => {
+  /*
+   * `src/features/notes/index.ts` re-exported `NoteEditor`, and that single
+   * line defeated every attempt to code-split the editor: importing anything
+   * at all from `@/features/notes` pulls `NoteEditor` in statically, and with
+   * it Tiptap, ProseMirror, highlight.js and marked — about 130 KB gzipped on
+   * the critical path of a note list that never uses any of it. Measured
+   * twice during the 2026-09-17 spike: with this edge present, a `React.lazy`
+   * boundary around the editor saved 86 bytes, and closing the export door as
+   * well saved nothing at all.
+   *
+   * A grep rather than a byte check because the byte check cannot say WHY it
+   * regressed, and this is the one line that does it.
+   */
+  it('keeps NoteEditor out of the notes barrel', () => {
+    const barrel = readFileSync('src/features/notes/index.ts', 'utf8');
+    expect(barrel).not.toMatch(/from '\.\/NoteEditor'/);
+  });
+
+  // This is DIAGNOSIS, not detection — it cannot be made complete and is not
+  // the thing that catches a regression. It only sees a top-level
+  // `import ... from '.../notes/NoteEditor'` line, so a re-export from a new
+  // barrel module (exactly the shape both real regressions here took — the
+  // notes barrel, then the export barrel) is invisible to it until someone
+  // adds a case for that specific module, and a Prettier-wrapped multi-line
+  // import defeats the single-line regex outright. What actually catches a
+  // regression is `scripts/bundleSize.test.ts`, which measures the real
+  // eager closure with ~3,204 B of headroom against a ~130 KB breach — this
+  // test exists only to say WHICH LINE did it, once the bundle guard has
+  // already said something did.
+  it('lets only AppShell reach NoteEditor, and only lazily', () => {
+    const offenders: string[] = [];
+    for (const path of walk('src', ['.ts', '.tsx'])) {
+      if (/\.test\.tsx?$/.test(path)) continue;
+      if (path.endsWith('src/features/notes/NoteEditor.tsx')) continue;
+      const source = readFileSync(path, 'utf8');
+      // A STATIC import of the module is the regression; `import(...)` is the
+      // shape this sub-project exists to establish.
+      if (/^import[^\n]*from '[^']*notes\/NoteEditor'/m.test(source)) offenders.push(path);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  /*
+   * The SECOND barrel edge, and the one the plan missed. `export/index.ts`
+   * re-exported `exportNote` and `renderNoteHtml` as values; both reach
+   * `html.ts`, which imports `@/features/editor`. Because `AppShell` imports
+   * `ExportProgressProvider` from that same barrel, the whole Tiptap stack
+   * stayed statically eager even after the notes barrel was fixed —
+   * measured at 348,748 B against a predicted 234,800 B.
+   *
+   * A value re-export is the hazard; `export type` is erased and is fine.
+   *
+   * This too is DIAGNOSIS, not detection, and cannot be made complete: the
+   * filter only matches a line that STARTS WITH `export {` or `export *`, so
+   * a Prettier-wrapped multi-line statement reduces to a bare `"export {"`
+   * that matches nothing, and an eager module reaching `@/features/export/
+   * html` or `@/features/editor/*` directly — skipping this barrel
+   * entirely — is invisible to it either way. `scripts/bundleSize.test.ts`
+   * is the net that actually catches a regression, by measuring the real
+   * eager closure; this test only says which barrel line did it, once the
+   * bundle guard has already said something did.
+   */
+  it('keeps the editor-reaching exporters out of the export barrel', () => {
+    const barrel = readFileSync('src/features/export/index.ts', 'utf8');
+    const valueLines = barrel
+      .split('\n')
+      .filter((line) => line.startsWith('export {') || line.startsWith('export *'));
+    expect(valueLines.join('\n')).not.toMatch(/from '\.\/(exportNote|html)'/);
+  });
+});

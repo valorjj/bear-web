@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 
 import { useLocale, type TranslationKey } from '@/i18n';
 
-import { exportNote, type ExportableNote, type ExportFormat } from './exportNote';
+import type { ExportableNote, ExportFormat } from './exportNote';
 import { useExportProgress } from './ExportProgressContext';
 import { PdfExportError, type PdfFailure } from './requestPdf';
 
@@ -57,6 +57,13 @@ export function useExportRunner(): ExportRunner {
         if (format === 'pdf') begin();
         try {
           setFailureKey(null);
+          // Dynamic, and load-bearing rather than stylistic: `exportNote`
+          // reaches `html.ts`, which imports `@/features/editor` and with it
+          // the whole Tiptap/ProseMirror stack. A static import here puts
+          // ~130 KB gzipped on the first-paint critical path for a feature
+          // nobody has asked for yet. `import type` above is erased, so it
+          // adds no edge.
+          const { exportNote } = await import('./exportNote');
           await exportNote(note, format, locale);
         } catch (error) {
           const reason = error instanceof PdfExportError ? error.reason : 'failed';

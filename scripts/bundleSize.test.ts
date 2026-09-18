@@ -601,8 +601,45 @@ import { describe, expect, it } from 'vitest';
  * before it (364,303 + ~3,700 B). A larger number was offered and declined
  * on purpose: the budget has shaped L2, L4 and W, and a ceiling with ten
  * kilobytes of slack stops shaping anything.
+ *
+ * ### The first DROP, to 144,000, decided BY THE USER on 2026-09-17, in
+ * advance — and the audit above is now ANSWERED
+ *
+ * Every entry above moved this number up. This one does not: the
+ * editor-code-splitting branch moves the rich text editor itself — Tiptap,
+ * ProseMirror, and the extensions built on them — out of the eager closure,
+ * behind a lazy load mounted only once a note is opened — a module-scope
+ * cache plus a manual `import()`, deliberately NOT `React.lazy`/`Suspense`,
+ * which broke the editor deterministically (see CLAUDE.md's "Toolchain
+ * surprises" for the mechanism: `useEditor`'s debounced `destroy()`). `main`
+ * measured **364,303 B**; this branch, finished, measures **140,796 B** —
+ * a reduction of **223,507 B**, not a feature's cost being absorbed.
+ *
+ * The sixth-raise entry above named the audit as outstanding and pointed at
+ * `themes-*`'s 241,182 B of vendor code — Tiptap, ProseMirror, React and
+ * lowlight — as the only lever big enough to matter, cautioning that it was
+ * "a sub-project, not a step in another task." **That audit is answered, and
+ * the answer was not the vendor chunk's contents.** The 223,507 B recovered
+ * here came from two barrel re-exports that pinned the editor eager despite
+ * nothing on the first-paint path needing it: `src/features/notes/index.ts`
+ * (fixed first) and, once that alone did not move the number, the export
+ * barrel at `src/features/export/index.ts` (fixed second, in Task 3b — a
+ * second edge onto the same eager pin, not a second bug). Neither React nor
+ * lowlight needed to move; Tiptap and ProseMirror now load lazily with the
+ * editor itself. A future session hunting for "the themes-* audit" should
+ * stop here rather than re-opening a question already closed.
+ *
+ * The decision to lower the ceiling to match was made by the user on
+ * 2026-09-17, as part of approving the sub-project's spec — not as a step
+ * any task in the branch performed on its own. Leaving `CEILING_BYTES` at
+ * 368,000 after a ~223 KB reduction would hand the entire saving to the next
+ * six features to spend without anyone having decided to spend it.
+ *
+ * 144,000 follows the same ~3 KB-for-wiring convention every raise in this
+ * file has used, applied for the first time in the other direction: 140,796
+ * rounded up to the next 1,000 (141,000) plus 3,000. Headroom: 3,204 B.
  */
-const CEILING_BYTES = 368_000;
+const CEILING_BYTES = 144_000;
 
 interface ManifestChunk {
   file: string;

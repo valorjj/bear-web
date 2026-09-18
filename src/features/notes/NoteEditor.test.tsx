@@ -9,12 +9,8 @@ import { db, files, folds, notes, storedImagePath } from '@/data';
 import type { Note } from '@/data';
 import * as editor from '@/features/editor';
 import { foldedKeys, headingSections, type RichEditorHandle } from '@/features/editor';
-import {
-  exportNote,
-  ExportProgressProvider,
-  PdfExportError,
-  useExportProgress,
-} from '@/features/export';
+import { ExportProgressProvider, PdfExportError, useExportProgress } from '@/features/export';
+import { exportNote } from '@/features/export/exportNote';
 import { I18nProvider } from '@/i18n';
 import type { Locale } from '@/i18n';
 
@@ -25,12 +21,10 @@ import { NoteEditor } from './NoteEditor';
 // `ExportProgressProvider`, `useExportProgress`, `PdfExportError` — passes
 // through to the real module, the same technique `normalizeMarkdown` below
 // uses via `vi.spyOn` rather than a full mock.
-// The DEEP module, not the `@/features/export` barrel. `useExportRunner` —
-// which is what actually calls `exportNote` now — imports it as `./exportNote`
-// rather than through its own barrel, so mocking the barrel replaces a binding
-// nothing in the path under test reads. The barrel re-exports whatever this
-// module resolves to, so `vi.mocked(exportNote)` imported from the barrel is
-// still this same spy.
+// The DEEP module, not the `@/features/export` barrel. Task 3b removed
+// `exportNote` from that barrel entirely (it reaches `html.ts`, which imports
+// `@/features/editor`), so this import and the mock below must both target
+// `./exportNote` directly — there is no longer a barrel binding to alias.
 vi.mock('@/features/export/exportNote', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/features/export/exportNote')>();
   return { ...actual, exportNote: vi.fn(actual.exportNote) };
@@ -904,6 +898,15 @@ describe('PDF export progress', () => {
       onExport!('pdf');
     });
     expect(screen.getByTestId('progress-probe')).toHaveAttribute('data-pending', 'true');
+
+    // `exportNote` is now reached through `await import('./exportNote')`
+    // inside `useExportRunner`, so `resolveExport` is not assigned the
+    // instant `onExport` runs — it is assigned only once that dynamic
+    // import settles and the mocked implementation actually runs. Poll for
+    // it rather than assuming a single microtask is enough.
+    await waitFor(() => {
+      expect(resolveExport).toBeDefined();
+    });
 
     await act(async () => {
       resolveExport?.();
