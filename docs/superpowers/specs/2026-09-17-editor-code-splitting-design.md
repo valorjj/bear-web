@@ -5,7 +5,34 @@ hand out, not this file's; CLAUDE.md is explicit that the lettered rows in
 its status table are that document's scheme.
 
 **Date:** 2026-09-17
-**Status:** design APPROVED by the user on 2026-09-17; plan to follow
+**Status:** SHIPPED 2026-09-18, merged to `main` as `67f6389`.
+
+**What actually shipped, against what this spec predicted.** Read the
+prediction table below as a record of reasoning, not as the result — the
+branch beat it, and the reason it beat it is the interesting part.
+
+| | this spec predicted | shipped |
+| --- | --- | --- |
+| eager gzip | 234,807 | **140,753** |
+| first note, Slow 4G | 1,979 ms | **1,473 ms** |
+| time-to-typeable | not predicted | 3,286 ms, from 2,556 |
+
+**The spec's own measurement was right about the prize and wrong about the
+route.** It found ONE barrel re-export (`src/features/notes/index.ts`). There
+were two: `src/features/export/index.ts` re-exported `exportNote` and
+`renderNoteHtml` as values through a second door. The spike measured 234,807 B
+only because it ablated `html.ts`'s editor imports outright, which masked that
+edge completely. Closing both got 223,507 B rather than 129,496.
+
+**`React.lazy` could not be used at all**, which this spec assumed throughout.
+See the task-3 addendum below and CLAUDE.md's Toolchain surprises.
+
+**The trade this spec reserved for the user was taken, with numbers.**
+Time-to-typeable is 730 ms worse on Slow 4G and unchanged on Fast 4G and
+WiFi. It was investigated before being accepted — no waterfall and no late
+fetch, both ruled out by direct observation — and decomposes into ~350 ms of
+irreducible transfer and ~500 ms of cold-code construction that `main` paid
+too, with its modules already warm from boot.
 
 ## The problem
 

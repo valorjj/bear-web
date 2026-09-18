@@ -2087,3 +2087,59 @@ navigation the visitor may simply abandon.
   the landing branch, so a sheet could appear behind the gate — has no test
   that opens the landing screen with a pending import and asserts
   `queryByRole('dialog')` is absent. Left open rather than fixed here.
+
+---
+
+## 2026-09-17/18 — a UI consistency pass, and the editor leaving the critical path
+
+Not a lettered sub-project; no letter assigned, because this file hands those
+out and the work arrived sideways. It began as "check the padding and margin
+consistency" and ended with a 61% cut to the first-load payload. The path is
+worth recording because almost every step changed direction once something was
+measured, and three of the turns were a measurement contradicting me.
+
+**What shipped, in order.** One floating-surface idiom across eleven menus
+(`src/ui/menuStyles.ts`, guarded); the phone toolbar overflow sheet, because 8
+of 15 controls sat off a 390px screen; the collapse decided by MEASUREMENT
+rather than a breakpoint, which fixed a 1024-1200px laptop band the breakpoint
+had hidden; `keepEditorFocus`; a CLAUDE.md pass; the seventh ceiling raise; the
+`measure:load` harness; and then the editor split, specced, planned and
+executed as nine commits on a branch.
+
+**Four things that are worth more than the diff.**
+
+- **"Passes alone, fails in the suite" is not evidence of contention.**
+  `footnotes.spec.ts`'s toolbar test looked exactly like every known flake in
+  this repo and was a real bug: Tiptap's `focus()` is deferred to a
+  `requestAnimationFrame` while Chromium focuses a `<button>` synchronously on
+  mousedown, so a `Space` in that window re-activates the button — and for an
+  insert command, inserts again. The typed text was going INTO the button. Two
+  clean base runs gave a false all-clear first; three a side is the minimum.
+
+- **An instrument that slows the run hides the race.** `--trace` took the suite
+  from 38s to 60s and it stopped reproducing entirely. So did adding
+  intermediate probes. Dump state only ON FAILURE, at the original timing.
+
+- **The bundle ceiling had been governing a number nobody had connected to a
+  second of anyone's time.** Seven raises, each carefully measured, against a
+  budget anchored to itself. `measure:load` exists because of that, and its
+  first finding inverted the usual assumption: on this app the network
+  dominates and the CPU barely matters.
+
+- **A barrel re-export defeats code splitting, and it took two of them to
+  learn it.** `React.lazy` with both barrels intact saved 86 bytes. Closing the
+  export call site too saved nothing. Removing two lines saved 223,507 B. The
+  spec found the first barrel and missed the second; the spike had masked it by
+  ablating `html.ts` outright.
+
+**Open, deliberately.** The i18n keys under `editor.loadError.*` still say
+`retry` though the button reloads (internal identifier; the copy is right in
+both locales). The two `sourceLint` greps are diagnosis, not detection — the
+bundle guard is the net, and its comments now say so. Phone item 3 from the
+2026-09-10 audit (the drawer's four 32x32 footer buttons, the 44x32 table
+handles) is untouched. The on-focus update banner is still unbuilt, and now
+has room: 3,247 B of headroom under a 144,000 ceiling.
+
+**Do not reopen the `themes-*` audit.** It is answered — the cause was two
+barrel re-exports, not the vendor chunk's contents — and CLAUDE.md says so in
+two places.

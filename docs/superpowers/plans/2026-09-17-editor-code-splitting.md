@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **STATUS: EXECUTED AND MERGED**, 2026-09-18, as `67f6389`. Two things in
+> this plan were WRONG and are left uncorrected as a record: Task 3 mandated
+> `React.lazy`/`Suspense`, which deterministically destroys this editor (see
+> CLAUDE.md's Toolchain surprises); and the plan assumed one barrel re-export
+> pinned the editor eager when there were two, so **Task 3b was inserted
+> mid-flight**. Task 4's preload turned out to be already satisfied by Task 3
+> and was never dispatched. Read the spec for what shipped.
+
 **Goal:** Move the rich text editor off the first-paint critical path so the
 note list appears ~500 ms sooner on a slow connection, without making the
 editor arrive later for someone who opens the app to type.

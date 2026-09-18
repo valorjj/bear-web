@@ -26,6 +26,12 @@ redirect stub instead of the app.
 **Spec:** `docs/superpowers/specs/2026-08-06-bear-web-design.md`
 **Plans:** `docs/superpowers/plans/`
 
+**Starting a fresh session? Read `NEXT-SESSION.md` at the repo root first.**
+It carries the handover: what shipped last, what is open and in what rough
+order, and the four things a session with no memory of the last one reliably
+gets wrong. It is short, and it is maintained at the END of a session rather
+than the start.
+
 ## Status
 
 | Milestone                                                          | State    |
@@ -250,16 +256,22 @@ went unrecorded here for weeks:
   a proxy with no measurement of what it is a proxy FOR.
 
   **What it found, on 2026-09-17: the network dominates and the CPU barely
-  matters.** First note visible at **2,482ms** on Slow 4G against **243ms**
+  matters.** Measured then at 2,482ms to first note on Slow 4G against 243ms
   on WiFi, while dropping CPU throttling from 4x to 1x moved it by ~30ms in
-  both cases. The 364 KB eager closure is a TRANSFER cost, not a
-  parse-and-execute one, which is the opposite of the usual mobile-web
-  assumption and changes what the ceiling protects: at 1.6 Mbps a 3 KB raise
-  is ~15ms and irrelevant, while the 86 KB grown since sub-project C is
-  ~430ms and was spent one "it is only 1 KB" at a time. The `themes-*` chunk
-  alone is ~1.6s of Slow 4G, which is what makes that audit worth more than
-  any further tightening. Cold load is paid on a FIRST visit and again after
-  each deploy, not on every launch.
+  both cases. The eager closure is a TRANSFER cost, not a parse-and-execute
+  one — the opposite of the usual mobile-web assumption — and that is what
+  the ceiling actually protects: at 1.6 Mbps a 3 KB raise is ~15ms and
+  irrelevant, while an accumulation of tens of KB is most of a second. Cold
+  load is paid on a FIRST visit and again after each deploy, not on every
+  launch.
+
+  **Those numbers are historical.** The editor-code-splitting branch cut the
+  eager closure to 140,753 B the same day, and first note to **1,473 ms** on
+  Slow 4G. Time-to-typeable went the other way — 2,556 → 3,286 ms — a trade
+  measured on both sides and taken deliberately; the harness now reports both
+  columns so neither can move unseen. **Run it for the current figures; never
+  quote these.** The rule this bullet exists for is the SHAPE — network over
+  CPU — which has held at both bundle sizes.
 
   **Two things made an earlier version of it lie, and both are in its
   header:** `Network.enable` must be sent BEFORE
@@ -1118,6 +1130,23 @@ user_id FROM identities WHERE email = ?`, which reads `user_id` without
   carry the shadow for some other reason (panes, the toolbar pills, the phone
   FAB). Ten surfaces had drifted into four radii, two row type steps and four
   with no border at all before this existed.
+
+- **A barrel re-export makes everything behind it a STATIC dependency of
+  every importer, and that silently defeats code splitting.** This cost a
+  whole sub-project to learn and is the single most expensive lesson in the
+  repo's bundle history. `src/features/notes/index.ts` re-exported
+  `NoteEditor`, so `AppShell` importing ANY symbol from `@/features/notes`
+  pulled the entire Tiptap/ProseMirror stack into the entry chunk; when that
+  was fixed, `src/features/export/index.ts` re-exporting `exportNote` and
+  `renderNoteHtml` as VALUES did the same thing through a second door.
+  Measured: `React.lazy` around the editor with both barrels intact saved
+  **86 bytes**; closing the export CALL SITE as well saved **nothing**;
+  removing the two barrel lines saved **223,507 B**. `export type` is erased
+  and is always safe — it is the value re-export that binds.
+  `scripts/sourceLint.test.ts` greps for both, but read its comments: those
+  greps are DIAGNOSIS (which line did it), not detection. What detects a
+  regression is `scripts/bundleSize.test.ts`. Before adding a re-export to
+  any barrel, ask what it drags with it.
 
 - **The publish host answers exactly one route family, and nothing else.**
   One process serves both `api.markflowing.com` and `pub.markflowing.com` —
